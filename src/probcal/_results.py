@@ -211,3 +211,23 @@ class BeltResult(_ResultBase):
             f"BeltResult(degree={self.degree}, p_value={self.p_value:.4g}, "
             f"grid of {len(self.grid_p)} points)"
         )
+
+
+@dataclass(frozen=True)
+class SmoothReliabilityCurve(_ResultBase):
+    """Smoothed reliability curve evaluated on a grid, on both scales.
+
+    Attributes
+    ----------
+    grid_p, grid_logit : numpy.ndarray
+        Evaluation grid on the probability and logit scales.
+    event_rate : numpy.ndarray
+        Smoothed conditional event rate at each grid point.
+    """
+
+    grid_p: np.ndarray
+    grid_logit: np.ndarray
+    event_rate: np.ndarray
+
+    def __repr__(self) -> str:
+        return f"SmoothReliabilityCurve (grid of {len(self.grid_p)} points)"

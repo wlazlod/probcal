@@ -249,3 +249,17 @@ Each entry references the source that drove the decision.
     weights are ignored with a UserWarning, because exact binomial and Jeffreys tests are
     defined on counts. Traffic lights: green > 0.05, amber > 0.01, red ≤ 0.01. *(spec §7
     items 12, 17–18; Task 7, 2026-07-23)*
+
+42. **Calibration-belt band is the information-matrix (Wald) ellipsoid approximation.**
+    The spec asks for the band "by inverting the LR region"; probcal draws the pointwise
+    band as η(t) ± sqrt(χ²_q(m+1) · x(t)ᵀ I⁻¹ x(t)) at the fitted polynomial — the standard
+    Wald approximation of that inversion, asymptotically equivalent and numerically robust.
+    Degree selection: forward LR (add a term while p < 0.05), capped at 4. The associated
+    p-value is the LR test of the fitted degree-m polynomial against the identity map with
+    df = m + 1 (a simplification of Nattino's selection-adjusted test, documented here).
+    *(spec §12; Task 8, 2026-07-23)*
+
+43. **Curve grids span the 0.5%–99.5% quantiles of the predictions** (smoothed reliability
+    curves and the belt): extrapolating a smoother beyond the observed score range invites
+    overreading exactly where there is no data. `SmoothReliabilityCurve` added to
+    `_results` per the extension clause of entry 25. *(spec §12; Task 8, 2026-07-23)*

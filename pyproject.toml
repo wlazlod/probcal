@@ -1,0 +1,78 @@
+[project]
+name = "probcal"
+version = "0.0.1"
+description = "Universal post-hoc probability calibration for binary classifiers: methods, metrics, diagnostics, and auditable offsetting — numpy-only."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Daniel Wlazło" }]
+keywords = [
+    "calibration",
+    "probability",
+    "binary-classification",
+    "credit-risk",
+    "reliability",
+    "isotonic-regression",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Operating System :: OS Independent",
+]
+dependencies = ["numpy>=1.26"]
+
+[project.urls]
+Homepage = "https://github.com/wlazlod/probcal"
+Documentation = "https://wlazlod.github.io/probcal/"
+Changelog = "https://github.com/wlazlod/probcal/blob/main/CHANGELOG.md"
+Issues = "https://github.com/wlazlod/probcal/issues"
+
+[project.optional-dependencies]
+viz = ["matplotlib>=3.8"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.4",
+    "black>=24",
+    "mypy>=1.10",
+    "scipy>=1.11",          # reference for tests ONLY — never imported by src/probcal
+    "scikit-learn>=1.4",    # reference for tests ONLY
+    "statsmodels>=0.14",    # reference for tests ONLY
+]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.24",
+    "mkdocs-jupyter>=0.24",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/probcal"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.black]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["probcal"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: long-running test (bootstrap/CV-heavy)",
+    "reference: compares against scipy/scikit-learn/statsmodels; skipped when those libs are absent",
+]

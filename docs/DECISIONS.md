@@ -190,3 +190,24 @@ Each entry references the source that drove the decision.
     queries clamp to the terminal block levels; ``interpolation="linear"`` joins block
     midpoints ``(first_s + last_s)/2``. CIR interpolates through weight-centered block
     coordinates. *(spec §6 rows 4–5; Task 4, 2026-07-22)*
+
+33. **Histogram binning defaults and edge cases.** Default ``n_bins=10``, ``strategy="mass"``,
+    Jeffreys shrinkage on. Equal-mass quantile edges are deduplicated (heavy ties can reduce
+    the effective bin count); empty bins under the ``"width"`` strategy fall back to the
+    global weighted event rate. ``is_monotone_`` is computed after fitting — binning does not
+    enforce monotonicity, so the flag reports the fitted rates' actual ordering. *(spec §6
+    row 6; Task 5, 2026-07-22)*
+
+34. **BBQ candidate range and prior.** Candidate bin counts default to
+    ``B ∈ [2, ceil(sqrt(n))]`` capped at 50; per-bin prior is the Jeffreys Beta(1/2, 1/2),
+    consistent with the package's other Jeffreys usages (shrinkage, grade test). Posterior
+    weights are the softmax of Beta-Binomial log marginal likelihoods; predictions average
+    posterior-mean bin rates. *(spec §6 row 8; Task 5, 2026-07-22)*
+
+35. **ENIR path and ensemble details.** Ties are aggregated before the path; the
+    nearly-isotonic path is computed by modified PAVA with collision events for both
+    violating pairs closing and non-violating pairs driven together by outer violations;
+    solutions are recorded at every breakpoint from λ=0 (raw data) to the fully isotonic
+    fit (verified equal to PAVA in tests). BIC uses the binomial log-likelihood with
+    probabilities clipped to [1e-12, 1-1e-12] and k = number of distinct fitted levels.
+    *(spec §6 row 9; Task 5, 2026-07-22)*

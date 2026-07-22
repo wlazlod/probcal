@@ -5,6 +5,8 @@ Methods, metrics, diagnostics, and auditable offsetting — numpy-only.
 
 from ._math import expit, logit
 from .base import BaseCalibrator
+from .bayesian import BBQCalibrator, ENIRCalibrator
+from .binning import HistogramBinningCalibrator, ScalingBinningCalibrator
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
 from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
 from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
@@ -12,12 +14,16 @@ from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
 __version__ = "0.0.1"
 
 __all__: list[str] = [
+    "BBQCalibrator",
     "BaseCalibrator",
     "BetaCalibrator",
     "CenteredIsotonicCalibrator",
     "CrossVennAbersCalibrator",
+    "ENIRCalibrator",
+    "HistogramBinningCalibrator",
     "IsotonicCalibrator",
     "PlattCalibrator",
+    "ScalingBinningCalibrator",
     "TemperatureCalibrator",
     "VennAbersCalibrator",
     "expit",

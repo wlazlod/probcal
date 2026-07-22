@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "probcal: universal post-hoc probability calibration for binary classifiers"
+authors:
+  - family-names: "Wlazło"
+    given-names: "Daniel"
+version: 0.0.1
+license: MIT
+repository-code: "https://github.com/wlazlod/probcal"

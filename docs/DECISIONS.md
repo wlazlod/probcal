@@ -124,3 +124,32 @@ Each entry references the source that drove the decision.
     (dblp lists CoRR only). Cite as: Rawal, K., Kamar, E., Lakkaraju, H. (2020). "Algorithmic
     Recourse in the Wild: Understanding the Impact of Data and Model Shifts."
     arXiv:2012.11788. Do not confuse with entry 20. *(spec §15; Task 1a, 2026-07-22)*
+
+22. **`norm_cdf` uses `math.erfc`, not `math.erf`.** The spec's wording (§5.9) says
+    "`norm_cdf` via `erf_vec`", but the erf form ``0.5*(1+erf(x/√2))`` loses relative accuracy
+    to cancellation in the deep tails, which would break the Halley refinement of `norm_ppf`
+    at quantiles like 1e-12. ``0.5*erfc(-x/√2)`` is tail-accurate; `erf_vec` remains available
+    as specified. Reference test holds `norm_ppf` to 1e-11 absolute vs scipy on
+    (1e-12, 1-1e-12). *(spec §5.9; Task 2, 2026-07-22)*
+
+23. **Separation heuristic in `irls_logistic`:** separation is declared when any fitted
+    linear predictor exceeds 30 in absolute value during iteration or the Hessian solve
+    fails; the routine then warns and returns a ridge-regularized refit with ridge = 1e-6.
+    Thresholds are heuristics chosen to trigger long before float overflow while never firing
+    on well-posed calibration fits. *(spec §5.3; Task 2, 2026-07-22)*
+
+24. **`loess` implementation details:** tricube weights over the ``ceil(frac·n)`` nearest
+    neighbors, local linear (degree 1) by default with degree 0 supported, evaluated at the
+    data points by default (the ICI use case) with an ``xeval`` override for grids. The
+    statsmodels lowess comparison is documented loose (5% of response range): window and
+    boundary handling differ by design. *(spec §5.10, §13; Task 2, 2026-07-22)*
+
+25. **`_results` dataclass field sets are the Task-2 minimum.** `ReliabilityCurve`,
+    `MetricReport`, `SelectionReport`, `Interpretation`, `BeltResult` are defined with the
+    fields their consumers (Tasks 7–13) are specified to need; extensions within 0.0.1 are
+    allowed and will be recorded here. *(spec §4; Task 2, 2026-07-22)*
+
+26. **`test_no_forbidden_imports` runs in a subprocess.** The in-process variant is
+    order-dependent — reference tests legitimately import scipy/sklearn/statsmodels into the
+    session — so the invariant "importing probcal pulls no forbidden dependency" is asserted
+    in a fresh interpreter. *(spec §13; Task 2, 2026-07-22)*

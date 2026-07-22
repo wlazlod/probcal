@@ -8,6 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ### Added
 
+- Numerical core (Task 2): `_math.py` (overflow-safe logit/expit, weighted PAVA with block structure, IRLS logistic regression with ridge stabilization and separation detection, safeguarded 1-D Newton and bisection, vectorized lgamma/erf, regularized incomplete beta and lower incomplete gamma, chi-square and normal quantiles, tricube LOESS, natural cubic spline basis), `_validation.py` (score/target/weight validation with 1e-12 clipping), `_results.py` (frozen result dataclasses with `as_dict()` and aligned-table reprs); 49 unit tests plus 9 reference tests against scipy/scikit-learn/statsmodels (betainc and gammainc within 1e-12, IRLS within rtol 1e-8)
 - Repository scaffold: src layout with docstring-only modules, tooling (uv, ruff, black, mypy, pytest), CI workflows (docs deploy, PyPI publish — tag-gated), documentation skeleton (mkdocs-material + MathJax), MIT license, citation metadata
 - Reference verification (Task 1a): all 12 ⚠ references of the spec verified against primary sources; completed bibliographic records logged in `docs/DECISIONS.md` entries 10–21
 - Theory guidebook, chunk 1 (Task 1b): `concepts/why-calibration.md` (definitions, sources of miscalibration, decisioning and regulatory consequences, proper-scoring-rule lens) and `concepts/methods-parametric.md` (Platt, temperature, beta: derivations, parameter interpretation, worked reading)

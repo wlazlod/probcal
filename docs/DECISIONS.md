@@ -153,3 +153,21 @@ Each entry references the source that drove the decision.
     order-dependent — reference tests legitimately import scipy/sklearn/statsmodels into the
     session — so the invariant "importing probcal pulls no forbidden dependency" is asserted
     in a fresh interpreter. *(spec §13; Task 2, 2026-07-22)*
+
+27. **Beta variant semantics.** ``variant="abm"`` fits ``(a, b, c)`` unconstrained then
+    applies the betacal refit strategy; ``"ab"`` ties ``a = b`` with a free intercept —
+    exactly logistic recalibration on logits (Platt without target smoothing); ``"a"``
+    additionally fixes ``c = 0``, leaving a single free exponent — the temperature family in
+    a different parameterization, kept for completeness of the nested hierarchy and uniform
+    constraint handling. The spec (§6) named the variants without pinning the tying; the
+    theory chapter deliberately deferred to this entry. *(spec §6 row 3; Task 3, 2026-07-22)*
+
+28. **Platt target smoothing uses unweighted class counts.** ``N+`` and ``N-`` in the
+    Lin–Lin–Weng targets are raw observation counts; sample weights enter the IRLS fit
+    itself. Weighted counts would change the smoothing strength under reweighting, which is
+    not what the stabilization is for. *(spec §6 row 1; Task 3, 2026-07-22)*
+
+29. **Temperature fitting bracket.** The NLL score equation is solved for ``u = 1/T`` on
+    ``[1e-6, 1e6]``; if the score has no sign change on the bracket (degenerate data), the
+    boundary with the smaller score magnitude is taken and a ``UserWarning`` is emitted.
+    *(spec §6 row 2; Task 3, 2026-07-22)*

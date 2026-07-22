@@ -1,0 +1,62 @@
+"""Tests for probcal.metrics.smooth."""
+
+import numpy as np
+
+from probcal._math import expit, logit
+from probcal.metrics.smooth import e50, e90, ecce, emax, ici, smooth_ece, spiegelhalter_z
+
+RNG = np.random.default_rng(61)
+
+
+def _calibrated(n: int = 5000) -> tuple[np.ndarray, np.ndarray]:
+    p = expit(RNG.normal(-0.8, 1.2, n))
+    y = (RNG.random(n) < p).astype(float)
+    return y, p
+
+
+def test_smooth_ece_small_when_calibrated_larger_when_shifted() -> None:
+    y, p = _calibrated()
+    v_ok = smooth_ece(y, p)
+    v_bad = smooth_ece(y, expit(logit(p) + 1.2))
+    assert v_ok < 0.05
+    assert v_bad > 2 * v_ok
+
+
+def test_ecce_hand_case() -> None:
+    p = np.array([0.2, 0.4, 0.6])
+    y = np.array([0.0, 1.0, 1.0])
+    # Sorted by p already. Cumulative (y - p)/n: (-0.2, 0.4, 0.8)/3.
+    res = ecce(y, p)
+    np.testing.assert_allclose(res.stat_max, 0.8 / 3)
+    np.testing.assert_allclose(res.stat_mean, (0.2 + 0.4 + 0.8) / 9)
+
+
+def test_ecce_small_when_calibrated() -> None:
+    y, p = _calibrated()
+    assert ecce(y, p).stat_max < 0.05
+
+
+def test_ici_family_ordering() -> None:
+    y, p = _calibrated()
+    v_ici = ici(y, p)
+    assert 0.0 <= v_ici < 0.05
+    assert e50(y, p) <= e90(y, p) <= emax(y, p)
+
+
+def test_ici_detects_shift() -> None:
+    y, p = _calibrated()
+    assert ici(y, expit(logit(p) + 1.0)) > 5 * ici(y, p)
+
+
+def test_spiegelhalter_near_zero_when_calibrated() -> None:
+    y, p = _calibrated(8000)
+    res = spiegelhalter_z(y, p)
+    assert abs(res.z) < 3.0
+    assert 0.0 < res.p_value <= 1.0
+
+
+def test_spiegelhalter_rejects_overconfidence() -> None:
+    y, p = _calibrated(8000)
+    p_over = expit(2.0 * logit(p))  # spread out: overconfident
+    res = spiegelhalter_z(y, p_over)
+    assert res.p_value < 0.001

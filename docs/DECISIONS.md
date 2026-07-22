@@ -218,3 +218,34 @@ Each entry references the source that drove the decision.
     effective d.o.f. = trace((B'WB + λP)^{-1} B'WB) at convergence. Monotonicity is checked
     on a dense probe grid post-fit and a non-monotone fit warns rather than errors — the
     penalty does not enforce shape. *(spec §6 row 11; Task 6, 2026-07-22)*
+
+37. **`evaluate` lives in `metrics/__init__.py`.** Spec §4 annotates the metrics
+    ``__init__`` as "flat re-exports"; `evaluate` aggregates every submodule, so the
+    package root is its least-coupled home — the smallest deviation from the annotation.
+    *(spec §4, §7; Task 7, 2026-07-23)*
+
+38. **Debiased ECE estimator.** Per non-empty bin, the squared gap is corrected by the
+    unbiased variance of the bin event rate, ``max(gap² − ȳ_b(1−ȳ_b)/(n_b−1), 0)``, and the
+    reported value is the weight-averaged square root — a correction in the spirit of
+    Bröcker (2009) / Ferro & Fricker (2012), floored at zero per bin. The same within-bin
+    variance correction backs ``murphy_decomposition(bias_corrected=True)``. *(spec §7
+    items 3, 6; Task 7, 2026-07-23)*
+
+39. **Log-loss calibration/refinement plug-in.** The recalibration curve c(p) is estimated
+    by LOESS (frac 0.75, consistent with the ICI family); calibration is the mean
+    KL(Bernoulli(c)‖Bernoulli(p)) and refinement the mean entropy of Bernoulli(c). *(spec
+    §7 item 4; Task 7, 2026-07-23)*
+
+40. **smoothECE implementation.** Residuals are smoothed with a plain Gaussian kernel on
+    the logit scale over a 257-point grid spanning the data ±5σ; the paper's reflected
+    kernel is a boundary device for [0,1] and is a no-op on the unbounded logit scale. The
+    bandwidth is the self-consistent fixed point smECE(σ) = σ found by 40-step bisection on
+    [1e-4, 2]. ``ece_sweep`` scans equal-mass B from 2 to min(n, 100) and keeps the largest
+    B with monotone bin event rates. *(spec §7 items 7, 10; Task 7, 2026-07-23)*
+
+41. **Weight handling edge cases in metrics.** The LOESS stage of the ICI family is
+    unweighted (weights enter the averaging of distances); e50/e90/emax use unweighted
+    quantiles of the distances. Grade tests use raw integer counts — non-uniform sample
+    weights are ignored with a UserWarning, because exact binomial and Jeffreys tests are
+    defined on counts. Traffic lights: green > 0.05, amber > 0.01, red ≤ 0.01. *(spec §7
+    items 12, 17–18; Task 7, 2026-07-23)*

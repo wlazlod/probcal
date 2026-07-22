@@ -171,3 +171,22 @@ Each entry references the source that drove the decision.
     ``[1e-6, 1e6]``; if the score has no sign change on the bracket (degenerate data), the
     boundary with the smaller score magnitude is taken and a ``UserWarning`` is emitted.
     *(spec §6 row 2; Task 3, 2026-07-22)*
+
+30. **Venn–Abers batch prediction refits per unique query score.** Each unique query costs
+    two PAVA fits on n+1 points after deduplication — exact and simple, fast at the
+    calibration-set sizes this package targets. The O((n+m)log(n+m)) precomputed-envelope
+    batch algorithm of Vovk & Petej is a planned optimization, to be adopted only if
+    profiling on real workloads shows this path as a bottleneck (spec §16 benchmark note).
+    The theory chapter's computational note was amended to match. *(spec §6 row 10; Task 4,
+    2026-07-22)*
+
+31. **CVAP `predict_interval` returns the conservative fold envelope** ``[min_k p0_k,
+    max_k p1_k]``. Vovk & Petej define only the scalar geometric-mean merge for CVAP; the
+    envelope is a deliberate, conservative summary, and the docstring points the validity
+    guarantee at the per-fold IVAP intervals. *(spec §6 row 10; Task 4, 2026-07-22)*
+
+32. **Isotonic step semantics.** Tied scores are pooled (weighted) before PAVA; the step
+    map is right-continuous with boundaries at each block's first score; out-of-range
+    queries clamp to the terminal block levels; ``interpolation="linear"`` joins block
+    midpoints ``(first_s + last_s)/2``. CIR interpolates through weight-centered block
+    coordinates. *(spec §6 rows 4–5; Task 4, 2026-07-22)*

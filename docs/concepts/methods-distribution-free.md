@@ -82,12 +82,14 @@ re-anchoring discussed in the [offset chapter](offset.md) exists precisely becau
 populations drift. The honest statement: Venn–Abers removes every assumption *except* the one
 that time inevitably breaks, and its intervals quantify sampling uncertainty, not drift.
 
-A computational note completes the picture. Naively, each test score costs two isotonic fits
-on \( n + 1 \) points. Vovk and Petej (2014) show the two augmented fits can be served from
-precomputed structures built once from the calibration set, making batch prediction cheap;
-probcal's implementation follows this route (details recorded in the implementation's
-DECISIONS entry), which is what keeps CVAP — \( 2K \) isotonic constructions rather than 2 —
-practical inside the [selector's](auto-selection.md) cross-validation loop.
+A computational note completes the picture. Each test score costs two isotonic fits on
+\( n + 1 \) points; probcal's implementation deduplicates query scores and pays exactly that
+price per unique score, which is comfortably fast at calibration-set sizes this package
+targets (hundreds to a few thousand points). Vovk and Petej (2014) show the augmented fits
+can also be served from structures precomputed once from the calibration set — an
+\( O((n+m)\log(n+m)) \) batch algorithm that probcal records as a planned optimization in
+its DECISIONS log, to be adopted if profiling on real workloads ever makes the naive route
+the bottleneck.
 
 ## The cross Venn–Abers predictor (CVAP)
 

@@ -1,0 +1,91 @@
+site_name: probcal
+site_description: Universal post-hoc probability calibration for binary classifiers — numpy-only.
+site_url: https://wlazlod.github.io/probcal/
+repo_url: https://github.com/wlazlod/probcal
+repo_name: wlazlod/probcal
+
+strict: true
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: numpy
+            docstring_section_style: spacy
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            merge_init_into_class: true
+            separate_signature: true
+            signature_crossrefs: true
+            show_signature_annotations: true
+  - mkdocs-jupyter:
+      include: ["notebooks/*.ipynb"]
+      execute: false  # notebooks are committed executed
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.snippets
+  - toc:
+      permalink: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - How it works: how-it-works.md
+  - Concepts:
+      - Why calibration: concepts/why-calibration.md
+      - Parametric methods: concepts/methods-parametric.md
+      - Nonparametric methods: concepts/methods-nonparametric.md
+      - Distribution-free methods: concepts/methods-distribution-free.md
+      - Metrics and tests: concepts/metrics.md
+      - Data splitting: concepts/data-splitting.md
+      - Offset: concepts/offset.md
+      - SHAP and calibration: concepts/shap-calibration.md
+      - Inverse maps: concepts/inverse-maps.md
+      - Automatic selection: concepts/auto-selection.md
+      - Visualization: concepts/visualization.md
+  - API reference: api.md
+  - FAQ: faq.md
+  - Decisions: DECISIONS.md
+  - Licensing: LICENSING.md
+  - Changelog: changelog.md

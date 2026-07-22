@@ -263,3 +263,11 @@ Each entry references the source that drove the decision.
     curves and the belt): extrapolating a smoother beyond the observed score range invites
     overreading exactly where there is no data. `SmoothReliabilityCurve` added to
     `_results` per the extension clause of entry 25. *(spec §12; Task 8, 2026-07-23)*
+
+44. **`LogitOffset` is scores-only and lives outside the `BaseCalibrator` hierarchy.** Its
+    `fit(p)` needs no outcomes (mode A is a constant; mode B matches a target mean), so
+    forcing the `fit(s, y)` contract would demand a fake `y`. It duck-types the parts that
+    matter downstream (`predict_proba`/`transform`, `affine_logit_coeffs_`, `interpret`,
+    `is_monotone_`). The mode-B bisection bracket is ±40 log-odds — beyond the ±27.6 range
+    that 1e-12 clipping permits, so the root is always interior. *(spec §8; Task 9,
+    2026-07-23)*

@@ -10,6 +10,7 @@ from .bayesian import BBQCalibrator, ENIRCalibrator
 from .binning import HistogramBinningCalibrator, ScalingBinningCalibrator
 from .curves import calibration_belt, reliability_binned, reliability_loess, reliability_spline
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
+from .offset import LogitOffset
 from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
 from .spline import SplineCalibrator
 from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
@@ -25,6 +26,7 @@ __all__: list[str] = [
     "ENIRCalibrator",
     "HistogramBinningCalibrator",
     "IsotonicCalibrator",
+    "LogitOffset",
     "PlattCalibrator",
     "ScalingBinningCalibrator",
     "SplineCalibrator",

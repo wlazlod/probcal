@@ -9,6 +9,7 @@ from .bayesian import BBQCalibrator, ENIRCalibrator
 from .binning import HistogramBinningCalibrator, ScalingBinningCalibrator
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
 from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
+from .spline import SplineCalibrator
 from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
 
 __version__ = "0.0.1"
@@ -24,6 +25,7 @@ __all__: list[str] = [
     "IsotonicCalibrator",
     "PlattCalibrator",
     "ScalingBinningCalibrator",
+    "SplineCalibrator",
     "TemperatureCalibrator",
     "VennAbersCalibrator",
     "expit",

@@ -211,3 +211,10 @@ Each entry references the source that drove the decision.
     fit (verified equal to PAVA in tests). BIC uses the binomial log-likelihood with
     probabilities clipped to [1e-12, 1-1e-12] and k = number of distinct fitted levels.
     *(spec §6 row 9; Task 5, 2026-07-22)*
+
+36. **Spline calibrator defaults.** Knots at equally spaced quantiles of the logit scores,
+    ``K = clip(ceil(n^(1/3)), 4, 12)`` by default; penalty grid ``logspace(-4, 4, 17)``;
+    second-difference penalty on the coefficient sequence of the natural cubic basis;
+    effective d.o.f. = trace((B'WB + λP)^{-1} B'WB) at convergence. Monotonicity is checked
+    on a dense probe grid post-fit and a non-monotone fit warns rather than errors — the
+    penalty does not enforce shape. *(spec §6 row 11; Task 6, 2026-07-22)*

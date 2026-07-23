@@ -271,3 +271,9 @@ Each entry references the source that drove the decision.
     `is_monotone_`). The mode-B bisection bracket is ±40 log-odds — beyond the ±27.6 range
     that 1e-12 clipping permits, so the root is always interior. *(spec §8; Task 9,
     2026-07-23)*
+
+45. **Attribution adjustment constants.** Degenerate rows (|s − s₀| < 1e-8 on the working
+    scale) replace the ill-conditioned secant with a central-difference local slope at the
+    base value, step h = 1e-4. In the Aumann–Shapley path the adjusted base is set to
+    ``target − Σφ'`` (equal to g(s₀) on regular rows by telescoping), which zeroes the
+    reconstruction error on degenerate rows as well. *(spec §9; Task 10, 2026-07-23)*

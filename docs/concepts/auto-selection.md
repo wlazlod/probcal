@@ -53,6 +53,27 @@ observations (see the [sizing guidance](data-splitting.md)) is the expected verd
 malfunction. The report prints; nothing needs a plotting backend; and the
 [selection plot](visualization.md) exists for the deck where a table will not land.
 
+## In probcal
+
+```python
+from probcal import CalibratorSelector
+
+sel = CalibratorSelector().fit(s_cal, y_cal)      # default menu, log-loss criterion
+print(sel.report_)                                # ranked table, guardrails, chosen
+print(sel.best_name_)
+
+p = sel.predict_proba(s_new)                      # the winner, refit on all data
+print(sel.interpret())
+
+# Restrict the menu (small samples) or switch the criterion deliberately:
+from probcal import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
+sel = CalibratorSelector(
+    candidates={"platt": PlattCalibrator(), "temp": TemperatureCalibrator(),
+                "beta": BetaCalibrator()},
+    scoring="brier",
+).fit(s_cal, y_cal)
+```
+
 ## References
 
 - Roelofs, R., Cain, N., Shlens, J., Mozer, M. C. (2022). "Mitigating Bias in Calibration Error Estimation." AISTATS, PMLR 151, 4036–4054.

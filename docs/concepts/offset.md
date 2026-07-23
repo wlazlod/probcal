@@ -144,6 +144,24 @@ subtraction, so [inverse maps](inverse-maps.md) pass through it exactly — a qu
 \( \delta \) update of magnitude at most \( m \) moves every raw-score threshold by at most
 \( m \) in logit units, which is the fact the `buffer_logit` robustness margin is built on.
 
+## In probcal
+
+```python
+from probcal import LogitOffset
+
+off = LogitOffset(target_mean=0.031).fit(p_cal)   # mode B: solve delta by bisection
+p_new = off.transform(p_cal)
+print(off.delta_, off.pre_mean_, off.post_mean_)
+
+print(off.audit_report(y_cal, p_cal))             # pre/post guardrails, one table
+
+off = LogitOffset(delta=-0.42).fit(p_cal)         # mode A: explicit shift
+
+# On a wrapped model, the offset stays a separate, inspectable stage:
+wrapped.offset_to(target_mean=0.031)
+print(wrapped.offsets_[0].interpret())
+```
+
 ## References
 
 - Elkan, C. (2001). "The Foundations of Cost-Sensitive Learning." IJCAI, 973–978.

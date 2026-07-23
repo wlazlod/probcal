@@ -61,6 +61,22 @@ guardrail markers — the table, made presentable. All of them accept the datacl
 `probcal.curves`, and none of them is importable without the `[viz]` extra; the import
 guard raises with the install instruction rather than a bare `ImportError`.
 
+## In probcal
+
+```python
+from probcal import calibration_belt, reliability_binned, reliability_loess
+from probcal.plots import plot_belt, plot_comparison, plot_reliability  # [viz] extra
+
+curve = reliability_binned(y, p, n_bins=10)        # Wilson CIs, both scales
+smooth = reliability_loess(y, p)
+belt = calibration_belt(y, p)
+print(belt.degree, belt.p_value)
+
+ax = plot_reliability(curve, smooth=smooth, scale="logit")   # the flagship view
+ax = plot_belt(belt)
+fig = plot_comparison(reliability_binned(y, s_raw), reliability_binned(y, p))
+```
+
 ## References
 
 - Austin, P. C., Steyerberg, E. W. (2014). "Graphical assessment of internal and external calibration of logistic regression models by using loess smoothers." *Statistics in Medicine* 33(3), 517–535.

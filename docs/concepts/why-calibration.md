@@ -162,6 +162,21 @@ a map fitted on data the model has not seen, select the map by a strictly proper
 estimated out-of-fold, report the descriptive calibration metrics alongside, and keep every
 adjustment inspectable. The remaining chapters fill in each of those steps.
 
+## In probcal
+
+```python
+from probcal import make_pd_portfolio
+from probcal.metrics import calibration_guardrails, evaluate
+
+port = make_pd_portfolio(n=8000, random_state=42)   # synthetic 3% PD portfolio
+
+g = calibration_guardrails(port.y, port.scores)     # slope / intercept / Spiegelhalter
+print(g.slope, g.intercept, g.all_ok)
+
+report = evaluate(port.y, port.scores)              # full catalog + bootstrap CIs
+print(report)
+```
+
 ## References
 
 - Brier, G. W. (1950). "Verification of forecasts expressed in terms of probability." *Monthly Weather Review* 78(1), 1–3.

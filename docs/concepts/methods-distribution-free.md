@@ -136,6 +136,20 @@ the intervals were needed. When the intervals are the point — regulatory conse
 low-default portfolios in the spirit of Pluto and Tasche (2005) — choose it directly rather
 than through the selector.
 
+## In probcal
+
+```python
+from probcal import CrossVennAbersCalibrator, VennAbersCalibrator
+
+ivap = VennAbersCalibrator().fit(s_cal, y_cal)
+intervals = ivap.predict_interval(s_new)      # (n, 2): the guaranteed object
+p = ivap.predict_proba(s_new)                 # scalarized p1 / (1 - p0 + p1)
+print(ivap.interpret())                       # mean/max interval width
+
+cvap = CrossVennAbersCalibrator(cv=5, random_state=0).fit(s_cal, y_cal)
+p = cvap.predict_proba(s_new)                 # geometric-mean merge across folds
+```
+
 ## References
 
 - Pluto, K., Tasche, D. (2005). "Estimating Probabilities of Default for Low Default Portfolios." In *The Basel II Risk Parameters*, Springer.

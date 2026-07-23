@@ -254,6 +254,28 @@ construction. The [selector](auto-selection.md) therefore defaults to out-of-fol
 accepts Brier, ICI, smooth ECE and ECE-sweep as deliberate alternatives, refuses plain ECE and
 Hosmer–Lemeshow entirely, and prints the guardrail flags next to whatever criterion was used.
 
+## In probcal
+
+```python
+import numpy as np
+from probcal.metrics import (
+    brier_score, calibration_guardrails, calibration_slope, ece, ece_debiased,
+    evaluate, ici, jeffreys_grade_test, log_loss, smooth_ece, spiegelhalter_z,
+)
+
+print(log_loss(y, p), brier_score(y, p))          # proper: safe to select on
+print(ece(y, p), ece_debiased(y, p))              # report-only; note the bias
+print(smooth_ece(y, p), ici(y, p))                # binning-free
+print(calibration_slope(y, p), spiegelhalter_z(y, p))
+print(calibration_guardrails(y, p))               # the three-flag summary
+
+report = evaluate(y, p, n_boot=1000, seed=42)     # everything + bootstrap CIs
+print(report)
+
+grades = np.array(["G1", "G2", "G3"])[np.searchsorted([0.01, 0.05], p)]
+print(jeffreys_grade_test(y, p, grades))          # ECB-style backtest, traffic lights
+```
+
 ## References
 
 - Arrieta-Ibarra, I., Gujral, P., Tannen, J., Tygert, M., Xu, C. (2022). "Metrics of Calibration for Probabilistic Predictions." *Journal of Machine Learning Research* 23(351), 1–54.

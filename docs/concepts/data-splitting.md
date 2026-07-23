@@ -116,6 +116,24 @@ Tasche (2013), and let the per-grade backtests of
 [Metrics and tests](metrics.md) monitor what the data cannot yet estimate; Pluto and Tasche
 (2005) develop the limiting case where defaults are too few for any curve fitting at all.
 
+## In probcal
+
+```python
+from probcal import CalibratedModel, PlattCalibrator
+
+# Prefit: the model is trained, a separate calibration set exists (the canon).
+wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
+
+# CV: no calibration set to spare — pooled out-of-fold scores, one auditable map.
+wrapped = CalibratedModel(model, PlattCalibrator(), flow="cv", cv=5).fit(X, y)
+
+# CalibratedClassifierCV-style fold ensemble, if you prefer variance reduction
+# over a single auditable mapping:
+wrapped = CalibratedModel(model, PlattCalibrator(), flow="cv", ensemble=True).fit(X, y)
+
+p = wrapped.predict_proba(X_new)
+```
+
 ## References
 
 - Pluto, K., Tasche, D. (2005). "Estimating Probabilities of Default for Low Default Portfolios." In *The Basel II Risk Parameters*, Springer.

@@ -212,6 +212,24 @@ diagram on the *logit scale* (see [Visualization](visualization.md)) shows curva
 a wrong slope — the distortion is outside every family in this chapter, and the nonparametric
 methods of the [next chapter](methods-nonparametric.md) apply.
 
+## In probcal
+
+```python
+from probcal import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
+
+platt = PlattCalibrator().fit(s_cal, y_cal)
+print(platt.a_, platt.b_)                  # identity is (1, 0)
+
+temp = TemperatureCalibrator().fit(s_cal, y_cal)
+print(temp.T_)                             # identity is 1; cannot move the base rate
+
+beta = BetaCalibrator(variant="abm").fit(s_cal, y_cal)
+print(beta.interpret())                    # a, b, c against the identity (1, 1, 0)
+
+p = beta.predict_proba(s_new)
+print(platt.affine_logit_coeffs_)          # (a, b) — the affine-exact attribution hook
+```
+
 ## References
 
 - Guo, C., Pleiss, G., Sun, Y., Weinberger, K. Q. (2017). "On Calibration of Modern Neural Networks." ICML, PMLR 70, 1321–1330.

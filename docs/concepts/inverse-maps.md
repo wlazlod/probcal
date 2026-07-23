@@ -93,6 +93,26 @@ grade boundaries are policy artifacts that outlive model versions, the translati
 masterscale — is what changes when the calibrator is refitted, and the audit story stays
 clean: policy fixed, mapping versioned.
 
+## In probcal
+
+```python
+from probcal import UnattainableTargetError, calibrated_bands_to_raw
+
+lo_s, hi_s = cal.interval_inverse(0.0, 0.02)               # "PD <= 2%" in score space
+lo_z, hi_z = cal.interval_inverse(0.0, 0.02, space="logit")  # ... in raw margins
+
+# Robust to the next re-anchoring of magnitude <= 0.1 log-odds:
+lo_z, hi_z = cal.interval_inverse(0.0, 0.02, space="logit", buffer_logit=0.1)
+
+masterscale = {"A": (0.0, 0.01), "B": (0.01, 0.03), "C": (0.03, 1.0)}
+raw_bands = calibrated_bands_to_raw(cal, masterscale, space="logit")
+
+try:
+    cal.interval_inverse(0.95, 1.0)     # beyond an isotonic map's output range
+except UnattainableTargetError as err:
+    print(err)                           # named intervals — never a silent clamp
+```
+
 ## References
 
 - Rawal, K., Kamar, E., Lakkaraju, H. (2020). "Algorithmic Recourse in the Wild: Understanding the Impact of Data and Model Shifts." arXiv:2012.11788.

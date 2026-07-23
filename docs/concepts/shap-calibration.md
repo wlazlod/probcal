@@ -112,6 +112,23 @@ Johansson and Sönströd, 2024) builds uncertainty-aware explanations on Venn–
 — a different object (explanations with uncertainty semantics) than the array-level
 additivity repair this module performs.
 
+## In probcal
+
+```python
+from probcal import adjust_attributions
+
+# phi: (n, d) SHAP values on the margin (logit) scale; base: scalar or (n,).
+adj = adjust_attributions(phi, base_value, calibrator)   # method="auto"
+print(adj.method_used)                  # "affine-exact" or "aumann-shapley"
+print(adj.max_reconstruction_error)     # < 1e-10 by construction
+
+# base + rows now reconstruct the calibrated log-odds:
+recon = adj.base_adj + adj.phi_adj.sum(axis=1)   # equals adj.target
+
+# shap.Explanation objects are duck-typed — no shap import needed:
+adj = adjust_attributions(explanation, None, calibrator, scale="logit")
+```
+
 ## References
 
 - Aumann, R. J., Shapley, L. S. (1974). *Values of Non-Atomic Games.* Princeton University Press.

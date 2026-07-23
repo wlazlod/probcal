@@ -206,6 +206,34 @@ cross-validation loop. All of them, unlike the parametric families, can repair c
 and all of them make the [data-splitting discipline](data-splitting.md) more important, not
 less, because flexible maps are precisely the ones that overfit a reused calibration set.
 
+## In probcal
+
+```python
+from probcal import (
+    BBQCalibrator,
+    CenteredIsotonicCalibrator,
+    ENIRCalibrator,
+    HistogramBinningCalibrator,
+    IsotonicCalibrator,
+    ScalingBinningCalibrator,
+    SplineCalibrator,
+)
+
+iso = IsotonicCalibrator().fit(s_cal, y_cal)
+print(iso.n_blocks_)                          # effective complexity from the data
+
+cir = CenteredIsotonicCalibrator().fit(s_cal, y_cal)   # strict where data permit
+hist = HistogramBinningCalibrator(n_bins=10).fit(s_cal, y_cal)  # equal-mass, Jeffreys
+sb = ScalingBinningCalibrator(n_bins=10).fit(s_cal, y_cal)      # Platt stage + binning
+
+bbq = BBQCalibrator().fit(s_cal, y_cal)
+print(bbq.interpret())                        # top-3 binnings by posterior weight
+
+enir = ENIRCalibrator().fit(s_cal, y_cal)     # is_monotone_ = False, by design
+spline = SplineCalibrator().fit(s_cal, y_cal)
+print(spline.edof_, spline.lambda_)           # honest complexity + CV-chosen penalty
+```
+
 ## References
 
 - Barlow, R. E., Bartholomew, D. J., Bremner, J. M., Brunk, H. D. (1972). *Statistical Inference under Order Restrictions.* Wiley.

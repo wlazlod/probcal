@@ -1,31 +1,29 @@
 # Implementation Decisions
 
-Resolved ambiguities and design choices made during implementation.
-Each entry references the source that drove the decision.
+Dated log of ambiguities resolved and design choices made during implementation.
 
 ---
 
 1. **Python floor is `>=3.11`; development runs on 3.12.** Rationale: consistency with
    FlagGAM, `typing.Self` for fluent `fit() -> Self`, better tracebacks and performance.
    `mypy` runs with `python_version = "3.11"` to guard against 3.12-only constructs.
-   *(spec §1.4; grooming 2026-07-22)*
+   *(grooming 2026-07-22)*
 
 2. **Input convention: probabilities only.** All calibrators accept scores
    `s ∈ (0,1)`; methods defined on logits (temperature, Platt-on-logits) convert internally
    via `z = logit(s)`. Users holding raw logits convert explicitly with the exported
-   `expit`. No `input=` switch on calibrators. *(spec §3 left the logit path open;
-   grooming 2026-07-22)*
+   `expit`. No `input=` switch on calibrators. *(grooming 2026-07-22)*
 
-3. **Task 1 executes as: reference verification first, then four writing chunks.**
-   All ⚠ references of spec §15 are web-verified in one pass before any chapter is written;
+3. **The theory guidebook executed as: reference verification first, then four writing
+   chunks.** All flagged (⚠) references are web-verified in one pass before any chapter is written;
    outcomes are logged here. Chunks: (1) why-calibration + methods-parametric,
    (2) methods-nonparametric + methods-distribution-free, (3) metrics + data-splitting +
    offset, (4) shap-calibration + inverse-maps + auto-selection + visualization.
-   *(spec §14.1; grooming 2026-07-22)*
+   *(grooming 2026-07-22)*
 
 4. **GitHub repository `wlazlod/probcal` created private; public flip is the owner's
    decision.** While private, `docs.yml` (gh-pages deploy) is dormant; `publish.yml` is
-   tag-gated and inactive until `0.1.0` per spec. *(spec §2; grooming 2026-07-22)*
+   tag-gated and inactive until `0.1.0`. *(grooming 2026-07-22)*
 
 5. **Repository is bound to the Obsidian project knowledge base at scaffold time.**
    Daily notes and reference-verification evidence live in the vault; canonical engineering
@@ -35,13 +33,13 @@ Each entry references the source that drove the decision.
    Mirrors FlagGAM's untracked `plan/` convention, renamed per owner preference.
    *(grooming 2026-07-22)*
 
-7. **Hyperparameters the spec leaves open** (spline knot count/placement and λ grid,
+7. **Hyperparameters left open by the original design** (spline knot count/placement and λ grid,
    histogram default bin count, LOESS evaluation grid, bootstrap internals beyond
    n_boot=1000/percentile/seeded) **are decided inside their implementing task**, each with
-   its own entry here. *(spec §2 DECISIONS protocol; grooming 2026-07-22)*
+   its own entry here. *(grooming 2026-07-22)*
 
 8. **Tree deltas vs the FlagGAM template:** no `benchmarks/`, no `scripts/`, no `NOTICE`;
-   the spec §2 tree is authoritative. *(spec §2; grooming 2026-07-22)*
+   the planned repository tree is authoritative. *(grooming 2026-07-22)*
 
 9. **Commit conventions:** Conventional Commits; no AI-attribution trailers or taglines in
    any artifact. *(owner's global convention; grooming 2026-07-22)*
@@ -49,73 +47,68 @@ Each entry references the source that drove the decision.
 10. **⚠ Bröcker (2009) — verified, record completed.** Bröcker, J. (2009). "Reliability,
     sufficiency, and the decomposition of proper scores." *Quarterly Journal of the Royal
     Meteorological Society* 135(643), 1512–1519. DOI 10.1002/qj.456. Confirmed via Crossref
-    and the Wiley landing page. *(spec §15; Task 1a, 2026-07-22)*
+    and the Wiley landing page. *(2026-07-22)*
 
 11. **⚠ Ferro & Fricker (2012) — verified, record completed.** Ferro, C. A. T., Fricker,
     T. E. (2012). "A bias-corrected decomposition of the Brier score." *Quarterly Journal of
     the Royal Meteorological Society* 138(668), 1954–1960. DOI 10.1002/qj.1924. Confirmed via
-    Crossref, Wiley, and the author's manuscript copy. *(spec §15; Task 1a, 2026-07-22)*
+    Crossref, Wiley, and the author's manuscript copy. *(2026-07-22)*
 
 12. **⚠ Murphy (1973) — verified, record completed.** Murphy, A. H. (1973). "A New Vector
     Partition of the Probability Score." *Journal of Applied Meteorology* 12(4), 595–600.
     DOI 10.1175/1520-0450(1973)012<0595:ANVPOT>2.0.CO;2. Cite the journal under its 1973 name
     (now *Journal of Applied Meteorology and Climatology*). Confirmed via Crossref and the AMS
-    journal archive. *(spec §15; Task 1a, 2026-07-22)*
+    journal archive. *(2026-07-22)*
 
 13. **⚠ Tibshirani, Hoefling & Tibshirani (2011) — verified, record completed.**
     Tibshirani, R. J., Hoefling, H., Tibshirani, R. (2011). "Nearly-Isotonic Regression."
     *Technometrics* 53(1), 54–61. DOI 10.1198/TECH.2010.10111. Author order as given is
     correct; the published spelling is "Hoefling" (not "Höfling"), per the paper byline,
-    Crossref, and Taylor & Francis. Safe to cite for ENIR's modified PAVA. *(spec §15; Task 1a,
-    2026-07-22)*
+    Crossref, and Taylor & Francis. Safe to cite for ENIR's modified PAVA. *(2026-07-22)*
 
 14. **⚠ Arrieta-Ibarra et al. (2022) — verified as given; full author list confirmed.**
     Arrieta-Ibarra, I., Gujral, P., Tannen, J., Tygert, M., Xu, C. (2022). "Metrics of
     Calibration for Probabilistic Predictions." *Journal of Machine Learning Research* 23(351),
     1–54. arXiv:2205.09680. Confirmed via jmlr.org (paper id 22-0658). Safe to cite for ECCE.
-    *(spec §15, §7 item 11; Task 1a, 2026-07-22)*
+    *(2026-07-22)*
 
 15. **⚠ Miller, Hui & Tierney (1991) — verified; exact paper identified.** Miller, M. E.,
     Hui, S. L., Tierney, W. M. (1991). "Validation techniques for logistic regression models."
     *Statistics in Medicine* 10(8), 1213–1226. DOI 10.1002/sim.4780100805. Confirmed via PubMed
     (PMID 1925153) and Crossref. `calibration_test` may cite Miller et al. for the
-    recalibration-test lineage alongside the Cox (1958) framing. *(spec §15, §7 item 16;
-    Task 1a, 2026-07-22)*
+    recalibration-test lineage alongside the Cox (1958) framing. *(2026-07-22)*
 
 16. **⚠ van der Burgt (2008) — verified, record completed.** van der Burgt, M. (2008).
     "Calibrating low-default portfolios, using the cumulative accuracy profile." *Journal of
     Risk Model Validation* 1(4), 17–33. DOI 10.21314/JRMV.2008.016. The issue is labeled
     Winter 2007/08 but Crossref and risk.net date publication to 2008 — cite 2008. No arXiv or
-    SSRN preprint could be found; cite the journal version only. *(spec §15; Task 1a,
-    2026-07-22)*
+    SSRN preprint could be found; cite the journal version only. *(2026-07-22)*
 
 17. **⚠ Löfström et al. — verified; published record completed.** Löfström, H., Löfström, T.,
     Johansson, U., Sönströd, C. (2024). "Calibrated explanations: With uncertainty information
     and counterfactuals." *Expert Systems with Applications* 246, 123154.
     DOI 10.1016/j.eswa.2024.123154. arXiv:2305.02305 is confirmed to be the same paper.
-    Safe to cite as related work in `shap-calibration.md`. *(spec §15, §14.1 item 10; Task 1a,
-    2026-07-22)*
+    Safe to cite as related work in `shap-calibration.md`. *(2026-07-22)*
 
 18. **⚠ ECB (2019) — verified; subtitle corrected.** The official title is *Instructions for
     reporting the validation results of internal models — IRB Pillar I models for credit
-    risk*, European Central Bank Banking Supervision, February 2019 (the spec's version
+    risk*, European Central Bank Banking Supervision, February 2019 (earlier internal records
     omitted "for credit risk"). The Jeffreys PD-backtesting test is confirmed present in the
     document. Only the February 2019 edition exists at the official URL; do not conflate with
-    the ECB *Guide to internal models* (a different publication). *(spec §15, §7 item 18;
-    Task 1a, 2026-07-22)*
+    the ECB *Guide to internal models* (a different publication). *(2026-07-22)*
 
 19. **⚠ BCBS (2005) — verified; cite the revised version.** Basel Committee on Banking
     Supervision (2005). *Studies on the Validation of Internal Rating Systems.* Working Paper
     No. 14, revised version, May 2005. Bank for International Settlements. The original
     pre-revision date is not published on bis.org; cite the May 2005 revised version.
-    *(spec §15; Task 1a, 2026-07-22)*
+    *(2026-07-22)*
 
 20. **⚠ Upadhyay et al. (2021) — verified as given.** Upadhyay, S., Joshi, S., Lakkaraju, H.
     (2021). "Towards Robust and Reliable Algorithmic Recourse." *Advances in Neural
     Information Processing Systems* 34 (NeurIPS 2021), 16926–16937. arXiv:2102.13620.
     Confirmed via the official proceedings page. Note: the page range comes from indexing
     metadata (the proceedings page shows none); no Crossref DOI exists for this proceedings
-    entry. Safe to cite for recourse robustness in §10 docs. *(spec §15; Task 1a, 2026-07-22)*
+    entry. Safe to cite for recourse robustness in §10 docs. *(2026-07-22)*
 
 21. **⚠ Rawal, Kamar & Lakkaraju — verified with a title-history caveat; cite as arXiv
     preprint.** arXiv:2012.11788 matches the given title and authors in its current (v2/v3,
@@ -123,86 +116,85 @@ Each entry references the source that drove the decision.
     Distribution Shifts on Algorithmic Recourses". Never published at a peer-reviewed venue
     (dblp lists CoRR only). Cite as: Rawal, K., Kamar, E., Lakkaraju, H. (2020). "Algorithmic
     Recourse in the Wild: Understanding the Impact of Data and Model Shifts."
-    arXiv:2012.11788. Do not confuse with entry 20. *(spec §15; Task 1a, 2026-07-22)*
+    arXiv:2012.11788. Do not confuse with entry 20. *(2026-07-22)*
 
-22. **`norm_cdf` uses `math.erfc`, not `math.erf`.** The spec's wording (§5.9) says
-    "`norm_cdf` via `erf_vec`", but the erf form ``0.5*(1+erf(x/√2))`` loses relative accuracy
+22. **`norm_cdf` uses `math.erfc`, not `math.erf`.** The original design called for
+    `norm_cdf` via `erf_vec`, but the erf form ``0.5*(1+erf(x/√2))`` loses relative accuracy
     to cancellation in the deep tails, which would break the Halley refinement of `norm_ppf`
     at quantiles like 1e-12. ``0.5*erfc(-x/√2)`` is tail-accurate; `erf_vec` remains available
     as specified. Reference test holds `norm_ppf` to 1e-11 absolute vs scipy on
-    (1e-12, 1-1e-12). *(spec §5.9; Task 2, 2026-07-22)*
+    (1e-12, 1-1e-12). *(2026-07-22)*
 
 23. **Separation heuristic in `irls_logistic`:** separation is declared when any fitted
     linear predictor exceeds 30 in absolute value during iteration or the Hessian solve
     fails; the routine then warns and returns a ridge-regularized refit with ridge = 1e-6.
     Thresholds are heuristics chosen to trigger long before float overflow while never firing
-    on well-posed calibration fits. *(spec §5.3; Task 2, 2026-07-22)*
+    on well-posed calibration fits. *(2026-07-22)*
 
 24. **`loess` implementation details:** tricube weights over the ``ceil(frac·n)`` nearest
     neighbors, local linear (degree 1) by default with degree 0 supported, evaluated at the
     data points by default (the ICI use case) with an ``xeval`` override for grids. The
     statsmodels lowess comparison is documented loose (5% of response range): window and
-    boundary handling differ by design. *(spec §5.10, §13; Task 2, 2026-07-22)*
+    boundary handling differ by design. *(2026-07-22)*
 
 25. **`_results` dataclass field sets are the Task-2 minimum.** `ReliabilityCurve`,
     `MetricReport`, `SelectionReport`, `Interpretation`, `BeltResult` are defined with the
-    fields their consumers (Tasks 7–13) are specified to need; extensions within 0.0.1 are
-    allowed and will be recorded here. *(spec §4; Task 2, 2026-07-22)*
+    fields their downstream consumers need; extensions within 0.0.1 are
+    allowed and will be recorded here. *(2026-07-22)*
 
 26. **`test_no_forbidden_imports` runs in a subprocess.** The in-process variant is
     order-dependent — reference tests legitimately import scipy/sklearn/statsmodels into the
     session — so the invariant "importing probcal pulls no forbidden dependency" is asserted
-    in a fresh interpreter. *(spec §13; Task 2, 2026-07-22)*
+    in a fresh interpreter. *(2026-07-22)*
 
 27. **Beta variant semantics.** ``variant="abm"`` fits ``(a, b, c)`` unconstrained then
     applies the betacal refit strategy; ``"ab"`` ties ``a = b`` with a free intercept —
     exactly logistic recalibration on logits (Platt without target smoothing); ``"a"``
     additionally fixes ``c = 0``, leaving a single free exponent — the temperature family in
     a different parameterization, kept for completeness of the nested hierarchy and uniform
-    constraint handling. The spec (§6) named the variants without pinning the tying; the
-    theory chapter deliberately deferred to this entry. *(spec §6 row 3; Task 3, 2026-07-22)*
+    constraint handling. The variant names were fixed before their exact tying; the
+    theory chapter deliberately deferred to this entry. *(2026-07-22)*
 
 28. **Platt target smoothing uses unweighted class counts.** ``N+`` and ``N-`` in the
     Lin–Lin–Weng targets are raw observation counts; sample weights enter the IRLS fit
     itself. Weighted counts would change the smoothing strength under reweighting, which is
-    not what the stabilization is for. *(spec §6 row 1; Task 3, 2026-07-22)*
+    not what the stabilization is for. *(2026-07-22)*
 
 29. **Temperature fitting bracket.** The NLL score equation is solved for ``u = 1/T`` on
     ``[1e-6, 1e6]``; if the score has no sign change on the bracket (degenerate data), the
     boundary with the smaller score magnitude is taken and a ``UserWarning`` is emitted.
-    *(spec §6 row 2; Task 3, 2026-07-22)*
+    *(2026-07-22)*
 
 30. **Venn–Abers batch prediction refits per unique query score.** Each unique query costs
     two PAVA fits on n+1 points after deduplication — exact and simple, fast at the
     calibration-set sizes this package targets. The O((n+m)log(n+m)) precomputed-envelope
     batch algorithm of Vovk & Petej is a planned optimization, to be adopted only if
-    profiling on real workloads shows this path as a bottleneck (spec §16 benchmark note).
-    The theory chapter's computational note was amended to match. *(spec §6 row 10; Task 4,
-    2026-07-22)*
+    profiling on real workloads shows this path as a bottleneck (see the README
+    performance note).
+    The theory chapter's computational note was amended to match. *(2026-07-22)*
 
 31. **CVAP `predict_interval` returns the conservative fold envelope** ``[min_k p0_k,
     max_k p1_k]``. Vovk & Petej define only the scalar geometric-mean merge for CVAP; the
     envelope is a deliberate, conservative summary, and the docstring points the validity
-    guarantee at the per-fold IVAP intervals. *(spec §6 row 10; Task 4, 2026-07-22)*
+    guarantee at the per-fold IVAP intervals. *(2026-07-22)*
 
 32. **Isotonic step semantics.** Tied scores are pooled (weighted) before PAVA; the step
     map is right-continuous with boundaries at each block's first score; out-of-range
     queries clamp to the terminal block levels; ``interpolation="linear"`` joins block
     midpoints ``(first_s + last_s)/2``. CIR interpolates through weight-centered block
-    coordinates. *(spec §6 rows 4–5; Task 4, 2026-07-22)*
+    coordinates. *(2026-07-22)*
 
 33. **Histogram binning defaults and edge cases.** Default ``n_bins=10``, ``strategy="mass"``,
     Jeffreys shrinkage on. Equal-mass quantile edges are deduplicated (heavy ties can reduce
     the effective bin count); empty bins under the ``"width"`` strategy fall back to the
     global weighted event rate. ``is_monotone_`` is computed after fitting — binning does not
-    enforce monotonicity, so the flag reports the fitted rates' actual ordering. *(spec §6
-    row 6; Task 5, 2026-07-22)*
+    enforce monotonicity, so the flag reports the fitted rates' actual ordering. *(2026-07-22)*
 
 34. **BBQ candidate range and prior.** Candidate bin counts default to
     ``B ∈ [2, ceil(sqrt(n))]`` capped at 50; per-bin prior is the Jeffreys Beta(1/2, 1/2),
     consistent with the package's other Jeffreys usages (shrinkage, grade test). Posterior
     weights are the softmax of Beta-Binomial log marginal likelihoods; predictions average
-    posterior-mean bin rates. *(spec §6 row 8; Task 5, 2026-07-22)*
+    posterior-mean bin rates. *(2026-07-22)*
 
 35. **ENIR path and ensemble details.** Ties are aggregated before the path; the
     nearly-isotonic path is computed by modified PAVA with collision events for both
@@ -210,81 +202,76 @@ Each entry references the source that drove the decision.
     solutions are recorded at every breakpoint from λ=0 (raw data) to the fully isotonic
     fit (verified equal to PAVA in tests). BIC uses the binomial log-likelihood with
     probabilities clipped to [1e-12, 1-1e-12] and k = number of distinct fitted levels.
-    *(spec §6 row 9; Task 5, 2026-07-22)*
+    *(2026-07-22)*
 
 36. **Spline calibrator defaults.** Knots at equally spaced quantiles of the logit scores,
     ``K = clip(ceil(n^(1/3)), 4, 12)`` by default; penalty grid ``logspace(-4, 4, 17)``;
     second-difference penalty on the coefficient sequence of the natural cubic basis;
     effective d.o.f. = trace((B'WB + λP)^{-1} B'WB) at convergence. Monotonicity is checked
     on a dense probe grid post-fit and a non-monotone fit warns rather than errors — the
-    penalty does not enforce shape. *(spec §6 row 11; Task 6, 2026-07-22)*
+    penalty does not enforce shape. *(2026-07-22)*
 
 37. **`evaluate` lives in `metrics/__init__.py`.** Spec §4 annotates the metrics
     ``__init__`` as "flat re-exports"; `evaluate` aggregates every submodule, so the
     package root is its least-coupled home — the smallest deviation from the annotation.
-    *(spec §4, §7; Task 7, 2026-07-23)*
+    *(2026-07-23)*
 
 38. **Debiased ECE estimator.** Per non-empty bin, the squared gap is corrected by the
     unbiased variance of the bin event rate, ``max(gap² − ȳ_b(1−ȳ_b)/(n_b−1), 0)``, and the
     reported value is the weight-averaged square root — a correction in the spirit of
     Bröcker (2009) / Ferro & Fricker (2012), floored at zero per bin. The same within-bin
-    variance correction backs ``murphy_decomposition(bias_corrected=True)``. *(spec §7
-    items 3, 6; Task 7, 2026-07-23)*
+    variance correction backs ``murphy_decomposition(bias_corrected=True)``. *(2026-07-23)*
 
 39. **Log-loss calibration/refinement plug-in.** The recalibration curve c(p) is estimated
     by LOESS (frac 0.75, consistent with the ICI family); calibration is the mean
-    KL(Bernoulli(c)‖Bernoulli(p)) and refinement the mean entropy of Bernoulli(c). *(spec
-    §7 item 4; Task 7, 2026-07-23)*
+    KL(Bernoulli(c)‖Bernoulli(p)) and refinement the mean entropy of Bernoulli(c). *(2026-07-23)*
 
 40. **smoothECE implementation.** Residuals are smoothed with a plain Gaussian kernel on
     the logit scale over a 257-point grid spanning the data ±5σ; the paper's reflected
     kernel is a boundary device for [0,1] and is a no-op on the unbounded logit scale. The
     bandwidth is the self-consistent fixed point smECE(σ) = σ found by 40-step bisection on
     [1e-4, 2]. ``ece_sweep`` scans equal-mass B from 2 to min(n, 100) and keeps the largest
-    B with monotone bin event rates. *(spec §7 items 7, 10; Task 7, 2026-07-23)*
+    B with monotone bin event rates. *(2026-07-23)*
 
 41. **Weight handling edge cases in metrics.** The LOESS stage of the ICI family is
     unweighted (weights enter the averaging of distances); e50/e90/emax use unweighted
     quantiles of the distances. Grade tests use raw integer counts — non-uniform sample
     weights are ignored with a UserWarning, because exact binomial and Jeffreys tests are
-    defined on counts. Traffic lights: green > 0.05, amber > 0.01, red ≤ 0.01. *(spec §7
-    items 12, 17–18; Task 7, 2026-07-23)*
+    defined on counts. Traffic lights: green > 0.05, amber > 0.01, red ≤ 0.01. *(2026-07-23)*
 
 42. **Calibration-belt band is the information-matrix (Wald) ellipsoid approximation.**
-    The spec asks for the band "by inverting the LR region"; probcal draws the pointwise
+    The Nattino construction inverts the LR region; probcal draws the pointwise
     band as η(t) ± sqrt(χ²_q(m+1) · x(t)ᵀ I⁻¹ x(t)) at the fitted polynomial — the standard
     Wald approximation of that inversion, asymptotically equivalent and numerically robust.
     Degree selection: forward LR (add a term while p < 0.05), capped at 4. The associated
     p-value is the LR test of the fitted degree-m polynomial against the identity map with
     df = m + 1 (a simplification of Nattino's selection-adjusted test, documented here).
-    *(spec §12; Task 8, 2026-07-23)*
+    *(2026-07-23)*
 
 43. **Curve grids span the 0.5%–99.5% quantiles of the predictions** (smoothed reliability
     curves and the belt): extrapolating a smoother beyond the observed score range invites
     overreading exactly where there is no data. `SmoothReliabilityCurve` added to
-    `_results` per the extension clause of entry 25. *(spec §12; Task 8, 2026-07-23)*
+    `_results` per the extension clause of entry 25. *(2026-07-23)*
 
 44. **`LogitOffset` is scores-only and lives outside the `BaseCalibrator` hierarchy.** Its
     `fit(p)` needs no outcomes (mode A is a constant; mode B matches a target mean), so
     forcing the `fit(s, y)` contract would demand a fake `y`. It duck-types the parts that
     matter downstream (`predict_proba`/`transform`, `affine_logit_coeffs_`, `interpret`,
     `is_monotone_`). The mode-B bisection bracket is ±40 log-odds — beyond the ±27.6 range
-    that 1e-12 clipping permits, so the root is always interior. *(spec §8; Task 9,
-    2026-07-23)*
+    that 1e-12 clipping permits, so the root is always interior. *(2026-07-23)*
 
 45. **Attribution adjustment constants.** Degenerate rows (|s − s₀| < 1e-8 on the working
     scale) replace the ill-conditioned secant with a central-difference local slope at the
     base value, step h = 1e-4. In the Aumann–Shapley path the adjusted base is set to
     ``target − Σφ'`` (equal to g(s₀) on regular rows by telescoping), which zeroes the
-    reconstruction error on degenerate rows as well. *(spec §9; Task 10, 2026-07-23)*
+    reconstruction error on degenerate rows as well. *(2026-07-23)*
 
-46. **Venn–Abers inverse maps use monotone bisection, not searchsorted.** The spec's §10
-    note assigns scalarized Venn–Abers to the block-structure path, but the scalarized map
+46. **Venn–Abers inverse maps use monotone bisection, not searchsorted.** An earlier
+    design note assigned scalarized Venn–Abers to the block-structure path, but the scalarized map
     has no *static* block structure — every query re-augments the two isotonic fits with
     the query point itself. An 80-step monotone bisection on the (tested-monotone)
     scalarized map locates the preimage boundary to ~1e-24 in score space instead. The
-    same generic bisection serves beta and monotone splines, per spec. *(spec §10; Task 11,
-    2026-07-23)*
+    same generic bisection serves beta and monotone splines. *(2026-07-23)*
 
 47. **Inverse-map boundary and range conventions.** ``raw_lo = 0`` whenever the buffered
     lower target does not exceed the map's minimum (everything qualifies), and
@@ -292,8 +279,7 @@ Each entry references the source that drove the decision.
     map's ``raw_hi`` is the *next* block's left edge (the sup of the qualifying region,
     an exclusive boundary), or 1.0 for the terminal block. A Platt fit with slope ≤ 0
     (pathological data) now sets ``is_monotone_ = False`` and is refused by
-    ``interval_inverse`` rather than inverted into nonsense. *(spec §10; Task 11,
-    2026-07-23)*
+    ``interval_inverse`` rather than inverted into nonsense. *(2026-07-23)*
 
 48. **Wrapper duck-typing and offset anchoring.** Model cloning in the cv flow tries
     ``sklearn.base.clone`` through a guarded runtime import (sklearn is never a
@@ -303,23 +289,22 @@ Each entry references the source that drove the decision.
     margin exactly). ``offset_to`` without an explicit ``X`` anchors the target mean on the
     stored calibration scores (out-of-fold scores in the cv flow) — the portfolio the
     calibrator was fitted on. ``interval_inverse`` is undefined for ``ensemble=True``
-    (K distinct maps have no single preimage) and raises NotImplementedError. *(spec §3,
-    §11; Task 12, 2026-07-23)*
+    (K distinct maps have no single preimage) and raises NotImplementedError. *(2026-07-23)*
 
 49. **Selector tie rule and parsimony ranks.** Candidates whose out-of-fold mean lies
     within one standard error (sd_best/√K) of the best mean are tied; the tie goes to the
     lowest parsimony rank (temperature 1 < beta_a 1.5 < platt 2 < beta_ab 2.5 < beta_abm 3
     < scaling_binning 4 < histogram 10 < spline 12 < BBQ 40 < isotonic/CIR 50 < IVAP/CVAP
     60 < ENIR 80; unknown names last). Ranks order model complexity classes; exact values
-    are inert beyond their ordering. *(spec §11; Task 13, 2026-07-23)*
+    are inert beyond their ordering. *(2026-07-23)*
 
 50. **API reference split into three pages; notebook execution stack.** Rendering all 21
     mkdocstrings module blocks on one page triggers a superlinear blowup in the rendering
     stack (12 blocks ≈ 5 s, 16 ≈ 23 s, 18 ≈ 81 s, 20+ > 5 min — measured), independent of
     which modules; `docs/api/` therefore carries three pages of ≤ 8 blocks each (5 s total,
-    strict-clean) with `api.md` as the index. This deviates from the single-`api.md` tree
-    of spec §2 for cause. `ipykernel` was added to the docs extra to execute the committed
-    tutorial notebook. *(spec §2, §14; Task 14, 2026-07-23)*
+    strict-clean) with `api.md` as the index. This deviates from the originally planned
+    single `api.md` page for cause. `ipykernel` was added to the docs extra to execute the committed
+    tutorial notebook. *(2026-07-23)*
 
 51. **`make_pd_portfolio` generative design.** Scores are logit-normal; the true
     probability follows the beta-calibration family with exponents
@@ -328,4 +313,4 @@ Each entry references the source that drove the decision.
     ``slope=1, asymmetry=0, intercept=0`` the scores are exactly calibrated. On the 3%
     default portfolio the high-tail exponent is deliberately unidentifiable (no data
     there) — the events-per-parameter lesson of the data-splitting chapter, exercised by
-    the tests. *(spec §14; Task 14, 2026-07-23)*
+    the tests. *(2026-07-23)*

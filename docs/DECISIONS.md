@@ -294,3 +294,14 @@ Each entry references the source that drove the decision.
     (pathological data) now sets ``is_monotone_ = False`` and is refused by
     ``interval_inverse`` rather than inverted into nonsense. *(spec §10; Task 11,
     2026-07-23)*
+
+48. **Wrapper duck-typing and offset anchoring.** Model cloning in the cv flow tries
+    ``sklearn.base.clone`` through a guarded runtime import (sklearn is never a
+    module-level import) and falls back to ``copy.deepcopy``. Models exposing only
+    ``decision_function`` have their margins mapped through ``expit`` so the calibrator
+    receives probabilities per the input convention (logit-based calibrators recover the
+    margin exactly). ``offset_to`` without an explicit ``X`` anchors the target mean on the
+    stored calibration scores (out-of-fold scores in the cv flow) — the portfolio the
+    calibrator was fitted on. ``interval_inverse`` is undefined for ``ensemble=True``
+    (K distinct maps have no single preimage) and raises NotImplementedError. *(spec §3,
+    §11; Task 12, 2026-07-23)*

@@ -16,6 +16,7 @@ from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
 from .spline import SplineCalibrator
 from .thresholds import calibrated_bands_to_raw, calibrated_interval_to_raw
 from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
+from .wrapper import CalibratedModel
 
 __version__ = "0.0.1"
 
@@ -23,6 +24,7 @@ __all__: list[str] = [
     "AdjustedAttribution",
     "BBQCalibrator",
     "BaseCalibrator",
+    "CalibratedModel",
     "BetaCalibrator",
     "CenteredIsotonicCalibrator",
     "CrossVennAbersCalibrator",

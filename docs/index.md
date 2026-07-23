@@ -10,5 +10,10 @@ visualization on both probability and logit scales, an auditable logit-offset (c
 tendency) adjustment, automatic method selection under nested validation, and prefit /
 cross-validation data flows.
 
-**Status:** pre-release (`0.0.1`). The [Concepts](concepts/why-calibration.md) chapters are the
-theoretical foundation of the package and are written before the corresponding code.
+**Status:** pre-release (`0.0.1`).
+
+Start with [Getting started](getting-started.md), read the
+[Concepts](concepts/why-calibration.md) chapters — the theoretical foundation of the
+package, written before the corresponding code — and walk the executed
+[PD calibration tutorial](notebooks/pd_calibration_walkthrough.ipynb). The
+[How it works](how-it-works.md) page maps the full pipeline in one view.

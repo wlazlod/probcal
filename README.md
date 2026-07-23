@@ -14,7 +14,7 @@ calibration visualization on both probability and logit scales, an auditable log
 data flows (prefit and cross-validation). Primary application domain: credit-risk PD models;
 the package is fully general.
 
-**Status:** pre-release (`0.0.1`), under active development. API may change until the first
+**Status:** pre-release, under active development. API may change until the first
 PyPI release.
 
 ## Installation

@@ -10,7 +10,7 @@ visualization on both probability and logit scales, an auditable logit-offset (c
 tendency) adjustment, automatic method selection under nested validation, and prefit /
 cross-validation data flows.
 
-**Status:** pre-release (`0.0.1`).
+**Status:** pre-release.
 
 Start with [Getting started](getting-started.md), read the
 [Concepts](concepts/why-calibration.md) chapters — the theoretical foundation of the

@@ -17,6 +17,7 @@ Lundberg & Lee (2017); Lundberg et al. (2020); Sundararajan, Taly & Yan
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -73,7 +74,7 @@ def _extract(phi: object, base_value: object) -> tuple[np.ndarray, np.ndarray]:
 def adjust_attributions(
     phi: object,
     base_value: object,
-    calibrator: object,
+    calibrator: Any,
     *,
     scale: str = "logit",
     method: str = "auto",
@@ -138,6 +139,7 @@ def adjust_attributions(
     target = g_work(s)
 
     if use_affine:
+        assert coeffs is not None
         a, b = coeffs
         phi_adj = a * phi_arr
         base_adj = a * base_arr + b

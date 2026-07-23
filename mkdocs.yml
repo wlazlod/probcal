@@ -84,7 +84,13 @@ nav:
       - Inverse maps: concepts/inverse-maps.md
       - Automatic selection: concepts/auto-selection.md
       - Visualization: concepts/visualization.md
-  - API reference: api.md
+  - Tutorials:
+      - PD calibration walkthrough: notebooks/pd_calibration_walkthrough.ipynb
+  - API reference:
+      - Overview: api.md
+      - Calibrators: api/calibrators.md
+      - Metrics and tests: api/metrics.md
+      - Tools: api/tools.md
   - FAQ: faq.md
   - Decisions: DECISIONS.md
   - Licensing: LICENSING.md

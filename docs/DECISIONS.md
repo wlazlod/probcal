@@ -312,3 +312,20 @@ Each entry references the source that drove the decision.
     < scaling_binning 4 < histogram 10 < spline 12 < BBQ 40 < isotonic/CIR 50 < IVAP/CVAP
     60 < ENIR 80; unknown names last). Ranks order model complexity classes; exact values
     are inert beyond their ordering. *(spec §11; Task 13, 2026-07-23)*
+
+50. **API reference split into three pages; notebook execution stack.** Rendering all 21
+    mkdocstrings module blocks on one page triggers a superlinear blowup in the rendering
+    stack (12 blocks ≈ 5 s, 16 ≈ 23 s, 18 ≈ 81 s, 20+ > 5 min — measured), independent of
+    which modules; `docs/api/` therefore carries three pages of ≤ 8 blocks each (5 s total,
+    strict-clean) with `api.md` as the index. This deviates from the single-`api.md` tree
+    of spec §2 for cause. `ipykernel` was added to the docs extra to execute the committed
+    tutorial notebook. *(spec §2, §14; Task 14, 2026-07-23)*
+
+51. **`make_pd_portfolio` generative design.** Scores are logit-normal; the true
+    probability follows the beta-calibration family with exponents
+    ``a_lo = slope·(1+asymmetry)`` (low tail) and ``a_hi = slope``, and the intercept is
+    anchored by bisection so that ``mean(p_true)`` equals ``event_rate`` exactly. With
+    ``slope=1, asymmetry=0, intercept=0`` the scores are exactly calibrated. On the 3%
+    default portfolio the high-tail exponent is deliberately unidentifiable (no data
+    there) — the events-per-parameter lesson of the data-splitting chapter, exercised by
+    the tests. *(spec §14; Task 14, 2026-07-23)*

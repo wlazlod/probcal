@@ -46,6 +46,7 @@ docs = [
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.24",
     "mkdocs-jupyter>=0.24",
+    "ipykernel>=6",  # executes the tutorial notebook (committed executed)
 ]
 
 [build-system]

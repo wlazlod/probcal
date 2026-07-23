@@ -10,6 +10,7 @@ from .base import BaseCalibrator, UnattainableTargetError
 from .bayesian import BBQCalibrator, ENIRCalibrator
 from .binning import HistogramBinningCalibrator, ScalingBinningCalibrator
 from .curves import calibration_belt, reliability_binned, reliability_loess, reliability_spline
+from .datasets import make_pd_portfolio
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
 from .offset import LogitOffset
 from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
@@ -50,4 +51,5 @@ __all__: list[str] = [
     "reliability_loess",
     "reliability_spline",
     "logit",
+    "make_pd_portfolio",
 ]

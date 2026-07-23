@@ -305,3 +305,10 @@ Each entry references the source that drove the decision.
     calibrator was fitted on. ``interval_inverse`` is undefined for ``ensemble=True``
     (K distinct maps have no single preimage) and raises NotImplementedError. *(spec §3,
     §11; Task 12, 2026-07-23)*
+
+49. **Selector tie rule and parsimony ranks.** Candidates whose out-of-fold mean lies
+    within one standard error (sd_best/√K) of the best mean are tied; the tie goes to the
+    lowest parsimony rank (temperature 1 < beta_a 1.5 < platt 2 < beta_ab 2.5 < beta_abm 3
+    < scaling_binning 4 < histogram 10 < spline 12 < BBQ 40 < isotonic/CIR 50 < IVAP/CVAP
+    60 < ENIR 80; unknown names last). Ranks order model complexity classes; exact values
+    are inert beyond their ordering. *(spec §11; Task 13, 2026-07-23)*

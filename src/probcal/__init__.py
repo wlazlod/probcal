@@ -13,6 +13,7 @@ from .curves import calibration_belt, reliability_binned, reliability_loess, rel
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
 from .offset import LogitOffset
 from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
+from .selection import CalibratorSelector
 from .spline import SplineCalibrator
 from .thresholds import calibrated_bands_to_raw, calibrated_interval_to_raw
 from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
@@ -25,6 +26,7 @@ __all__: list[str] = [
     "BBQCalibrator",
     "BaseCalibrator",
     "CalibratedModel",
+    "CalibratorSelector",
     "BetaCalibrator",
     "CenteredIsotonicCalibrator",
     "CrossVennAbersCalibrator",

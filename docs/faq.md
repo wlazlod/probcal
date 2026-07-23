@@ -66,8 +66,3 @@ Yes — for the *interval* from `predict_interval()`, under exchangeability. The
 from `predict_proba` is the log-loss-minimax merger `p1/(1-p0+p1)` and is not itself
 covered by the theorem. See
 [Distribution-free methods](concepts/methods-distribution-free.md).
-
-## Why is the version still 0.0.1?
-
-The version is frozen at 0.0.1 until the first PyPI release; everything accumulates
-under `[Unreleased]` in the changelog. The bump to 0.1.0 is the owner's decision.

@@ -53,6 +53,31 @@ it inverts the model's own sigmoid link, not the calibrator, and therefore targe
 Pass `buffer_logit=m` to keep counterfactuals valid under future re-anchoring of
 magnitude up to `m`.
 
+## How does probcal compare to netcal?
+
+The two packages overlap on method names (temperature, Platt/logistic, beta, histogram
+binning, BBQ, ENIR) but target different settings.
+
+**netcal** is built for deep-learning pipelines: it covers multi-class and object-detection
+confidence calibration and regression-uncertainty calibration, and it runs on the
+PyTorch stack. If your model is a neural network, your problem is multi-class, or you need
+detection/regression calibration, netcal is the right tool — probcal deliberately does none
+of those (binary only, by design).
+
+**probcal** is built for binary probabilities feeding regulated or audited decisions —
+credit-risk PD models being the archetype. What it adds that netcal does not aim at: a
+numpy-only runtime (no torch/scipy in the import path — a small, auditable dependency
+surface), logit-scale diagnostics readable on low-event-rate portfolios, `interpret()` on
+every fitted map, the first-class auditable [offset](concepts/offset.md) with pre/post
+guardrail reports, structurally leak-free
+[automatic selection](concepts/auto-selection.md), Venn–Abers interval predictions,
+per-grade binomial/Jeffreys backtests, calibrated→raw
+[threshold translation](concepts/inverse-maps.md), and SHAP additivity repair.
+
+Rule of thumb: neural networks, multi-class, detection, or regression → netcal. Binary
+scores feeding cutoffs, pricing, capital, or reason codes — especially under validation or
+supervisory review → probcal.
+
 ## Can I select a calibrator by ECE or Hosmer–Lemeshow?
 
 No — the selector refuses both. They are binning-sensitive, biased, non-proper report

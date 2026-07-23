@@ -25,7 +25,13 @@ plot time, not at computation time.
 
 On a low-PD portfolio, the probability-scale reliability diagram is a picture of almost
 nothing: the entire book lives between 0 and 0.1, the region a linear axis compresses into
-its left margin. Plotting on the logit scale stretches exactly where the decisions are —
+its left margin.
+
+![Reliability diagram on the probability scale: the whole portfolio is compressed into the lower-left corner](img/reliability_probability.png)
+
+The same data on the logit scale, where the miscalibration becomes readable:
+
+![Reliability diagram on the logit scale: binned points with Wilson intervals sit below the identity, and the tail distortion is visible](img/reliability_logit.png) Plotting on the logit scale stretches exactly where the decisions are —
 the difference between 0.5% and 1% PD is a factor of two in price and a full grade on a
 masterscale, and it is invisible on \( [0,1] \) but a fixed distance in log-odds.
 `plot_reliability(scale="logit")` is therefore the package's default recommendation for
@@ -49,6 +55,8 @@ the global test. The construction (Nattino et al., 2017, describe the practition
 version) is reimplemented in probcal from the papers, on the numpy-only χ² machinery of
 `probcal._math`.
 
+![Calibration belt on the miscalibrated portfolio: the 80% and 95% bands exclude the diagonal, rejecting calibration across the whole range](img/belt.png)
+
 ## The remaining plots
 
 Three purpose-built views complete `probcal.plots`. `plot_comparison(before, after)` puts
@@ -60,6 +68,12 @@ calibration uncertainty concentrates. `plot_selection` renders the
 guardrail markers — the table, made presentable. All of them accept the dataclasses from
 `probcal.curves`, and none of them is importable without the `[viz]` extra; the import
 guard raises with the install instruction rather than a bare `ImportError`.
+
+![Before/after comparison: raw scores vs beta-calibrated probabilities on the logit scale](img/comparison.png)
+
+![Venn–Abers interval widths against the score: uncertainty concentrates where calibration data are sparse](img/interval.png)
+
+![Selection report as a ranked dot plot with fold-spread whiskers; the chosen candidate in green](img/selection.png)
 
 ## In probcal
 

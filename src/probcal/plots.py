@@ -55,17 +55,28 @@ def plot_reliability(
     and a count histogram margin.
 
     ``scale="logit"`` stretches the low-probability region — the recommended
-    view for PD portfolios.
+    view for PD portfolios. Bins whose event rate is exactly 0 or 1 have no
+    finite logit and are omitted from the logit-scale point layer; they remain
+    visible in the count margin.
     """
     _require_mpl()
     if ax is None:
         _, ax = _plt.subplots(figsize=(6.5, 6))
     if scale == "logit":
-        x, ylo = curve.pred_mean_logit, logit(curve.ci_low)
-        yv, yhi = logit(curve.event_rate), logit(curve.ci_high)
+        keep = (curve.event_rate > 0.0) & (curve.event_rate < 1.0)
+        x, ylo = curve.pred_mean_logit[keep], logit(curve.ci_low[keep])
+        yv, yhi = logit(curve.event_rate[keep]), logit(curve.ci_high[keep])
         diag = np.linspace(x.min() - 0.5, x.max() + 0.5, 50)
         ax.plot(diag, diag, ls="--", c="grey", lw=1, label="identity")
-        ax.errorbar(x, yv, yerr=[yv - ylo, yhi - yv], fmt="o", ms=4, capsize=2, label="binned")
+        ax.errorbar(
+            x,
+            yv,
+            yerr=[np.maximum(yv - ylo, 0.0), np.maximum(yhi - yv, 0.0)],
+            fmt="o",
+            ms=4,
+            capsize=2,
+            label="binned",
+        )
         if smooth is not None:
             ax.plot(smooth.grid_logit, logit(smooth.event_rate), lw=1.5, label="smoothed")
         _logit_axis(ax)

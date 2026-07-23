@@ -85,3 +85,16 @@ def test_belt_grid_scales_consistent() -> None:
     y, p = _calibrated(3000)
     belt = calibration_belt(y, p)
     np.testing.assert_allclose(belt.grid_logit, logit(belt.grid_p), atol=1e-12)
+
+
+def test_wilson_ci_contains_rate_with_empty_event_bins() -> None:
+    # A zero-event bin: analytically the Wilson lower bound touches 0 exactly,
+    # and floating-point noise must not push ci_low above the rate (it broke
+    # errorbar rendering with negative yerr on exactly this portfolio).
+    from probcal import make_pd_portfolio
+
+    port = make_pd_portfolio(n=6000, random_state=42)
+    curve = reliability_binned(port.y, port.scores)
+    assert float(curve.event_rate[0]) == 0.0  # the offending zero-event bin
+    assert np.all(curve.ci_low <= curve.event_rate)
+    assert np.all(curve.event_rate <= curve.ci_high)

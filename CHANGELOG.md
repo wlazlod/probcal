@@ -6,7 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
+### Fixed
+
+- `reliability_binned`: Wilson interval bounds are now forced to contain the point estimate (floating-point noise at zero-event bins could push `ci_low` above a 0.0 event rate, breaking error-bar rendering)
+- `plot_reliability(scale="logit")`: bins with an event rate of exactly 0 or 1 (no finite logit) are omitted from the point layer instead of rendering at the clipping floor and crushing the axis; they remain visible in the count margin
+
 ### Added
+
+- Documentation: generated example figures in the visualization chapter, "In probcal" code snippets in every concept chapter, and a probcal-vs-netcal guidance note in the FAQ
 
 - Polish: README quickstart with real printed output, feature matrix vs scikit-learn/netcal/single-method packages, performance note on the deliberate absence of Rust acceleration, docs cross-linking pass
 - Datasets, tutorial, and user docs: `make_pd_portfolio` (beta-family generative miscalibration with exact event-rate anchoring), executed tutorial notebook `pd_calibration_walkthrough.ipynb` (diagnose → select → fit → re-anchor → backtest → threshold translation, incl. the counterfactual-engine interop recipe), `getting-started.md` with a runnable quickstart and its printed output, `how-it-works.md` pipeline walkthrough with schema, three-page mkdocstrings API reference, and the FAQ (inverse-map protocol, `Target.probability` trap, selection rules)

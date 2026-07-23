@@ -66,12 +66,16 @@ def reliability_binned(
     pred_mean = wp / w_kept
     event_rate = wy / w_kept
     ci_low, ci_high = _wilson(event_rate, counts.astype(np.float64))
+    # The Wilson interval contains the point estimate analytically; enforce it
+    # against floating-point noise at 0/1-rate bins (negative yerr otherwise).
+    ci_low = np.minimum(np.clip(ci_low, 0.0, 1.0), event_rate)
+    ci_high = np.maximum(np.clip(ci_high, 0.0, 1.0), event_rate)
     return ReliabilityCurve(
         pred_mean=pred_mean,
         event_rate=event_rate,
         count=counts.astype(np.int64),
-        ci_low=np.clip(ci_low, 0.0, 1.0),
-        ci_high=np.clip(ci_high, 0.0, 1.0),
+        ci_low=ci_low,
+        ci_high=ci_high,
         pred_mean_logit=logit(pred_mean),
     )
 

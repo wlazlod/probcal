@@ -24,6 +24,8 @@ Dated log of ambiguities resolved and design choices made during implementation.
 4. **GitHub repository `wlazlod/probcal` created private; public flip is the owner's
    decision.** While private, `docs.yml` (gh-pages deploy) is dormant; `publish.yml` is
    tag-gated and inactive until `0.1.0`. *(grooming 2026-07-22)*
+   — Flipped public on the owner's instruction; GitHub Pages enabled from the `gh-pages`
+   branch and the docs deploy activated. *(2026-07-23)*
 
 5. **Repository is bound to the Obsidian project knowledge base at scaffold time.**
    Daily notes and reference-verification evidence live in the vault; canonical engineering

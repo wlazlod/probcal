@@ -59,11 +59,9 @@ def test_fit_length_mismatch_raises() -> None:
         PlattCalibrator().fit([0.1, 0.2], [0, 1, 1])
 
 
-def test_interval_inverse_not_implemented_yet() -> None:
-    s, y = _calibrated_sample()
-    cal = PlattCalibrator().fit(s, y)
-    with pytest.raises(NotImplementedError):
-        cal.interval_inverse(0.0, 0.02)
+def test_interval_inverse_requires_fit() -> None:
+    with pytest.raises(RuntimeError, match="not fitted"):
+        PlattCalibrator().interval_inverse(0.0, 0.02)
 
 
 def test_is_monotone_flag_default_true() -> None:

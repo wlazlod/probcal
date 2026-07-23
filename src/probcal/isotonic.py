@@ -83,6 +83,21 @@ class IsotonicCalibrator(BaseCalibrator):
         idx = np.clip(idx, 0, self.n_blocks_ - 1)
         return self.block_mean_[idx]
 
+    def _output_range(self) -> tuple[float, float]:
+        return float(self.block_mean_[0]), float(self.block_mean_[-1])
+
+    def _inverse_left(self, t: float) -> float:
+        # Left edge of the first block whose level reaches t (spec block-edge semantics).
+        j = int(np.searchsorted(self.block_mean_, t, side="left"))
+        return float(self.block_first_s_[j])
+
+    def _inverse_right(self, t: float) -> float:
+        # Boundary after the last block whose level stays within t.
+        j = int(np.searchsorted(self.block_mean_, t, side="right")) - 1
+        if j >= self.n_blocks_ - 1:
+            return 1.0
+        return float(self.block_first_s_[j + 1])
+
     def interpret(self) -> Interpretation:
         """Read the block structure as effective complexity and local event rates."""
         self._check_fitted()
@@ -131,6 +146,22 @@ class CenteredIsotonicCalibrator(IsotonicCalibrator):
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         return np.interp(s, self.block_center_s_, self.block_mean_)
+
+    def _inverse_left(self, t: float) -> float:
+        m, c = self.block_mean_, self.block_center_s_
+        j = int(np.searchsorted(m, t, side="left"))
+        if j == 0:
+            return 0.0
+        frac = (t - m[j - 1]) / (m[j] - m[j - 1])
+        return float(c[j - 1] + frac * (c[j] - c[j - 1]))
+
+    def _inverse_right(self, t: float) -> float:
+        m, c = self.block_mean_, self.block_center_s_
+        j = int(np.searchsorted(m, t, side="right")) - 1
+        if j >= len(m) - 1:
+            return 1.0
+        frac = (t - m[j]) / (m[j + 1] - m[j])
+        return float(c[j] + frac * (c[j + 1] - c[j]))
 
     def interpret(self) -> Interpretation:
         """Isotonic reading plus the strictness property CIR adds."""

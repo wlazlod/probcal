@@ -89,6 +89,19 @@ class HistogramBinningCalibrator(BaseCalibrator):
     def _predict(self, s: np.ndarray) -> np.ndarray:
         return self.bin_rate_[np.searchsorted(self.edges_, s, side="right")]
 
+    def _output_range(self) -> tuple[float, float]:
+        return float(self.bin_rate_[0]), float(self.bin_rate_[-1])
+
+    def _inverse_left(self, t: float) -> float:
+        j = int(np.searchsorted(self.bin_rate_, t, side="left"))
+        return 0.0 if j == 0 else float(self.edges_[j - 1])
+
+    def _inverse_right(self, t: float) -> float:
+        j = int(np.searchsorted(self.bin_rate_, t, side="right")) - 1
+        if j >= len(self.bin_rate_) - 1:
+            return 1.0
+        return float(self.edges_[j])
+
     def interpret(self) -> Interpretation:
         """Read bin rates as local event frequencies and B as the complexity dial."""
         self._check_fitted()
@@ -152,6 +165,22 @@ class ScalingBinningCalibrator(BaseCalibrator):
     def _predict(self, s: np.ndarray) -> np.ndarray:
         g = self.platt_.predict_proba(s)
         return self.bin_value_[np.searchsorted(self.edges_, g, side="right")]
+
+    def _output_range(self) -> tuple[float, float]:
+        return float(self.bin_value_[0]), float(self.bin_value_[-1])
+
+    def _pullback(self, platt_value: float) -> float:
+        return self.platt_._closed_inverse(platt_value)
+
+    def _inverse_left(self, t: float) -> float:
+        j = int(np.searchsorted(self.bin_value_, t, side="left"))
+        return 0.0 if j == 0 else self._pullback(float(self.edges_[j - 1]))
+
+    def _inverse_right(self, t: float) -> float:
+        j = int(np.searchsorted(self.bin_value_, t, side="right")) - 1
+        if j >= len(self.bin_value_) - 1:
+            return 1.0
+        return self._pullback(float(self.edges_[j]))
 
     def interpret(self) -> Interpretation:
         """Two-stage reading: Platt map, then the error-measurability discretization."""

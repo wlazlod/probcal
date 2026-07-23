@@ -51,6 +51,7 @@ class PlattCalibrator(BaseCalibrator):
         res = irls_logistic(X, targets, w=w)
         self.b_ = float(res.beta[0])
         self.a_ = float(res.beta[1])
+        self.is_monotone_ = self.a_ > 0.0
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         return expit(self.a_ * logit(s) + self.b_)
@@ -60,6 +61,15 @@ class PlattCalibrator(BaseCalibrator):
         """``(a, b)``: Platt scaling is affine on the logit scale."""
         self._check_fitted()
         return (self.a_, self.b_)
+
+    def _closed_inverse(self, t: float) -> float:
+        return float(expit(np.array([(logit(np.array([t]))[0] - self.b_) / self.a_]))[0])
+
+    def _inverse_left(self, t: float) -> float:
+        return self._closed_inverse(t)
+
+    def _inverse_right(self, t: float) -> float:
+        return self._closed_inverse(t)
 
     def interpret(self) -> Interpretation:
         """Read the fitted slope and intercept against the identity ``(1, 0)``."""
@@ -132,6 +142,15 @@ class TemperatureCalibrator(BaseCalibrator):
         """``(1/T, 0)``: temperature scaling is affine on the logit scale."""
         self._check_fitted()
         return (1.0 / self.T_, 0.0)
+
+    def _closed_inverse(self, t: float) -> float:
+        return float(expit(np.array([self.T_ * logit(np.array([t]))[0]]))[0])
+
+    def _inverse_left(self, t: float) -> float:
+        return self._closed_inverse(t)
+
+    def _inverse_right(self, t: float) -> float:
+        return self._closed_inverse(t)
 
     def interpret(self) -> Interpretation:
         """Read the fitted temperature against the identity ``T = 1``."""

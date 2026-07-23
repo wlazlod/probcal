@@ -277,3 +277,20 @@ Each entry references the source that drove the decision.
     base value, step h = 1e-4. In the Aumann–Shapley path the adjusted base is set to
     ``target − Σφ'`` (equal to g(s₀) on regular rows by telescoping), which zeroes the
     reconstruction error on degenerate rows as well. *(spec §9; Task 10, 2026-07-23)*
+
+46. **Venn–Abers inverse maps use monotone bisection, not searchsorted.** The spec's §10
+    note assigns scalarized Venn–Abers to the block-structure path, but the scalarized map
+    has no *static* block structure — every query re-augments the two isotonic fits with
+    the query point itself. An 80-step monotone bisection on the (tested-monotone)
+    scalarized map locates the preimage boundary to ~1e-24 in score space instead. The
+    same generic bisection serves beta and monotone splines, per spec. *(spec §10; Task 11,
+    2026-07-23)*
+
+47. **Inverse-map boundary and range conventions.** ``raw_lo = 0`` whenever the buffered
+    lower target does not exceed the map's minimum (everything qualifies), and
+    symmetrically ``raw_hi = 1``; on the logit scale these become ∓inf. The isotonic step
+    map's ``raw_hi`` is the *next* block's left edge (the sup of the qualifying region,
+    an exclusive boundary), or 1.0 for the terminal block. A Platt fit with slope ≤ 0
+    (pathological data) now sets ``is_monotone_ = False`` and is refused by
+    ``interval_inverse`` rather than inverted into nonsense. *(spec §10; Task 11,
+    2026-07-23)*

@@ -157,6 +157,44 @@ class LogitOffset:
             ),
         )
 
+    def interval_inverse(
+        self,
+        lo: float,
+        hi: float,
+        *,
+        space: str = "probability",
+        buffer_logit: float = 0.0,
+    ) -> tuple[float, float]:
+        """Closed-form preimage: subtract delta on the logit scale.
+
+        Same protocol as ``BaseCalibrator.interval_inverse``; the offset's
+        output range is the full unit interval, so only a crossed buffer can
+        make a target unattainable.
+        """
+        if not self.fitted_:
+            raise RuntimeError("LogitOffset is not fitted; call fit() first")
+        if not 0.0 <= lo <= hi <= 1.0:
+            raise ValueError(f"need 0 <= lo <= hi <= 1, got lo={lo}, hi={hi}")
+        from .base import UnattainableTargetError
+
+        lo_b, hi_b = float(lo), float(hi)
+        if buffer_logit > 0.0:
+            if lo > 0.0:
+                lo_b = float(expit(np.array([logit(np.array([lo]))[0] + buffer_logit]))[0])
+            if hi < 1.0:
+                hi_b = float(expit(np.array([logit(np.array([hi]))[0] - buffer_logit]))[0])
+            if lo_b > hi_b:
+                raise UnattainableTargetError(
+                    f"buffer_logit={buffer_logit} empties the calibrated interval [{lo}, {hi}]"
+                )
+        lo_z = -np.inf if lo_b <= 0.0 else float(logit(np.array([lo_b]))[0]) - self.delta_
+        hi_z = np.inf if hi_b >= 1.0 else float(logit(np.array([hi_b]))[0]) - self.delta_
+        if space == "logit":
+            return lo_z, hi_z
+        raw_lo = 0.0 if np.isneginf(lo_z) else float(expit(np.array([lo_z]))[0])
+        raw_hi = 1.0 if np.isposinf(hi_z) else float(expit(np.array([hi_z]))[0])
+        return raw_lo, raw_hi
+
     def audit_report(self, y: object, p: object, *, sample_weight: object = None) -> AuditReport:
         """Pre/post guardrail comparison for the validator's one-table view."""
         if not self.fitted_:

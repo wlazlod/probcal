@@ -345,6 +345,26 @@ def chi2_ppf(q: float, df: float) -> float:
     return bisect(lambda x: float(gammainc_lower(df / 2.0, x / 2.0)) - q, 0.0, hi, tol=1e-12)
 
 
+def beta_ppf(q: float, a: float, b: float) -> float:
+    """Beta(a, b) quantile function via bisection on :func:`betainc`.
+
+    Parameters
+    ----------
+    q : float
+        Probability level in ``(0, 1)``.
+    a, b : float
+        Positive shape parameters.
+
+    Returns
+    -------
+    float
+        ``x`` such that ``I_x(a, b) = q``.
+    """
+    if not 0.0 < q < 1.0:
+        raise ValueError("beta_ppf: q must lie in (0, 1)")
+    return bisect(lambda x: float(betainc(a, b, x)) - q, 0.0, 1.0, tol=1e-12)
+
+
 def norm_cdf(x: object) -> np.ndarray:
     """Standard normal CDF via the complementary error function.
 

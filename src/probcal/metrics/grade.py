@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import betainc, norm_cdf
+from .._math import beta_ppf, betainc, norm_cdf
 from .scores import _prep
 
 
@@ -59,6 +59,8 @@ class BinomialGradeResult:
     p_exact: np.ndarray
     p_normal: np.ndarray
     light: tuple
+    ci_low: np.ndarray
+    ci_high: np.ndarray
 
 
 def binomial_grade_test(
@@ -70,6 +72,9 @@ def binomial_grade_test(
     supports. The exact tail uses the incomplete-beta identity
     ``P(X >= k) = I_PD(k, n - k + 1)``; the normal approximation is reported
     alongside. Traffic lights: green > 0.05, amber > 0.01, red <= 0.01.
+    ``ci_low``/``ci_high`` are 90% Clopper-Pearson display intervals for the
+    observed rate; the traffic light itself remains the one-sided exact test,
+    unchanged.
     """
     y_arr, p_arr, _ = _prep(y, p, None)
     _check_weights(sample_weight, len(y_arr))
@@ -86,8 +91,22 @@ def binomial_grade_test(
         z = (k[i] - n[i] * pd[i]) / se if se > 0 else 0.0
         p_normal[i] = float(1.0 - norm_cdf(np.array([z]))[0])
     light = tuple(_traffic_light(v) for v in p_exact)
+    ci_low = np.empty(len(labels))
+    ci_high = np.empty(len(labels))
+    for i in range(len(labels)):
+        ki, ni = int(k[i]), int(n[i])
+        ci_low[i] = 0.0 if ki == 0 else beta_ppf(0.05, float(ki), float(ni - ki + 1))
+        ci_high[i] = 1.0 if ki == ni else beta_ppf(0.95, float(ki + 1), float(ni - ki))
     return BinomialGradeResult(
-        grades=labels, n=n, k=k, pd=pd, p_exact=p_exact, p_normal=p_normal, light=light
+        grades=labels,
+        n=n,
+        k=k,
+        pd=pd,
+        p_exact=p_exact,
+        p_normal=p_normal,
+        light=light,
+        ci_low=ci_low,
+        ci_high=ci_high,
     )
 
 
@@ -101,6 +120,8 @@ class JeffreysGradeResult:
     pd: np.ndarray
     p_value: np.ndarray
     light: tuple
+    ci_low: np.ndarray
+    ci_high: np.ndarray
 
 
 def jeffreys_grade_test(
@@ -110,7 +131,9 @@ def jeffreys_grade_test(
 
     One-sided and conservative by design: a small value flags a grade whose
     PD is likely understated. Do not read it two-sided (a recurring
-    validation error — see the metrics chapter).
+    validation error — see the metrics chapter). ``ci_low``/``ci_high`` are
+    the central 90% Jeffreys posterior display intervals; the traffic light
+    itself remains the one-sided posterior test, unchanged.
     """
     y_arr, p_arr, _ = _prep(y, p, None)
     _check_weights(sample_weight, len(y_arr))
@@ -120,4 +143,19 @@ def jeffreys_grade_test(
     for i in range(len(labels)):
         p_value[i] = float(betainc(k[i] + 0.5, n[i] - k[i] + 0.5, pd[i]))
     light = tuple(_traffic_light(v) for v in p_value)
-    return JeffreysGradeResult(grades=labels, n=n, k=k, pd=pd, p_value=p_value, light=light)
+    ci_low = np.empty(len(labels))
+    ci_high = np.empty(len(labels))
+    for i in range(len(labels)):
+        a, b = k[i] + 0.5, n[i] - k[i] + 0.5
+        ci_low[i] = beta_ppf(0.05, a, b)
+        ci_high[i] = beta_ppf(0.95, a, b)
+    return JeffreysGradeResult(
+        grades=labels,
+        n=n,
+        k=k,
+        pd=pd,
+        p_value=p_value,
+        light=light,
+        ci_low=ci_low,
+        ci_high=ci_high,
+    )

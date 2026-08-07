@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from probcal._math import (
+    beta_ppf,
     betainc,
     bisect,
     chi2_ppf,
@@ -105,6 +106,26 @@ def test_chi2_ppf_roundtrip() -> None:
         x = 7.3
         q = gammainc_lower(df / 2.0, x / 2.0)
         assert abs(chi2_ppf(q, df) - x) < 1e-8
+
+
+def test_beta_ppf_hand_anchors() -> None:
+    assert abs(beta_ppf(0.5, 2.0, 2.0) - 0.5) < 1e-10
+    assert abs(beta_ppf(0.5, 1.0, 1.0) - 0.5) < 1e-10
+    # Beta(1,2): CDF = 1 - (1-x)^2 -> x = 1 - sqrt(1-q); q=0.19 -> 0.1.
+    assert abs(beta_ppf(0.19, 1.0, 2.0) - 0.1) < 1e-10
+
+
+def test_beta_ppf_monotone_in_q() -> None:
+    qs = np.linspace(0.01, 0.99, 25)
+    vals = [beta_ppf(float(q), 2.5, 7.0) for q in qs]
+    assert np.all(np.diff(vals) > 0)
+
+
+def test_beta_ppf_validation() -> None:
+    with pytest.raises(ValueError, match="beta_ppf"):
+        beta_ppf(0.0, 1.0, 1.0)
+    with pytest.raises(ValueError, match="beta_ppf"):
+        beta_ppf(1.0, 1.0, 1.0)
 
 
 def test_norm_cdf_symmetry() -> None:

@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from probcal._math import (
+    beta_ppf,
     betainc,
     chi2_ppf,
     erf_vec,
@@ -40,6 +41,15 @@ def test_gammainc_lower_vs_scipy() -> None:
     for s in (0.5, 1.0, 2.5, 10.0, 50.0, 150.0):
         err = np.max(np.abs(gammainc_lower(s, x) - sp.gammainc(s, x)))
         assert err < 1e-12, f"gammainc_lower(s={s}): max abs err {err:.2e}"
+
+
+def test_beta_ppf_vs_scipy() -> None:
+    stats = pytest.importorskip("scipy.stats")
+    for a in (0.5, 1.0, 2.0, 5.0, 20.0):
+        for b in (0.5, 1.0, 2.0, 5.0, 20.0):
+            for q in (0.05, 0.25, 0.5, 0.75, 0.95):
+                ours, ref = beta_ppf(q, a, b), float(stats.beta.ppf(q, a, b))
+                assert abs(ours - ref) < 1e-8 + abs(ref) * 1e-8, f"a={a}, b={b}, q={q}"
 
 
 def test_chi2_ppf_vs_scipy() -> None:

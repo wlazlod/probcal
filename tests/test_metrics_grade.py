@@ -3,9 +3,44 @@
 import numpy as np
 import pytest
 
+from probcal._math import betainc, bisect
 from probcal.metrics.grade import binomial_grade_test, jeffreys_grade_test
 
 RNG = np.random.default_rng(71)
+
+
+def test_grade_cis_contain_observed_rate() -> None:
+    y = (RNG.random(300) < 0.05).astype(float)
+    p = np.full(300, 0.05)
+    grades = np.array(["g1"] * 100 + ["g2"] * 100 + ["g3"] * 100)
+    for res in (binomial_grade_test(y, p, grades), jeffreys_grade_test(y, p, grades)):
+        rate = res.k / res.n
+        assert np.all(res.ci_low <= rate + 1e-12)
+        assert np.all(rate <= res.ci_high + 1e-12)
+
+
+def test_jeffreys_ci_hand_anchor() -> None:
+    # k=1, n=100: central 90% interval of Beta(1.5, 99.5), independently by bisection.
+    y = np.concatenate([np.ones(1), np.zeros(99)])
+    p = np.full(100, 0.02)
+    res = jeffreys_grade_test(y, p, np.array(["A"] * 100))
+    lo = bisect(lambda x: float(betainc(1.5, 99.5, x)) - 0.05, 0.0, 1.0, tol=1e-12)
+    hi = bisect(lambda x: float(betainc(1.5, 99.5, x)) - 0.95, 0.0, 1.0, tol=1e-12)
+    np.testing.assert_allclose(res.ci_low, [lo], atol=1e-9)
+    np.testing.assert_allclose(res.ci_high, [hi], atol=1e-9)
+
+
+def test_clopper_pearson_edge_cases() -> None:
+    # Two grades in one call so y has both classes: "hi" is all events (k=n),
+    # "lo" is event-free (k=0).
+    y = np.concatenate([np.ones(30), np.zeros(70)])
+    p = np.full(100, 0.05)
+    grades = np.array(["hi"] * 30 + ["lo"] * 70)
+    res = binomial_grade_test(y, p, grades)
+    i_hi, i_lo = res.grades.index("hi"), res.grades.index("lo")
+    assert res.ci_high[i_hi] == 1.0  # k = n
+    assert res.ci_low[i_lo] == 0.0  # k = 0
+    assert res.ci_low[i_hi] > 0.0 and res.ci_high[i_lo] < 1.0
 
 
 def test_binomial_exact_hand_case() -> None:

@@ -11,6 +11,8 @@ Lemeshow, Phillips, Finazzi & Bertolini (2017) — full records in the
 documentation. The belt is reimplemented from the papers; no GPL code is used.
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from ._math import chi2_ppf, expit, gammainc_lower, irls_logistic, loess, logit
@@ -116,6 +118,43 @@ def reliability_spline(
     grid = _grid(p_arr, grid_size)
     return SmoothReliabilityCurve(
         grid_p=grid, grid_logit=logit(grid), event_rate=cal.predict_proba(grid)
+    )
+
+
+@dataclass(frozen=True)
+class EcceCurve:
+    """Cumulative-deviation walk over predictions sorted ascending (ECCE)."""
+
+    frac: np.ndarray
+    cumdev: np.ndarray
+    sd_null: np.ndarray
+    stat_max: float
+    argmax_frac: float
+
+
+def ecce_curve(y: object, p: object, *, sample_weight: object = None) -> EcceCurve:
+    """Cumulative-deviation walk for the ECCE plot (Arrieta-Ibarra et al., 2022).
+
+    Sorts by prediction and accumulates weighted residuals, mirroring
+    ``metrics.ecce`` exactly so ``stat_max`` agrees with the metric.
+    ``sd_null`` is the pointwise standard deviation of the walk under
+    calibration — an envelope for reading, not a simultaneous band.
+    """
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    order = np.argsort(p_arr, kind="stable")
+    n = len(p_arr)
+    wsum = w.sum()
+    cumdev = np.cumsum(w[order] * (y_arr[order] - p_arr[order])) / wsum
+    # Pointwise H0 SD; reduces to sqrt(cumsum(p(1-p)))/n for unit weights.
+    sd_null = np.sqrt(np.cumsum(w[order] ** 2 * p_arr[order] * (1.0 - p_arr[order]))) / wsum
+    frac = np.arange(1, n + 1) / n
+    k = int(np.argmax(np.abs(cumdev)))
+    return EcceCurve(
+        frac=frac,
+        cumdev=cumdev,
+        sd_null=sd_null,
+        stat_max=float(np.abs(cumdev[k])),
+        argmax_frac=float(frac[k]),
     )
 
 

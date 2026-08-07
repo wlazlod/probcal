@@ -5,7 +5,9 @@ import numpy as np
 from probcal._math import expit, logit
 from probcal._results import BeltResult, ReliabilityCurve
 from probcal.curves import (
+    EcceCurve,
     calibration_belt,
+    ecce_curve,
     reliability_binned,
     reliability_loess,
     reliability_spline,
@@ -98,3 +100,29 @@ def test_wilson_ci_contains_rate_with_empty_event_bins() -> None:
     assert float(curve.event_rate[0]) == 0.0  # the offending zero-event bin
     assert np.all(curve.ci_low <= curve.event_rate)
     assert np.all(curve.event_rate <= curve.ci_high)
+
+
+def test_ecce_curve_hand_case() -> None:
+    # 4 points already sorted by p. Residuals: -0.2, -0.4, 0.6, 0.2.
+    y = np.array([0.0, 0.0, 1.0, 1.0])
+    p = np.array([0.2, 0.4, 0.4, 0.8])
+    c = ecce_curve(y, p)
+    assert isinstance(c, EcceCurve)
+    np.testing.assert_allclose(c.frac, [0.25, 0.5, 0.75, 1.0], atol=1e-12)
+    np.testing.assert_allclose(c.cumdev, np.cumsum([-0.2, -0.4, 0.6, 0.2]) / 4.0, atol=1e-12)
+    var = np.cumsum([0.2 * 0.8, 0.4 * 0.6, 0.4 * 0.6, 0.8 * 0.2])
+    np.testing.assert_allclose(c.sd_null, np.sqrt(var) / 4.0, atol=1e-12)
+    assert abs(c.stat_max - np.max(np.abs(c.cumdev))) < 1e-15
+    assert c.argmax_frac == c.frac[int(np.argmax(np.abs(c.cumdev)))]
+
+
+def test_ecce_curve_stat_max_matches_metric() -> None:
+    from probcal.metrics import ecce
+
+    y, p = _calibrated(2000)
+    w = RNG.uniform(0.5, 2.0, 2000)
+    assert abs(ecce_curve(y, p).stat_max - ecce(y, p).stat_max) < 1e-15
+    c_w = ecce_curve(y, p, sample_weight=w)
+    assert abs(c_w.stat_max - ecce(y, p, sample_weight=w).stat_max) < 1e-15
+    # Final cumdev equals the metric-consistent weighted mean residual.
+    assert abs(c_w.cumdev[-1] - float(np.sum(w * (y - p)) / w.sum())) < 1e-12

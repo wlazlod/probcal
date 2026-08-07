@@ -5,7 +5,16 @@ import pytest
 
 from probcal._math import expit
 from probcal._results import MetricReport
-from probcal.metrics import evaluate
+from probcal.metrics import (
+    ReliabilitySummary,
+    calibration_intercept,
+    calibration_slope,
+    e90,
+    evaluate,
+    ici,
+    reliability_summary,
+    spiegelhalter_z,
+)
 
 RNG = np.random.default_rng(73)
 
@@ -34,6 +43,18 @@ def test_evaluate_seeded_reproducible() -> None:
     b = evaluate(y, p, n_boot=20, seed=7)
     np.testing.assert_allclose(a.ci_low, b.ci_low)
     np.testing.assert_allclose(a.ci_high, b.ci_high)
+
+
+def test_reliability_summary_matches_metric_calls() -> None:
+    y, p = _calibrated(1500)
+    s = reliability_summary(y, p)
+    assert isinstance(s, ReliabilitySummary)
+    assert s.n == 1500 and s.events == int(y.sum())
+    assert s.intercept == calibration_intercept(y, p)
+    assert s.slope == calibration_slope(y, p)
+    assert s.ici == ici(y, p)
+    assert s.e90 == e90(y, p)
+    assert s.spiegelhalter_p == spiegelhalter_z(y, p).p_value
 
 
 @pytest.mark.slow

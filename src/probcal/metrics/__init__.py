@@ -5,6 +5,8 @@
 report-only — is the table in ``docs/concepts/metrics.md``.
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from .._results import MetricReport
@@ -65,6 +67,7 @@ __all__ = [
     "JeffreysGradeResult",
     "LogLossDecomposition",
     "MurphyDecomposition",
+    "ReliabilitySummary",
     "SkceTestResult",
     "SpiegelhalterResult",
     "adaptive_ece",
@@ -89,6 +92,7 @@ __all__ = [
     "log_loss",
     "logloss_calibration_refinement",
     "murphy_decomposition",
+    "reliability_summary",
     "skce",
     "skce_test",
     "smooth_ece",
@@ -176,3 +180,41 @@ def evaluate(
     ci_low = np.percentile(boot, 2.5, axis=0)
     ci_high = np.percentile(boot, 97.5, axis=0)
     return MetricReport(names=names, values=values, ci_low=ci_low, ci_high=ci_high)
+
+
+@dataclass(frozen=True)
+class ReliabilitySummary:
+    """Stats-box aggregate for the annotated reliability diagram."""
+
+    n: int
+    events: int
+    intercept: float
+    slope: float
+    ici: float
+    e90: float
+    spiegelhalter_p: float
+
+
+def reliability_summary(
+    y: object, p: object, *, sample_weight: object = None
+) -> ReliabilitySummary:
+    """Assemble the annotated-reliability stats box from existing metrics.
+
+    No new math: intercept and slope from the recalibration regression, ICI
+    and E90 from the LOESS distance family, and Spiegelhalter's p-value.
+    Lives here because, like `evaluate`, it aggregates across submodules;
+    ``probcal.plots`` only formats the result.
+    """
+    from .scores import _prep
+
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    wq = None if sample_weight is None else w
+    return ReliabilitySummary(
+        n=len(y_arr),
+        events=int(y_arr.sum()),
+        intercept=calibration_intercept(y_arr, p_arr, sample_weight=wq),
+        slope=calibration_slope(y_arr, p_arr, sample_weight=wq),
+        ici=ici(y_arr, p_arr, sample_weight=wq),
+        e90=e90(y_arr, p_arr),
+        spiegelhalter_p=spiegelhalter_z(y_arr, p_arr, sample_weight=wq).p_value,
+    )

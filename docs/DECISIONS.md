@@ -368,3 +368,14 @@ Dated log of ambiguities resolved and design choices made during implementation.
     O(n²) statistic multiply cost without adding decision value over the test's calibrated
     p-values. MMCE (Kumar et al., 2018) is a special case of the SKCE (Example I.1) and is
     therefore not implemented separately. *(2026-08-08)*
+
+54. **mypy targets 3.12 (config and CI).** `[tool.mypy] python_version` moves from
+    `"3.11"` to `"3.12"`, and the CI mypy step's gate moves from the 3.11 to the 3.12
+    matrix job. numpy ≥ 2.x type stubs use PEP 695 `type` statements, which mypy only
+    parses when the *target* version is ≥ 3.12, so a 3.11-targeted run can die inside
+    numpy's own `.pyi` before checking any probcal code (observed with mypy 1.x; mypy
+    2.3.0 happens to tolerate it locally, but the target should not depend on that).
+    Runtime 3.11 support is unaffected — the full test suite still runs on the 3.11
+    matrix job, which is the guard against 3.12-only *runtime* constructs. The residual
+    risk — 3.12-only *typing* constructs passing mypy — is accepted and stated.
+    *(2026-08-08)*

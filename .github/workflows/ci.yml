@@ -33,7 +33,7 @@ jobs:
         run: ruff check .
 
       - name: Type-check
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.12'
         run: mypy
 
       - name: Run tests

@@ -11,3 +11,5 @@
 ::: probcal.metrics.regression
 
 ::: probcal.metrics.grade
+
+::: probcal.metrics.kernel

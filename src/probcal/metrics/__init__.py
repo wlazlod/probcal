@@ -22,6 +22,11 @@ from .grade import (
     binomial_grade_test,
     jeffreys_grade_test,
 )
+from .kernel import (
+    SkceTestResult,
+    skce,
+    skce_test,
+)
 from .regression import (
     CalibrationTestResult,
     GuardrailReport,
@@ -60,6 +65,7 @@ __all__ = [
     "JeffreysGradeResult",
     "LogLossDecomposition",
     "MurphyDecomposition",
+    "SkceTestResult",
     "SpiegelhalterResult",
     "adaptive_ece",
     "binomial_grade_test",
@@ -83,6 +89,8 @@ __all__ = [
     "log_loss",
     "logloss_calibration_refinement",
     "murphy_decomposition",
+    "skce",
+    "skce_test",
     "smooth_ece",
     "spiegelhalter_z",
 ]

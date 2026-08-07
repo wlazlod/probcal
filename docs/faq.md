@@ -78,6 +78,18 @@ Rule of thumb: neural networks, multi-class, detection, or regression → netcal
 scores feeding cutoffs, pricing, capital, or reason codes — especially under validation or
 supervisory review → probcal.
 
+## Are there other packages called "probcal"?
+
+Yes — two, neither affiliated with this project. The R package
+[probcal](https://prdm0.github.io/probcal/) (P. R. Diniz Marinho) offers binary and
+multiclass calibrators with SKCE-based inference; its binary catalog (Platt, temperature,
+beta, isotonic, histogram) is a subset of the eleven methods here, and probcal (Python)
+covers the SKCE too — see [Metrics and tests](concepts/metrics.md). The GitHub repository
+[spencermyoung513/probcal](https://github.com/spencermyoung513/probcal) is an ECAI 2025
+research codebase around the Conditional Congruence Error for neural *regression* fit, and
+is not on PyPI. `pip install probcal` installs this package; when citing, "probcal
+(Python)" avoids the ambiguity.
+
 ## Can I select a calibrator by ECE or Hosmer–Lemeshow?
 
 No — the selector refuses both. They are binning-sensitive, biased, non-proper report

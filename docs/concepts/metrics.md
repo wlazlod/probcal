@@ -147,6 +147,55 @@ gives an asymptotically standard normal statistic with a two-sided p-value. No b
 smoothing; the trade is that it aggregates over the whole range and can miss compensating
 regional errors.
 
+## Kernel calibration error and tests (SKCE)
+
+The squared kernel calibration error (Widmann, Lindsten and Zachariah, 2019) embeds the
+residual measure in a reproducing-kernel Hilbert space: the population SKCE is zero exactly
+when the model is calibrated, for any universal kernel. In probcal's binary specialization —
+the paper's identity-matrix kernel construction with predictions represented as
+\( (1-p, p) \) — the kernel term reduces to
+
+\[
+h_{ij} = 2\, \tilde{k}(s_i, s_j)\, (y_i - p_i)(y_j - p_j) ,
+\]
+
+where the factor 2 keeps values comparable with the paper's framework. The residuals
+\( y_i - p_i \) always stay on the probability scale; only the kernel input \( s \) may be
+logit-transformed (`scale="logit"`, the low-PD option). Three consistent estimators
+(the paper's Table 1):
+
+| Estimator | Definition | Properties |
+|---|---|---|
+| `"biased"` | \( n^{-2} \sum_{i,j} h_{ij} \) (diagonal included) | V-statistic; squared RKHS norm, always ≥ 0; biased upward |
+| `"uq"` (default) | \( (n(n-1))^{-1} \sum_{i \ne j} h_{ij} \) | unbiased; may be negative |
+| `"ul"` | \( \lfloor n/2 \rfloor^{-1} \sum_i h_{(2i-1),(2i)} \) over seeded disjoint pairs | unbiased; O(n); higher variance |
+
+The defaults follow the paper's own experiments: a Laplacian kernel
+\( \exp(-|d|/\mathrm{bw}) \) with the median-heuristic bandwidth (Gretton et al., 2012) —
+implemented deterministically (an evenly strided subsample of at most 4096 points above
+\( n = 4096 \), a mean-distance fallback when heavy ties drive the median to zero, and a
+refusal with instructions when all scores are identical). A Gaussian kernel is available.
+
+`skce_test` turns the estimate into a one-sided test of H0: calibrated. The default
+`method="bootstrap"` uses the quadratic statistic with the Arcones–Giné (1992) centered
+resampling — the construction the paper itself states in its Appendix G, not the wild
+bootstrap other implementations substitute — at O(n_boot · n²) cost. `method="asymptotic"`
+uses the linear estimator with a normal approximation at O(n), the practical choice for
+\( n \gtrsim 20\,000 \); the trade, stated openly, is power: a single random pairing can
+miss slope-type miscalibration (residual means that change sign across the score range)
+that the bootstrap test rejects on the same data — the paper's documented power gap. Both
+report `p_value_bound`, the distribution-free bound
+\( \min\!\bigl(1, \exp(-\lfloor n/2 \rfloor\, t^2 / 8)\bigr) \): valid without any
+asymptotics but loose, so treat it as a worst-case check and decide with `p_value`.
+
+Against Spiegelhalter's z the contrast is scope: the z tests one global moment condition
+and can miss compensating regional errors, while the SKCE is sensitive to any deviation the
+kernel can resolve at its bandwidth. Neither `skce` nor `skce_test` accepts
+`sample_weight`: the U-statistic theory behind unbiasedness, the bootstrap, and the bounds
+is stated for unweighted i.i.d. samples, and probcal refuses to improvise weighted
+inference the source does not cover. Kumar, Sarawagi and Jain's (2018) MMCE is a special
+case of the SKCE (the paper's Example I.1), so it is not implemented separately.
+
 ## The recalibration-regression framework
 
 The most decision-relevant diagnostics come from Cox's (1958) idea of regressing the outcome
@@ -241,6 +290,7 @@ different question — not "is the map good" but "which grades would a superviso
 | ECCE | no | no | low | max-statistic | report |
 | ICI / E50 / E90 / Emax | no | no (LOESS frac) | low | no | optional |
 | Spiegelhalter z | — | no | — | **yes** | never (it is a test) |
+| SKCE (skce, skce_test) | — | no (bandwidth) | uq/ul unbiased | **yes** | never (it is a test) |
 | Hosmer–Lemeshow | no | **yes** | — | **yes** | **never** |
 | Calibration intercept/slope | — | no | — | yes (LR/Wald) | guardrails |
 | Binomial / Jeffreys per grade | — | grades fixed | — | **yes** | never (backtest) |
@@ -260,13 +310,15 @@ Hosmer–Lemeshow entirely, and prints the guardrail flags next to whatever crit
 import numpy as np
 from probcal.metrics import (
     brier_score, calibration_guardrails, calibration_slope, ece, ece_debiased,
-    evaluate, ici, jeffreys_grade_test, log_loss, smooth_ece, spiegelhalter_z,
+    evaluate, ici, jeffreys_grade_test, log_loss, skce, skce_test, smooth_ece,
+    spiegelhalter_z,
 )
 
 print(log_loss(y, p), brier_score(y, p))          # proper: safe to select on
 print(ece(y, p), ece_debiased(y, p))              # report-only; note the bias
 print(smooth_ece(y, p), ici(y, p))                # binning-free
 print(calibration_slope(y, p), spiegelhalter_z(y, p))
+print(skce(y, p), skce_test(y, p).p_value)        # kernel calibration error + test
 print(calibration_guardrails(y, p))               # the three-flag summary
 
 report = evaluate(y, p, n_boot=1000, seed=42)     # everything + bootstrap CIs
@@ -278,6 +330,7 @@ print(jeffreys_grade_test(y, p, grades))          # ECB-style backtest, traffic 
 
 ## References
 
+- Arcones, M. A., Giné, E. (1992). "On the bootstrap of U and V statistics." *Annals of Statistics* 20(2), 655–674.
 - Arrieta-Ibarra, I., Gujral, P., Tannen, J., Tygert, M., Xu, C. (2022). "Metrics of Calibration for Probabilistic Predictions." *Journal of Machine Learning Research* 23(351), 1–54.
 - Austin, P. C., Steyerberg, E. W. (2014). "Graphical assessment of internal and external calibration of logistic regression models by using loess smoothers." *Statistics in Medicine* 33(3), 517–535.
 - Austin, P. C., Steyerberg, E. W. (2019). "The Integrated Calibration Index (ICI) and related metrics for quantifying the calibration of logistic regression models." *Statistics in Medicine* 38(21), 4051–4065.
@@ -288,8 +341,11 @@ print(jeffreys_grade_test(y, p, grades))          # ECB-style backtest, traffic 
 - Cox, D. R. (1958). "Two further applications of a model for binary regression." *Biometrika* 45, 562–565.
 - ECB (2019). *Instructions for reporting the validation results of internal models — IRB Pillar I models for credit risk.* European Central Bank Banking Supervision, February 2019.
 - Ferro, C. A. T., Fricker, T. E. (2012). "A bias-corrected decomposition of the Brier score." *Quarterly Journal of the Royal Meteorological Society* 138(668), 1954–1960.
+- Gretton, A., Borgwardt, K. M., Rasch, M. J., Schölkopf, B., Smola, A. (2012). "A Kernel Two-Sample Test." *Journal of Machine Learning Research* 13, 723–773.
 - Hosmer, D. W., Lemeshow, S. (1980). "Goodness of fit tests for the multiple logistic regression model." *Communications in Statistics — Theory and Methods* 9(10), 1043–1069.
+- Kumar, A., Sarawagi, S., Jain, U. (2018). "Trainable Calibration Measures for Neural Networks from Kernel Mean Embeddings." ICML, PMLR 80, 2805–2814.
 - Miller, M. E., Hui, S. L., Tierney, W. M. (1991). "Validation techniques for logistic regression models." *Statistics in Medicine* 10(8), 1213–1226.
 - Murphy, A. H. (1973). "A New Vector Partition of the Probability Score." *Journal of Applied Meteorology* 12(4), 595–600.
 - Roelofs, R., Cain, N., Shlens, J., Mozer, M. C. (2022). "Mitigating Bias in Calibration Error Estimation." AISTATS, PMLR 151, 4036–4054.
 - Spiegelhalter, D. J. (1986). "Probabilistic prediction in patient management and clinical trials." *Statistics in Medicine* 5(5), 421–433.
+- Widmann, D., Lindsten, F., Zachariah, D. (2019). "Calibration tests in multi-class classification: A unifying framework." NeurIPS 32.

@@ -84,21 +84,24 @@ lo_z, hi_z = wrapped.interval_inverse(0.0, 0.02, space="logit")   # "PD <= 2%" i
 
 ## Why probcal
 
-| Capability | probcal | scikit-learn | netcal | single-method packages¹ |
-|---|---|---|---|---|
-| Calibration methods | 11 | 2 | many | 1 each |
-| Runtime dependencies | numpy | scipy stack | torch stack | varies |
-| Logit-scale diagnostics (low-PD readable) | yes | — | — | — |
-| First-class auditable offset (central tendency) | yes | — | — | — |
-| Automatic selection under nested validation | yes | — | — | — |
-| Venn–Abers intervals | yes | — | — | venn-abers |
-| Metric catalog with selection-suitability guidance | yes | partial | partial | — |
-| Per-grade regulatory backtests (binomial, Jeffreys) | yes | — | — | — |
-| Calibrated→raw threshold translation (`interval_inverse`) | yes | — | — | — |
-| SHAP additivity repair on the calibrated scale | yes | — | — | — |
-| Parameter interpretation (`interpret()`) on every method | yes | — | — | — |
+| Capability | probcal | scikit-learn | netcal | probcal (R)² | single-method packages¹ |
+|---|---|---|---|---|---|
+| Calibration methods | 11 | 2 | many | 5 binary³ | 1 each |
+| Runtime dependencies | numpy | scipy stack | torch stack | native R | varies |
+| Logit-scale diagnostics (low-PD readable) | yes | — | — | — | — |
+| First-class auditable offset (central tendency) | yes | — | — | — | — |
+| Automatic selection under nested validation | yes | — | — | — | — |
+| Venn–Abers intervals | yes | — | — | — | venn-abers |
+| Metric catalog with selection-suitability guidance | yes | partial | partial | partial | — |
+| Per-grade regulatory backtests (binomial, Jeffreys) | yes | — | — | — | — |
+| Kernel calibration error and test (SKCE, Widmann et al.) | yes | — | — | **yes** | — |
+| Calibrated→raw threshold translation (`interval_inverse`) | yes | — | — | — | — |
+| SHAP additivity repair on the calibrated scale | yes | — | — | — | — |
+| Parameter interpretation (`interpret()`) on every method | yes | — | — | partial | — |
 
 ¹ betacal, venn-abers, ml-insights.
+² prdm0/probcal (P. R. Diniz Marinho), unaffiliated — see the FAQ. Verified against v0.2.0, 2026-08-08.
+³ Platt, temperature, beta, isotonic, histogram binning; its multiclass methods (Dirichlet, vector scaling, one-vs-rest) are out of probcal's binary scope.
 
 Performance note: the PAVA family and special functions are hand-rolled numpy/stdlib;
 profiling on real workloads has not shown them to be a bottleneck. Rust acceleration is

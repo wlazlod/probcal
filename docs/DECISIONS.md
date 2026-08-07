@@ -340,3 +340,31 @@ Dated log of ambiguities resolved and design choices made during implementation.
     dynamic.
     A test job was also added ahead of `build`: before this release nothing in CI ran the
     suite, so a tag could publish code GitHub had never tested. *(2026-08-07)*
+
+53. **SKCE design decisions (`probcal.metrics.kernel`).** Four choices made while
+    implementing Widmann, Lindsten & Zachariah's (2019) squared kernel calibration error:
+    (a) *Bootstrap fidelity* — `skce_test(method="bootstrap")` uses the Appendix G
+    Arcones–Giné centered resampling, NOT the Rademacher wild bootstrap that other
+    implementations substitute. probcal implements what its cited source states.
+    (b) *Seeded permutation before the `"ul"` pairing* — the paper pairs consecutive
+    observations of an i.i.d. sample, but a score-sorted array (routine in credit
+    portfolios) silently breaks the independence of pair terms that Corollary G.3's CLT
+    requires. probcal permutes with `default_rng(random_state)` first, then pairs
+    `perm[0::2]` with `perm[1::2]` (dropping the odd tail). A fixed permutation of an
+    i.i.d. sample is still i.i.d., so unbiasedness is unaffected — tested by matching the
+    mean of `"ul"` over many pairings against `"uq"`.
+    (c) *No `sample_weight`* — the cited U-statistic theory (unbiasedness, the degenerate
+    limit of Theorem G.2, the H.3/H.4 bounds) is stated for unweighted i.i.d. samples.
+    Refusing the argument is honest; improvising weighted inference is not. The parameter
+    is not accepted at all, with the reason in the module docstring.
+    (d) *Deterministic median heuristic* — `bandwidth=None` takes the median of pairwise
+    absolute kernel-input differences; above 4096 points an evenly strided subsample of
+    ≤ 4096 points (no RNG) keeps the O(n) `"ul"` path off an O(n²) distance matrix and
+    results bit-reproducible. A zero median (heavy score ties) falls back to the mean
+    pairwise distance; all-identical scores raise a `ValueError` instructing the user to
+    pass `bandwidth` explicitly.
+    `skce` joins the selection table as "never — it is a test" (alongside Spiegelhalter's
+    z) and is NOT added to `evaluate()`'s bootstrap catalog: case-resampling CIs around an
+    O(n²) statistic multiply cost without adding decision value over the test's calibrated
+    p-values. MMCE (Kumar et al., 2018) is a special case of the SKCE (Example I.1) and is
+    therefore not implemented separately. *(2026-08-08)*

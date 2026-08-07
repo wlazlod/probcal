@@ -3,9 +3,15 @@
 ## Installation
 
 ```bash
-pip install -e .            # runtime dependency: numpy only
-pip install -e ".[viz]"     # + matplotlib for probcal.plots
-uv sync --extra dev         # development (tests, lint, type-check)
+pip install probcal            # runtime dependency: numpy only
+pip install "probcal[viz]"     # + matplotlib for probcal.plots
+```
+
+To work on the package itself:
+
+```bash
+git clone https://github.com/wlazlod/probcal && cd probcal
+uv sync --extra dev            # tests, lint, type-check
 ```
 
 probcal requires Python ≥ 3.11. The core import path touches nothing beyond numpy and the

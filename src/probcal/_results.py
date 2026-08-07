@@ -2,7 +2,7 @@
 
 All results are immutable dataclasses of numpy arrays (no pandas), each with an
 ``as_dict()`` accessor and a readable aligned-table ``__repr__``. Field sets here
-are the Task-2 minimum and may be extended by later tasks within version 0.0.1.
+are the initial minimum and may be extended by later releases.
 """
 
 import dataclasses

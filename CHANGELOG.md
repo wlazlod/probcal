@@ -6,6 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-07
+
+First public release on PyPI.
+
 ### Fixed
 
 - `reliability_binned`: Wilson interval bounds are now forced to contain the point estimate (floating-point noise at zero-event bins could push `ci_low` above a 0.0 event rate, breaking error-bar rendering)
@@ -13,6 +17,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ### Added
 
+- Packaging and CI: PEP 639 license metadata (SPDX `license = "MIT"` plus `license-files`, replacing the deprecated table form), Python 3.13 classifier, `Development Status :: 4 - Beta`, a tag-vs-version consistency check in the publish workflow, and a `ci.yml` matrix running lint, type-check, and the test suite on Python 3.11/3.12/3.13
 - Documentation: generated example figures in the visualization chapter, "In probcal" code snippets in every concept chapter, and a probcal-vs-netcal guidance note in the FAQ
 
 - Polish: README quickstart with real printed output, feature matrix vs scikit-learn/netcal/single-method packages, performance note on the deliberate absence of Rust acceleration, docs cross-linking pass
@@ -35,3 +40,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 - Theory guidebook, chunk 4 (completes the guidebook — ~16,400 words total): `concepts/shap-calibration.md` (identifiability obstacle, affine-exact class, Aumann–Shapley mode, invariance properties), `concepts/inverse-maps.md` (preimage identity, generalized inverses, attainability, buffer_logit drift robustness, masterscale workflow), `concepts/auto-selection.md` (selector protocol, structural no-leakage, report reading), `concepts/visualization.md` (reliability constructions, logit-scale rationale, calibration belt)
 - Theory guidebook, chunk 3: `concepts/metrics.md` (full metric catalog with formulas and pathologies, bootstrap-CI protocol, report-reading order, selection-suitability table), `concepts/data-splitting.md` (prefit vs cv flows, ensemble vs pooled, calibration-set sizing, nested selection), `concepts/offset.md` (uniqueness of the bisection root, King–Zeng/Elkan/Tasche equivalences, worked re-anchoring, audit practice)
 - Theory guidebook, chunk 2: `concepts/methods-nonparametric.md` (PAVA with worked micro-example, CIR, histogram binning, scaling-binning sample-complexity argument, BBQ, ENIR, spline calibration, properties table) and `concepts/methods-distribution-free.md` (IVAP construction, validity guarantee scope, scalarization caveat, exchangeability limits, CVAP geometric-mean merge)
+
+[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/wlazlod/probcal/releases/tag/v0.1.0

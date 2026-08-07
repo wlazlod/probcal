@@ -316,3 +316,27 @@ Dated log of ambiguities resolved and design choices made during implementation.
     default portfolio the high-tail exponent is deliberately unidentifiable (no data
     there) — the events-per-parameter lesson of the data-splitting chapter, exercised by
     the tests. *(2026-07-23)*
+
+52. **Release 0.1.0 packaging decisions.** Entry 4's condition ("`publish.yml` is
+    tag-gated and inactive until `0.1.0`") is now satisfied; the `v0.1.0` tag activates it.
+    Four choices made at the release gate:
+    (a) *PEP 639 license metadata* — `license = "MIT"` as an SPDX expression plus
+    `license-files = ["LICENSE"]`, replacing the deprecated `license = { text = ... }`
+    table, and the `License :: OSI Approved :: MIT License` classifier is dropped because
+    PEP 639 deprecates license classifiers and build backends reject both forms together.
+    This emits Metadata 2.4, which PyPI has accepted since 2024; hatchling has supported
+    the SPDX form since 1.27 and `uv build` resolves it fresh in an isolated build env, so
+    no floor pin is added to `[build-system]`.
+    (b) *`Development Status :: 4 - Beta`* — the 248-test suite, the executed tutorial
+    notebook, and the strict-mode docs build make Alpha an understatement; Beta claims a
+    usable API without promising 1.0 stability.
+    (c) *Python 3.13 classifier* — advertised only because `ci.yml` now runs the suite on
+    3.13, not on the strength of the pure-numpy runtime alone.
+    (d) *Tag-vs-version check* — the `build` job compares `uvx hatchling version` against
+    `${GITHUB_REF_NAME#v}` and fails the run on a mismatch. A `v0.1.0` tag on a `0.0.1`
+    `pyproject.toml` would otherwise publish a silently mislabelled artifact under a
+    version number PyPI never lets you reuse. Reading the version through the build backend
+    rather than grepping the file keeps the check correct if the version later becomes
+    dynamic.
+    A test job was also added ahead of `build`: before this release nothing in CI ran the
+    suite, so a tag could publish code GitHub had never tested. *(2026-08-07)*

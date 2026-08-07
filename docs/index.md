@@ -10,7 +10,11 @@ visualization on both probability and logit scales, an auditable logit-offset (c
 tendency) adjustment, automatic method selection under nested validation, and prefit /
 cross-validation data flows.
 
-**Status:** pre-release.
+**Status:** released on PyPI, beta. Breaking changes bump the minor version until 1.0.
+
+```bash
+pip install probcal
+```
 
 Start with [Getting started](getting-started.md), read the
 [Concepts](concepts/why-calibration.md) chapters — the theoretical foundation of the

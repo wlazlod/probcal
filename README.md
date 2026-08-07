@@ -1,5 +1,6 @@
 # probcal
 
+[![PyPI](https://img.shields.io/pypi/v/probcal.svg)](https://pypi.org/project/probcal/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
@@ -14,15 +15,21 @@ calibration visualization on both probability and logit scales, an auditable log
 data flows (prefit and cross-validation). Primary application domain: credit-risk PD models;
 the package is fully general.
 
-**Status:** pre-release, under active development. API may change until the first
-PyPI release.
+**Status:** released on PyPI, beta. The API is stable enough to build on; breaking changes
+bump the minor version until 1.0.
 
 ## Installation
 
 ```bash
-pip install -e .            # runtime: numpy only
-pip install -e ".[viz]"     # + matplotlib for probcal.plots
-uv sync --extra dev         # development (tests, lint, type-check)
+pip install probcal            # runtime: numpy only
+pip install "probcal[viz]"     # + matplotlib for probcal.plots
+```
+
+Development setup (tests, lint, type-check):
+
+```bash
+git clone https://github.com/wlazlod/probcal && cd probcal
+uv sync --extra dev
 ```
 
 ## Quickstart

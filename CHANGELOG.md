@@ -6,6 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-08
+
+### Added
+
+- `probcal.metrics.kernel`: squared kernel calibration error `skce` (estimators `uq`/`ul`/`biased`, Laplacian/Gaussian kernels, deterministic median-heuristic bandwidth with strided-subsample and tie fallbacks, probability/logit kernel scale, seeded `ul` pairing) and `skce_test` (Arcones–Giné centered bootstrap per the paper's Appendix G and the O(n) asymptotic-normal linear method, one-sided, with the distribution-free `p_value_bound`), after Widmann et al. (2019); report-only — deliberately excluded from `evaluate()` and the selector (DECISIONS 53); 21 tests incl. hand-computed anchors, brute-force references, bootstrap-identity check, and level/power studies
+- Documentation: SKCE section and selection-table row in the metrics chapter, `probcal.metrics.kernel` API page, namesake-disambiguation FAQ entry (the unaffiliated R package `probcal` and the ECAI 2025 research codebase), and a README feature-matrix column for the R package
+- Tooling: mypy targets Python 3.12 in config and CI (numpy ≥ 2 stubs use PEP 695 `type` statements that mypy only parses for target ≥ 3.12; DECISIONS 54); runtime 3.11 support unchanged
+
 ## [0.1.0] - 2026-08-07
 
 First public release on PyPI.
@@ -41,5 +49,6 @@ First public release on PyPI.
 - Theory guidebook, chunk 3: `concepts/metrics.md` (full metric catalog with formulas and pathologies, bootstrap-CI protocol, report-reading order, selection-suitability table), `concepts/data-splitting.md` (prefit vs cv flows, ensemble vs pooled, calibration-set sizing, nested selection), `concepts/offset.md` (uniqueness of the bisection root, King–Zeng/Elkan/Tasche equivalences, worked re-anchoring, audit practice)
 - Theory guidebook, chunk 2: `concepts/methods-nonparametric.md` (PAVA with worked micro-example, CIR, histogram binning, scaling-binning sample-complexity argument, BBQ, ENIR, spline calibration, properties table) and `concepts/methods-distribution-free.md` (IVAP construction, validity guarantee scope, scalarization caveat, exchangeability limits, CVAP geometric-mean merge)
 
-[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/wlazlod/probcal/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/wlazlod/probcal/releases/tag/v0.1.0

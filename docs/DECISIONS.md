@@ -404,3 +404,19 @@ Dated log of ambiguities resolved and design choices made during implementation.
     ≤1000 marks per class) the subsample is sort-then-stride with no RNG, so identical
     inputs always render identical figures; `docs/scripts/generate_figures.py` extends
     the same principle to the committed documentation images. *(2026-08-08)*
+
+56. **Repository governance after the 0.1.1 release.** `main` is protected by an active
+    repository ruleset: changes land only via pull request with the full CI matrix
+    (`Test on Python 3.11/3.12/3.13`) green and the branch up to date; force pushes and
+    deletion are blocked. Required approvals are 0, not 1 — GitHub forbids approving
+    one's own PR, so a solo maintainer would be locked out entirely; the count should be
+    raised to 1 as soon as a second maintainer exists. The repository-admin role may
+    bypass, and every bypass is visibly logged — the protection is against accidents and
+    compromised automation, not against the owner. A second ruleset protects `v*` tags
+    from deletion and movement with NO bypass: the publish workflow is tag-gated and
+    PyPI never allows a version number to be reused, so moving a released tag is never
+    correct. Also enabled: secret scanning with push protection, Dependabot alerts and
+    security updates plus a weekly `dependabot.yml` (github-actions + pip), private
+    vulnerability reporting with `SECURITY.md` pointing at it, auto-delete of merged PR
+    branches, and squash/merge-commit as the allowed merge methods (rebase-merge off;
+    squash inherits the conventional-commit PR title). *(2026-08-08)*

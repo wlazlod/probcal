@@ -379,3 +379,28 @@ Dated log of ambiguities resolved and design choices made during implementation.
     matrix job, which is the guard against 3.12-only *runtime* constructs. The residual
     risk — 3.12-only *typing* constructs passing mypy — is accepted and stated.
     *(2026-08-08)*
+
+55. **Visualization overhaul decisions (0.1.1 part 2).** Six choices:
+    (a) *rc-context styling* — the house style (`_STYLE`, muted six-color palette) is
+    applied via `matplotlib.pyplot.rc_context` inside each plot function and never by
+    mutating global `rcParams`; a user's own matplotlib configuration survives calling
+    probcal, verified by a test comparing `rcParams` before and after.
+    (b) *Rug replaces count bars by default* — `plot_reliability` gains a per-class
+    event/non-event rug and the twin-axis count margin flips to opt-in `counts=False`.
+    The rug shows the same density information at the data's own coordinates without a
+    second y-scale, and the margin remains one keyword away.
+    (c) *Pointwise-band honesty* — `plot_ecce`'s grey envelope is ±2 pointwise SDs of
+    the walk under calibration and is labeled "(pointwise)" on the canvas itself; a
+    simultaneous band (the formal max-statistic test of Arrieta-Ibarra et al.) is out
+    of scope for this release and the docstring and docs say so.
+    (d) *Display intervals on grade results* — `ci_low`/`ci_high` are the central 90%
+    Jeffreys posterior interval and the 90% Clopper–Pearson interval respectively,
+    display-only companions for `plot_grade_backtest`; the traffic lights keep coming
+    from the unchanged one-sided tests, and no p-values are printed on the canvas.
+    (e) *`beta_ppf` by bisection* — the Beta quantile reuses the existing `bisect` on
+    `betainc` (the `chi2_ppf` pattern), preserving the numpy-only runtime; verified
+    against hand anchors and `scipy.stats.beta.ppf`.
+    (f) *Deterministic reduction everywhere* — anywhere plotting thins data (the rug's
+    ≤1000 marks per class) the subsample is sort-then-stride with no RNG, so identical
+    inputs always render identical figures; `docs/scripts/generate_figures.py` extends
+    the same principle to the committed documentation images. *(2026-08-08)*

@@ -120,7 +120,8 @@ and Xu, 2022), sorts observations by \( p \) and tracks the cumulative deviation
 hovering near zero; systematic over- or under-prediction makes it drift. The Kolmogorov-style
 maximum \( \max_k |C_k|/n \) and the mean absolute deviation summarize the drift, and the plot
 of \( C_k \) against sorted \( p \) localizes *where* the miscalibration lives without any
-smoothing parameter at all.
+smoothing parameter at all — rendered by `ecce_curve` and `plot_ecce`
+([Visualization](visualization.md)).
 
 **ICI and its quantiles** (Austin and Steyerberg, 2019). Fit a LOESS smoother
 \( \hat{c}(p) \) of outcome on prediction (Austin and Steyerberg, 2014, established the
@@ -237,7 +238,9 @@ prior is \( \mathrm{Beta}(k + \tfrac12,\; n - k + \tfrac12) \), and the reported
 the posterior probability that the true rate lies at or below the assigned PD. The reading is
 one-sided and conservative by design — a small value flags a grade whose PD is likely
 understated — and the documentation says so explicitly, because two-sided misreadings of the
-Jeffreys test are a recurring validation error.
+Jeffreys test are a recurring validation error. Both results carry 90% display intervals
+(`ci_low`/`ci_high`) for `plot_grade_backtest` ([Visualization](visualization.md)); the
+intervals are for reading, the traffic lights carry the verdict.
 
 ## Uncertainty: the bootstrap protocol
 

@@ -132,7 +132,9 @@ timestamp. `audit_report()` re-runs the [guardrails](metrics.md) before and afte
 so the reviewing validator sees in one table what moved, by how much, and what it did to
 slope, intercept, and the Spiegelhalter statistic. `interpret()` renders \( \delta \) in all
 three vocabularies: log-odds shift, multiplicative odds factor \( e^{\delta} \), and the
-central-tendency re-anchoring statement with both means.
+central-tendency re-anchoring statement with both means. `plot_offset_audit` draws the
+fitted stage — the shifted map against the identity, both means, and the audit numbers —
+directly from those recorded attributes ([Visualization](visualization.md)).
 
 Composition is deliberately explicit. `CalibratedModel.offset_to(target_mean=...)` appends a
 `LogitOffset` stage to the pipeline — calibrator first, offset second — and both stages

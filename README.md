@@ -111,7 +111,8 @@ deliberately out of scope unless benchmarks on production-sized portfolios say o
 
 Built with mkdocs-material; run locally with `uv run mkdocs serve`. Start with
 *Getting started*, then the *Concepts* chapters — the package's theoretical foundation —
-and the executed *PD calibration walkthrough* notebook.
+and the executed *PD calibration walkthrough* notebook. The *Visualization* chapter is a
+gallery of every plot, regenerated deterministically by `docs/scripts/generate_figures.py`.
 
 ## License
 

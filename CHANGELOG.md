@@ -13,6 +13,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 - `probcal.metrics.kernel`: squared kernel calibration error `skce` (estimators `uq`/`ul`/`biased`, Laplacian/Gaussian kernels, deterministic median-heuristic bandwidth with strided-subsample and tie fallbacks, probability/logit kernel scale, seeded `ul` pairing) and `skce_test` (Arcones–Giné centered bootstrap per the paper's Appendix G and the O(n) asymptotic-normal linear method, one-sided, with the distribution-free `p_value_bound`), after Widmann et al. (2019); report-only — deliberately excluded from `evaluate()` and the selector (DECISIONS 53); 21 tests incl. hand-computed anchors, brute-force references, bootstrap-identity check, and level/power studies
 - Documentation: SKCE section and selection-table row in the metrics chapter, `probcal.metrics.kernel` API page, namesake-disambiguation FAQ entry (the unaffiliated R package `probcal` and the ECAI 2025 research codebase), and a README feature-matrix column for the R package
 - Tooling: mypy targets Python 3.12 in config and CI (numpy ≥ 2 stubs use PEP 695 `type` statements that mypy only parses for target ≥ 3.12; DECISIONS 54); runtime 3.11 support unchanged
+- Visualization: annotated `plot_reliability` (stats box via the new `probcal.metrics.reliability_summary` aggregate, deterministic event/non-event rug thinned to ≤ 1000 marks per class), `plot_ecce` cumulative-drift walks with the pointwise ±2 SD envelope (on the new `probcal.curves.ecce_curve`, whose `stat_max` agrees exactly with `metrics.ecce`), `plot_grade_backtest` traffic-light chart with 90% display intervals (new `ci_low`/`ci_high` fields on both grade results, Jeffreys central / Clopper–Pearson, powered by the new numpy-only `probcal._math.beta_ppf`), and `plot_offset_audit` for fitted `LogitOffset` stages; seeded `docs/scripts/generate_figures.py` regenerates every documentation figure deterministically; DECISIONS 55; 16 tests incl. hand anchors, a scipy `beta.ppf` reference, and rug/annotation determinism checks
+
+### Changed
+
+- All plots now style themselves via a per-call `rc_context` house style (muted palette, no top/right spines, light grid) — global matplotlib `rcParams` are never touched, verified by test
+- `plot_reliability`: the twin-axis count-bar margin is now opt-in (`counts=False` default) — the rug replaces it as the density view
+- All documentation figures regenerated under the house style by the new figure script (the logit-scale reliability figure is now the annotated variant)
 
 ## [0.1.0] - 2026-08-07
 

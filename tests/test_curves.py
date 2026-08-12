@@ -1,6 +1,7 @@
 """Tests for probcal.curves."""
 
 import numpy as np
+import pytest
 
 from probcal._math import expit, logit
 from probcal._results import BeltResult, ReliabilityCurve
@@ -87,6 +88,20 @@ def test_belt_grid_scales_consistent() -> None:
     y, p = _calibrated(3000)
     belt = calibration_belt(y, p)
     np.testing.assert_allclose(belt.grid_logit, logit(belt.grid_p), atol=1e-12)
+
+
+def test_belt_separated_data_stops_extension() -> None:
+    # Perfectly separated outcomes: the degree-1 fit separates (ridge fallback)
+    # and the forward LR loop must not extend to higher degrees (IRLS_SPEC W3.3).
+    rng = np.random.default_rng(9)
+    n = 200
+    p = np.concatenate([rng.uniform(0.02, 0.2, n // 2), rng.uniform(0.8, 0.98, n // 2)])
+    y = np.concatenate([np.zeros(n // 2), np.ones(n // 2)])
+    with pytest.warns(UserWarning, match="[Ss]eparation"):
+        belt = calibration_belt(y, p)
+    assert belt.degree == 1
+    assert np.all(np.isfinite(belt.lower_95)) and np.all(np.isfinite(belt.upper_95))
+    assert 0.0 <= belt.p_value <= 1.0
 
 
 def test_wilson_ci_contains_rate_with_empty_event_bins() -> None:

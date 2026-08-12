@@ -1,6 +1,8 @@
 """Unit tests for probcal._math (numpy-only; reference comparisons live in
 test_math_reference.py)."""
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -205,10 +207,87 @@ def test_irls_separation_warns_and_returns_finite() -> None:
     x = np.array([-2.0, -1.0, 1.0, 2.0])
     X = np.column_stack([np.ones(4), x])
     y = np.array([0.0, 0.0, 1.0, 1.0])  # perfectly separated
-    with pytest.warns(UserWarning, match="[Ss]eparation"):
+    with pytest.warns(UserWarning, match="[Ss]eparation") as rec:
         res = irls_logistic(X, y)
+    assert sum("eparation" in str(r.message) for r in rec) == 1
     assert np.all(np.isfinite(res.beta))
     assert res.separation
+    assert res.converged  # the ridge fallback is coercive: it must converge
+    assert res.beta[1] > 0.0  # fitted map monotone in x
+
+
+@pytest.mark.parametrize("size", ["small", "large"])
+def test_irls_quasi_separation_warns_and_converges(size: str) -> None:
+    if size == "small":
+        # Detected via the singular Hessian: far-point weights underflow.
+        x = np.array([1.0, 2.0, 3.0, 3.0, 4.0, 5.0])
+        y = np.array([0.0, 0.0, 0.0, 1.0, 1.0, 1.0])  # class ranges touch at x = 3
+    else:
+        # Realistic size: the Hessian stays numerically nonsingular and the
+        # tied pair keeps the margin rule from firing, so detection comes from
+        # the unconverged-divergence signature (max_iter exhaustion).
+        x = np.concatenate([np.linspace(-4.0, -0.2, 50), [0.0, 0.0], np.linspace(0.2, 4.0, 50)])
+        y = np.concatenate([np.zeros(50), [0.0, 1.0], np.ones(50)])
+    X = np.column_stack([np.ones(len(x)), x])
+    with pytest.warns(UserWarning, match="[Ss]eparation") as rec:
+        res = irls_logistic(X, y)
+    assert sum("eparation" in str(r.message) for r in rec) == 1
+    assert np.all(np.isfinite(res.beta))
+    assert res.separation
+    assert res.converged
+    assert res.beta[1] > 0.0
+
+
+def test_irls_offset_alone_is_not_separation() -> None:
+    # A strongly discriminating offset with a mixed-outcome design: the MLE for
+    # the intercept exists, so no separation may be declared (the margin rule
+    # must measure the design's own contribution, eta - offset).
+    n1, n0 = 900, 100
+    off = np.concatenate([np.full(n1, 12.0), np.full(n0, -12.0)])
+    y = np.concatenate([np.ones(n1), np.zeros(n0)])
+    X = np.ones((n1 + n0, 1))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        res = irls_logistic(X, y, offset=off)
+    assert not res.separation
+    assert res.converged
+    np.testing.assert_allclose(res.beta[0], np.log(3.0), atol=1e-3)
+
+
+def test_irls_soft_targets_never_separate() -> None:
+    # Lin-Lin-Weng smoothing of the perfectly-split design: interior targets
+    # make the objective coercive, so separation is a category error.
+    x = np.array([-2.0, -1.0, 1.0, 2.0])
+    X = np.column_stack([np.ones(4), x])
+    targets = np.array([0.25, 0.25, 0.75, 0.75])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        res = irls_logistic(X, targets)
+    assert not res.separation
+    assert res.converged
+
+
+def test_irls_monotone_descent() -> None:
+    rng = np.random.default_rng(7)
+    n = 20_000
+    z = rng.normal(0.0, 8.0, n)
+    y = (rng.random(n) < expit(1.5 * z + 0.5)).astype(float)
+    n_pos, n_neg = float(y.sum()), float(n - y.sum())
+    targets = np.where(y == 1.0, (n_pos + 1.0) / (n_pos + 2.0), 1.0 / (n_neg + 2.0))
+    X = np.column_stack([np.ones(n), logit(expit(z))])  # the design the Platt pipeline sees
+
+    def platt_nll(beta: np.ndarray) -> float:
+        eta = X @ beta
+        softplus = np.maximum(eta, 0.0) + np.log1p(np.exp(-np.abs(eta)))
+        return float(np.sum(softplus - targets * eta))
+
+    res = irls_logistic(X, targets)
+    assert res.converged
+    assert not res.separation
+    assert res.nll <= platt_nll(np.zeros(2))
+    # v0.1.1's false-separation abort returned (b, a) ~ (0.3518, 1.1825); the
+    # monotone-descent fit must do at least as well on the objective.
+    assert res.nll <= platt_nll(np.array([0.3518, 1.1825]))
 
 
 # ---------------------------------------------------------------- LOESS

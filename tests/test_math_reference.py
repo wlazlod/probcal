@@ -17,6 +17,7 @@ from probcal._math import (
     irls_logistic,
     lgamma_vec,
     loess,
+    logit,
     norm_ppf,
     pava,
 )
@@ -109,6 +110,22 @@ def test_irls_offset_vs_statsmodels() -> None:
     ours = irls_logistic(X, y, offset=off).beta
     theirs = sm.GLM(y, X, family=sm.families.Binomial(), offset=off).fit().params
     np.testing.assert_allclose(ours, theirs, rtol=1e-8)
+
+
+def test_irls_soft_targets_vs_statsmodels() -> None:
+    # GLM(Binomial) accepts interior-valued targets: the smoothed Platt targets
+    # on wide-score data must give matching coefficients (IRLS_SPEC W4.6).
+    sm = pytest.importorskip("statsmodels.api")
+    rng = np.random.default_rng(11)  # local rng: keep the module RNG draw order intact
+    n = 20_000
+    z = rng.normal(0.0, 8.0, n)
+    y = (rng.random(n) < expit(1.5 * z + 0.5)).astype(float)
+    n_pos, n_neg = float(y.sum()), float(n - y.sum())
+    targets = np.where(y == 1.0, (n_pos + 1.0) / (n_pos + 2.0), 1.0 / (n_neg + 2.0))
+    X = np.column_stack([np.ones(n), logit(expit(z))])
+    ours = irls_logistic(X, targets).beta
+    theirs = sm.GLM(targets, X, family=sm.families.Binomial()).fit().params
+    np.testing.assert_allclose(ours, theirs, rtol=1e-6)
 
 
 def test_loess_vs_statsmodels_lowess() -> None:

@@ -26,8 +26,8 @@ g(s) = \sigma\bigl(a z + b\bigr), \qquad z = \operatorname{logit}(s),
 
 with slope \( a \) and intercept \( b \) fitted by maximum likelihood — an ordinary logistic
 regression of the outcome on a single covariate. `PlattCalibrator` fits it with the shared IRLS
-core (`probcal._math.irls_logistic`), which detects quasi-separation and falls back to a
-ridge-stabilized solution rather than diverging.
+core (`probcal._math.irls_logistic`), whose step-halved Newton iteration decreases the objective
+at every step (see [Separation, steep maps, and convergence](#separation-steep-maps-and-convergence)).
 
 **Fitting targets.** Platt's original recipe does not regress on the hard labels
 \( y \in \{0, 1\} \). To keep the fitted sigmoid away from degenerate solutions when one class
@@ -212,6 +212,39 @@ diagram on the *logit scale* (see [Visualization](visualization.md)) shows curva
 a wrong slope — the distortion is outside every family in this chapter, and the nonparametric
 methods of the [next chapter](methods-nonparametric.md) apply.
 
+## Separation, steep maps, and convergence
+
+Logistic regression fitted by maximum likelihood has one genuine failure mode: **separation**.
+When binary outcomes are perfectly split by the covariate, the likelihood keeps improving as the
+slope grows without bound — no finite MLE exists. probcal's IRLS core detects this only where it
+can actually occur: when the targets are effectively binary, it declares separation once every
+observation sits on the correct side by more than 10 log-odds while the gradient shows the fit
+still improving, when the Hessian degenerates outright, or when the iteration exhausts its
+budget without converging (the divergence signature of quasi-separation, where tied boundary
+points keep the margin small) — then warns and refits with a tiny ridge penalty
+(\( 10^{-6} \)). The ridged objective always has a finite minimizer, so the fallback converges
+by construction and its coefficients are finite.
+
+**Platt cannot separate.** The Lin–Lin–Weng smoothed targets are strictly inside \( (0, 1) \),
+which makes the cross-entropy objective coercive — a finite maximum-likelihood solution always
+exists, however extreme the scores. A "separation" diagnostic for Platt would be a category
+error, and probcal never raises one there. The same applies to any call with soft targets;
+genuine separation is possible only for binary-target fits (the beta variants and the
+calibration belt).
+
+This matters because a legitimately *steep* calibration map is easy to mistake for separation.
+Scores are clipped to \( [10^{-12}, 1 - 10^{-12}] \), so \( |\operatorname{logit}(s)| \le 27.6 \);
+any true slope above about 1.1 pushes fitted log-odds past 30 at the extremes. Versions before
+0.1.2 aborted the iteration at that point and returned a biased interior iterate: on wide-score
+data with a true slope of 1.5, Platt reported \( a \approx 1.18 \) alongside a misleading
+separation warning. The current core instead halves each Newton step until the objective
+decreases, so steep maps are simply fitted.
+
+What to check after fitting: `converged_` on `PlattCalibrator` and `BetaCalibrator` records
+whether IRLS converged (an unconverged fit warns at fit time and is noted by `interpret()`), and
+`separation_fallback_` on `BetaCalibrator` records that the ridge fallback produced the
+coefficients — `interpret()` states both, so the audit trail is complete.
+
 ## In probcal
 
 ```python
@@ -219,6 +252,7 @@ from probcal import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
 
 platt = PlattCalibrator().fit(s_cal, y_cal)
 print(platt.a_, platt.b_)                  # identity is (1, 0)
+print(platt.converged_)                    # IRLS convergence status
 
 temp = TemperatureCalibrator().fit(s_cal, y_cal)
 print(temp.T_)                             # identity is 1; cannot move the base rate

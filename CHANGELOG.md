@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-12
+
+### Fixed
+
+- `irls_logistic` no longer aborts at `max|eta| > 30` — a false "separation" that biased Platt/beta fits on wide-score data (z ~ N(0, 8) with true slope 1.5: v0.1.1 returned a ≈ 1.18 plus a spurious separation warning); Newton now step-halves on an overflow-safe softplus objective, separation is detected only for effectively binary targets (all-correct-by-10-log-odds by the design's own contribution `eta - offset` with non-vanishing gradient, singular Hessian, or unconverged divergence — the quasi-separation signature), and the ridge-1e-6 fallback converges instead of hitting the same abort (DECISIONS 57); note `calibration_belt` may now select higher polynomial degrees on wide-score data where the old cap silently truncated the forward search
+- `PlattCalibrator` and `BetaCalibrator` no longer swallow IRLS convergence status: an unconverged fit raises a distinct `UserWarning` (never the separation message) and is recorded by `interpret()`; `calibration_belt` stops forward degree extension at a separated fit instead of consuming its ridge-fallback coefficients
+
+### Added
+
+- `IrlsResult.nll` — final penalized objective value (backward-compatible field append)
+- `converged_` on `PlattCalibrator`/`BetaCalibrator` and `separation_fallback_` on `BetaCalibrator`, with matching `interpret()` audit lines; docs section "Separation, steep maps, and convergence" in the parametric-methods chapter
+
 ## [0.1.1] - 2026-08-08
 
 ### Added
@@ -56,6 +68,7 @@ First public release on PyPI.
 - Theory guidebook, chunk 3: `concepts/metrics.md` (full metric catalog with formulas and pathologies, bootstrap-CI protocol, report-reading order, selection-suitability table), `concepts/data-splitting.md` (prefit vs cv flows, ensemble vs pooled, calibration-set sizing, nested selection), `concepts/offset.md` (uniqueness of the bisection root, King–Zeng/Elkan/Tasche equivalences, worked re-anchoring, audit practice)
 - Theory guidebook, chunk 2: `concepts/methods-nonparametric.md` (PAVA with worked micro-example, CIR, histogram binning, scaling-binning sample-complexity argument, BBQ, ENIR, spline calibration, properties table) and `concepts/methods-distribution-free.md` (IVAP construction, validity guarantee scope, scalarization caveat, exchangeability limits, CVAP geometric-mean merge)
 
-[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/wlazlod/probcal/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/wlazlod/probcal/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/wlazlod/probcal/releases/tag/v0.1.0

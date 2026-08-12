@@ -1,5 +1,7 @@
 """Tests for probcal.parametric: Platt, temperature, and beta calibrators."""
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -181,6 +183,66 @@ def test_affine_coeffs_reproduce_prediction() -> None:
     cal = PlattCalibrator().fit(s, y)
     a, b = cal.affine_logit_coeffs_
     np.testing.assert_allclose(cal.predict_proba(GRID), expit(a * logit(GRID) + b), atol=1e-12)
+
+
+# ---------------------------------------------------------------- separation / convergence
+
+
+def _wide_sample(seed: int, n: int = 20_000) -> tuple[np.ndarray, np.ndarray, np.random.Generator]:
+    """Wide-score design: z ~ N(0, 8), true relation logit p = 1.5 z + 0.5."""
+    rng = np.random.default_rng(seed)
+    z = rng.normal(0.0, 8.0, n)
+    y = (rng.random(n) < expit(1.5 * z + 0.5)).astype(float)
+    return expit(z), y, rng
+
+
+def test_platt_steep_map_unbiased() -> None:
+    # Regression for the v0.1.1 false-separation abort (true a = 1.5 -> 1.18).
+    s, y, _ = _wide_sample(31)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any warning fails the test
+        cal = PlattCalibrator().fit(s, y)
+    assert 1.45 <= cal.a_ <= 1.55
+    assert cal.converged_ is True
+
+
+def test_beta_ab_steep_map_unbiased() -> None:
+    # Binary-target MLE is noisier than Platt's smoothed fit: larger n keeps
+    # the estimate inside the +/- 0.05 window (sd ~ 0.019 at n = 50k).
+    s, y, _ = _wide_sample(32, n=50_000)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        cal = BetaCalibrator(variant="ab").fit(s, y)
+    assert 1.45 <= cal.a_ <= 1.55
+    assert cal.converged_ is True
+
+
+def test_platt_weighted_steep_map_unbiased() -> None:
+    s, y, rng = _wide_sample(33)
+    w = rng.integers(1, 4, size=len(s)).astype(float)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        cal = PlattCalibrator().fit(s, y, sample_weight=w)
+    assert 1.45 <= cal.a_ <= 1.55
+    assert cal.converged_ is True
+
+
+def test_interpret_reports_unconverged() -> None:
+    s, y, _ = _wide_sample(34, n=2000)
+    for cal in (PlattCalibrator().fit(s, y), BetaCalibrator(variant="ab").fit(s, y)):
+        cal.converged_ = False
+        assert any("did not converge" in m for m in cal.interpret().messages)
+
+
+def test_beta_separation_fallback_surfaces() -> None:
+    s = np.concatenate([np.linspace(0.05, 0.3, 10), np.linspace(0.7, 0.95, 10)])
+    y = np.concatenate([np.zeros(10), np.ones(10)])  # perfectly separated
+    with pytest.warns(UserWarning, match="[Ss]eparation"):
+        cal = BetaCalibrator(variant="ab").fit(s, y)
+    assert cal.separation_fallback_ is True
+    assert cal.converged_ is True  # the ridge fallback must converge
+    assert np.isfinite(cal.a_) and np.isfinite(cal.c_)
+    assert any("separation" in m for m in cal.interpret().messages)
 
 
 # ---------------------------------------------------------------- exports

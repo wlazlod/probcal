@@ -545,9 +545,7 @@ class IrlsResult(NamedTuple):
     converged: bool
     separation: bool
     n_iter: int
-
-
-_ETA_SEPARATION = 30.0
+    nll: float
 
 
 def irls_logistic(
@@ -559,11 +557,21 @@ def irls_logistic(
     max_iter: int = 100,
     tol: float = 1e-10,
 ) -> IrlsResult:
-    """Logistic regression by Newton/IRLS with ridge stabilization.
+    """Logistic regression by Newton/IRLS with monotone descent.
 
-    Detects (quasi-)separation — fitted linear predictors running away or a
-    singular Hessian — and in that case warns and returns a ridge-regularized
-    refit instead of diverging.
+    Each Newton step is halved until it does not increase the (penalized)
+    negative log-likelihood, so the iteration never diverges. Separation is
+    declared only for effectively binary targets (every ``y`` within ``1e-9``
+    of 0 or 1) on unpenalized fits, when every observation sits on the correct
+    side by more than 10 log-odds from the design's own contribution
+    (``eta - offset``) while the gradient is still large (the signature of a
+    nonexistent MLE), when the Hessian is singular, or when the iteration
+    exits unconverged (the divergence signature of quasi-separation); the
+    function then warns and returns a ridge-regularized refit, which is
+    coercive and expected to report ``converged=True``. Soft targets (as
+    produced by Platt target smoothing) make the objective coercive, so
+    ``separation`` is never ``True`` for them; failures surface only as
+    ``converged=False`` or a singular-Hessian ridge fallback.
 
     Parameters
     ----------
@@ -581,12 +589,14 @@ def irls_logistic(
     max_iter : int
         Newton iteration cap.
     tol : float
-        Convergence tolerance on the max absolute Newton step.
+        Convergence tolerance on the max absolute (possibly halved) Newton
+        step.
 
     Returns
     -------
     IrlsResult
-        Coefficients plus ``converged``, ``separation`` and ``n_iter`` flags.
+        Coefficients plus ``converged``, ``separation``, ``n_iter`` and the
+        final penalized objective value ``nll``.
     """
     X_arr = np.asarray(X, dtype=np.float64)
     y_arr = np.asarray(y, dtype=np.float64)
@@ -594,33 +604,80 @@ def irls_logistic(
     w_arr = np.ones(n) if w is None else np.asarray(w, dtype=np.float64)
     off = np.zeros(n) if offset is None else np.asarray(offset, dtype=np.float64)
 
+    # Separation is a binary-target concept: soft targets make the objective
+    # coercive, so a finite minimizer always exists.
+    binary = bool(np.all((y_arr < 1e-9) | (y_arr > 1.0 - 1e-9)))
+    sign = 2.0 * y_arr - 1.0
+
+    def nll_at(beta: np.ndarray, eta: np.ndarray) -> float:
+        # Overflow-safe softplus(eta) - y*eta; never log(mu) on saturated mu.
+        softplus = np.maximum(eta, 0.0) + np.log1p(np.exp(-np.abs(eta)))
+        return float(np.sum(w_arr * (softplus - y_arr * eta))) + 0.5 * ridge * float(beta @ beta)
+
     beta = np.zeros(k)
+    eta = off.copy()
+    obj = nll_at(beta, eta)
     separation = False
+    singular = False
     converged = False
     n_iter = 0
     while n_iter < max_iter:
         n_iter += 1
-        eta = X_arr @ beta + off
-        if np.max(np.abs(eta)) > _ETA_SEPARATION:
+        mu = expit(eta)
+        grad = X_arr.T @ (w_arr * (y_arr - mu)) - ridge * beta
+        grad_inf = float(np.max(np.abs(grad)))
+        tol_grad = 1e-8 * (1.0 + abs(obj))
+        if (
+            binary
+            and ridge == 0.0
+            and float(np.min(sign * (eta - off))) > 10.0
+            and grad_inf > tol_grad
+        ):
+            # Every point classified correctly by > 10 log-odds *by the design
+            # itself* (offset excluded: it is not under the coefficients'
+            # control) yet the likelihood still improves by pushing beta
+            # outward: no MLE.
             separation = True
             break
-        mu = expit(eta)
         wt = w_arr * mu * (1.0 - mu)
-        grad = X_arr.T @ (w_arr * (y_arr - mu)) - ridge * beta
         hess = (X_arr * wt[:, None]).T @ X_arr + ridge * np.eye(k)
         try:
             step = np.linalg.solve(hess, grad)
         except np.linalg.LinAlgError:
-            separation = True
+            singular = True
+            separation = binary
             break
-        beta = beta + step
+        eta_step = X_arr @ step
+        accepted = False
+        for _ in range(31):  # step-halving: accept beta + step / 2**j, j in {0, ..., 30}
+            beta_new = beta + step
+            eta_new = eta + eta_step
+            obj_new = nll_at(beta_new, eta_new)
+            if obj_new <= obj:
+                accepted = True
+                break
+            step = 0.5 * step
+            eta_step = 0.5 * eta_step
+        if not accepted:
+            converged = grad_inf < tol_grad
+            break
+        beta, eta, obj = beta_new, eta_new, obj_new
         if np.max(np.abs(step)) < tol * (1.0 + np.max(np.abs(beta))):
             converged = True
             break
 
-    if separation and ridge == 0.0:
+    if binary and ridge == 0.0 and not (converged or separation or singular):
+        # Exhausting max_iter (or stalling with a large gradient) on an
+        # unpenalized binary fit is the divergence signature of
+        # quasi-separation: tied boundary points keep the per-point margin
+        # near zero, so the margin rule cannot fire, while the Hessian stays
+        # numerically nonsingular as beta runs away.
+        separation = True
+
+    if (separation or singular) and ridge == 0.0:
+        reason = "separation detected" if separation else "singular Hessian"
         warnings.warn(
-            "irls_logistic: separation detected; returning ridge-regularized fit " "(ridge=1e-6)",
+            f"irls_logistic: {reason}; returning ridge-regularized fit (ridge=1e-6)",
             UserWarning,
             stacklevel=2,
         )
@@ -628,9 +685,13 @@ def irls_logistic(
             X_arr, y_arr, w=w_arr, ridge=1e-6, offset=off, max_iter=max_iter, tol=tol
         )
         return IrlsResult(
-            beta=ridged.beta, converged=ridged.converged, separation=True, n_iter=ridged.n_iter
+            beta=ridged.beta,
+            converged=ridged.converged,
+            separation=separation,
+            n_iter=ridged.n_iter,
+            nll=ridged.nll,
         )
-    return IrlsResult(beta=beta, converged=converged, separation=separation, n_iter=n_iter)
+    return IrlsResult(beta=beta, converged=converged, separation=separation, n_iter=n_iter, nll=obj)
 
 
 # ------------------------------------------------------------------ LOESS

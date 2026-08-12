@@ -187,12 +187,16 @@ def calibration_belt(
         prob = np.clip(expit(design(deg, z) @ beta), 1e-12, 1.0 - 1e-12)
         return float(np.sum(w * (y_arr * np.log(prob) + (1.0 - y_arr) * np.log1p(-prob))))
 
-    # Forward LR selection of the polynomial degree.
+    # Forward LR selection of the polynomial degree. A separated fit's
+    # coefficients come from the ridge fallback: usable as a terminal fit,
+    # never a basis for extension (IRLS_SPEC W3.3 / DECISIONS 57).
     degree = 1
     fit = irls_logistic(design(1, z), y_arr, w=w)
     ll = loglik(fit.beta, 1)
-    while degree < 4:
+    while degree < 4 and not fit.separation:
         cand = irls_logistic(design(degree + 1, z), y_arr, w=w)
+        if cand.separation:
+            break
         ll_cand = loglik(cand.beta, degree + 1)
         lr = max(2.0 * (ll_cand - ll), 0.0)
         p_add = 1.0 - float(gammainc_lower(0.5, lr / 2.0))  # chi-square df=1

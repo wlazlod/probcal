@@ -420,3 +420,29 @@ Dated log of ambiguities resolved and design choices made during implementation.
     vulnerability reporting with `SECURITY.md` pointing at it, auto-delete of merged PR
     branches, and squash/merge-commit as the allowed merge methods (rebase-merge off;
     squash inherits the conventional-commit PR title). *(2026-08-08)*
+
+57. **`irls_logistic` descends monotonically and declares separation only for binary
+    targets.** The `max|eta| > 30` abort conflated genuine separation with legitimately
+    steep fitted maps: scores clipped to `[1e-12, 1-1e-12]` bound `|logit(s)|` by 27.6,
+    so any slope above ~1.1 tripped the cap and the caller silently received an
+    unconverged interior iterate (true a = 1.5 on z ~ N(0, 8) → v0.1.1 Platt returned
+    a ≈ 1.18 with a spurious separation warning). Three choices, per `IRLS_SPEC.md`:
+    (a) *eta-cap removal with step-halving* — Newton steps are halved until the
+    overflow-safe softplus objective does not increase, so the iteration never diverges
+    and steep maps are simply fitted; (b) *binary-target-only detection* — separation is
+    declared only when all targets are within 1e-9 of {0, 1} on unpenalized fits, via
+    every observation correct by > 10 log-odds *from the design's own contribution*
+    (`eta - offset`: a discriminating offset must not trip the rule — the MLE it leaves
+    for the coefficients can exist) with `‖grad‖∞ > 1e-8·(1+|nll|)` (the signature of a
+    nonexistent MLE), a singular Hessian, or an unconverged exit on such a fit (the
+    divergence signature of quasi-separation: tied boundary points hold the per-point
+    margin near zero while the Hessian stays numerically nonsingular, so neither of the
+    first two triggers fires at realistic sample sizes); soft targets (Platt's
+    Lin–Lin–Weng smoothing) make the objective coercive, so for them separation is a
+    category error and is never raised — the ridge-1e-6 fallback is coercive too and
+    must report `converged=True`; (c) *convergence surfaced, not swallowed* — Platt and
+    beta store `converged_` (beta also `separation_fallback_`), warn distinctly on
+    non-convergence, record both in `interpret()`, and `calibration_belt` stops degree
+    extension at a separated fit instead of consuming its coefficients.
+    `spline._penalized_irls` is out of scope: its `lam * penalty` term already
+    regularizes. *(2026-08-12)*

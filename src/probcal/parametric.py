@@ -19,6 +19,11 @@ from .base import BaseCalibrator
 _U_LO = 1e-6
 _U_HI = 1e6
 
+_IRLS_NOT_CONVERGED = (
+    "IRLS did not converge; coefficients may be unreliable — inspect interpret() "
+    "and consider a nonparametric calibrator"
+)
+
 
 class PlattCalibrator(BaseCalibrator):
     """Logistic recalibration on the logit scale (Platt scaling).
@@ -34,6 +39,9 @@ class PlattCalibrator(BaseCalibrator):
         scores toward the base rate, ``a > 1`` sharpens underconfident ones.
     b_ : float
         Fitted intercept — calibration-in-the-large shift in log-odds.
+    converged_ : bool
+        Whether IRLS converged; if ``False`` a warning was raised at fit time
+        and ``interpret()`` records it.
 
     References
     ----------
@@ -52,6 +60,9 @@ class PlattCalibrator(BaseCalibrator):
         self.b_ = float(res.beta[0])
         self.a_ = float(res.beta[1])
         self.is_monotone_ = self.a_ > 0.0
+        self.converged_ = bool(res.converged)
+        if not self.converged_:
+            warnings.warn(_IRLS_NOT_CONVERGED, UserWarning, stacklevel=2)
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         return expit(self.a_ * logit(s) + self.b_)
@@ -88,11 +99,14 @@ class PlattCalibrator(BaseCalibrator):
             f"intercept b = {self.b_:.3f}: base-rate (calibration-in-the-large) shift of "
             f"{self.b_:+.3f} log-odds, odds factor {np.exp(self.b_):.3f}"
         )
+        messages = [slope_msg, int_msg, "identity map corresponds to (a, b) = (1, 0)"]
+        if not self.converged_:
+            messages.append("IRLS did not converge; coefficients may be unreliable")
         return Interpretation(
             method=type(self).__name__,
             param_names=("a", "b"),
             param_values=(self.a_, self.b_),
-            messages=(slope_msg, int_msg, "identity map corresponds to (a, b) = (1, 0)"),
+            messages=tuple(messages),
         )
 
 
@@ -198,6 +212,13 @@ class BetaCalibrator(BaseCalibrator):
         Base-rate shift in log-odds.
     constraint_active_ : bool
         Whether the ``a, b >= 0`` constraint forced a refit.
+    converged_ : bool
+        Whether the fit whose coefficients survive converged (``True`` for
+        closed-form paths); if ``False`` a warning was raised at fit time and
+        ``interpret()`` records it.
+    separation_fallback_ : bool
+        Whether any IRLS call during fitting detected separation and fell
+        back to the ridge-regularized fit; recorded by ``interpret()``.
 
     References
     ----------
@@ -216,19 +237,22 @@ class BetaCalibrator(BaseCalibrator):
         ln_s = np.log(s)
         ln_1ms = -np.log1p(-s)  # -ln(1 - s), non-negative
         self.constraint_active_ = False
+        self.converged_ = True
+        self.separation_fallback_ = False
 
         if self.variant == "abm":
             self._fit_abm(ln_s, ln_1ms, y, w)
         elif self.variant == "ab":
             z = ln_s + ln_1ms  # logit(s)
             X = np.column_stack([np.ones_like(z), z])
-            beta = irls_logistic(X, y, w=w).beta
+            beta = self._irls(X, y, w)
             a = float(beta[1])
             if a < 0.0:
                 self.constraint_active_ = True
                 a = 0.0
                 beta0 = self._intercept_only(y, w)
                 self.c_ = beta0
+                self.converged_ = True  # surviving coefficient is closed-form
             else:
                 self.c_ = float(beta[0])
             self.a_ = self.b_ = a
@@ -248,22 +272,35 @@ class BetaCalibrator(BaseCalibrator):
             self.a_ = self.b_ = float(a)
             self.c_ = 0.0
 
+        if not self.converged_:
+            warnings.warn(_IRLS_NOT_CONVERGED, UserWarning, stacklevel=2)
+
+    def _irls(self, X: np.ndarray, y: np.ndarray, w: np.ndarray) -> np.ndarray:
+        # Last call wins for converged_ (its coefficients survive the cascade);
+        # separation_fallback_ is sticky so interpret() records any fallback.
+        res = irls_logistic(X, y, w=w)
+        self.converged_ = bool(res.converged)
+        self.separation_fallback_ = self.separation_fallback_ or bool(res.separation)
+        return res.beta
+
     def _fit_abm(self, ln_s: np.ndarray, ln_1ms: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         ones = np.ones_like(ln_s)
-        beta = irls_logistic(np.column_stack([ones, ln_s, ln_1ms]), y, w=w).beta
+        beta = self._irls(np.column_stack([ones, ln_s, ln_1ms]), y, w)
         a, b, c = float(beta[1]), float(beta[2]), float(beta[0])
         if a < 0.0:
             self.constraint_active_ = True
-            beta = irls_logistic(np.column_stack([ones, ln_1ms]), y, w=w).beta
+            beta = self._irls(np.column_stack([ones, ln_1ms]), y, w)
             a, b, c = 0.0, float(beta[1]), float(beta[0])
             if b < 0.0:
                 b, c = 0.0, self._intercept_only(y, w)
+                self.converged_ = True  # surviving coefficient is closed-form
         elif b < 0.0:
             self.constraint_active_ = True
-            beta = irls_logistic(np.column_stack([ones, ln_s]), y, w=w).beta
+            beta = self._irls(np.column_stack([ones, ln_s]), y, w)
             a, b, c = float(beta[1]), 0.0, float(beta[0])
             if a < 0.0:
                 a, c = 0.0, self._intercept_only(y, w)
+                self.converged_ = True  # surviving coefficient is closed-form
         self.a_, self.b_, self.c_ = a, b, c
 
     @staticmethod
@@ -314,6 +351,13 @@ class BetaCalibrator(BaseCalibrator):
             messages.append(
                 "monotonicity constraint a, b >= 0 was active: a negative exponent was "
                 "dropped and the model refitted (betacal strategy)"
+            )
+        if not self.converged_:
+            messages.append("IRLS did not converge; coefficients may be unreliable")
+        if self.separation_fallback_:
+            messages.append(
+                "separation was detected during fitting; at least one fit fell back to "
+                "the ridge-regularized solution (ridge=1e-6)"
             )
         return Interpretation(
             method=type(self).__name__,

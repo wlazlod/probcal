@@ -13,9 +13,76 @@ Vovk & Petej (2014) — full record in the documentation.
 
 import numpy as np
 
-from ._math import pava
 from ._results import Interpretation
 from .base import BaseCalibrator
+
+
+def _csd_sweep(c: np.ndarray, z: np.ndarray, dy: float) -> np.ndarray:
+    """Fitted value of a unit-weight query labeled ``dy`` inserted at every
+    position k = 0..n (Vovk & Petej 2014 precomputation, weighted CSD).
+
+    With ``c`` the cumulative weights and ``z`` the cumulative ``w * y`` (both of
+    length n+1 with a leading zero), the isotonic fit at the inserted query is
+    ``max_{i<=k} min_{j>=k} (z[j] - z[i] + dy) / (c[j] - c[i] + 1)``. Shifting the
+    prefix points by ``(-1, -dy)`` turns that into the slope of the bridge between
+    the lower hull of the shifted prefix and the lower hull of the suffix, so one
+    left-to-right sweep with incremental hull maintenance yields every position.
+
+    Two slopes recur: the within-chain slope ``(z[j] - z[i]) / (c[j] - c[i])``
+    (shift-free) and the cross-chain bridge ``(z[j] - z[i] + dy) /
+    (c[j] - c[i] + 1)``. Both are written out inline over Python lists rather than
+    through helpers over ``c``/``z``: the arithmetic is identical (bit for bit),
+    but the sweep runs ~6x faster at n = 100,000.
+    """
+    cl = c.tolist()
+    zl = z.tolist()
+    n = len(cl) - 1
+
+    # Suffix lower hull A_k..A_n, built right to left; top = leftmost alive. Each
+    # push journals the points it hides so they can be resurfaced in O(1) later.
+    hr = [n]
+    journal: list[list[int]] = [[] for _ in range(n)]
+    for k in range(n - 1, -1, -1):
+        popped: list[int] = []
+        while len(hr) >= 2:
+            j1, j2 = hr[-1], hr[-2]
+            if (zl[j1] - zl[k]) / (cl[j1] - cl[k]) < (zl[j2] - zl[j1]) / (cl[j2] - cl[j1]):
+                break
+            popped.append(hr.pop())
+        journal[k] = popped
+        hr.append(k)
+
+    out = np.empty(n + 1)
+    hl = [0]  # prefix hull of L_0..L_k; top = rightmost
+    for k in range(n + 1):
+        a = len(hl) - 1
+        b = len(hr) - 1
+        while True:  # walk both hull tops down to the bridge's tangent points
+            i0, j0 = hl[a], hr[b]
+            br = (zl[j0] - zl[i0] + dy) / (cl[j0] - cl[i0] + 1.0)
+            if a > 0:
+                im = hl[a - 1]
+                if (zl[i0] - zl[im]) / (cl[i0] - cl[im]) >= br:
+                    a -= 1
+                    continue
+            if b > 0:
+                jm = hr[b - 1]
+                if br >= (zl[jm] - zl[j0]) / (cl[jm] - cl[j0]):
+                    b -= 1
+                    continue
+            break
+        out[k] = br
+        if k < n:
+            hr.pop()  # A_k is always the current hull top
+            hr.extend(reversed(journal[k]))  # resurface what A_k had hidden
+            i = k + 1
+            while len(hl) >= 2:
+                i1, i2 = hl[-1], hl[-2]
+                if (zl[i1] - zl[i2]) / (cl[i1] - cl[i2]) < (zl[i] - zl[i1]) / (cl[i] - cl[i1]):
+                    break
+                hl.pop()
+            hl.append(i)
+    return out
 
 
 class VennAbersCalibrator(BaseCalibrator):
@@ -25,9 +92,22 @@ class VennAbersCalibrator(BaseCalibrator):
     with the query labeled 0 (resp. 1) yield the interval ``[p0, p1]``;
     ``predict_proba`` scalarizes it as ``p1 / (1 - p0 + p1)``.
 
-    Batch prediction deduplicates query scores and runs two PAVA fits per
-    unique score (DECISIONS entry: the O((n+m)log(n+m)) precomputation of
-    Vovk & Petej is a planned optimization, not yet implemented).
+    Both fits are precomputed at fit time by the Vovk & Petej (2014) cumulative-
+    sum-diagram sweep, so prediction is a ``searchsorted`` gather rather than a
+    pair of PAVA refits per unique query score.
+
+    Attributes
+    ----------
+    F0_, F1_ : numpy.ndarray of shape (n + 1,)
+        Fitted probabilities for a unit-weight query labeled 0 (resp. 1)
+        inserted at each of the n+1 positions of the sorted calibration set.
+        Both are non-decreasing, and ``F0_ <= F1_`` elementwise.
+
+    Notes
+    -----
+    With non-unit sample weights the query still enters at weight 1, which is the
+    natural generalization but sits outside the validity theorem as proved; see
+    the scope note in ``docs/concepts/methods-distribution-free.md``.
     """
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
@@ -36,15 +116,10 @@ class VennAbersCalibrator(BaseCalibrator):
         self._y = y[order]
         self._w = w[order]
         self._widths_cache: tuple[float, float] | None = None
-
-    def _pair_at(self, x: float) -> tuple[float, float]:
-        idx = int(np.searchsorted(self._s, x, side="left"))
-        w_aug = np.insert(self._w, idx, 1.0)
-        p = []
-        for label in (0.0, 1.0):
-            y_aug = np.insert(self._y, idx, label)
-            p.append(float(pava(y_aug, w_aug).fitted[idx]))
-        return p[0], p[1]
+        c = np.concatenate([[0.0], np.cumsum(self._w)])
+        z = np.concatenate([[0.0], np.cumsum(self._w * self._y)])
+        self.F0_ = _csd_sweep(c, z, 0.0)
+        self.F1_ = _csd_sweep(c, z, 1.0)
 
     def predict_interval(self, s: object) -> np.ndarray:
         """Venn–Abers intervals ``[p0, p1]`` for new scores.
@@ -65,9 +140,8 @@ class VennAbersCalibrator(BaseCalibrator):
         from ._validation import validate_scores
 
         arr = validate_scores(s)
-        uniq, inverse = np.unique(arr, return_inverse=True)
-        pairs = np.array([self._pair_at(float(x)) for x in uniq])
-        return pairs[inverse]
+        idx = np.searchsorted(self._s, arr, side="left")
+        return np.column_stack([self.F0_[idx], self.F1_[idx]])
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         intervals = self.predict_interval(s)

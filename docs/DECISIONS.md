@@ -174,6 +174,12 @@ Dated log of ambiguities resolved and design choices made during implementation.
     profiling on real workloads shows this path as a bottleneck (see the README
     performance note).
     The theory chapter's computational note was amended to match. *(2026-07-22)*
+    — Adopted in 0.1.3: `_fit` now precomputes `F0_`/`F1_` (length n+1, non-decreasing)
+    by a single left-to-right sweep of the weighted cumulative-sum diagram per label,
+    reading each insertion position's fitted value off the bridge between the prefix and
+    suffix lower hulls, and `predict_interval` is a `searchsorted` gather. The frozen
+    v0.1.2 refit lives on as `tests/_ivap_reference.py`, the brute-force correctness gate
+    the sweep is checked against at `atol=1e-12`. *(2026-08-16)*
 
 31. **CVAP `predict_interval` returns the conservative fold envelope** ``[min_k p0_k,
     max_k p1_k]``. Vovk & Petej define only the scalar geometric-mean merge for CVAP; the

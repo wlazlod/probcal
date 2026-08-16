@@ -37,6 +37,14 @@ theorem is distribution-free — it requires only that the calibration observati
 observation are exchangeable — and it is a guarantee about the *pair*, which is what makes the
 next section necessary.
 
+**Scope note on sample weights.** The theorem is stated and proved for exchangeable, unweighted
+observations. probcal's IVAP accepts `sample_weight`, and the weighted fit inserts the query at
+weight 1 into weighted calibration data — the natural generalization, and the only one that
+keeps a single test case from being scaled by an arbitrary calibration weight, but not a case
+the theorem covers as proved. Read weighted Venn–Abers intervals as the weighted-isotonic
+analogue of the guaranteed object rather than as carrying the guarantee itself; with unit
+weights (the default) the two coincide.
+
 ## Scalarization, and what it costs
 
 Most pipelines need one number. Vovk and Petej (2014) derive the merger that is minimax
@@ -82,14 +90,17 @@ re-anchoring discussed in the [offset chapter](offset.md) exists precisely becau
 populations drift. The honest statement: Venn–Abers removes every assumption *except* the one
 that time inevitably breaks, and its intervals quantify sampling uncertainty, not drift.
 
-A computational note completes the picture. Each test score costs two isotonic fits on
-\( n + 1 \) points; probcal's implementation deduplicates query scores and pays exactly that
-price per unique score, which is comfortably fast at calibration-set sizes this package
-targets (hundreds to a few thousand points). Vovk and Petej (2014) show the augmented fits
-can also be served from structures precomputed once from the calibration set — an
-\( O((n+m)\log(n+m)) \) batch algorithm that probcal records as a planned optimization in
-its DECISIONS log, to be adopted if profiling on real workloads ever makes the naive route
-the bottleneck.
+A computational note completes the picture. Read naively, each test score costs two isotonic
+fits on \( n + 1 \) points. Vovk and Petej (2014) show the augmented fits can instead be served
+from structures precomputed once from the calibration set, and since 0.1.3 probcal does exactly
+that: fitting sweeps the cumulative-sum diagram left to right, maintaining the lower hulls of
+the prefix and suffix point sets and reading the fitted value at every insertion position from
+the bridge between them. The result is two tables of length \( n + 1 \) — `F0_` and `F1_`,
+non-decreasing — and prediction becomes a `searchsorted` lookup: fitting costs
+\( O(n \log n) \) (dominated by sorting the calibration scores; the sweep itself is linear),
+and a batch of \( m \) queries costs \( O(m \log n) \), for a total of \( O((n+m)\log(n+m)) \)
+rather than \( O(mn) \). The brute-force refit is retained in the test suite as the frozen
+correctness reference the precomputation is checked against.
 
 ## The cross Venn–Abers predictor (CVAP)
 

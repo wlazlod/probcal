@@ -123,3 +123,80 @@ def test_export() -> None:
     import probcal
 
     assert "CalibratorSelector" in probcal.__all__
+
+
+def test_complexity_rank_matches_old_parsimony_table() -> None:
+    """Round-trip: each old _PARSIMONY entry equals the corresponding instance's
+    complexity_rank (DECISIONS 49: exact values are inert beyond ordering)."""
+    from probcal.bayesian import BBQCalibrator, ENIRCalibrator
+    from probcal.binning import HistogramBinningCalibrator, ScalingBinningCalibrator
+    from probcal.isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
+    from probcal.parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
+    from probcal.spline import SplineCalibrator
+    from probcal.vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
+
+    expected = [
+        (TemperatureCalibrator(), 1.0),  # temperature
+        (PlattCalibrator(), 2.0),  # platt
+        (BetaCalibrator(variant="ab"), 2.5),  # beta_ab
+        (BetaCalibrator(variant="a"), 1.5),  # beta_a
+        (BetaCalibrator(variant="abm"), 3.0),  # beta_abm
+        (ScalingBinningCalibrator(), 4.0),  # scaling_binning
+        (BBQCalibrator(), 40.0),  # bbq
+        (HistogramBinningCalibrator(strategy="mass"), 10.0),  # histogram_mass
+        (HistogramBinningCalibrator(strategy="width"), 10.0),  # histogram_width
+        (SplineCalibrator(), 12.0),  # spline
+        (CenteredIsotonicCalibrator(), 50.0),  # cir
+        (IsotonicCalibrator(), 50.0),  # isotonic
+        (VennAbersCalibrator(), 60.0),  # ivap
+        (CrossVennAbersCalibrator(), 60.0),  # cvap
+        (ENIRCalibrator(), 80.0),  # enir
+    ]
+    assert len(expected) == 15
+    for calibrator, rank in expected:
+        assert calibrator.complexity_rank == rank, type(calibrator).__name__
+
+
+def test_forced_tie_custom_complexity_rank_wins() -> None:
+    from probcal.parametric import TemperatureCalibrator
+
+    class _TinyRank(TemperatureCalibrator):
+        """Behaves exactly like TemperatureCalibrator but ranks simpler."""
+
+        @property
+        def complexity_rank(self) -> float:
+            return 0.5
+
+    # "temperature" is listed FIRST so dict/iteration order favors the built-in;
+    # the test can only pass if complexity_rank (0.5 < 1.0) is actually consulted
+    # by the tie-break, not merely dict order.
+    sel = CalibratorSelector(
+        candidates={"temperature": TemperatureCalibrator(), "custom": _TinyRank()},
+        cv=5,
+        random_state=11,
+    ).fit(*_calibrated(1500))
+    assert sel.best_name_ == "custom"
+
+
+def test_default_complexity_rank() -> None:
+    """No override -> 100.0, both on the base property and via the selector's
+    getattr fallback for non-BaseCalibrator duck-typed candidates."""
+
+    class _NoOverride(BaseCalibrator):
+        def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
+            self._rate = float(np.average(y, weights=w))
+
+        def _predict(self, s: np.ndarray) -> np.ndarray:
+            return np.full(len(s), self._rate)
+
+        def interpret(self) -> Interpretation:
+            return Interpretation(
+                method="_NoOverride", param_names=(), param_values=(), messages=()
+            )
+
+    assert _NoOverride().complexity_rank == 100.0
+
+    class _DuckTyped:
+        """Not a BaseCalibrator; exercises the selector's getattr fallback."""
+
+    assert getattr(_DuckTyped(), "complexity_rank", 100.0) == 100.0

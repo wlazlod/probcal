@@ -47,7 +47,7 @@ def test_bbq_predictions_in_unit_interval() -> None:
 
 def test_enir_path_ends_at_isotonic_fit() -> None:
     s, y = _sample(300)
-    cal = ENIRCalibrator().fit(s, y)
+    cal = ENIRCalibrator(max_solutions=None).fit(s, y)
     # Aggregate ties the same way the calibrator does, then compare the final
     # path solution with plain isotonic regression.
     order = np.argsort(s, kind="stable")
@@ -62,7 +62,7 @@ def test_enir_path_ends_at_isotonic_fit() -> None:
 def test_enir_path_starts_at_raw_data() -> None:
     s = np.array([0.1, 0.3, 0.5, 0.7, 0.9])
     y = np.array([0.0, 1.0, 0.0, 1.0, 1.0])
-    cal = ENIRCalibrator().fit(s, y)
+    cal = ENIRCalibrator(max_solutions=None).fit(s, y)
     np.testing.assert_allclose(cal.path_solutions_[0], y)
     assert cal.path_lambdas_[0] == 0.0
 

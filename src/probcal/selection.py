@@ -27,26 +27,6 @@ _SCORERS = {
     "ece_sweep": ece_sweep,
 }
 
-# Parsimony ranks for the tie-break: fewer parameters win a tie (DECISIONS 49).
-_PARSIMONY = {
-    "temperature": 1.0,
-    "platt": 2.0,
-    "beta_ab": 2.5,
-    "beta_a": 1.5,
-    "beta_abm": 3.0,
-    "scaling_binning": 4.0,
-    "bbq": 40.0,
-    "histogram_mass": 10.0,
-    "histogram_width": 10.0,
-    "spline": 12.0,
-    "cir": 50.0,
-    "isotonic": 50.0,
-    "ivap": 60.0,
-    "cvap": 60.0,
-    "enir": 80.0,
-}
-_PARSIMONY_UNKNOWN = 100.0
-
 
 def _default_candidates() -> dict[str, BaseCalibrator]:
     return {
@@ -88,6 +68,9 @@ class CalibratorSelector:
     report_ : SelectionReport
         Ranked table: mean ± sd of the criterion, guardrail flags, chosen
         marker.
+
+    Custom candidates declare their tie-break position by overriding
+    ``complexity_rank`` (lower = simpler; default 100.0 ranks last).
     """
 
     def __init__(
@@ -146,7 +129,10 @@ class CalibratorSelector:
         best_idx = int(np.argmin(means))
         se_best = sds[best_idx] / np.sqrt(self.cv)
         tied = [i for i in range(len(names)) if means[i] <= means[best_idx] + se_best]
-        winner = min(tied, key=lambda i: (_PARSIMONY.get(names[i], _PARSIMONY_UNKNOWN), means[i]))
+        winner = min(
+            tied,
+            key=lambda i: (getattr(menu[names[i]], "complexity_rank", 100.0), means[i]),
+        )
 
         order = np.argsort(means, kind="stable")
         chosen = np.zeros(len(names), dtype=bool)

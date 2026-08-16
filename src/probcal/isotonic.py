@@ -83,6 +83,11 @@ class IsotonicCalibrator(BaseCalibrator):
         idx = np.clip(idx, 0, self.n_blocks_ - 1)
         return self.block_mean_[idx]
 
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank 50.0: nonparametric, data-driven block count."""
+        return 50.0
+
     def _output_range(self) -> tuple[float, float]:
         return float(self.block_mean_[0]), float(self.block_mean_[-1])
 

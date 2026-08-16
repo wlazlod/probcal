@@ -1,12 +1,14 @@
 """Unit tests for probcal._math (numpy-only; reference comparisons live in
 test_math_reference.py)."""
 
+import math
 import warnings
 
 import numpy as np
 import pytest
 
 from probcal._math import (
+    _FPMIN,
     beta_ppf,
     betainc,
     bisect,
@@ -23,7 +25,9 @@ from probcal._math import (
     norm_cdf,
     norm_ppf,
     pava,
+    weighted_quantile,
 )
+from probcal.datasets import make_pd_portfolio
 
 RNG = np.random.default_rng(42)
 
@@ -307,6 +311,83 @@ def test_loess_xeval() -> None:
     np.testing.assert_allclose(loess(x, y, xeval=grid), 2.0 * grid + 1.0, atol=1e-10)
 
 
+def _loess_v012(
+    x: object,
+    y: object,
+    frac: float = 0.75,
+    degree: int = 1,
+    xeval: object = None,
+) -> np.ndarray:
+    """Verbatim copy of the v0.1.2 ``loess`` body (argpartition search).
+
+    Frozen as an equivalence reference for the sorted two-pointer rewrite.
+    """
+    x_arr = np.asarray(x, dtype=np.float64)
+    y_arr = np.asarray(y, dtype=np.float64)
+    ev = x_arr if xeval is None else np.asarray(xeval, dtype=np.float64)
+    n = x_arr.shape[0]
+    r = max(int(math.ceil(frac * n)), degree + 1)
+    r = min(r, n)
+    out = np.empty(ev.shape[0], dtype=np.float64)
+    for j, x0 in enumerate(ev):
+        dist = np.abs(x_arr - x0)
+        idx = np.argpartition(dist, r - 1)[:r]
+        h = dist[idx].max()
+        if h == 0.0:
+            out[j] = y_arr[idx].mean()
+            continue
+        u = dist[idx] / h
+        wts = np.clip(1.0 - u**3, 0.0, None) ** 3
+        if degree == 0:
+            out[j] = float(np.average(y_arr[idx], weights=np.maximum(wts, _FPMIN)))
+            continue
+        xc = x_arr[idx] - x0
+        sw = wts.sum()
+        swx = (wts * xc).sum()
+        swxx = (wts * xc * xc).sum()
+        swy = (wts * y_arr[idx]).sum()
+        swxy = (wts * xc * y_arr[idx]).sum()
+        det = sw * swxx - swx * swx
+        if abs(det) < _FPMIN:
+            out[j] = swy / sw
+        else:
+            out[j] = (swxx * swy - swx * swxy) / det
+    return out
+
+
+def test_loess_matches_v012_on_tie_free_data() -> None:
+    rng = np.random.default_rng(7)
+    x = rng.normal(size=400)  # continuous draws: tie-free a.s.
+    y = np.sin(2.0 * x) + rng.normal(scale=0.1, size=400)
+    for frac in (0.3, 0.75):
+        np.testing.assert_allclose(loess(x, y, frac=frac), _loess_v012(x, y, frac=frac), atol=1e-9)
+    xe = rng.uniform(x.min() - 0.5, x.max() + 0.5, 50)  # includes out-of-range evals
+    np.testing.assert_allclose(
+        loess(x, y, frac=0.5, xeval=xe), _loess_v012(x, y, frac=0.5, xeval=xe), atol=1e-9
+    )
+
+
+def test_loess_tie_window_uses_min_width_rule() -> None:
+    # r=2, eval at the tied pair: min-width window is the zero-width [1.0, 1.0]
+    x = np.array([0.0, 1.0, 1.0, 2.0])
+    y = np.array([0.0, 1.0, 2.0, 3.0])
+    assert loess(x, y, frac=0.5, xeval=np.array([1.0]))[0] == 1.5  # h==0 fallback: mean
+
+
+def test_loess_grid_matches_exact_within_tolerance() -> None:
+    d = make_pd_portfolio(n=5000)
+    yf = d.y.astype(np.float64)
+    assert np.max(np.abs(loess(d.scores, yf) - loess(d.scores, yf, grid_size=512))) <= 5e-3
+
+
+def test_loess_grid_size_none_and_oversized_are_exact() -> None:
+    d = make_pd_portfolio(n=1000)
+    yf = d.y.astype(np.float64)
+    base = loess(d.scores, yf)
+    assert np.array_equal(loess(d.scores, yf, grid_size=None), base)
+    assert np.array_equal(loess(d.scores, yf, grid_size=5000), base)  # threshold not crossed
+
+
 # ---------------------------------------------------------------- natural cubic basis
 
 
@@ -324,3 +405,28 @@ def test_natural_cubic_basis_linear_beyond_boundary() -> None:
     # Linear in x out there: second differences vanish column by column.
     second_diff = np.diff(B, n=2, axis=0)
     np.testing.assert_allclose(second_diff, 0.0, atol=1e-9)
+
+
+def test_weighted_quantile_unit_weights_matches_hazen() -> None:
+    # Same Hazen positions as np.quantile(..., method="hazen"), computed via a
+    # different arithmetic path (cumsum + division vs. numpy's virtual-index
+    # formula), so equality holds to double precision rather than bit-for-bit.
+    rng = np.random.default_rng(17)
+    x = rng.normal(size=200)
+    w = np.ones(200)
+    q = np.array([0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0])
+    np.testing.assert_allclose(
+        weighted_quantile(x, q, w), np.quantile(x, q, method="hazen"), rtol=0.0, atol=1e-12
+    )
+
+
+def test_weighted_quantile_integer_weights_matches_repeat_within_one_gap() -> None:
+    rng = np.random.default_rng(29)
+    x = rng.normal(size=25)
+    w = rng.integers(1, 6, size=25)
+    q = np.array([0.0, 0.2, 0.5, 0.8, 1.0])
+    expanded = np.repeat(x, w)
+    expected = np.quantile(expanded, q, method="hazen")
+    actual = weighted_quantile(x, q, w)
+    tol = float(np.diff(np.sort(expanded)).max())
+    np.testing.assert_allclose(actual, expected, atol=tol)

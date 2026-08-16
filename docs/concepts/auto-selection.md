@@ -28,6 +28,13 @@ set — the inner folds existed to rank, not to produce the deployed map — and
 alongside a `SelectionReport`: the ranked table of candidates with mean and standard
 deviation of the criterion across folds, guardrail flags, and the chosen-flag column.
 
+Parsimony itself is read off each candidate's `complexity_rank` property (lower wins a tie;
+the built-in menu spans temperature's 1.0 up to ENIR's 80.0, and the base-class default is
+100.0 — "unknown, ranks last"). A custom calibrator is scored on the same footing simply by
+overriding the property (e.g. returning `1.5` slots it between temperature and Platt in the
+tie-break), so a user-supplied candidate can now win a tie against a built-in method instead of
+always ranking last.
+
 ## Why the nesting is structural
 
 The trap the selector exists to prevent — scoring candidates on the data they were fitted on
@@ -64,6 +71,10 @@ print(sel.best_name_)
 
 p = sel.predict_proba(s_new)                      # the winner, refit on all data
 print(sel.interpret())
+
+# A custom candidate declares its own tie-break position by overriding the
+# complexity_rank property (e.g. return 1.5 to slot it between temperature
+# at 1.0 and Platt at 2.0); the base-class default is 100.0, "unranked".
 
 # Restrict the menu (small samples) or switch the criterion deliberately:
 from probcal import BetaCalibrator, PlattCalibrator, TemperatureCalibrator

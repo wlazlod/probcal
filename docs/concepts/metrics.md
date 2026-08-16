@@ -254,16 +254,35 @@ robustness of implementation and transparency — it makes no normality assumpti
 bounded and skewed statistics like ECE near zero, and is reproducible bit for bit given the
 seed.
 
-Two honest caveats accompany the protocol. First, on low-event-rate data the resamples vary
-substantially in event count, and a resample can lose the tail entirely; the resulting
-intervals are wide because the uncertainty is real, and narrowing them by stratifying the
-bootstrap on the outcome is a deliberate deviation that would understate total sampling
-variation (probcal does not do it by default). Second, bootstrap intervals for *biased*
-estimators center on the biased value — a bootstrap CI around plain ECE quantifies its
-variance, not its bias, so the interval can exclude zero for a perfectly calibrated model.
-The report pairs ECE with its debiased variant precisely so this artifact is visible rather
-than misread. Bootstrap-heavy computations carry the `slow` pytest marker and a fixed default
-seed, per the package's reproducibility conventions.
+**Stratification is the default.** Each replicate resamples the negative and positive classes
+separately — case resampling within strata, the pROC-style default — so every replicate
+reproduces the observed class counts exactly. This conditions the CI on the observed class
+balance: it excludes the additional variance a plain i.i.d. bootstrap picks up from the event
+*count* itself fluctuating replicate to replicate, which on low-event-rate data can be the
+dominant source of resampling noise. Excluding that source of variance can *narrow* the
+interval relative to i.i.d. resampling on exactly the rare-event, small-\( n \) data where it
+matters most — the opposite of the intuition that stratifying always tightens or always
+widens a CI; the direction depends on which variance source dominates. `evaluate(...,
+stratify=False)` restores plain i.i.d. resampling, redrawing a degenerate (single-class)
+replicate up to 100 times before raising rather than silently substituting anything. An older
+substitution rule — reusing the point estimate as a zero-variance replicate whenever an i.i.d.
+draw came back single-class — was removed for the same reason: it narrowed the i.i.d. path
+artificially rather than reporting the sampling variance honestly. Neither the stratified
+default nor its removal makes CIs uniformly wider or narrower; both make the reported interval
+mean what it claims to measure.
+
+Bootstrap intervals for *biased* estimators still center on the biased value — a bootstrap CI
+around plain ECE quantifies its variance, not its bias, so the interval can exclude zero for a
+perfectly calibrated model. The report pairs ECE with its debiased variant precisely so this
+artifact is visible rather than misread. Bootstrap-heavy computations carry the `slow` pytest
+marker and a fixed default seed, per the package's reproducibility conventions.
+
+**Weighted quantiles.** `e50`, `e90`, and the `reliability_summary` stats box compute their
+quantile step with `probcal._math.weighted_quantile` (Hazen interpolation positions) whenever
+`sample_weight` is given and not uniform; unweighted and equal-weight calls short-circuit to
+plain `np.quantile` so 0.1.2 results stay bit-identical (Hazen differs from numpy's default
+quantile method even at equal weights, so the short-circuit — not a numerical coincidence —
+is what protects those anchors).
 
 ## Reading a report
 
@@ -330,6 +349,44 @@ print(report)
 grades = np.array(["G1", "G2", "G3"])[np.searchsorted([0.01, 0.05], p)]
 print(jeffreys_grade_test(y, p, grades))          # ECB-style backtest, traffic lights
 ```
+
+## Computational cost
+
+Most of the catalog is O(n) or O(n log n) per call: the proper scores, ECCE, Spiegelhalter's
+z, and the recalibration-regression framework are single linear passes; the binned ECE family
+sorts or bins in O(n log n). Two estimators smooth rather than bin, which historically cost
+more, and both gained an anchoring parameter in 0.1.3 to bring their cost down without
+changing what they measure.
+
+**The ICI family** (`ici`, `e50`, `e90`, `emax`, and the `reliability_summary` stats box) fits
+a LOESS smoother \( \hat{c}(p) \) and previously refit it at every one of the \( n \)
+observations, each fit itself scanning an O(n)-window — effectively O(n²) at portfolio scale.
+`grid_size` (default 512) fits the smoother at that many equal-mass anchors spanning the
+prediction range and linearly interpolates the rest, the same device R's `stats::lowess` uses
+via its `delta` parameter. Windows and bandwidths are computed against the full data, so this
+changes *how many points get an exact fit*, not what the fit means; measured drift on
+`make_pd_portfolio(n=5000)` is `|Δici| ≈ 1.3e-6`, far below bootstrap CI width. `grid_size=None`
+recovers the exact per-point fit and its pre-0.1.3 cost. On this host, `ici` at n=50,000 fell
+from 192.2s to 1.2s, and `loess(grid_size=512)` fits n=1,000,000 points in under 30s
+(DECISIONS 58).
+
+**`smooth_ece`** solves a bandwidth fixed point by bisection, and each step built a kernel
+matrix against every residual. `bins` (default 8192) pre-aggregates the weighted residual
+measure onto equal-width bins over the logit range before each step, with a small-bandwidth
+guard that re-bins 8x finer, then falls back to the exact computation, whenever the found
+bandwidth would be under-resolved by the bins — so accuracy never degrades silently. `bins=None`,
+or any call where `n <= bins`, is bit-identical to the pre-0.1.3 exact computation
+(DECISIONS 59).
+
+**`evaluate`'s cost is dominated by the bootstrap**, not any single metric: every point
+estimate in the requested catalog is recomputed `n_boot` times (default 1000). Per replicate,
+scores, ECCE, and the regression framework are O(n); binned ECEs are O(n log n); the ICI
+family shares one LOESS fit at O(grid_size · frac · n); `smooth_ece` is
+O(n + 257 · bins) per bisection step. `metrics=` (DECISIONS 60) restricts the catalog to the
+names actually needed, which matters most for `ece_sweep` — its ~99-candidate bin-count scan
+dominates full-catalog `evaluate` calls at large n. For n above roughly 10⁶, reduce `n_boot`,
+pass a `metrics=` subset, or both; `docs/scripts/benchmarks.py` measures wall time for `ici`,
+`smooth_ece`, and `evaluate` at several portfolio sizes on demand.
 
 ## References
 

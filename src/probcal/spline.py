@@ -158,6 +158,11 @@ class SplineCalibrator(BaseCalibrator):
                 stacklevel=2,
             )
 
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank 12.0: a penalized basis expansion, more flexible than binning."""
+        return 12.0
+
     def _stratified_folds(self, y: np.ndarray) -> np.ndarray:
         rng = np.random.default_rng(self.random_state)
         folds = np.empty(len(y), dtype=np.int64)

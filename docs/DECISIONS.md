@@ -174,6 +174,12 @@ Dated log of ambiguities resolved and design choices made during implementation.
     profiling on real workloads shows this path as a bottleneck (see the README
     performance note).
     The theory chapter's computational note was amended to match. *(2026-07-22)*
+    — Adopted in 0.1.3: `_fit` now precomputes `F0_`/`F1_` (length n+1, non-decreasing)
+    by a single left-to-right sweep of the weighted cumulative-sum diagram per label,
+    reading each insertion position's fitted value off the bridge between the prefix and
+    suffix lower hulls, and `predict_interval` is a `searchsorted` gather. The frozen
+    v0.1.2 refit lives on as `tests/_ivap_reference.py`, the brute-force correctness gate
+    the sweep is checked against at `atol=1e-12`. *(2026-08-16)*
 
 31. **CVAP `predict_interval` returns the conservative fold envelope** ``[min_k p0_k,
     max_k p1_k]``. Vovk & Petej define only the scalar geometric-mean merge for CVAP; the
@@ -205,6 +211,9 @@ Dated log of ambiguities resolved and design choices made during implementation.
     fit (verified equal to PAVA in tests). BIC uses the binomial log-likelihood with
     probabilities clipped to [1e-12, 1-1e-12] and k = number of distinct fitted levels.
     *(2026-07-22)*
+    — The path solver's algorithm and internal representation changed in 0.1.3 (entry
+    61); the path *contract* described above — breakpoints from λ=0 to the fully
+    isotonic fit, combined by BIC weight — is unchanged. *(2026-08-16)*
 
 36. **Spline calibrator defaults.** Knots at equally spaced quantiles of the logit scores,
     ``K = clip(ceil(n^(1/3)), 4, 12)`` by default; penalty grid ``logspace(-4, 4, 17)``;
@@ -299,6 +308,9 @@ Dated log of ambiguities resolved and design choices made during implementation.
     < scaling_binning 4 < histogram 10 < spline 12 < BBQ 40 < isotonic/CIR 50 < IVAP/CVAP
     60 < ENIR 80; unknown names last). Ranks order model complexity classes; exact values
     are inert beyond their ordering. *(2026-07-23)*
+    — The ranks now live directly on each calibrator class as the `complexity_rank`
+    property (entry 65) rather than in a name-keyed table; the ranks and the tie-break
+    ordering above are unchanged. *(2026-08-16)*
 
 50. **API reference split into three pages; notebook execution stack.** Rendering all 21
     mkdocstrings module blocks on one page triggers a superlinear blowup in the rendering
@@ -446,3 +458,121 @@ Dated log of ambiguities resolved and design choices made during implementation.
     extension at a separated fit instead of consuming its coefficients.
     `spline._penalized_irls` is out of scope: its `lam * penalty` term already
     regularizes. *(2026-08-12)*
+
+58. **The ICI family evaluates its LOESS smoother at 512 equal-mass anchors by
+    default, not at every observation.** `loess`'s new `grid_size` argument fits at
+    `grid_size` quantile points of the eval set (endpoints included) and linearly
+    interpolates the rest; windows and bandwidths are still computed against the full
+    data, so this is an interpolation device, not a subsampling one. The precedent is R
+    `stats::lowess`'s `delta` parameter, which fits at points at least `delta` apart
+    and interpolates between them by the same logic. `ici`/`e50`/`e90`/`emax` and
+    `reliability_summary` all default to `grid_size=512`; `grid_size=None` recovers the
+    exact pre-0.1.3 fit-at-every-point behavior and cost. Measured effect on
+    `make_pd_portfolio(n=5000)`: `|Δici| ≈ 1.3e-6`, far below the bootstrap CI width at
+    that sample size. Separately, `_loess_fit_sorted` was rewritten from an
+    `argpartition`-based r-nearest-neighbor search to a sorted two-pointer window walk:
+    for sorted 1-D eval points the r-nearest-neighbor window is contiguous, so the
+    window start advances monotonically as the eval point advances, turning an
+    O(n log n)-per-point search into amortized O(1). The rewrite changes results only
+    at exact distance ties between the leftmost and rightmost candidate windows, which
+    it resolves to the leftmost minimal-width window (strict `<` in the advance
+    condition) — a deterministic tie rule, not a behavior regression. *(2026-08-16)*
+
+59. **`smooth_ece` smooths a pre-binned residual measure instead of the raw
+    per-observation one.** Each bisection step of the self-consistent bandwidth solve
+    built a 257 x n kernel matrix; the new `bins` argument (default 8192) aggregates
+    the weighted `y - p` residuals onto equal-width bins over the logit range before
+    solving, cutting the per-step cost to 257 x bins. A small-bandwidth guard protects
+    accuracy: if the fixed-point `sigma` found on the initial binning is smaller than
+    8 bin widths (the kernel would be under-resolved by the bins), the solve repeats
+    once on an 8x finer binning; if that guard still trips, the function silently falls
+    back to the exact O(n)-per-step computation with no warning, matching pre-0.1.3
+    worst-case cost. `bins=None`, or whenever `n <= bins`, or a degenerate logit range
+    (`t.max() == t.min()`), is bit-identical to the pre-0.1.3 exact path — no binning
+    is ever imposed where it wouldn't reduce cost. *(2026-08-16)*
+
+60. **`evaluate` accepts a keyword-only `metrics=` subset of the catalog.** Passing a
+    sequence of catalog names computes and bootstraps only those metrics — the
+    dominant cost of `evaluate` is paying every metric's point-estimate cost `n_boot`
+    times, so a caller who only needs `log_loss` and `ici` no longer pays for
+    `ece_sweep`'s ~99-candidate scan on every replicate. `metrics=None` (the default)
+    computes the full catalog. Unknown names raise `ValueError` listing the valid
+    catalog rather than silently ignoring them. The returned `MetricReport` always
+    follows catalog order, regardless of the order names were given in `metrics=`, so
+    report layout stays stable across call sites. *(2026-08-16)*
+
+61. **ENIR's near-isotonic path solver is a vectorized transcription of the v0.1.2
+    algorithm, not the heap-scheduled lazy-trajectory design originally planned.**
+    The lazy-trajectory design could not reproduce the reference: exact ties that
+    separate into a violation as \( \lambda \) grows require the reference's
+    per-breakpoint global recompute, which a lazily-scheduled heap cannot replay
+    bit-exactly. What shipped instead recomputes violations, slopes, and collision
+    times as elementwise numpy operations over compacted per-group arrays at every
+    breakpoint; `np.argmin` over the candidate collision times preserves the
+    leftmost strict-`<` tie-break of the reference. Cost is `O(m*G)` time and
+    `O(m*max_solutions)` memory — the `O(m^2)` memory blow-up of retaining every
+    breakpoint's full-length solution was the bug this fixes. The BIC level count
+    `k_t` is computed from the current group means with a 1e-12 tie threshold. A
+    pruning bound, derived from the saturated and isotonic (`pava`) log-likelihoods,
+    skips scoring any breakpoint whose relative BIC weight is provably below 1e-15
+    — exactly 0 in double precision, not an approximation — and is disabled
+    outright when `log(total weight) <= 0` (the bound's derivation assumes
+    `n_tot > 1`; sub-unit total sample weights previously crashed it). Retention
+    keeps the `max_solutions=256` (default) lowest-BIC solutions; `dropped_weight_`
+    measures retention loss only — pruned breakpoints contribute nothing to it —
+    and warns above 1e-6. `path_solutions_` is now shaped `(K, m)` over
+    `kept_breakpoints_` rather than every breakpoint; `path_lambdas_` still records
+    every breakpoint. Equivalence with the frozen v0.1.2 path
+    (`tests/_enir_reference.py`) was gated bit-exact on 20 seeded datasets before
+    the old code was removed. *(2026-08-16)*
+
+62. **IVAP precomputation reads each insertion position off the tangent bridge
+    between two monotone hulls of the weighted cumulative-sum diagram (CSD).** The
+    suffix lower hull (points \( A_k, \ldots, A_n \)) is built once, right to left,
+    with a per-position pop journal so any point a later push hides can be
+    resurfaced in O(1) when the sweep passes that position; the prefix lower hull
+    grows left to right as the sweep advances. Because the reference construction
+    inserts the query point on the *left* chain, that chain's points are shifted by
+    \( (-1, -\text{label}) \) before comparison, turning the within-chain slope
+    and the cross-chain bridge slope into the same arithmetic form, evaluated
+    inline over Python lists rather than through shared helpers for speed. `F0_`
+    and `F1_` are the two sweeps (labels 0 and 1); correctness is gated at
+    `atol=1e-12` against the frozen v0.1.2 two-PAVA construction in
+    `tests/_ivap_reference.py`. The adoption itself — replacing per-query PAVA
+    refits with this precomputation — is recorded as the amendment to entry 30;
+    this entry documents the mechanism. *(2026-08-16)*
+
+63. **`evaluate`'s bootstrap defaults to stratified (pROC-style) resampling; the
+    directional effect on CI width is not uniform.** Each replicate resamples the
+    negative and positive classes separately, preserving the observed class count
+    exactly. This conditions the CI on the observed class balance — it excludes
+    base-rate sampling variability, the replicate-to-replicate fluctuation in
+    event *count* — which can narrow CIs on rare-event data relative to plain
+    i.i.d. resampling, precisely where that source of variance is largest.
+    Separately, the old degenerate-resample rule (a single-class i.i.d. draw
+    silently reused the point estimate as a zero-variance replicate) is deleted;
+    that was an artificial narrowing of the iid path, not an honest one.
+    `stratify=False` restores i.i.d. resampling, redrawing a degenerate draw up to
+    100 times before raising `RuntimeError`. Neither change is universally wider
+    or narrower than the other; both make the reported CI mean what it claims to
+    measure. *(2026-08-16)*
+
+64. **Weighted quantiles (`probcal._math.weighted_quantile`) use Hazen positions
+    \( (C_i - w_i/2)/W \), linearly interpolated and end-clipped.** With equal
+    weights these coincide with `np.quantile(..., method="hazen")`, not numpy's
+    default method — the two differ bit-for-bit even at equal weights — so `e50`,
+    `e90`, and `reliability_summary` short-circuit to plain `np.quantile` whenever
+    `sample_weight` is `None` or uniform, protecting the 0.1.2 anchors exactly
+    rather than relying on a numerical coincidence. Previously `sample_weight` was
+    accepted by `e50`/`e90` and by `reliability_summary`'s internal `e90` call but
+    silently had no effect on the returned quantile. *(2026-08-16)*
+
+65. **`complexity_rank` is a `BaseCalibrator` property (default 100.0), replacing
+    the selector's name-keyed parsimony table.** Every built-in calibrator
+    overrides it with the same values entry 49 fixed (temperature 1 < beta_a 1.5 <
+    platt 2 < beta_ab 2.5 < beta_abm 3 < scaling_binning 4 < histogram 10 <
+    spline 12 < BBQ 40 < isotonic/CIR 50 < IVAP/CVAP 60 < ENIR 80); the ordering is
+    unchanged, only its home moved from a lookup keyed on candidate *name* to an
+    attribute read off the candidate *instance*. A user-supplied candidate that
+    overrides `complexity_rank` on its own class can now win a tie against a
+    built-in method, which a name-keyed table could never recognize. *(2026-08-16)*

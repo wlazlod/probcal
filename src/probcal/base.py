@@ -119,6 +119,15 @@ class BaseCalibrator(ABC):
         """
         return None
 
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank for selector tie-breaks; lower wins a tie.
+
+        Default 100.0 means "unknown — override in subclasses". Custom calibrators
+        declare their place in the tie-break by overriding this property.
+        """
+        return 100.0
+
     def interval_inverse(
         self,
         lo: float,

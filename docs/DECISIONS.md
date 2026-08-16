@@ -446,3 +446,45 @@ Dated log of ambiguities resolved and design choices made during implementation.
     extension at a separated fit instead of consuming its coefficients.
     `spline._penalized_irls` is out of scope: its `lam * penalty` term already
     regularizes. *(2026-08-12)*
+
+58. **The ICI family evaluates its LOESS smoother at 512 equal-mass anchors by
+    default, not at every observation.** `loess`'s new `grid_size` argument fits at
+    `grid_size` quantile points of the eval set (endpoints included) and linearly
+    interpolates the rest; windows and bandwidths are still computed against the full
+    data, so this is an interpolation device, not a subsampling one. The precedent is R
+    `stats::lowess`'s `delta` parameter, which fits at points at least `delta` apart
+    and interpolates between them by the same logic. `ici`/`e50`/`e90`/`emax` and
+    `reliability_summary` all default to `grid_size=512`; `grid_size=None` recovers the
+    exact pre-0.1.3 fit-at-every-point behavior and cost. Measured effect on
+    `make_pd_portfolio(n=5000)`: `|Δici| ≈ 1.3e-6`, far below the bootstrap CI width at
+    that sample size. Separately, `_loess_fit_sorted` was rewritten from an
+    `argpartition`-based r-nearest-neighbor search to a sorted two-pointer window walk:
+    for sorted 1-D eval points the r-nearest-neighbor window is contiguous, so the
+    window start advances monotonically as the eval point advances, turning an
+    O(n log n)-per-point search into amortized O(1). The rewrite changes results only
+    at exact distance ties between the leftmost and rightmost candidate windows, which
+    it resolves to the leftmost minimal-width window (strict `<` in the advance
+    condition) — a deterministic tie rule, not a behavior regression. *(2026-08-16)*
+
+59. **`smooth_ece` smooths a pre-binned residual measure instead of the raw
+    per-observation one.** Each bisection step of the self-consistent bandwidth solve
+    built a 257 x n kernel matrix; the new `bins` argument (default 8192) aggregates
+    the weighted `y - p` residuals onto equal-width bins over the logit range before
+    solving, cutting the per-step cost to 257 x bins. A small-bandwidth guard protects
+    accuracy: if the fixed-point `sigma` found on the initial binning is smaller than
+    8 bin widths (the kernel would be under-resolved by the bins), the solve repeats
+    once on an 8x finer binning; if that guard still trips, the function silently falls
+    back to the exact O(n)-per-step computation with no warning, matching pre-0.1.3
+    worst-case cost. `bins=None`, or whenever `n <= bins`, or a degenerate logit range
+    (`t.max() == t.min()`), is bit-identical to the pre-0.1.3 exact path — no binning
+    is ever imposed where it wouldn't reduce cost. *(2026-08-16)*
+
+60. **`evaluate` accepts a keyword-only `metrics=` subset of the catalog.** Passing a
+    sequence of catalog names computes and bootstraps only those metrics — the
+    dominant cost of `evaluate` is paying every metric's point-estimate cost `n_boot`
+    times, so a caller who only needs `log_loss` and `ici` no longer pays for
+    `ece_sweep`'s ~99-candidate scan on every replicate. `metrics=None` (the default)
+    computes the full catalog. Unknown names raise `ValueError` listing the valid
+    catalog rather than silently ignoring them. The returned `MetricReport` always
+    follows catalog order, regardless of the order names were given in `metrics=`, so
+    report layout stays stable across call sites. *(2026-08-16)*

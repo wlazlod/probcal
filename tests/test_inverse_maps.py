@@ -261,6 +261,40 @@ def test_beta_point_inverse_certificate_ratio_50() -> None:
     assert np.max(np.abs(resid)) <= 1e-12
 
 
+def test_offset_point_inverse_round_trip() -> None:
+    p = expit(RNG.normal(-1.0, 1.0, 500))
+    off = LogitOffset(delta=0.35).fit(p)
+    targets = np.linspace(0.02, 0.9, 25)
+    s = off.point_inverse(targets)
+    np.testing.assert_allclose(off.transform(s), targets, atol=1e-12)
+    s2 = np.linspace(0.05, 0.9, 25)
+    t2 = off.transform(s2)
+    np.testing.assert_allclose(off.point_inverse(t2), s2, atol=1e-9)
+
+
+def test_offset_point_inverse_matches_interval_inverse_midpoint() -> None:
+    p = expit(RNG.normal(-1.0, 1.0, 500))
+    off = LogitOffset(delta=-0.2).fit(p)
+    for tau in (0.02, 0.1, 0.4):
+        raw = off.point_inverse(np.array([tau]))[0]
+        lo_s, hi_s = off.interval_inverse(tau, tau)
+        np.testing.assert_allclose(raw, 0.5 * (lo_s + hi_s), atol=1e-9)
+
+
+def test_offset_point_inverse_space_consistency() -> None:
+    p = expit(RNG.normal(-1.0, 1.0, 500))
+    off = LogitOffset(delta=0.1).fit(p)
+    targets = np.linspace(0.02, 0.9, 15)
+    z = off.point_inverse(targets, space="logit")
+    np.testing.assert_allclose(expit(z), off.point_inverse(targets), atol=1e-12)
+
+
+def test_offset_point_inverse_unfitted_raises() -> None:
+    off = LogitOffset(delta=0.0)
+    with pytest.raises(RuntimeError):
+        off.point_inverse(np.array([0.3]))
+
+
 def test_exports() -> None:
     import probcal
 

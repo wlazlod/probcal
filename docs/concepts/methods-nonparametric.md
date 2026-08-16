@@ -145,6 +145,19 @@ The practical caveat: the combined map may be **non-monotone**. `ENIRCalibrator`
 targeting through [inverse maps](inverse-maps.md) above all — should prefer a monotone
 calibrator. probcal raises rather than guesses when a non-monotone map is asked for a preimage.
 
+**Retention bounds the ensemble's memory.** A calibration set with \( m \) distinct scores can
+have up to \( m \) path breakpoints, and keeping every breakpoint's full-length solution around
+for the BIC average costs \( O(m^2) \) memory — the failure mode `max_solutions` exists to rule
+out. `ENIRCalibrator(max_solutions=256)` (the default) keeps only the 256 lowest-BIC solutions
+as they are produced, so `path_solutions_` has shape `(K, m)` with \( K \le \) `max_solutions`
+(fewer still when a breakpoint's BIC weight is provably negligible and is pruned before ever
+being scored) rather than one row per breakpoint; `kept_breakpoints_` indexes which breakpoints
+those rows came from, and `path_lambdas_` still records every breakpoint regardless of
+retention. `dropped_weight_` reports the BIC weight lost to the cap — evicted, already-scored
+solutions, not pruned ones — and `fit()` raises a `UserWarning` if that loss exceeds 1e-6, the
+signal that `max_solutions` is cutting into the ensemble rather than just bounding its memory.
+`max_solutions=None` recovers the unbounded, one-row-per-breakpoint ensemble.
+
 ## Spline calibration
 
 Between "a three-parameter formula" and "a step function per data block" sits a middle ground:

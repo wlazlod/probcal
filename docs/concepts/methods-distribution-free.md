@@ -96,9 +96,11 @@ from structures precomputed once from the calibration set, and since 0.1.3 probc
 that: fitting sweeps the cumulative-sum diagram left to right, maintaining the lower hulls of
 the prefix and suffix point sets and reading the fitted value at every insertion position from
 the bridge between them. The result is two tables of length \( n + 1 \) — `F0_` and `F1_`,
-non-decreasing — and prediction becomes a `searchsorted` lookup, so a batch of \( m \) queries
-costs \( O(n + m\log n) \) rather than \( O(mn) \). The brute-force refit is retained in the
-test suite as the frozen correctness reference the precomputation is checked against.
+non-decreasing — and prediction becomes a `searchsorted` lookup: fitting costs
+\( O(n \log n) \) (dominated by sorting the calibration scores; the sweep itself is linear),
+and a batch of \( m \) queries costs \( O(m \log n) \), for a total of \( O((n+m)\log(n+m)) \)
+rather than \( O(mn) \). The brute-force refit is retained in the test suite as the frozen
+correctness reference the precomputation is checked against.
 
 ## The cross Venn–Abers predictor (CVAP)
 

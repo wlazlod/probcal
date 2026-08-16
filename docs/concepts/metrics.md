@@ -254,16 +254,35 @@ robustness of implementation and transparency — it makes no normality assumpti
 bounded and skewed statistics like ECE near zero, and is reproducible bit for bit given the
 seed.
 
-Two honest caveats accompany the protocol. First, on low-event-rate data the resamples vary
-substantially in event count, and a resample can lose the tail entirely; the resulting
-intervals are wide because the uncertainty is real, and narrowing them by stratifying the
-bootstrap on the outcome is a deliberate deviation that would understate total sampling
-variation (probcal does not do it by default). Second, bootstrap intervals for *biased*
-estimators center on the biased value — a bootstrap CI around plain ECE quantifies its
-variance, not its bias, so the interval can exclude zero for a perfectly calibrated model.
-The report pairs ECE with its debiased variant precisely so this artifact is visible rather
-than misread. Bootstrap-heavy computations carry the `slow` pytest marker and a fixed default
-seed, per the package's reproducibility conventions.
+**Stratification is the default.** Each replicate resamples the negative and positive classes
+separately — case resampling within strata, the pROC-style default — so every replicate
+reproduces the observed class counts exactly. This conditions the CI on the observed class
+balance: it excludes the additional variance a plain i.i.d. bootstrap picks up from the event
+*count* itself fluctuating replicate to replicate, which on low-event-rate data can be the
+dominant source of resampling noise. Excluding that source of variance can *narrow* the
+interval relative to i.i.d. resampling on exactly the rare-event, small-\( n \) data where it
+matters most — the opposite of the intuition that stratifying always tightens or always
+widens a CI; the direction depends on which variance source dominates. `evaluate(...,
+stratify=False)` restores plain i.i.d. resampling, redrawing a degenerate (single-class)
+replicate up to 100 times before raising rather than silently substituting anything. An older
+substitution rule — reusing the point estimate as a zero-variance replicate whenever an i.i.d.
+draw came back single-class — was removed for the same reason: it narrowed the i.i.d. path
+artificially rather than reporting the sampling variance honestly. Neither the stratified
+default nor its removal makes CIs uniformly wider or narrower; both make the reported interval
+mean what it claims to measure.
+
+Bootstrap intervals for *biased* estimators still center on the biased value — a bootstrap CI
+around plain ECE quantifies its variance, not its bias, so the interval can exclude zero for a
+perfectly calibrated model. The report pairs ECE with its debiased variant precisely so this
+artifact is visible rather than misread. Bootstrap-heavy computations carry the `slow` pytest
+marker and a fixed default seed, per the package's reproducibility conventions.
+
+**Weighted quantiles.** `e50`, `e90`, and the `reliability_summary` stats box compute their
+quantile step with `probcal._math.weighted_quantile` (Hazen interpolation positions) whenever
+`sample_weight` is given and not uniform; unweighted and equal-weight calls short-circuit to
+plain `np.quantile` so 0.1.2 results stay bit-identical (Hazen differs from numpy's default
+quantile method even at equal weights, so the short-circuit — not a numerical coincidence —
+is what protects those anchors).
 
 ## Reading a report
 

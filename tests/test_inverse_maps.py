@@ -131,6 +131,54 @@ def test_thresholds_wrappers() -> None:
     assert raw["A"][0] == -np.inf and raw["C"][1] == np.inf
 
 
+def test_point_inverse_platt_round_trip() -> None:
+    cal = PlattCalibrator().fit(*_sample())
+    p = np.linspace(0.02, 0.9, 25)
+    s = cal.point_inverse(p)
+    np.testing.assert_allclose(cal.predict_proba(s), p, atol=1e-12)
+    s2 = np.linspace(0.05, 0.9, 25)
+    p2 = cal.predict_proba(s2)
+    np.testing.assert_allclose(cal.point_inverse(p2), s2, atol=1e-9)
+
+
+def test_point_inverse_temperature_round_trip() -> None:
+    cal = TemperatureCalibrator().fit(*_sample())
+    p = np.linspace(0.02, 0.9, 25)
+    s = cal.point_inverse(p)
+    np.testing.assert_allclose(cal.predict_proba(s), p, atol=1e-12)
+    s2 = np.linspace(0.05, 0.9, 25)
+    p2 = cal.predict_proba(s2)
+    np.testing.assert_allclose(cal.point_inverse(p2), s2, atol=1e-9)
+
+
+def test_point_inverse_space_consistency() -> None:
+    cal = PlattCalibrator().fit(*_sample())
+    p = np.linspace(0.02, 0.9, 15)
+    z = cal.point_inverse(p, space="logit")
+    np.testing.assert_allclose(expit(z), cal.point_inverse(p), atol=1e-12)
+
+
+def test_point_inverse_non_monotone_platt_raises() -> None:
+    cal = PlattCalibrator().fit(*_sample())
+    cal.a_ = -1.0
+    cal.is_monotone_ = False
+    with pytest.raises(NotImplementedError, match="monotone"):
+        cal.point_inverse(np.array([0.3]))
+
+
+def test_point_inverse_unfitted_raises() -> None:
+    cal = PlattCalibrator()
+    with pytest.raises(RuntimeError):
+        cal.point_inverse(np.array([0.3]))
+
+
+def test_point_inverse_non_affine_monotone_raises() -> None:
+    cal = SplineCalibrator().fit(*_sample())
+    assert cal.is_monotone_
+    with pytest.raises(NotImplementedError, match="interval_inverse"):
+        cal.point_inverse(np.array([0.3]))
+
+
 def test_exports() -> None:
     import probcal
 

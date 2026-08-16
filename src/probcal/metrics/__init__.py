@@ -5,6 +5,7 @@
 report-only — is the table in ``docs/concepts/metrics.md``.
 """
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -100,35 +101,79 @@ __all__ = [
 ]
 
 
-def _point_metrics(y: np.ndarray, p: np.ndarray, w: np.ndarray | None) -> dict[str, float]:
-    from .._math import loess
+_METRIC_CATALOG: tuple[str, ...] = (
+    "log_loss",
+    "brier",
+    "brier_skill",
+    "ece",
+    "ece_debiased",
+    "mce",
+    "ece_sweep",
+    "smooth_ece",
+    "ecce_max",
+    "ecce_mean",
+    "ici",
+    "e50",
+    "e90",
+    "emax",
+    "spiegelhalter_z",
+    "spiegelhalter_p",
+    "intercept",
+    "slope",
+)
 
-    sp = spiegelhalter_z(y, p, sample_weight=w)
-    ec = ecce(y, p, sample_weight=w)
-    # One shared LOESS fit powers the whole ICI family (ici/e50/e90/emax use
-    # the same distances; refitting four times would quadruple bootstrap cost).
-    d = np.abs(loess(p, y, frac=0.75, grid_size=512) - p)
-    w_arr = np.ones(len(p)) if w is None else w
-    return {
-        "log_loss": log_loss(y, p, sample_weight=w),
-        "brier": brier_score(y, p, sample_weight=w),
-        "brier_skill": brier_skill_score(y, p, sample_weight=w),
-        "ece": ece(y, p, sample_weight=w),
-        "ece_debiased": ece_debiased(y, p, sample_weight=w),
-        "mce": ece(y, p, norm="max", sample_weight=w),
-        "ece_sweep": ece_sweep(y, p, sample_weight=w),
-        "smooth_ece": smooth_ece(y, p, sample_weight=w),
-        "ecce_max": ec.stat_max,
-        "ecce_mean": ec.stat_mean,
-        "ici": float(np.average(d, weights=w_arr)),
-        "e50": float(np.quantile(d, 0.5)),
-        "e90": float(np.quantile(d, 0.9)),
-        "emax": float(np.max(d)),
-        "spiegelhalter_z": sp.z,
-        "spiegelhalter_p": sp.p_value,
-        "intercept": calibration_intercept(y, p, sample_weight=w),
-        "slope": calibration_slope(y, p, sample_weight=w),
+
+def _point_metrics(
+    y: np.ndarray,
+    p: np.ndarray,
+    w: np.ndarray | None,
+    names: tuple[str, ...] | None = None,
+) -> dict[str, float]:
+    sel = set(_METRIC_CATALOG if names is None else names)
+    dispatch: dict[str, Callable[[], float]] = {
+        "log_loss": lambda: log_loss(y, p, sample_weight=w),
+        "brier": lambda: brier_score(y, p, sample_weight=w),
+        "brier_skill": lambda: brier_skill_score(y, p, sample_weight=w),
+        "ece": lambda: ece(y, p, sample_weight=w),
+        "ece_debiased": lambda: ece_debiased(y, p, sample_weight=w),
+        "mce": lambda: ece(y, p, norm="max", sample_weight=w),
+        "ece_sweep": lambda: ece_sweep(y, p, sample_weight=w),
+        "smooth_ece": lambda: smooth_ece(y, p, sample_weight=w),
+        "intercept": lambda: calibration_intercept(y, p, sample_weight=w),
+        "slope": lambda: calibration_slope(y, p, sample_weight=w),
     }
+    out: dict[str, float] = {k: fn() for k, fn in dispatch.items() if k in sel}
+
+    if sel & {"ecce_max", "ecce_mean"}:
+        ec = ecce(y, p, sample_weight=w)
+        out["ecce_max"] = ec.stat_max
+        out["ecce_mean"] = ec.stat_mean
+
+    if sel & {"ici", "e50", "e90", "emax"}:
+        from .._math import loess
+
+        # One shared LOESS fit powers the whole ICI family (ici/e50/e90/emax
+        # use the same distances; refitting four times would quadruple
+        # bootstrap cost).
+        d = np.abs(loess(p, y, frac=0.75, grid_size=512) - p)
+        w_arr = np.ones(len(p)) if w is None else w
+        if "ici" in sel:
+            out["ici"] = float(np.average(d, weights=w_arr))
+        if "e50" in sel:
+            out["e50"] = float(np.quantile(d, 0.5))
+        if "e90" in sel:
+            out["e90"] = float(np.quantile(d, 0.9))
+        if "emax" in sel:
+            out["emax"] = float(np.max(d))
+
+    if sel & {"spiegelhalter_z", "spiegelhalter_p"}:
+        sp = spiegelhalter_z(y, p, sample_weight=w)
+        if "spiegelhalter_z" in sel:
+            out["spiegelhalter_z"] = sp.z
+        if "spiegelhalter_p" in sel:
+            out["spiegelhalter_p"] = sp.p_value
+
+    return {k: out[k] for k in _METRIC_CATALOG if k in sel}
 
 
 def evaluate(
@@ -138,6 +183,7 @@ def evaluate(
     sample_weight: object = None,
     n_boot: int = 1000,
     seed: int = 42,
+    metrics: Sequence[str] | None = None,
 ) -> MetricReport:
     """Full metric report with seeded bootstrap percentile confidence intervals.
 
@@ -151,19 +197,41 @@ def evaluate(
         Case-resampling bootstrap replicates (percentile CIs at 2.5/97.5).
     seed : int
         RNG seed; results are bit-reproducible given the seed.
+    metrics : sequence of str or None
+        Subset of catalog names to compute; ``None`` computes the full
+        catalog. The report follows catalog order regardless of the order
+        given here. Raises ``ValueError`` for unknown names.
 
     Returns
     -------
     MetricReport
-        Point estimates and CI bounds for the full catalog. Note the caveat
-        from the metrics chapter: a bootstrap CI around a *biased* estimator
-        (plain ECE) quantifies its variance, not its bias.
+        Point estimates and CI bounds for the requested catalog. Note the
+        caveat from the metrics chapter: a bootstrap CI around a *biased*
+        estimator (plain ECE) quantifies its variance, not its bias.
+
+    Notes
+    -----
+    Cost model per replicate: scores and regression metrics and ECCE are
+    O(n); binned ECEs are O(n log n); the ICI family (ici/e50/e90/emax)
+    shares one LOESS fit at O(grid_size * frac * n); smECE is
+    O(n + 257 * bins) per bisection step. All of the above are paid
+    ``n_boot`` times — for n > 1e6, reduce ``n_boot`` or pass a ``metrics=``
+    subset.
     """
     from .scores import _prep
 
+    if metrics is not None:
+        unknown = sorted(set(metrics) - set(_METRIC_CATALOG))
+        if unknown:
+            raise ValueError(
+                f"unknown metric names {unknown}; valid names: {list(_METRIC_CATALOG)}"
+            )
+        names = tuple(k for k in _METRIC_CATALOG if k in set(metrics))
+    else:
+        names = _METRIC_CATALOG
+
     y_arr, p_arr, w_arr = _prep(y, p, sample_weight)
-    point = _point_metrics(y_arr, p_arr, w_arr)
-    names = tuple(point)
+    point = _point_metrics(y_arr, p_arr, w_arr, names)
     values = np.array([point[k] for k in names])
 
     rng = np.random.default_rng(seed)
@@ -175,7 +243,7 @@ def evaluate(
         if yb.min() == yb.max():  # degenerate resample: keep the point estimate
             boot[b] = values
             continue
-        pm = _point_metrics(yb, pb, wb)
+        pm = _point_metrics(yb, pb, wb, names)
         boot[b] = [pm[k] for k in names]
     ci_low = np.percentile(boot, 2.5, axis=0)
     ci_high = np.percentile(boot, 97.5, axis=0)

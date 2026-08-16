@@ -5,6 +5,7 @@ import pytest
 
 from probcal._math import expit
 from probcal._results import MetricReport
+from probcal.datasets import make_pd_portfolio
 from probcal.metrics import (
     ReliabilitySummary,
     calibration_intercept,
@@ -55,6 +56,26 @@ def test_reliability_summary_matches_metric_calls() -> None:
     assert s.ici == ici(y, p)
     assert s.e90 == e90(y, p)
     assert s.spiegelhalter_p == spiegelhalter_z(y, p).p_value
+
+
+def test_evaluate_metrics_subset_matches_full_run() -> None:
+    d = make_pd_portfolio(n=400)
+    full = evaluate(d.y, d.scores, n_boot=25, seed=3)
+    sub = evaluate(d.y, d.scores, n_boot=25, seed=3, metrics=["e90", "ici"])
+    assert sub.names == ("ici", "e90")  # catalog order, not argument order
+    for name in sub.names:
+        i, j = full.names.index(name), sub.names.index(name)
+        assert (full.values[i], full.ci_low[i], full.ci_high[i]) == (
+            sub.values[j],
+            sub.ci_low[j],
+            sub.ci_high[j],
+        )
+
+
+def test_evaluate_unknown_metric_raises_listing_valid_names() -> None:
+    d = make_pd_portfolio(n=100)
+    with pytest.raises(ValueError, match="log_loss"):
+        evaluate(d.y, d.scores, n_boot=5, metrics=["nope"])
 
 
 @pytest.mark.slow

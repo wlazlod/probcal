@@ -69,6 +69,20 @@ def test_reliability_summary_matches_metric_calls() -> None:
     assert s.spiegelhalter_p == spiegelhalter_z(y, p).p_value
 
 
+def test_reliability_summary_e90_reflects_sample_weight() -> None:
+    from probcal.metrics.smooth import _ici_distances
+
+    d = make_pd_portfolio(n=2000)
+    y, p = d.y, d.scores
+    dist = _ici_distances(y, p, 0.75, 512)
+    tail_idx = np.argsort(dist)[-50:]  # top ~2.5% largest ICI distances
+    w = np.ones(len(y))
+    w[tail_idx] = 50.0
+    baseline = reliability_summary(y, p).e90
+    weighted = reliability_summary(y, p, sample_weight=w).e90
+    assert weighted != baseline
+
+
 def test_evaluate_metrics_subset_matches_full_run() -> None:
     d = make_pd_portfolio(n=400)
     full = evaluate(d.y, d.scores, n_boot=25, seed=3)

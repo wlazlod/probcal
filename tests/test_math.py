@@ -25,6 +25,7 @@ from probcal._math import (
     norm_cdf,
     norm_ppf,
     pava,
+    weighted_quantile,
 )
 from probcal.datasets import make_pd_portfolio
 
@@ -404,3 +405,28 @@ def test_natural_cubic_basis_linear_beyond_boundary() -> None:
     # Linear in x out there: second differences vanish column by column.
     second_diff = np.diff(B, n=2, axis=0)
     np.testing.assert_allclose(second_diff, 0.0, atol=1e-9)
+
+
+def test_weighted_quantile_unit_weights_matches_hazen() -> None:
+    # Same Hazen positions as np.quantile(..., method="hazen"), computed via a
+    # different arithmetic path (cumsum + division vs. numpy's virtual-index
+    # formula), so equality holds to double precision rather than bit-for-bit.
+    rng = np.random.default_rng(17)
+    x = rng.normal(size=200)
+    w = np.ones(200)
+    q = np.array([0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0])
+    np.testing.assert_allclose(
+        weighted_quantile(x, q, w), np.quantile(x, q, method="hazen"), rtol=0.0, atol=1e-12
+    )
+
+
+def test_weighted_quantile_integer_weights_matches_repeat_within_one_gap() -> None:
+    rng = np.random.default_rng(29)
+    x = rng.normal(size=25)
+    w = rng.integers(1, 6, size=25)
+    q = np.array([0.0, 0.2, 0.5, 0.8, 1.0])
+    expanded = np.repeat(x, w)
+    expected = np.quantile(expanded, q, method="hazen")
+    actual = weighted_quantile(x, q, w)
+    tol = float(np.diff(np.sort(expanded)).max())
+    np.testing.assert_allclose(actual, expected, atol=tol)

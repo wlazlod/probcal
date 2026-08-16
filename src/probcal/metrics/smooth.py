@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import loess, logit, norm_cdf
+from .._math import loess, logit, norm_cdf, weighted_quantile
 from .scores import _prep
 
 
@@ -124,6 +124,22 @@ def _ici_distances(y: object, p: object, frac: float, grid_size: int | None) -> 
     return np.abs(loess(p_arr, y_arr, frac=frac, grid_size=grid_size) - p_arr)
 
 
+def _ici_quantile(d: np.ndarray, q: float, y: object, p: object, sample_weight: object) -> float:
+    """Quantile of the (always-unweighted) LOESS distances ``d``.
+
+    ``sample_weight is None`` or all-equal weights use ``np.quantile``
+    unchanged, so every unweighted/equal-weight caller stays bit-identical to
+    0.1.2; otherwise the quantile step (only) is weighted via
+    :func:`weighted_quantile`.
+    """
+    if sample_weight is None:
+        return float(np.quantile(d, q))
+    _, _, w = _prep(y, p, sample_weight)
+    if np.all(w == w[0]):
+        return float(np.quantile(d, q))
+    return float(weighted_quantile(d, q, w))
+
+
 def e50(
     y: object,
     p: object,
@@ -133,8 +149,11 @@ def e50(
     grid_size: int | None = 512,
 ) -> float:
     """Median of the |LOESS(y|p) - p| distances. ``grid_size=None`` recovers
-    0.1.2 values exactly."""
-    return float(np.quantile(_ici_distances(y, p, frac, grid_size), 0.5))
+    0.1.2 values exactly. The LOESS distances are always unweighted
+    (DECISIONS entry); ``sample_weight``, when given and not uniform, weights
+    only the quantile step (see :func:`weighted_quantile`)."""
+    d = _ici_distances(y, p, frac, grid_size)
+    return _ici_quantile(d, 0.5, y, p, sample_weight)
 
 
 def e90(
@@ -146,8 +165,11 @@ def e90(
     grid_size: int | None = 512,
 ) -> float:
     """90th percentile of the |LOESS(y|p) - p| distances. ``grid_size=None``
-    recovers 0.1.2 values exactly."""
-    return float(np.quantile(_ici_distances(y, p, frac, grid_size), 0.9))
+    recovers 0.1.2 values exactly. The LOESS distances are always unweighted
+    (DECISIONS entry); ``sample_weight``, when given and not uniform, weights
+    only the quantile step (see :func:`weighted_quantile`)."""
+    d = _ici_distances(y, p, frac, grid_size)
+    return _ici_quantile(d, 0.9, y, p, sample_weight)
 
 
 def emax(

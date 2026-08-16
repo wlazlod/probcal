@@ -834,3 +834,41 @@ def natural_cubic_basis(x: object, knots: object) -> np.ndarray:
     for k in range(n_knots - 2):
         cols.append(d(k) - d_last)
     return np.column_stack(cols)
+
+
+# ------------------------------------------------------------------ weighted quantile
+
+
+def weighted_quantile(x: object, q: object, w: object) -> np.ndarray:
+    """Weighted quantiles by linear interpolation of the empirical weighted CDF.
+
+    Positions are ``p_i = (C_i - w_i / 2) / W``, where ``C_i`` is the
+    cumulative weight through the ``i``-th sorted observation and ``W`` is the
+    total weight; ``q`` outside ``[p_1, p_n]`` is clipped to the extremes
+    (``np.interp`` clamps). With equal weights these are the Hazen positions
+    ``(i - 0.5) / n`` — numpy's ``method="hazen"`` — *not* numpy's default
+    quantile method. Callers that must stay bit-identical to ``np.quantile``
+    on unweighted or equal-weight input should short-circuit to
+    ``np.quantile`` themselves rather than rely on this function.
+
+    Parameters
+    ----------
+    x : array_like
+        Sample values.
+    q : array_like
+        Probability level(s) in ``[0, 1]``.
+    w : array_like
+        Positive weights, same length as ``x``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Interpolated weighted quantile(s) at ``q``.
+    """
+    x_arr = np.asarray(x, dtype=np.float64)
+    w_arr = np.asarray(w, dtype=np.float64)
+    order = np.argsort(x_arr, kind="stable")
+    xs, ws = x_arr[order], w_arr[order]
+    cw = np.cumsum(ws)
+    pos = (cw - 0.5 * ws) / cw[-1]
+    return np.interp(np.asarray(q, dtype=np.float64), pos, xs)

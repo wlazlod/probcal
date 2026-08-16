@@ -5,7 +5,16 @@ import pytest
 
 from probcal._math import expit, logit
 from probcal.datasets import make_pd_portfolio
-from probcal.metrics.smooth import e50, e90, ecce, emax, ici, smooth_ece, spiegelhalter_z
+from probcal.metrics.smooth import (
+    _ici_distances,
+    e50,
+    e90,
+    ecce,
+    emax,
+    ici,
+    smooth_ece,
+    spiegelhalter_z,
+)
 
 RNG = np.random.default_rng(61)
 
@@ -82,6 +91,23 @@ def test_smooth_ece_binned_close_to_exact(kw: dict) -> None:
 def test_smooth_ece_default_exact_below_bin_count() -> None:
     d = make_pd_portfolio(n=2000)  # n <= 8192: default must be bit-identical to exact
     assert smooth_ece(d.y, d.scores) == smooth_ece(d.y, d.scores, bins=None)
+
+
+def test_e50_unweighted_equals_all_equal_weight() -> None:
+    d = make_pd_portfolio(n=1500)
+    assert e50(d.y, d.scores) == e50(d.y, d.scores, sample_weight=np.ones(len(d.y)))
+
+
+def test_e50_weighted_moves_when_tail_upweighted() -> None:
+    d = make_pd_portfolio(n=2000)
+    y, p = d.y, d.scores
+    dist = _ici_distances(y, p, 0.75, 512)
+    tail_idx = np.argsort(dist)[-100:]  # top 5% largest ICI distances
+    w = np.ones(len(y))
+    w[tail_idx] = 50.0
+    baseline = e50(y, p)
+    weighted = e50(y, p, sample_weight=w)
+    assert weighted > baseline
 
 
 def test_smooth_ece_guard_falls_back_to_exact() -> None:

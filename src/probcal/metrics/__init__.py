@@ -150,19 +150,25 @@ def _point_metrics(
         out["ecce_mean"] = ec.stat_mean
 
     if sel & {"ici", "e50", "e90", "emax"}:
-        from .._math import loess
+        from .._math import loess, weighted_quantile
 
         # One shared LOESS fit powers the whole ICI family (ici/e50/e90/emax
         # use the same distances; refitting four times would quadruple
-        # bootstrap cost).
+        # bootstrap cost). Distances themselves stay unweighted; sample_weight,
+        # when given and not uniform, weights only the e50/e90 quantile step.
         d = np.abs(loess(p, y, frac=0.75, grid_size=512) - p)
         w_arr = np.ones(len(p)) if w is None else w
+        uniform_w = w is None or bool(np.all(w == w[0]))
         if "ici" in sel:
             out["ici"] = float(np.average(d, weights=w_arr))
         if "e50" in sel:
-            out["e50"] = float(np.quantile(d, 0.5))
+            out["e50"] = (
+                float(np.quantile(d, 0.5)) if uniform_w else float(weighted_quantile(d, 0.5, w))
+            )
         if "e90" in sel:
-            out["e90"] = float(np.quantile(d, 0.9))
+            out["e90"] = (
+                float(np.quantile(d, 0.9)) if uniform_w else float(weighted_quantile(d, 0.9, w))
+            )
         if "emax" in sel:
             out["emax"] = float(np.max(d))
 
@@ -321,6 +327,6 @@ def reliability_summary(
         intercept=calibration_intercept(y_arr, p_arr, sample_weight=wq),
         slope=calibration_slope(y_arr, p_arr, sample_weight=wq),
         ici=ici(y_arr, p_arr, sample_weight=wq, grid_size=grid_size),
-        e90=e90(y_arr, p_arr, grid_size=grid_size),
+        e90=e90(y_arr, p_arr, sample_weight=wq, grid_size=grid_size),
         spiegelhalter_p=spiegelhalter_z(y_arr, p_arr, sample_weight=wq).p_value,
     )

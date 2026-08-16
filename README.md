@@ -103,9 +103,15 @@ lo_z, hi_z = wrapped.interval_inverse(0.0, 0.02, space="logit")   # "PD <= 2%" i
 ² prdm0/probcal (P. R. Diniz Marinho), unaffiliated — see the FAQ. Verified against v0.2.0, 2026-08-08.
 ³ Platt, temperature, beta, isotonic, histogram binning; its multiclass methods (Dirichlet, vector scaling, one-vs-rest) are out of probcal's binary scope.
 
-Performance note: the PAVA family and special functions are hand-rolled numpy/stdlib;
-profiling on real workloads has not shown them to be a bottleneck. Rust acceleration is
-deliberately out of scope unless benchmarks on production-sized portfolios say otherwise.
+Performance note: the ICI family (`ici`/`e50`/`e90`/`emax`) shares one LOESS fit anchored
+to `grid_size=512` quantile points instead of refitting at every observation — the same
+device R's `stats::lowess` uses via its `delta` parameter (fit at spaced points, interpolate
+the rest) — and `smooth_ece` pre-aggregates its residual measure onto `bins=8192` cells
+before the bandwidth bisection. Measured on this host: `ici` at n=50,000 dropped from 192.2s
+(v0.1.2) to 1.2s, and `loess(grid_size=512)` now fits n=1,000,000 points in under 30s.
+`grid_size=None` and `bins=None` recover the exact pre-0.1.3 values and cost, so nothing is
+lost for portfolios small enough to afford it. Still numpy-only; Rust acceleration remains
+out of scope unless a future workload demands it.
 
 ## Documentation
 

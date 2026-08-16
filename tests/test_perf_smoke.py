@@ -2,13 +2,16 @@
 catch a regression to the pre-fast-path O(n^2)/O(n log n) behavior without being
 flaky on slower CI hardware.
 
-``evaluate`` is measured at n=5,000/n_boot=20 rather than the larger n=50,000/
-n_boot=50 scale: its default metric catalog includes ``ece_sweep``, which scans
-~99 candidate bin counts per call (untouched by this perf pass), so it -- not
-the grid-anchored LOESS / binned smECE fast paths this suite guards -- would
-dominate the timing at n=50,000 (measured ~537s on this host). The smaller
-scale still exercises the same bootstrap loop and metric dispatch and stays a
-practical smoke test.
+``evaluate`` is measured at n=20,000/n_boot=20 (raised from n=5,000 now that the
+binned smECE fast path this fix corrects no longer dominates timing at that
+scale -- measured 16.6s here, comfortably under the ceiling) rather than the
+larger n=50,000/n_boot=50 scale: its default metric catalog still includes
+``ece_sweep``, which scans ~99 candidate bin counts per call (untouched by
+this fix), so it -- not the grid-anchored LOESS / binned smECE fast paths this
+suite guards -- would dominate the timing at n=50,000 (measured ~537s on this
+host). n=20,000 exercises the bootstrap loop and metric dispatch above both
+the smECE bin-lattice default (8,192) and the LOESS anchor grid (512), and
+stays a practical smoke test.
 
 ENIR's ceiling uses n=20,000, not the spec's m=1e5: the vectorized engine (the
 production memory fix; see DECISIONS) is O(m*G) in time, and 1e5 is not
@@ -31,6 +34,7 @@ from probcal import CalibratorSelector, ENIRCalibrator, VennAbersCalibrator
 from probcal._math import loess
 from probcal.datasets import make_pd_portfolio
 from probcal.metrics import evaluate, ici
+from probcal.metrics.smooth import smooth_ece
 
 pytestmark = pytest.mark.slow
 
@@ -43,8 +47,19 @@ def test_ici_n200k_under_30s() -> None:
     assert elapsed < 30.0
 
 
-def test_evaluate_n5k_boot20_under_130s() -> None:
-    d = make_pd_portfolio(n=5_000, random_state=42)
+def test_smooth_ece_default_n20k_under_ceiling() -> None:
+    # n=20,000 exercises the lattice-binned default path (n > 8192 bins); the
+    # pre-fix aliasing defect made this cost ~6s regardless of n, the fixed
+    # lattice integrator measures ~ms, so 5s is a generous (>=5x) ceiling.
+    d = make_pd_portfolio(n=20_000, random_state=42)
+    t0 = time.perf_counter()
+    smooth_ece(d.y, d.scores)
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 5.0
+
+
+def test_evaluate_n20k_boot20_under_130s() -> None:
+    d = make_pd_portfolio(n=20_000, random_state=42)
     t0 = time.perf_counter()
     evaluate(d.y, d.scores, n_boot=20)
     elapsed = time.perf_counter() - t0

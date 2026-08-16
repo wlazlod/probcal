@@ -92,10 +92,42 @@ def test_path_matches_v012_reference(m: int, kind: int, seed: int) -> None:
     cal = ENIRCalibrator(max_solutions=None).fit(s, y, w)
     np.testing.assert_allclose(cal._x, s_u)
     np.testing.assert_allclose(cal.path_lambdas_, ref_lambdas, rtol=1e-9, atol=1e-12)
-    np.testing.assert_allclose(cal.path_solutions_, ref_solutions, atol=1e-10)
-    np.testing.assert_allclose(cal.predict_proba(PROBE), ref_pred, atol=1e-10)
+    np.testing.assert_allclose(cal.path_solutions_, ref_solutions, rtol=0, atol=1e-10)
+    np.testing.assert_allclose(cal.predict_proba(PROBE), ref_pred, rtol=0, atol=1e-10)
 
     bounded = ENIRCalibrator().fit(s, y, w)
     np.testing.assert_allclose(bounded.path_lambdas_, ref_lambdas, rtol=1e-9, atol=1e-12)
-    np.testing.assert_allclose(bounded.predict_proba(PROBE), ref_pred, atol=1e-9)
+    np.testing.assert_allclose(bounded.predict_proba(PROBE), ref_pred, rtol=0, atol=1e-9)
     assert bounded.dropped_weight_ < 1e-6
+
+
+def test_unit_total_weight_matches_reference() -> None:
+    """Weights summing to exactly 1 make ``log(n_tot)`` exactly 0, which the BIC
+    pruning bound divides by. Pruning must switch off and the fit must still
+    reproduce the frozen reference."""
+    s, y, _ = _make_dataset(64, 0, 0)
+    w = np.full(64, 2.0**-6)  # exact halves: sums to exactly 1.0
+    assert float(w.sum()) == 1.0
+
+    s_u, ref_lambdas, ref_solutions, ref_weights = _reference_fit(s, y, w)
+    ref_pred = _reference_predict(s_u, ref_solutions, ref_weights, PROBE)
+
+    cal = ENIRCalibrator(max_solutions=None).fit(s, y, w)
+    np.testing.assert_allclose(cal.path_lambdas_, ref_lambdas, rtol=1e-9, atol=1e-12)
+    np.testing.assert_allclose(cal.predict_proba(PROBE), ref_pred, rtol=0, atol=1e-10)
+    np.testing.assert_allclose(cal.weights_.sum(), 1.0, atol=1e-12)
+
+
+def test_sub_unit_total_weight_fits() -> None:
+    """Weights summing to less than 1 make ``log(n_tot)`` negative, which would turn
+    the pruning bound into "prune everything". The fit must stay valid."""
+    s, y, _ = _make_dataset(64, 0, 0)
+    w = np.full(64, 2.0**-10)  # sums to 0.0625
+
+    cal = ENIRCalibrator().fit(s, y, w)
+    assert np.all(np.isfinite(cal.weights_))
+    np.testing.assert_allclose(cal.weights_.sum(), 1.0, atol=1e-12)
+    assert cal.path_solutions_.shape[0] == len(cal.kept_breakpoints_) >= 1
+    p = cal.predict_proba(PROBE)
+    assert np.all(np.isfinite(p))
+    assert np.all((p > 0.0) & (p < 1.0))

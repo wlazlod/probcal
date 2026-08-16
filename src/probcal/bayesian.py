@@ -141,14 +141,20 @@ class ENIRCalibrator(BaseCalibrator):
         are recorded, whether or not their solution is retained.
     path_solutions_ : numpy.ndarray of shape (K, m)
         Fitted values on the tie-aggregated score grid at the retained
-        breakpoints, in breakpoint order. ``K = min(T, max_solutions)``.
+        breakpoints, in breakpoint order. ``K`` is the number of retained
+        breakpoints: at most ``max_solutions``, and fewer when breakpoints are
+        pruned (a breakpoint whose BIC weight is provably below 1e-15 relative
+        is skipped without being scored, and is retained only when
+        ``max_solutions`` is ``None``).
     kept_breakpoints_ : numpy.ndarray of shape (K,)
         Indices into ``path_lambdas_`` of the retained breakpoints.
     weights_ : numpy.ndarray of shape (K,)
         BIC weights over the retained solutions, renormalized to sum to 1.
     dropped_weight_ : float
-        BIC weight of the discarded solutions before renormalization; a
-        ``UserWarning`` is raised above 1e-6.
+        BIC weight lost to retention — the weight of scored solutions that the
+        ``max_solutions`` cap evicted, before renormalization; a
+        ``UserWarning`` is raised above 1e-6. Pruned breakpoints do not count
+        towards it: their weight is exactly 0 in double precision.
 
     References
     ----------
@@ -199,7 +205,14 @@ class ENIRCalibrator(BaseCalibrator):
         iso = pava(y, w)
         ll_iso = loglik(iso.fitted, S1_init, S0_init)
         k_iso = 1 + int(np.sum(np.abs(np.diff(iso.fitted)) > 1e-12))
-        k_prune = k_iso + (2.0 * (ll_sat - ll_iso) + 2.0 * math.log(1e15)) / log_n
+        if log_n > 0.0:
+            k_prune = k_iso + (2.0 * (ll_sat - ll_iso) + 2.0 * math.log(1e15)) / log_n
+        else:
+            # The bound assumes n_tot > 1: with log_n == 0 it is undefined and with
+            # log_n < 0 the BIC penalty rewards extra levels instead of charging for
+            # them, so no solution can be ruled out. Weights below unity are legal
+            # (validate_weights only requires positivity), so score everything.
+            k_prune = math.inf
 
         # Compacted group state in grid order; sizes[g] is the group's run length.
         means = y.astype(float).copy()
@@ -279,7 +292,11 @@ class ENIRCalibrator(BaseCalibrator):
         wgt = np.zeros(len(bic_arr))
         if finite.any():
             wgt[finite] = np.exp(-0.5 * (bic_arr[finite] - bic_arr[finite].min()))
-        wgt /= wgt.sum()
+            wgt /= wgt.sum()
+        else:  # nothing scored: fall back to the last breakpoint, the isotonic fit
+            wgt[-1] = 1.0
+        if not kept:  # ditto, so that the ensemble always has a solution to average
+            heapq.heappush(kept, (0.0, len(bic_arr) - 1, np.repeat(means, sizes)))
         kept_t = np.array(sorted(e[1] for e in kept), dtype=np.int64)
         sols = {e[1]: e[2] for e in kept}
         kept_w = wgt[kept_t]

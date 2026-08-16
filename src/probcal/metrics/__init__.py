@@ -184,6 +184,7 @@ def evaluate(
     n_boot: int = 1000,
     seed: int = 42,
     metrics: Sequence[str] | None = None,
+    stratify: bool = True,
 ) -> MetricReport:
     """Full metric report with seeded bootstrap percentile confidence intervals.
 
@@ -201,6 +202,20 @@ def evaluate(
         Subset of catalog names to compute; ``None`` computes the full
         catalog. The report follows catalog order regardless of the order
         given here. Raises ``ValueError`` for unknown names.
+    stratify : bool
+        If ``True`` (default), each bootstrap replicate resamples the
+        negative and positive classes separately (case resampling within
+        strata), preserving the observed class counts exactly — the
+        pROC-style default. This conditions the CI on the observed class
+        balance: it removes the additional variance a plain i.i.d. bootstrap
+        picks up from the replicate-to-replicate event *count* fluctuating,
+        and it makes every replicate well-defined (never a single-class
+        resample) on rare-event data, at the cost of not propagating
+        sampling variance in the event rate itself. ``y`` must already
+        contain both classes (checked unconditionally, independent of this
+        flag). If ``False``, replicates draw i.i.d. from all ``n`` rows; a
+        degenerate (single-class) draw is redrawn up to 100 times before
+        raising ``RuntimeError``.
 
     Returns
     -------
@@ -236,13 +251,31 @@ def evaluate(
 
     rng = np.random.default_rng(seed)
     n = len(y_arr)
+    # _prep -> validate_binary_y already rejects single-class y unconditionally
+    # (both idx0 and idx1 are therefore guaranteed non-empty here).
+    idx0 = np.flatnonzero(y_arr == 0)
+    idx1 = np.flatnonzero(y_arr == 1)
+
     boot = np.empty((n_boot, len(names)))
     for b in range(n_boot):
-        idx = rng.integers(0, n, n)
+        if stratify:
+            idx = np.concatenate(
+                [
+                    idx0[rng.integers(0, len(idx0), len(idx0))],
+                    idx1[rng.integers(0, len(idx1), len(idx1))],
+                ]
+            )
+        else:
+            for _attempt in range(100):
+                idx = rng.integers(0, n, n)
+                if y_arr[idx].min() != y_arr[idx].max():
+                    break
+            else:
+                raise RuntimeError(
+                    "100 consecutive degenerate (single-class) bootstrap draws; "
+                    "pass stratify=True or supply more data"
+                )
         yb, pb, wb = y_arr[idx], p_arr[idx], w_arr[idx]
-        if yb.min() == yb.max():  # degenerate resample: keep the point estimate
-            boot[b] = values
-            continue
         pm = _point_metrics(yb, pb, wb, names)
         boot[b] = [pm[k] for k in names]
     ci_low = np.percentile(boot, 2.5, axis=0)

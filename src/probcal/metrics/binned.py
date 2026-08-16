@@ -59,6 +59,26 @@ def ece(
 
     Binning-sensitive and upward-biased in finite samples — report, never
     select on it (see the metrics chapter's table).
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    n_bins : int, keyword-only
+        Requested number of bins.
+    strategy : {"mass", "width"}, keyword-only
+        ``"mass"`` (equal-count, default) or ``"width"`` (equal-width over [0, 1]).
+    norm : {"l1", "l2", "max"}, keyword-only
+        ``"l1"`` (default, the usual ECE), ``"l2"``, or ``"max"`` (the MCE).
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    float
+        Weighted binned calibration error under the chosen norm.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     shares, gaps, _, _ = _bin_gaps(y_arr, p_arr, w, n_bins, strategy)
@@ -79,9 +99,30 @@ def ece_debiased(
     strategy: str = "mass",
     sample_weight: object = None,
 ) -> float:
-    """Bias-corrected ECE: per-bin squared gaps minus the within-bin variance
-    of the event rate, floored at zero (correction in the spirit of Bröcker
-    2009 / Ferro & Fricker 2012; exact estimator in the DECISIONS log)."""
+    """Bias-corrected ECE, floored at zero.
+
+    Per-bin squared gaps minus the within-bin variance of the event rate
+    (correction in the spirit of Bröcker 2009 / Ferro & Fricker 2012; exact
+    estimator in the DECISIONS log).
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    n_bins : int, keyword-only
+        Requested number of bins.
+    strategy : {"mass", "width"}, keyword-only
+        ``"mass"`` (equal-count, default) or ``"width"`` (equal-width over [0, 1]).
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    float
+        Bias-corrected calibration error.
+    """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     shares, gaps, rates, counts = _bin_gaps(y_arr, p_arr, w, n_bins, strategy)
     corrected = np.empty_like(gaps)
@@ -105,6 +146,22 @@ def ece_sweep(
 
     Uses equal-mass bins with the largest ``B`` whose bin event rates remain
     monotone non-decreasing (scan 2..min(n, 100); DECISIONS entry).
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    norm : {"l1", "l2", "max"}, keyword-only
+        Norm passed to the final :func:`ece` call at the selected bin count.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    float
+        Calibration error at the largest monotone bin count.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     best_b = 1
@@ -127,14 +184,44 @@ def adaptive_ece(
     norm: str = "l1",
     sample_weight: object = None,
 ) -> float:
-    """Adaptive ECE: an explicit alias for equal-mass ``ece`` (the literature
-    uses both names for the same estimator)."""
+    """Adaptive ECE: an explicit alias for equal-mass ``ece``.
+
+    The literature uses both names for the same estimator.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    n_bins : int, keyword-only
+        Requested number of bins.
+    norm : {"l1", "l2", "max"}, keyword-only
+        Norm passed through to :func:`ece`.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    float
+        Equal-mass binned calibration error under the chosen norm.
+    """
     return ece(y, p, n_bins=n_bins, strategy="mass", norm=norm, sample_weight=sample_weight)
 
 
 @dataclass(frozen=True)
 class HosmerLemeshowResult:
-    """Hosmer–Lemeshow chi-square test (report-only; never a selection criterion)."""
+    """Hosmer–Lemeshow chi-square test (report-only; never a selection criterion).
+
+    Attributes
+    ----------
+    statistic : float
+        Chi-square test statistic.
+    df : int
+        Degrees of freedom (used groups minus 2, floored at 1).
+    p_value : float
+        Upper-tail p-value of the chi-square statistic.
+    """
 
     statistic: float
     df: int
@@ -152,6 +239,22 @@ def hosmer_lemeshow(
 
     The statistic depends on an essentially arbitrary grouping and its power
     scales with n — see the metrics chapter for why this is report-only.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    g : int, keyword-only
+        Requested number of equal-mass risk groups.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    HosmerLemeshowResult
+        Chi-square statistic, degrees of freedom, and p-value.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     idx, m = _bin_index(p_arr, g, "mass")

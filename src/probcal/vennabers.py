@@ -184,6 +184,24 @@ class CrossVennAbersCalibrator(BaseCalibrator):
     ``GM(p1) / (GM(1 - p0) + GM(p1))``. ``predict_interval`` returns the
     conservative envelope ``[min_k p0_k, max_k p1_k]`` (DECISIONS entry —
     the paper defines only the scalar merge).
+
+    Parameters
+    ----------
+    cv : int
+        Number of stratified folds; must be at least 2.
+    random_state : int
+        Seed for the fold assignment.
+
+    Attributes
+    ----------
+    _ivaps : list of VennAbersCalibrator
+        Internal per-fold state: one fitted IVAP per fold, each trained on
+        the other ``cv - 1`` folds. No public fitted attribute is exposed;
+        read fitted state through :meth:`predict_interval` instead.
+
+    References
+    ----------
+    Vovk & Petej (2014).
     """
 
     def __init__(self, cv: int = 5, random_state: int = 42) -> None:
@@ -222,7 +240,20 @@ class CrossVennAbersCalibrator(BaseCalibrator):
         return gm_p1 / (gm_1mp0 + gm_p1)
 
     def predict_interval(self, s: object) -> np.ndarray:
-        """Conservative fold envelope ``[min_k p0_k, max_k p1_k]`` (see class docs)."""
+        """Conservative fold envelope ``[min_k p0_k, max_k p1_k]`` for new scores.
+
+        Parameters
+        ----------
+        s : array_like
+            Raw scores/probabilities in ``[0, 1]``.
+
+        Returns
+        -------
+        numpy.ndarray of shape (n, 2)
+            Columns ``p0`` (lower) and ``p1`` (upper): the envelope across
+            fold-wise IVAP intervals (DECISIONS entry — the paper defines
+            only the scalar merge, not an interval for CVAP).
+        """
         self._check_fitted()
         from ._validation import validate_scores
 

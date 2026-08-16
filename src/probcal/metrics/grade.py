@@ -50,7 +50,28 @@ def _check_weights(sample_weight: object, n_obs: int) -> None:
 
 @dataclass(frozen=True)
 class BinomialGradeResult:
-    """Exact and approximate one-sided binomial backtest per rating grade."""
+    """Exact and approximate one-sided binomial backtest per rating grade.
+
+    Attributes
+    ----------
+    grades : tuple of str
+        Sorted grade labels.
+    n : numpy.ndarray
+        Observation count per grade.
+    k : numpy.ndarray
+        Default count per grade.
+    pd : numpy.ndarray
+        Assigned PD per grade (mean of ``p`` within the grade).
+    p_exact : numpy.ndarray
+        Exact binomial tail p-value per grade.
+    p_normal : numpy.ndarray
+        Normal-approximation p-value per grade.
+    light : tuple of str
+        Traffic light per grade (``"green"``, ``"amber"``, or ``"red"``),
+        derived from ``p_exact``.
+    ci_low, ci_high : numpy.ndarray
+        90% Clopper-Pearson display interval for the observed rate.
+    """
 
     grades: tuple
     n: np.ndarray
@@ -75,6 +96,23 @@ def binomial_grade_test(
     ``ci_low``/``ci_high`` are 90% Clopper-Pearson display intervals for the
     observed rate; the traffic light itself remains the one-sided exact test,
     unchanged.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities (assigned PDs) in ``[0, 1]``.
+    grades : array_like
+        Rating grade label per observation.
+    sample_weight : array_like or None, keyword-only
+        Not used: grade tests use raw integer counts. A ``UserWarning`` is
+        emitted if the weights are non-uniform.
+
+    Returns
+    -------
+    BinomialGradeResult
+        Per-grade counts, p-values, traffic lights, and display intervals.
     """
     y_arr, p_arr, _ = _prep(y, p, None)
     _check_weights(sample_weight, len(y_arr))
@@ -112,7 +150,26 @@ def binomial_grade_test(
 
 @dataclass(frozen=True)
 class JeffreysGradeResult:
-    """Jeffreys-posterior backtest per rating grade (ECB IRB practice)."""
+    """Jeffreys-posterior backtest per rating grade (ECB IRB practice).
+
+    Attributes
+    ----------
+    grades : tuple of str
+        Sorted grade labels.
+    n : numpy.ndarray
+        Observation count per grade.
+    k : numpy.ndarray
+        Default count per grade.
+    pd : numpy.ndarray
+        Assigned PD per grade (mean of ``p`` within the grade).
+    p_value : numpy.ndarray
+        Posterior ``P(theta <= PD | k, n)`` per grade.
+    light : tuple of str
+        Traffic light per grade (``"green"``, ``"amber"``, or ``"red"``),
+        derived from ``p_value``.
+    ci_low, ci_high : numpy.ndarray
+        Central 90% Jeffreys posterior display interval.
+    """
 
     grades: tuple
     n: np.ndarray
@@ -134,6 +191,23 @@ def jeffreys_grade_test(
     validation error — see the metrics chapter). ``ci_low``/``ci_high`` are
     the central 90% Jeffreys posterior display intervals; the traffic light
     itself remains the one-sided posterior test, unchanged.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities (assigned PDs) in ``[0, 1]``.
+    grades : array_like
+        Rating grade label per observation.
+    sample_weight : array_like or None, keyword-only
+        Not used: grade tests use raw integer counts. A ``UserWarning`` is
+        emitted if the weights are non-uniform.
+
+    Returns
+    -------
+    JeffreysGradeResult
+        Per-grade counts, p-values, traffic lights, and display intervals.
     """
     y_arr, p_arr, _ = _prep(y, p, None)
     _check_weights(sample_weight, len(y_arr))

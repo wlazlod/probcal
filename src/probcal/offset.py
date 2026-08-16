@@ -74,6 +74,16 @@ class LogitOffset:
     parameters: ``CalibratedModel.offset_to`` appends it as a separate,
     inspectable pipeline stage.
 
+    Parameters
+    ----------
+    delta : float or None
+        Mode A: the log-odds shift to apply directly. Mutually exclusive
+        with ``target_mean`` — :meth:`fit` requires exactly one of the two.
+    target_mean : float or None
+        Mode B: the desired post-shift portfolio mean probability in
+        ``(0, 1)``; ``delta`` is solved by bisection. Mutually exclusive
+        with ``delta``.
+
     Attributes
     ----------
     delta_ : float
@@ -100,6 +110,11 @@ class LogitOffset:
             Current calibrated probabilities of the portfolio.
         sample_weight : array_like or None
             Weights for the portfolio mean.
+
+        Returns
+        -------
+        Self
+            The fitted offset.
         """
         if (self.delta is None) == (self.target_mean is None):
             raise ValueError("LogitOffset: give exactly one of delta or target_mean")
@@ -170,6 +185,30 @@ class LogitOffset:
         Same protocol as ``BaseCalibrator.interval_inverse``; the offset's
         output range is the full unit interval, so only a crossed buffer can
         make a target unattainable.
+
+        Parameters
+        ----------
+        lo, hi : float
+            Calibrated-probability bounds; ``lo=0``/``hi=1`` map to the full
+            raw range (−inf/+inf on the logit scale).
+        space : {"probability", "logit"}, keyword-only
+            Scale of the returned raw bounds.
+        buffer_logit : float, keyword-only
+            Shrink the calibrated interval by this margin in logit space
+            before inverting.
+
+        Returns
+        -------
+        tuple of float
+            ``(raw_lo, raw_hi)`` preimage bounds, on the scale requested by
+            ``space``.
+
+        Raises
+        ------
+        UnattainableTargetError
+            If a crossed ``buffer_logit`` empties the calibrated interval.
+        ValueError
+            If ``lo``, ``hi`` are not ordered in ``[0, 1]``.
         """
         if not self.fitted_:
             raise RuntimeError("LogitOffset is not fitted; call fit() first")

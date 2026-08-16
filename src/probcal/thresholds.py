@@ -31,6 +31,11 @@ def calibrated_interval_to_raw(
         Scale of the returned bounds.
     buffer_logit : float
         Robustness margin applied in logit space before inversion.
+
+    Returns
+    -------
+    tuple of float
+        ``(raw_lo, raw_hi)`` bounds, on the scale requested by ``space``.
     """
     return calibrator.interval_inverse(lo, hi, space=space, buffer_logit=buffer_logit)  # type: ignore[attr-defined]
 
@@ -46,6 +51,25 @@ def calibrated_bands_to_raw(
 
     Grade edges are policy artifacts that outlive model versions; this
     translation is what changes when the calibrator is refitted.
+
+    Parameters
+    ----------
+    calibrator : fitted calibrator
+        Any object implementing the duck-typed protocol
+        ``interval_inverse(lo, hi, *, space, buffer_logit)`` with
+        ``is_monotone_``.
+    bands : dict
+        Mapping of grade label to ``(lo, hi)`` calibrated-probability bounds.
+    space : {"probability", "logit"}, keyword-only
+        Scale of the returned bounds.
+    buffer_logit : float, keyword-only
+        Robustness margin applied in logit space before inversion.
+
+    Returns
+    -------
+    dict
+        Mapping of grade label to ``(raw_lo, raw_hi)`` bounds, on the scale
+        requested by ``space``.
     """
     return {
         grade: calibrated_interval_to_raw(

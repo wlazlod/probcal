@@ -44,6 +44,9 @@ def _default_candidates() -> dict[str, BaseCalibrator]:
 class CalibratorSelector:
     """Choose a calibrator by inner cross-validation on the calibration data.
 
+    Custom candidates declare their tie-break position by overriding
+    ``complexity_rank`` (lower = simpler; default 100.0 ranks last).
+
     Parameters
     ----------
     candidates : dict[str, BaseCalibrator] or None
@@ -68,9 +71,6 @@ class CalibratorSelector:
     report_ : SelectionReport
         Ranked table: mean ± sd of the criterion, guardrail flags, chosen
         marker.
-
-    Custom candidates declare their tie-break position by overriding
-    ``complexity_rank`` (lower = simpler; default 100.0 ranks last).
     """
 
     def __init__(
@@ -86,7 +86,29 @@ class CalibratorSelector:
         self.random_state = random_state
 
     def fit(self, s: object, y: object, sample_weight: object = None) -> "CalibratorSelector":
-        """Run the nested selection and refit the winner on all data."""
+        """Run the nested selection and refit the winner on all data.
+
+        Parameters
+        ----------
+        s : array_like
+            Raw scores/probabilities in ``[0, 1]``.
+        y : array_like
+            Binary outcomes in ``{0, 1}``; both classes must be present.
+        sample_weight : array_like or None
+            Positive observation weights.
+
+        Returns
+        -------
+        CalibratorSelector
+            ``self``, with ``best_name_``, ``best_calibrator_``, and
+            ``report_`` set.
+
+        Raises
+        ------
+        ValueError
+            If ``scoring`` is not one of the accepted criteria (plain ECE
+            and Hosmer–Lemeshow are refused as selection criteria).
+        """
         if self.scoring not in _SCORERS:
             raise ValueError(
                 f"scoring must be one of {sorted(_SCORERS)} (proper scores and accepted "

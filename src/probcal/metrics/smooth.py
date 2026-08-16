@@ -124,6 +124,23 @@ def smooth_ece(
     lattice integrator resolves the kernel at >= 8 samples per sigma, which
     is more accurate than the pre-fix 257-point grid whenever sigma < range /
     256.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+    bins : int or None, keyword-only
+        Number of lattice bins for the fast path (default 8192); ``None``
+        forces the exact O(n) computation.
+
+    Returns
+    -------
+    float
+        smECE: the fixed point ``sigma`` solving ``smECE(sigma) = sigma``.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     t = logit(p_arr)
@@ -155,7 +172,15 @@ def smooth_ece(
 @dataclass(frozen=True)
 class EcceResult:
     """Empirical cumulative calibration error: Kolmogorov-style max and mean
-    of the cumulative deviation over sorted predictions."""
+    of the cumulative deviation over sorted predictions.
+
+    Attributes
+    ----------
+    stat_max : float
+        Maximum absolute cumulative deviation.
+    stat_mean : float
+        Mean absolute cumulative deviation.
+    """
 
     stat_max: float
     stat_mean: float
@@ -167,6 +192,20 @@ def ecce(y: object, p: object, *, sample_weight: object = None) -> EcceResult:
     Sort by prediction and walk the cumulative sum of weighted residuals;
     under calibration the walk hovers near zero, and drift localizes
     miscalibration without any smoothing parameter.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    EcceResult
+        Max and mean absolute cumulative deviation.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     order = np.argsort(p_arr, kind="stable")
@@ -183,8 +222,30 @@ def ici(
     grid_size: int | None = 512,
 ) -> float:
     """Integrated calibration index: weighted mean |LOESS(y|p) - p|
-    (Austin & Steyerberg, 2019). The LOESS stage itself is unweighted
-    (DECISIONS entry). ``grid_size=None`` recovers 0.1.2 values exactly."""
+    (Austin & Steyerberg, 2019).
+
+    The LOESS stage itself is unweighted (DECISIONS entry).
+    ``grid_size=None`` recovers 0.1.2 values exactly.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    frac : float, keyword-only
+        LOESS smoothing fraction.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``; weights only the
+        final averaging step, not the LOESS fit.
+    grid_size : int or None, keyword-only
+        LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
+
+    Returns
+    -------
+    float
+        Weighted mean absolute LOESS-to-prediction distance.
+    """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     c = loess(p_arr, y_arr, frac=frac, grid_size=grid_size)
     return float(np.average(np.abs(c - p_arr), weights=w))
@@ -219,10 +280,31 @@ def e50(
     sample_weight: object = None,
     grid_size: int | None = 512,
 ) -> float:
-    """Median of the |LOESS(y|p) - p| distances. ``grid_size=None`` recovers
-    0.1.2 values exactly. The LOESS distances are always unweighted
-    (DECISIONS entry); ``sample_weight``, when given and not uniform, weights
-    only the quantile step (see :func:`weighted_quantile`)."""
+    """Median of the |LOESS(y|p) - p| distances.
+
+    ``grid_size=None`` recovers 0.1.2 values exactly. The LOESS distances are
+    always unweighted (DECISIONS entry); ``sample_weight``, when given and
+    not uniform, weights only the quantile step (see
+    :func:`weighted_quantile`).
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    frac : float, keyword-only
+        LOESS smoothing fraction.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights; used only for the quantile step.
+    grid_size : int or None, keyword-only
+        LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
+
+    Returns
+    -------
+    float
+        Median of the LOESS distances.
+    """
     d = _ici_distances(y, p, frac, grid_size)
     return _ici_quantile(d, 0.5, y, p, sample_weight)
 
@@ -235,10 +317,31 @@ def e90(
     sample_weight: object = None,
     grid_size: int | None = 512,
 ) -> float:
-    """90th percentile of the |LOESS(y|p) - p| distances. ``grid_size=None``
-    recovers 0.1.2 values exactly. The LOESS distances are always unweighted
-    (DECISIONS entry); ``sample_weight``, when given and not uniform, weights
-    only the quantile step (see :func:`weighted_quantile`)."""
+    """90th percentile of the |LOESS(y|p) - p| distances.
+
+    ``grid_size=None`` recovers 0.1.2 values exactly. The LOESS distances are
+    always unweighted (DECISIONS entry); ``sample_weight``, when given and
+    not uniform, weights only the quantile step (see
+    :func:`weighted_quantile`).
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    frac : float, keyword-only
+        LOESS smoothing fraction.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights; used only for the quantile step.
+    grid_size : int or None, keyword-only
+        LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
+
+    Returns
+    -------
+    float
+        90th percentile of the LOESS distances.
+    """
     d = _ici_distances(y, p, frac, grid_size)
     return _ici_quantile(d, 0.9, y, p, sample_weight)
 
@@ -251,14 +354,43 @@ def emax(
     sample_weight: object = None,
     grid_size: int | None = 512,
 ) -> float:
-    """Maximum of the |LOESS(y|p) - p| distances. ``grid_size=None`` recovers
-    0.1.2 values exactly."""
+    """Maximum of the |LOESS(y|p) - p| distances.
+
+    ``grid_size=None`` recovers 0.1.2 values exactly.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    frac : float, keyword-only
+        LOESS smoothing fraction.
+    sample_weight : array_like or None, keyword-only
+        Accepted for signature parity with the other ICI-family metrics but
+        not used: the maximum is a weight-independent order statistic.
+    grid_size : int or None, keyword-only
+        LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
+
+    Returns
+    -------
+    float
+        Maximum of the LOESS distances.
+    """
     return float(np.max(_ici_distances(y, p, frac, grid_size)))
 
 
 @dataclass(frozen=True)
 class SpiegelhalterResult:
-    """Spiegelhalter's z test of forecast unbiasedness (two-sided)."""
+    """Spiegelhalter's z test of forecast unbiasedness (two-sided).
+
+    Attributes
+    ----------
+    z : float
+        Standardized test statistic.
+    p_value : float
+        Two-sided p-value under the standard normal approximation.
+    """
 
     z: float
     p_value: float
@@ -270,6 +402,20 @@ def spiegelhalter_z(y: object, p: object, *, sample_weight: object = None) -> Sp
     The numerator has expectation zero under calibration; the statistic is
     asymptotically standard normal. No binning, no smoothing; aggregates the
     whole range, so compensating regional errors can cancel.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    SpiegelhalterResult
+        Z statistic and two-sided p-value.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     num = float(np.sum(w * (y_arr - p_arr) * (1.0 - 2.0 * p_arr)))

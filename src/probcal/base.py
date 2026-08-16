@@ -12,9 +12,12 @@ from ._validation import EPS, validate_binary_y, validate_scores, validate_weigh
 
 
 class UnattainableTargetError(ValueError):
-    """The requested calibrated interval does not intersect the calibrator's
-    output range (or was emptied by ``buffer_logit``). Raised instead of
-    silently clamping — spec §10."""
+    """The requested calibrated interval is unattainable.
+
+    Raised when the interval does not intersect the calibrator's output
+    range (or was emptied by ``buffer_logit``), instead of silently
+    clamping — spec §10.
+    """
 
 
 class BaseCalibrator(ABC):
@@ -155,6 +158,12 @@ class BaseCalibrator(ABC):
             *before* inverting — robustness against future recalibration
             drift (a central-tendency update of magnitude <= buffer cannot
             invalidate the result).
+
+        Returns
+        -------
+        tuple of float
+            ``(raw_lo, raw_hi)`` preimage bounds, on the scale requested by
+            ``space``.
 
         Raises
         ------

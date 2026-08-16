@@ -140,6 +140,20 @@ class ScalingBinningCalibrator(BaseCalibrator):
     bin. Achieves measurable calibration error with O(1/eps^2 + B) samples
     versus O(B/eps^2) for histogram binning.
 
+    Parameters
+    ----------
+    n_bins : int
+        Requested number of equal-mass bins of the Platt-fitted values.
+
+    Attributes
+    ----------
+    platt_ : PlattCalibrator
+        The fitted first-stage Platt calibrator.
+    edges_ : numpy.ndarray
+        Interior quantile edges of the Platt-fitted values.
+    bin_value_ : numpy.ndarray
+        Mean Platt-fitted value per bin (the calibrated output for that bin).
+
     References
     ----------
     Kumar, Liang & Ma (2019).

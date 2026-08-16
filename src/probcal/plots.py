@@ -86,8 +86,10 @@ def plot_reliability(
     counts: bool = False,
     ax: Any = None,
 ) -> Any:
-    """Annotated reliability diagram: binned points with Wilson CIs, optional
-    smooth overlay, stats box, and event/non-event rug.
+    """Annotated reliability diagram.
+
+    Binned points with Wilson CIs, optional smooth overlay, stats box, and
+    event/non-event rug.
 
     ``scale="logit"`` stretches the low-probability region — the recommended
     view for PD portfolios. Bins whose event rate is exactly 0 or 1 have no
@@ -100,6 +102,33 @@ def plot_reliability(
     deterministically thinned to at most 1000 marks per class). Both are
     silently skipped when ``y``/``p`` are absent. ``counts=True`` restores the
     twin-axis count-bar margin.
+
+    Parameters
+    ----------
+    curve : ReliabilityCurve
+        Binned curve, e.g. from :func:`probcal.curves.reliability_binned`.
+    smooth : SmoothReliabilityCurve or None, keyword-only
+        Optional smooth overlay, e.g. from
+        :func:`probcal.curves.reliability_loess`.
+    scale : {"probability", "logit"}, keyword-only
+        Axis scale; ``"logit"`` stretches the low-probability region.
+    y, p : array_like or None, keyword-only
+        Raw outcomes and predictions; must be given together (or not at all).
+        Enables the stats box and rug.
+    annotate : bool, keyword-only
+        If ``True`` (default) and ``y``/``p`` are given, draw the stats box.
+    rug : bool, keyword-only
+        If ``True`` (default) and ``y``/``p`` are given, draw the event/
+        non-event rug.
+    counts : bool, keyword-only
+        If ``True``, add a twin-axis bar strip of per-bin counts.
+    ax : matplotlib.axes.Axes or None, keyword-only
+        Axes to draw on; a new figure and axes are created if ``None``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes the diagram was drawn on.
     """
     _require_mpl()
     if (y is None) != (p is None):
@@ -189,7 +218,22 @@ def plot_reliability(
 
 
 def plot_belt(belt: BeltResult, *, scale: str = "probability", ax: Any = None) -> Any:
-    """GiViTI-style calibration belt with 80/95% bands and the test p-value."""
+    """GiViTI-style calibration belt with 80/95% bands and the test p-value.
+
+    Parameters
+    ----------
+    belt : BeltResult
+        Result of :func:`probcal.curves.calibration_belt`.
+    scale : {"probability", "logit"}, keyword-only
+        Axis scale; ``"logit"`` stretches the low-probability region.
+    ax : matplotlib.axes.Axes or None, keyword-only
+        Axes to draw on; a new figure and axes are created if ``None``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes the belt was drawn on.
+    """
     _require_mpl()
     with _plt.rc_context(_STYLE):
         if ax is None:
@@ -223,7 +267,22 @@ def plot_comparison(
     scale: str = "probability",
     labels: tuple[str, str] = ("before", "after"),
 ) -> Any:
-    """Side-by-side reliability diagrams (pre/post calibration or offset)."""
+    """Side-by-side reliability diagrams (pre/post calibration or offset).
+
+    Parameters
+    ----------
+    before, after : ReliabilityCurve
+        Binned curves to compare, e.g. raw vs calibrated.
+    scale : {"probability", "logit"}, keyword-only
+        Axis scale; ``"logit"`` stretches the low-probability region.
+    labels : tuple of str, keyword-only
+        Panel titles for ``(before, after)``.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The figure containing both panels.
+    """
     _require_mpl()
     with _plt.rc_context(_STYLE):
         fig, axes = _plt.subplots(1, 2, figsize=(12, 5.5), sharey=True)
@@ -244,7 +303,23 @@ def plot_comparison(
 
 
 def plot_interval(intervals: np.ndarray, s: np.ndarray, *, ax: Any = None) -> Any:
-    """Venn–Abers interval widths against the score: where is calibration uncertain?"""
+    """Venn–Abers interval widths against the score: where is calibration uncertain?
+
+    Parameters
+    ----------
+    intervals : numpy.ndarray of shape (n, 2)
+        ``(p0, p1)`` Venn–Abers interval bounds per score, e.g. from
+        :meth:`probcal.vennabers.CrossVennAbersCalibrator.predict_interval`.
+    s : numpy.ndarray of shape (n,)
+        Scores the intervals are plotted against.
+    ax : matplotlib.axes.Axes or None, keyword-only
+        Axes to draw on; a new figure and axes are created if ``None``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes the intervals were drawn on.
+    """
     _require_mpl()
     with _plt.rc_context(_STYLE):
         if ax is None:
@@ -259,7 +334,21 @@ def plot_interval(intervals: np.ndarray, s: np.ndarray, *, ax: Any = None) -> An
 
 
 def plot_selection(report: SelectionReport, *, ax: Any = None) -> Any:
-    """SelectionReport as a ranked dot plot with fold-spread whiskers."""
+    """SelectionReport as a ranked dot plot with fold-spread whiskers.
+
+    Parameters
+    ----------
+    report : SelectionReport
+        Result of :meth:`probcal.selection.CalibratorSelector.fit`, read
+        from its ``report_`` attribute.
+    ax : matplotlib.axes.Axes or None, keyword-only
+        Axes to draw on; a new figure and axes are created if ``None``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes the dot plot was drawn on.
+    """
     _require_mpl()
     with _plt.rc_context(_STYLE):
         if ax is None:
@@ -299,6 +388,23 @@ def plot_ecce(
     *pointwise* standard deviations under calibration — an aid for reading
     the walk, NOT a simultaneous confidence band; the formal max-statistic
     test of Arrieta-Ibarra et al. (2022) is out of scope for this release.
+
+    Parameters
+    ----------
+    curves : EcceCurve or sequence of EcceCurve
+        One or more cumulative-drift walks to overlay.
+    labels : sequence of str or None, keyword-only
+        Legend labels, aligned with ``curves``; ``None`` uses
+        ``"curve 1", "curve 2", ...``.
+    show_band : bool, keyword-only
+        If ``True`` (default), draw the ±2 SD envelope from the first curve.
+    ax : matplotlib.axes.Axes or None, keyword-only
+        Axes to draw on; a new figure and axes are created if ``None``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes the walk(s) were drawn on.
     """
     _require_mpl()
     if isinstance(curves, EcceCurve):
@@ -342,6 +448,23 @@ def plot_grade_backtest(result: Any, *, log_scale: bool = True, ax: Any = None) 
     verdict is carried by the lights from the unchanged one-sided tests, so
     no p-values are printed on the canvas. ``log_scale=True`` is the right
     default for PD grades spanning orders of magnitude.
+
+    Parameters
+    ----------
+    result : BinomialGradeResult or JeffreysGradeResult
+        Per-grade backtest result, from
+        :func:`probcal.metrics.binomial_grade_test` or
+        :func:`probcal.metrics.jeffreys_grade_test`.
+    log_scale : bool, keyword-only
+        If ``True`` (default), use a log-scale y-axis — the right default
+        for PD grades spanning orders of magnitude.
+    ax : matplotlib.axes.Axes or None, keyword-only
+        Axes to draw on; a new figure and axes are created if ``None``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes the backtest chart was drawn on.
     """
     _require_mpl()
     light_color = {"green": _GREEN, "yellow": _AMBER, "amber": _AMBER, "red": _RED}
@@ -399,6 +522,18 @@ def plot_offset_audit(offset: Any, *, ax: Any = None) -> Any:
     prints the audit numbers read directly from the fitted attributes. This
     chart audits the *stage*, not the outcomes — for the before/after
     guardrail comparison use ``LogitOffset.audit_report(y, p)``.
+
+    Parameters
+    ----------
+    offset : LogitOffset
+        A fitted :class:`probcal.offset.LogitOffset` instance.
+    ax : matplotlib.axes.Axes or None, keyword-only
+        Axes to draw on; a new figure and axes are created if ``None``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes the audit chart was drawn on.
     """
     _require_mpl()
     if not getattr(offset, "fitted_", False):

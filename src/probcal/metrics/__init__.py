@@ -207,7 +207,7 @@ def evaluate(
     metrics : sequence of str or None
         Subset of catalog names to compute; ``None`` computes the full
         catalog. The report follows catalog order regardless of the order
-        given here. Raises ``ValueError`` for unknown names.
+        given here.
     stratify : bool
         If ``True`` (default), each bootstrap replicate resamples the
         negative and positive classes separately (case resampling within
@@ -229,6 +229,14 @@ def evaluate(
         Point estimates and CI bounds for the requested catalog. Note the
         caveat from the metrics chapter: a bootstrap CI around a *biased*
         estimator (plain ECE) quantifies its variance, not its bias.
+
+    Raises
+    ------
+    ValueError
+        If ``metrics`` contains names outside the metric catalog.
+    RuntimeError
+        If ``stratify=False`` and 100 consecutive bootstrap draws are all
+        single-class.
 
     Notes
     -----
@@ -291,7 +299,25 @@ def evaluate(
 
 @dataclass(frozen=True)
 class ReliabilitySummary:
-    """Stats-box aggregate for the annotated reliability diagram."""
+    """Stats-box aggregate for the annotated reliability diagram.
+
+    Attributes
+    ----------
+    n : int
+        Observation count.
+    events : int
+        Event count (``sum(y)``).
+    intercept : float
+        Calibration-in-the-large intercept (log-odds).
+    slope : float
+        Cox calibration slope.
+    ici : float
+        Integrated calibration index.
+    e90 : float
+        90th percentile of the LOESS distances.
+    spiegelhalter_p : float
+        Spiegelhalter test p-value.
+    """
 
     n: int
     events: int
@@ -316,6 +342,23 @@ def reliability_summary(
     Lives here because, like `evaluate`, it aggregates across submodules;
     ``probcal.plots`` only formats the result. ``grid_size=None`` recovers
     0.1.2 values exactly.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+    grid_size : int or None, keyword-only
+        LOESS evaluation grid size for the ICI/E90 terms; ``None`` recovers
+        0.1.2 values exactly.
+
+    Returns
+    -------
+    ReliabilitySummary
+        Stats-box fields for the annotated reliability diagram.
     """
     from .scores import _prep
 

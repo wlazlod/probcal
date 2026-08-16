@@ -88,7 +88,11 @@ class PlattCalibrator(BaseCalibrator):
         return self._closed_inverse(t)
 
     def interpret(self) -> Interpretation:
-        """Read the fitted slope and intercept against the identity ``(1, 0)``."""
+        """Read the fitted slope and intercept against the identity ``(1, 0)``.
+
+        If IRLS did not converge at fit time (a ``UserWarning`` was raised),
+        the messages include a note not to trust the coefficients.
+        """
         self._check_fitted()
         if self.a_ < 1.0:
             slope_msg = (
@@ -210,6 +214,12 @@ class BetaCalibrator(BaseCalibrator):
     family in a different parameterization). The monotonicity constraint
     ``a, b >= 0`` is enforced by the betacal refit strategy: a negative
     exponent drops its feature and refits.
+
+    Parameters
+    ----------
+    variant : {"abm", "ab", "a"}
+        ``"abm"`` (default) fits the full ``(a, b, c)``; ``"ab"`` ties
+        ``a = b``; ``"a"`` additionally fixes ``c = 0``.
 
     Attributes
     ----------
@@ -344,7 +354,11 @@ class BetaCalibrator(BaseCalibrator):
         return {"a": 1.5, "ab": 2.5, "abm": 3.0}.get(self.variant, 100.0)
 
     def interpret(self) -> Interpretation:
-        """Read the fitted exponents and intercept against the identity (1, 1, 0)."""
+        """Read the fitted exponents and intercept against the identity (1, 1, 0).
+
+        If IRLS did not converge at fit time (a ``UserWarning`` was raised),
+        the messages include a note not to trust the coefficients.
+        """
         self._check_fitted()
         messages = [
             (

@@ -99,7 +99,30 @@ class CalibratedModel:
     # ------------------------------------------------------------------ fitting
 
     def fit(self, X: object, y: object, sample_weight: object = None) -> Self:
-        """Fit the calibration stage per the configured flow."""
+        """Fit the calibration stage per the configured flow.
+
+        Parameters
+        ----------
+        X : array_like
+            Calibration-set inputs, passed to the model (``flow="cv"``) or
+            scored directly by the already-trained model (``flow="prefit"``).
+        y : array_like
+            Binary outcomes in ``{0, 1}``; both classes must be present.
+        sample_weight : array_like or None
+            Positive observation weights.
+
+        Returns
+        -------
+        Self
+            The fitted wrapper.
+
+        Raises
+        ------
+        ValueError
+            If ``flow`` is not ``"prefit"`` or ``"cv"``.
+        TypeError
+            If ``flow="cv"`` and the model has no ``fit(X, y)`` method.
+        """
         if self.flow not in ("prefit", "cv"):
             raise ValueError(f"flow must be 'prefit' or 'cv', got {self.flow!r}")
         X_arr = np.asarray(X, dtype=np.float64)
@@ -163,7 +186,19 @@ class CalibratedModel:
         return self.calibrator_.predict_proba(_model_scores(self.model_, X))
 
     def predict_proba(self, X: object) -> np.ndarray:
-        """Calibrated (and offset) probabilities ``P(y=1)`` for new inputs."""
+        """Calibrated (and offset) probabilities ``P(y=1)`` for new inputs.
+
+        Parameters
+        ----------
+        X : array_like
+            New inputs, passed to the deployed model (or every ensemble
+            fold's model, averaged).
+
+        Returns
+        -------
+        numpy.ndarray of shape (n,)
+            Calibrated probabilities, after any appended offset stages.
+        """
         self._check_fitted()
         p = self._base_predict(np.asarray(X, dtype=np.float64))
         for off in self.offsets_:
@@ -189,6 +224,23 @@ class CalibratedModel:
         pipeline output — computed on ``X`` when given, else on the stored
         calibration scores (DECISIONS 48). The offset is never folded into
         the calibrator's parameters.
+
+        Parameters
+        ----------
+        target_mean : float or None
+            Mode B: desired post-shift portfolio mean; mutually exclusive
+            with ``delta`` (enforced by :class:`LogitOffset`).
+        delta : float or None
+            Mode A: the log-odds shift to apply directly; mutually exclusive
+            with ``target_mean``.
+        X : array_like or None
+            Inputs to compute the current pipeline output on; ``None`` uses
+            the stored calibration scores instead.
+
+        Returns
+        -------
+        Self
+            The wrapper, with the new offset appended to ``offsets_``.
         """
         self._check_fitted()
         if X is not None:
@@ -245,6 +297,34 @@ class CalibratedModel:
         offset subtracts its delta on the logit scale, and the calibrator's
         own inverse finishes the job. Returns bounds on the model's
         probability output (``space="probability"``) or their logits.
+
+        Parameters
+        ----------
+        lo, hi : float
+            Calibrated-probability bounds; ``lo=0``/``hi=1`` map to the full
+            raw range (−inf/+inf on the logit scale).
+        space : {"probability", "logit"}, keyword-only
+            Scale of the returned raw bounds.
+        buffer_logit : float, keyword-only
+            Shrink the calibrated interval by this margin in logit space
+            before inverting.
+
+        Returns
+        -------
+        tuple of float
+            ``(raw_lo, raw_hi)`` preimage bounds, on the scale requested by
+            ``space``.
+
+        Raises
+        ------
+        NotImplementedError
+            If the wrapper was fitted with ``ensemble=True`` (K distinct
+            maps have no single preimage).
+        UnattainableTargetError
+            If the (buffered) interval does not intersect the pipeline's
+            output range.
+        ValueError
+            If ``lo``, ``hi`` are not ordered in ``[0, 1]``.
         """
         self._check_fitted()
         if self.ensemble_:
@@ -273,7 +353,14 @@ class CalibratedModel:
         return self.calibrator_.interval_inverse(lo_b, hi_b, space=space, buffer_logit=0.0)
 
     def interpret(self) -> Interpretation:
-        """Concatenated interpretation of the calibrator and every offset stage."""
+        """Concatenated interpretation of the calibrator and every offset stage.
+
+        Returns
+        -------
+        Interpretation
+            Parameters and messages concatenated across the calibrator
+            stage(s) and every appended offset, in application order.
+        """
         self._check_fitted()
         if self.ensemble_:
             parts = [cal.interpret() for _, cal in self.ensemble_]

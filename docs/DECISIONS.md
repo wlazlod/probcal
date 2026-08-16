@@ -667,13 +667,25 @@ Dated log of ambiguities resolved and design choices made during implementation.
     at most 3 of the 4 available steps to satisfy the certificate, with
     residuals `<= 1.5e-12` (within the `1e-13 * max(1, |K|)` bound for
     `|K| <= 30`), so the certified cap buys ratio-50 machine precision without
-    spending a step in the common low-asymmetry case. The Halley denominator `2*f'^2 - f*f''`
-    cannot vanish while `f` is still large in this domain: `f' >= min(a, b) >
-    0` for `a, b >= 0` not both zero, so `f'^2` alone is bounded away from
-    zero, and the observed minimum `|denominator|` across the verification
-    grid (`a, b in {0.02, ..., 5}`) was `~8e-4` — order `2*min(a,b)^2` at the
-    smallest tested exponent, never closer to zero — so no epsilon guard was
-    needed or added. Degenerate exponents,
+    spending a step in the common low-asymmetry case. The Halley denominator
+    `2*f'^2 - f*f''` was not given an epsilon guard, on two grounds: the
+    Layer-1 seed bound keeps `|f|` small from the first Halley step onward,
+    and a full-grid numerical sweep found the observed minimum
+    `|denominator|` across the verification grid (`a, b in {0.02, ..., 5}`)
+    was `~8e-4`, never closer to zero. Outside the verified domain (extreme
+    exponent ratios), the construction no longer
+    relies on this observation alone: a post-loop residual certificate
+    (`|h(z) - K| <= 1e-10 * max(1, |K|)`, looser than the early-exit target
+    but still enforced unconditionally) is checked after the fixed 4-step
+    loop, and `_beta_point_inverse_z` raises `RuntimeError` naming the worst
+    residual if it is not met, rather than ever returning an uncertified
+    value — extending the user's own certificate principle and the
+    package's no-silent-clamp doctrine (`UnattainableTargetError`) to this
+    construction's own failure mode. A synthetic `(a=1e-4, b=5)` instance
+    (ratio 50,000, far outside the verified domain) was checked directly:
+    the post-loop certificate correctly fails there (residual ~0.054 against
+    a tolerance of ~1e-10), and `point_inverse` raises `RuntimeError`
+    instead of returning a silently wrong root. Degenerate exponents,
     checked against `BetaCalibrator._fit`'s constraint-refit cascade (all
     reachable via the betacal `a, b >= 0` monotonicity constraint, which never
     touches `is_monotone_` — it stays the class default `True` even for the

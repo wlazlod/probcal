@@ -225,11 +225,26 @@ def test_beta_variant_ab_point_inverse_round_trip() -> None:
     np.testing.assert_allclose(cal.predict_proba(out), p, atol=1e-10)
 
 
+def test_beta_variant_ab_override_matches_base_affine_path() -> None:
+    # The "ab" variant is affine (a_ == b_), so the base class's generic
+    # affine_logit_coeffs_ path and BetaCalibrator's override must agree
+    # exactly (not just up to round-trip tolerance) on the same instance.
+    from probcal.base import BaseCalibrator
+
+    cal = BetaCalibrator(variant="ab").fit(*_sample())
+    p = np.linspace(0.02, 0.9, 15)
+    np.testing.assert_allclose(
+        BaseCalibrator.point_inverse(cal, p), cal.point_inverse(p), atol=1e-14
+    )
+
+
 def test_beta_point_inverse_degenerate_a_zero() -> None:
     cal = _beta_with_params(0.0, 2.0, 0.1)
     lo = float(expit(np.array([0.1]))[0])
     p_ok = np.linspace(lo + 1e-4, 1 - 1e-6, 10)
     s = cal.point_inverse(p_ok)
+    # atol 1e-8, not 1e-10+: expm1/log lose precision as K -> 0+ (p -> lo+),
+    # not slack in the closed form itself.
     np.testing.assert_allclose(cal.predict_proba(s), p_ok, atol=1e-8)
     with pytest.raises(UnattainableTargetError, match="attainable"):
         cal.point_inverse(np.array([max(lo - 1e-4, 1e-9)]))
@@ -240,6 +255,8 @@ def test_beta_point_inverse_degenerate_b_zero() -> None:
     hi = float(expit(np.array([-0.1]))[0])
     p_ok = np.linspace(1e-6, hi - 1e-4, 10)
     s = cal.point_inverse(p_ok)
+    # atol 1e-8, not 1e-10+: expm1/log lose precision as K -> 0- (p -> hi-),
+    # not slack in the closed form itself.
     np.testing.assert_allclose(cal.predict_proba(s), p_ok, atol=1e-8)
     with pytest.raises(UnattainableTargetError, match="attainable"):
         cal.point_inverse(np.array([min(hi + 1e-4, 1 - 1e-9)]))
@@ -259,6 +276,22 @@ def test_beta_point_inverse_certificate_ratio_50() -> None:
     z = _beta_point_inverse_z(K, a, b)
     resid = a * z + (b - a) * np.logaddexp(0.0, z) - K
     assert np.max(np.abs(resid)) <= 1e-12
+
+
+def test_beta_point_inverse_pathological_certifies_or_raises() -> None:
+    # Ratio 50,000 (a=1e-4, b=5) is far outside the numerically verified
+    # domain (a, b in (0, 5], ratio <= 50). The post-loop certificate must
+    # never let an uncertified root through silently: either the round trip
+    # holds at 1e-8, or point_inverse raises RuntimeError naming the
+    # residual. No third outcome (silently wrong output) is acceptable.
+    cal = _beta_with_params(1e-4, 5.0, 0.2)
+    p = np.linspace(0.02, 0.9, 25)
+    try:
+        s = cal.point_inverse(p)
+    except RuntimeError as err:
+        assert "residual" in str(err)
+    else:
+        np.testing.assert_allclose(cal.predict_proba(s), p, atol=1e-8)
 
 
 def test_offset_point_inverse_round_trip() -> None:

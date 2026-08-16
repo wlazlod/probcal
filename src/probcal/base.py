@@ -258,7 +258,7 @@ class BaseCalibrator(ABC):
             )
         if space not in ("probability", "logit"):
             raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
-        arr = validate_scores(p)
+        arr = validate_scores(p, name="p")
         coeffs = self.affine_logit_coeffs_
         if coeffs is None:
             raise NotImplementedError(

@@ -35,23 +35,33 @@ def _beta_point_inverse_z(
     kappa: float = _BETA_INVERSE_KAPPA,
     max_steps: int = 4,
     rtol: float = 1e-13,
+    rtol_final: float = 1e-10,
 ) -> np.ndarray:
     """Exact-to-machine-precision root of ``a*z + (b-a)*softplus(z) = K``.
 
     Layer 1 seeds with the minimax-hyperbola approximation to softplus
     (``kappa=1.524``, max deviation 0.076): the admissible root of the
     resulting quadratic is exact at ``a=b`` and in both tails, with error
-    bounded by ``0.076*|b-a|/min(a,b)`` elsewhere (verified numerically over
-    ``a, b in (0, 5], |K| <= 30`` — no bound violations up to asymmetry
-    ratio 50). Layer 2 refines with up to ``max_steps`` (default 4) Halley
-    corrections, exiting early once the residual certificate
-    ``|f(z)| <= rtol * max(1, |K|)`` is met; the certificate bounds the
-    coordinate error by ``|f(z)| / min(a, b)``. The user's original
-    prescription was a fixed 2 steps (machine precision up to asymmetry
-    ratio 3, ~1e-10 at ratio 10, ~1e-4 at ratio 50 without a 3rd step); the
-    certified cap is a finite, bounded expression — not open-ended
-    iteration — that reaches machine precision at ratio 50 in <= 3 steps
-    without paying a 4th step in the common (low-asymmetry) case.
+    bounded by ``0.076*|b-a|/min(a,b)`` elsewhere. Layer 2 refines with up to
+    ``max_steps`` (default 4) Halley corrections, exiting early once the
+    residual certificate ``|f(z)| <= rtol * max(1, |K|)`` is met; the
+    certificate bounds the coordinate error by ``|f(z)| / min(a, b)``. The
+    user's original prescription was a fixed 2 steps (machine precision up to
+    asymmetry ratio 3, ~1e-10 at ratio 10, ~1e-4 at ratio 50 without a 3rd
+    step); the certified cap is a finite, bounded expression — not
+    open-ended iteration — that reaches machine precision at ratio 50 in
+    <= 3 steps without paying a 4th step in the common (low-asymmetry) case.
+
+    Machine precision is verified numerically (DECISIONS 67) over
+    ``a, b in (0, 5]`` and asymmetry ratio ``<= 50`` — the realistic fit
+    domain. Outside it (extreme exponent ratios, e.g. ``a=1e-4, b=5``), the
+    seed can be far off and 4 Halley steps may not recover full precision;
+    rather than silently return an uncertified value (the package's
+    no-silent-clamp doctrine — see ``UnattainableTargetError``), a final
+    residual is recomputed after the loop and checked against a looser
+    tolerance ``rtol_final * max(1, |K|)``. A failure raises ``RuntimeError``
+    naming the worst residual: the method either returns a certified-exact
+    root, or it raises — never a silently uncertified one.
 
     Parameters
     ----------
@@ -65,12 +75,26 @@ def _beta_point_inverse_z(
     max_steps : int
         Fixed Halley iteration cap.
     rtol : float
-        Residual certificate tolerance, relative to ``max(1, |K|)``.
+        Early-exit residual certificate tolerance, relative to
+        ``max(1, |K|)``.
+    rtol_final : float
+        Post-loop certificate tolerance, relative to ``max(1, |K|)``; looser
+        than ``rtol`` (the error bound ``residual / min(a, b)`` stays
+        negligible at ``1e-10``) but still enforced unconditionally.
 
     Returns
     -------
     numpy.ndarray
-        ``z`` solving the equation, elementwise.
+        ``z`` solving the equation, elementwise, certified to
+        ``|h(z) - K| <= rtol_final * max(1, |K|)``.
+
+    Raises
+    ------
+    RuntimeError
+        If the post-loop residual certificate is not met anywhere in ``K``
+        (only reachable at exponent ratios far outside the verified
+        domain — see above); names the worst residual and suggests
+        ``interval_inverse``.
     """
     z = ((a + b) * K - (b - a) * np.sqrt(K**2 + kappa * a * b)) / (2.0 * a * b)
     for _ in range(max_steps):
@@ -81,6 +105,15 @@ def _beta_point_inverse_z(
         f1 = a + (b - a) * s
         f2 = (b - a) * s * (1.0 - s)
         z = z - 2.0 * f * f1 / (2.0 * f1**2 - f * f2)
+    f_final = a * z + (b - a) * np.logaddexp(0.0, z) - K
+    tol_final = rtol_final * np.maximum(1.0, np.abs(K))
+    if np.any(np.abs(f_final) > tol_final):
+        raise RuntimeError(
+            f"beta point inverse (a={a:g}, b={b:g}) failed to certify to residual <= "
+            f"{rtol_final:g}*max(1,|K|) after {max_steps} Halley steps (max observed "
+            f"residual {float(np.max(np.abs(f_final))):.3g}); this exponent ratio is "
+            "outside the verified domain — use interval_inverse"
+        )
     return z
 
 
@@ -437,7 +470,11 @@ class BetaCalibrator(BaseCalibrator):
         Raises
         ------
         RuntimeError
-            If not yet fitted.
+            If not yet fitted; or if the general (``a != b``, both nonzero)
+            case fails to certify to machine precision after 4 Halley steps
+            (only reachable at exponent ratios far outside the numerically
+            verified domain, ``a, b in (0, 5]`` and ratio ``<= 50`` — see
+            :func:`_beta_point_inverse_z`).
         ValueError
             If ``space`` is not ``"probability"`` or ``"logit"``.
         NotImplementedError
@@ -445,8 +482,11 @@ class BetaCalibrator(BaseCalibrator):
             constant map (``a == b == 0``): a constant map has no point
             inverse.
         UnattainableTargetError
-            If ``p`` lies outside the attainable range of a degenerate
-            (``a == 0`` or ``b == 0``) fit.
+            If any element of ``p`` lies outside the attainable probability
+            range of a degenerate (``a == 0`` or ``b == 0``) fit — ``p`` is
+            validated all-or-nothing: if any element is outside the range
+            (named in the error message), the whole call raises and no
+            element is silently clamped.
         """
         self._check_fitted()
         if not self.is_monotone_:
@@ -457,7 +497,7 @@ class BetaCalibrator(BaseCalibrator):
             )
         if space not in ("probability", "logit"):
             raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
-        arr = validate_scores(p)
+        arr = validate_scores(p, name="p")
         a, b = self.a_, self.b_
         K = logit(arr) - self.c_
         if a == 0.0 and b == 0.0:

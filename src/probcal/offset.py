@@ -234,6 +234,43 @@ class LogitOffset:
         raw_hi = 1.0 if np.isposinf(hi_z) else float(expit(np.array([hi_z]))[0])
         return raw_lo, raw_hi
 
+    def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
+        """Raw scores whose shifted probabilities equal ``p`` (exact preimage).
+
+        Closed form: subtract ``delta`` on the logit scale. Same protocol as
+        :meth:`BaseCalibrator.point_inverse` — ``LogitOffset`` is not a
+        ``BaseCalibrator`` subclass, so the fit-guard and validation are
+        duplicated here rather than shared (the existing ``offset.py``
+        precedent, e.g. :meth:`interval_inverse`).
+
+        Parameters
+        ----------
+        p : array_like
+            Shifted probabilities in ``[0, 1]``.
+        space : {"probability", "logit"}, keyword-only
+            Scale of the returned raw values.
+
+        Returns
+        -------
+        numpy.ndarray
+            Raw scores (or logits, if ``space="logit"``) whose shifted
+            probability equals ``p``.
+
+        Raises
+        ------
+        RuntimeError
+            If not yet fitted.
+        ValueError
+            If ``space`` is not ``"probability"`` or ``"logit"``.
+        """
+        if not self.fitted_:
+            raise RuntimeError("LogitOffset is not fitted; call fit() first")
+        if space not in ("probability", "logit"):
+            raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
+        arr = validate_scores(p, name="p")
+        z = logit(arr) - self.delta_
+        return z if space == "logit" else expit(z)
+
     def audit_report(self, y: object, p: object, *, sample_weight: object = None) -> AuditReport:
         """Pre/post guardrail comparison for the validator's one-table view."""
         if not self.fitted_:

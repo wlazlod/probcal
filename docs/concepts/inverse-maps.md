@@ -113,6 +113,76 @@ except UnattainableTargetError as err:
     print(err)                           # named intervals — never a silent clamp
 ```
 
+## Point inverses: an exact preimage for the parametric family
+
+`interval_inverse` answers "what raw range maps into this calibrated interval"; a second
+question is narrower and, for the affine and beta families, answerable exactly: "what raw
+score maps to *this one* calibrated probability". `point_inverse(p, *, space)` is that exact
+preimage — a single closed-form (or fixed, certified-precision) computation, not bisection.
+
+It is defined on:
+
+- `BaseCalibrator` (inherited by every calibrator): the affine-logit path. Any calibrator
+  whose `affine_logit_coeffs_` is not `None` — `PlattCalibrator`, `TemperatureCalibrator`,
+  and `BetaCalibrator`'s tied `"a"`/`"ab"` variants — inverts
+  `logit g(s) = a * logit(s) + b` in one line: `z = (logit(p) - b) / a`.
+- `BetaCalibrator` (all three variants, overriding the base method): the full `"abm"` map is
+  not affine on the logit scale, so it gets its own layered exact construction — see below.
+- `LogitOffset`: `z = logit(p) - delta`, the same closed form as its `interval_inverse`.
+
+A non-monotone calibrator, or a monotone one with no affine-logit or beta closed form
+(isotonic/CIR/binning/scaling-binning, splines, Venn–Abers, ENIR), raises
+`NotImplementedError` naming `interval_inverse` — the right tool wherever the map is a step
+function (plateaus have no single preimage) or an otherwise non-affine monotone curve
+(only a generalized inverse is well-defined).
+
+## The beta inverse: a layered exact construction
+
+`BetaCalibrator.point_inverse` solves, with `z = logit(s)` and `K = logit(p) - c`,
+
+\[
+h(z) = a z + (b - a)\,\mathrm{softplus}(z) = K, \qquad \mathrm{softplus}(z) = \ln(1 + e^{z}),
+\]
+
+which has no elementary closed form when `a != b` (it is transcendental — see the Lambert-W
+connection below). The construction layers three ideas, each exact in a different regime:
+
+**Layer 1 — minimax hyperbola seed.** Replacing `softplus(z)` by the minimax hyperbola
+`(z + sqrt(z^2 + kappa)) / 2` with `kappa = 1.524` (max pointwise deviation 0.076) turns the
+equation quadratic, with admissible root
+
+\[
+z_0 = \frac{(a+b) K - (b-a)\sqrt{K^2 + \kappa a b}}{2 a b},
+\]
+
+exact at `a = b` (collapses to `K / a`) and in both tails, with error bounded by
+`0.076 * |b - a| / min(a, b)` elsewhere.
+
+**Layer 2 — certified Halley correction.** Up to 4 fixed Newton–Halley steps refine `z_0` to
+machine precision, exiting as soon as the residual certificate `|h(z) - K| <= 1e-13 *
+max(1, |K|)` is met — a bounded, finite expression, not open-ended iteration. The residual is
+itself a certificate: `|z - z*| <= |h(z) - K| / min(a, b)`.
+
+**Layer 3 — the Lambert-W tail form (theory, not shipped code).** As `|z| -> infinity` the
+equation admits a closed form in the Lambert-W function. For the left tail (`z -> -infinity`,
+`softplus(z) -> 0`):
+
+\[
+z = \frac{K}{a} - W_0\!\left(\frac{b-a}{a}\, e^{K/a}\right),
+\]
+
+with the symmetric right-tail form (`z -> +infinity`) obtained by the `a <-> b`, `z -> -z`,
+`K -> -K` swap. Both are exact only in the limit; away from the tails the correct branch and
+argument regime are case-dependent, so probcal ships the seed-plus-Halley construction above
+rather than a Lambert-W evaluator — recorded here as the closed form the numerics are
+approximating, not as an implementation.
+
+Degenerate exponents fall back to their own closed forms: `a == b` uses the affine formula
+directly; `a == 0` (`h` ranges over `(0, infinity)`, so `p` above `sigma(c)` only) and
+`b == 0` (range `(-infinity, 0)`, `p` below `sigma(c)` only) invert via `expm1`/`log`, and
+raise `UnattainableTargetError` outside the attainable range; `a == b == 0` (a constant map)
+raises `NotImplementedError` — no point has a well-defined preimage.
+
 ## References
 
 - Rawal, K., Kamar, E., Lakkaraju, H. (2020). "Algorithmic Recourse in the Wild: Understanding the Impact of Data and Model Shifts." arXiv:2012.11788.

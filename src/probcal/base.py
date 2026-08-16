@@ -209,6 +209,65 @@ class BaseCalibrator(ABC):
             return lo_out, hi_out
         return raw_lo, raw_hi
 
+    def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
+        """Raw scores whose calibrated probabilities equal ``p`` (exact preimage).
+
+        Defined only for strictly monotone calibrators with an exact
+        inverse: affine-logit maps (``logit g(s) = a * logit(s) + b``)
+        invert in closed form here, covering Platt scaling, temperature
+        scaling, and the tied Beta variants (``"a"``, ``"ab"``);
+        ``BetaCalibrator`` overrides this method with its own exact
+        construction for the full ``"abm"`` variant (DECISIONS 67). Others
+        raise ``NotImplementedError`` and should use :meth:`interval_inverse`
+        instead.
+
+        Parameters
+        ----------
+        p : array_like
+            Calibrated probabilities in ``[0, 1]`` (clipped to
+            ``[1e-12, 1 - 1e-12]``, the same convention as every forward
+            entry point).
+        space : {"probability", "logit"}, keyword-only
+            Scale of the returned raw values. ``"logit"`` returns the raw
+            logit directly; ``"probability"`` (default) returns the raw
+            score.
+
+        Returns
+        -------
+        numpy.ndarray
+            Raw scores (or logits, if ``space="logit"``) whose calibrated
+            probability equals ``p``.
+
+        Raises
+        ------
+        RuntimeError
+            If not yet fitted.
+        ValueError
+            If ``space`` is not ``"probability"`` or ``"logit"``.
+        NotImplementedError
+            If the calibrator is not monotone (``is_monotone_ = False``), or
+            has no affine-logit closed form (``affine_logit_coeffs_`` is
+            ``None``).
+        """
+        self._check_fitted()
+        if not self.is_monotone_:
+            raise NotImplementedError(
+                f"{type(self).__name__} is not monotone (is_monotone_=False); its preimage "
+                "may be a union of intervals. Use a monotone calibrator for thresholding "
+                "and recourse."
+            )
+        if space not in ("probability", "logit"):
+            raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
+        arr = validate_scores(p, name="p")
+        coeffs = self.affine_logit_coeffs_
+        if coeffs is None:
+            raise NotImplementedError(
+                f"{type(self).__name__} has no exact point inverse; use interval_inverse"
+            )
+        a, b = coeffs
+        z = (logit(arr) - b) / a
+        return z if space == "logit" else expit(z)
+
     # Hooks for interval_inverse — overridden by closed-form / block calibrators.
 
     def _predict_scalar(self, x: float) -> float:

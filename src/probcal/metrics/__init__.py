@@ -107,7 +107,7 @@ def _point_metrics(y: np.ndarray, p: np.ndarray, w: np.ndarray | None) -> dict[s
     ec = ecce(y, p, sample_weight=w)
     # One shared LOESS fit powers the whole ICI family (ici/e50/e90/emax use
     # the same distances; refitting four times would quadruple bootstrap cost).
-    d = np.abs(loess(p, y, frac=0.75) - p)
+    d = np.abs(loess(p, y, frac=0.75, grid_size=512) - p)
     w_arr = np.ones(len(p)) if w is None else w
     return {
         "log_loss": log_loss(y, p, sample_weight=w),
@@ -196,14 +196,19 @@ class ReliabilitySummary:
 
 
 def reliability_summary(
-    y: object, p: object, *, sample_weight: object = None
+    y: object,
+    p: object,
+    *,
+    sample_weight: object = None,
+    grid_size: int | None = 512,
 ) -> ReliabilitySummary:
     """Assemble the annotated-reliability stats box from existing metrics.
 
     No new math: intercept and slope from the recalibration regression, ICI
     and E90 from the LOESS distance family, and Spiegelhalter's p-value.
     Lives here because, like `evaluate`, it aggregates across submodules;
-    ``probcal.plots`` only formats the result.
+    ``probcal.plots`` only formats the result. ``grid_size=None`` recovers
+    0.1.2 values exactly.
     """
     from .scores import _prep
 
@@ -214,7 +219,7 @@ def reliability_summary(
         events=int(y_arr.sum()),
         intercept=calibration_intercept(y_arr, p_arr, sample_weight=wq),
         slope=calibration_slope(y_arr, p_arr, sample_weight=wq),
-        ici=ici(y_arr, p_arr, sample_weight=wq),
-        e90=e90(y_arr, p_arr),
+        ici=ici(y_arr, p_arr, sample_weight=wq, grid_size=grid_size),
+        e90=e90(y_arr, p_arr, grid_size=grid_size),
         spiegelhalter_p=spiegelhalter_z(y_arr, p_arr, sample_weight=wq).p_value,
     )

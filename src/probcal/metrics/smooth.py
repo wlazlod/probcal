@@ -72,33 +72,64 @@ def ecce(y: object, p: object, *, sample_weight: object = None) -> EcceResult:
     return EcceResult(stat_max=float(np.max(np.abs(c))), stat_mean=float(np.mean(np.abs(c))))
 
 
-def ici(y: object, p: object, *, frac: float = 0.75, sample_weight: object = None) -> float:
+def ici(
+    y: object,
+    p: object,
+    *,
+    frac: float = 0.75,
+    sample_weight: object = None,
+    grid_size: int | None = 512,
+) -> float:
     """Integrated calibration index: weighted mean |LOESS(y|p) - p|
     (Austin & Steyerberg, 2019). The LOESS stage itself is unweighted
-    (DECISIONS entry)."""
+    (DECISIONS entry). ``grid_size=None`` recovers 0.1.2 values exactly."""
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    c = loess(p_arr, y_arr, frac=frac)
+    c = loess(p_arr, y_arr, frac=frac, grid_size=grid_size)
     return float(np.average(np.abs(c - p_arr), weights=w))
 
 
-def _ici_distances(y: object, p: object, frac: float) -> np.ndarray:
+def _ici_distances(y: object, p: object, frac: float, grid_size: int | None) -> np.ndarray:
     y_arr, p_arr, _ = _prep(y, p, None)
-    return np.abs(loess(p_arr, y_arr, frac=frac) - p_arr)
+    return np.abs(loess(p_arr, y_arr, frac=frac, grid_size=grid_size) - p_arr)
 
 
-def e50(y: object, p: object, *, frac: float = 0.75, sample_weight: object = None) -> float:
-    """Median of the |LOESS(y|p) - p| distances."""
-    return float(np.quantile(_ici_distances(y, p, frac), 0.5))
+def e50(
+    y: object,
+    p: object,
+    *,
+    frac: float = 0.75,
+    sample_weight: object = None,
+    grid_size: int | None = 512,
+) -> float:
+    """Median of the |LOESS(y|p) - p| distances. ``grid_size=None`` recovers
+    0.1.2 values exactly."""
+    return float(np.quantile(_ici_distances(y, p, frac, grid_size), 0.5))
 
 
-def e90(y: object, p: object, *, frac: float = 0.75, sample_weight: object = None) -> float:
-    """90th percentile of the |LOESS(y|p) - p| distances."""
-    return float(np.quantile(_ici_distances(y, p, frac), 0.9))
+def e90(
+    y: object,
+    p: object,
+    *,
+    frac: float = 0.75,
+    sample_weight: object = None,
+    grid_size: int | None = 512,
+) -> float:
+    """90th percentile of the |LOESS(y|p) - p| distances. ``grid_size=None``
+    recovers 0.1.2 values exactly."""
+    return float(np.quantile(_ici_distances(y, p, frac, grid_size), 0.9))
 
 
-def emax(y: object, p: object, *, frac: float = 0.75, sample_weight: object = None) -> float:
-    """Maximum of the |LOESS(y|p) - p| distances."""
-    return float(np.max(_ici_distances(y, p, frac)))
+def emax(
+    y: object,
+    p: object,
+    *,
+    frac: float = 0.75,
+    sample_weight: object = None,
+    grid_size: int | None = 512,
+) -> float:
+    """Maximum of the |LOESS(y|p) - p| distances. ``grid_size=None`` recovers
+    0.1.2 values exactly."""
+    return float(np.max(_ici_distances(y, p, frac, grid_size)))
 
 
 @dataclass(frozen=True)

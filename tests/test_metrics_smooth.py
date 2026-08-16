@@ -1,11 +1,15 @@
 """Tests for probcal.metrics.smooth."""
 
 import numpy as np
+import pytest
 
 from probcal._math import expit, logit
+from probcal.datasets import make_pd_portfolio
 from probcal.metrics.smooth import e50, e90, ecce, emax, ici, smooth_ece, spiegelhalter_z
 
 RNG = np.random.default_rng(61)
+
+_GRID_CONFIGS = ({}, {"slope": 1.0, "asymmetry": 0.0}, {"event_rate": 0.10})
 
 
 def _calibrated(n: int = 5000) -> tuple[np.ndarray, np.ndarray]:
@@ -60,3 +64,10 @@ def test_spiegelhalter_rejects_overconfidence() -> None:
     p_over = expit(2.0 * logit(p))  # spread out: overconfident
     res = spiegelhalter_z(y, p_over)
     assert res.p_value < 0.001
+
+
+@pytest.mark.parametrize("kw", _GRID_CONFIGS)
+def test_ici_family_grid_default_close_to_exact(kw: dict) -> None:
+    d = make_pd_portfolio(n=5000, **kw)
+    for fn, tol in ((ici, 1e-4), (e50, 1e-4), (e90, 1e-4), (emax, 1e-3)):
+        assert abs(fn(d.y, d.scores) - fn(d.y, d.scores, grid_size=None)) <= tol

@@ -21,15 +21,46 @@ def _prep(y: object, p: object, sample_weight: object) -> tuple[np.ndarray, np.n
 
 
 def log_loss(y: object, p: object, *, sample_weight: object = None) -> float:
-    """Weighted mean negative log-likelihood (strictly proper; the default
-    selection criterion)."""
+    """Weighted mean negative log-likelihood.
+
+    Strictly proper; the default selection criterion.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    float
+        Weighted mean negative log-likelihood.
+    """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     ll = y_arr * np.log(p_arr) + (1.0 - y_arr) * np.log1p(-p_arr)
     return float(-np.average(ll, weights=w))
 
 
 def brier_score(y: object, p: object, *, sample_weight: object = None) -> float:
-    """Weighted mean squared error of the probability forecast (strictly proper)."""
+    """Weighted mean squared error of the probability forecast (strictly proper).
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    float
+        Weighted mean squared error.
+    """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     return float(np.average((p_arr - y_arr) ** 2, weights=w))
 
@@ -38,6 +69,20 @@ def brier_skill_score(y: object, p: object, *, sample_weight: object = None) -> 
     """Brier skill score vs the climatology forecast ``p = mean(y)``.
 
     Positive values beat the base rate; 0 equals it.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    float
+        Skill score relative to the weighted base rate.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     base = float(np.average(y_arr, weights=w))
@@ -53,6 +98,15 @@ class MurphyDecomposition:
     ``reliability - resolution + uncertainty`` equals the Brier score exactly
     when predictions are constant within bins; otherwise the identity holds
     up to the within-bin variance of ``p`` (documented binning bias).
+
+    Attributes
+    ----------
+    reliability : float
+        Mean squared gap between within-bin predicted and observed rates.
+    resolution : float
+        Mean squared gap between within-bin observed rate and the overall base rate.
+    uncertainty : float
+        Base-rate variance ``y_bar * (1 - y_bar)``.
     """
 
     reliability: float
@@ -75,6 +129,27 @@ def murphy_decomposition(
     rate from the squared-gap terms (within-bin variance corrections in the
     manner of Ferro & Fricker, 2012); the naive plug-in otherwise. The
     decomposition inherits the binning choice — see the metrics chapter.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    n_bins : int, keyword-only
+        Requested number of bins.
+    strategy : {"mass", "width"}, keyword-only
+        ``"mass"`` (equal-count, default) or ``"width"`` (equal-width over [0, 1]).
+    bias_corrected : bool, keyword-only
+        If ``True`` (default ``False``), apply the Ferro & Fricker (2012)
+        within-bin variance correction to the reliability and resolution terms.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    MurphyDecomposition
+        Reliability, resolution, and uncertainty terms.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     from .binned import _bin_index
@@ -106,7 +181,15 @@ def murphy_decomposition(
 @dataclass(frozen=True)
 class LogLossDecomposition:
     """Calibration/refinement split of the log loss via a plug-in
-    recalibration curve (LOESS; DECISIONS entry)."""
+    recalibration curve (LOESS; DECISIONS entry).
+
+    Attributes
+    ----------
+    calibration : float
+        Mean KL divergence between the plug-in and predicted Bernoullis.
+    refinement : float
+        Mean entropy of the plug-in Bernoulli.
+    """
 
     calibration: float
     refinement: float
@@ -125,6 +208,22 @@ def logloss_calibration_refinement(
     the outcome on the prediction; calibration is the mean
     ``KL(Bernoulli(c) || Bernoulli(p))`` and refinement the mean entropy of
     ``Bernoulli(c)``. Only as good as the plug-in estimate of ``c``.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    frac : float, keyword-only
+        LOESS smoothing fraction passed through to the recalibration curve.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    LogLossDecomposition
+        Calibration and refinement terms.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     c = np.clip(loess(p_arr, y_arr, frac=frac), 1e-12, 1.0 - 1e-12)

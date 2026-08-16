@@ -94,7 +94,27 @@ def reliability_loess(
     grid_size: int = 100,
     sample_weight: object = None,
 ) -> SmoothReliabilityCurve:
-    """LOESS-smoothed reliability curve on a grid (Austin & Steyerberg, 2014)."""
+    """LOESS-smoothed reliability curve on a grid (Austin & Steyerberg, 2014).
+
+    Parameters
+    ----------
+    y, p : array_like
+        Outcomes and predicted probabilities.
+    frac : float, keyword-only
+        LOESS smoothing fraction.
+    grid_size : int, keyword-only
+        Number of evaluation points, spanning the 0.5th to 99.5th percentile
+        of ``p``.
+    sample_weight : array_like or None, keyword-only
+        Validated (must match ``y`` in length) but not used: the LOESS fit
+        itself is unweighted.
+
+    Returns
+    -------
+    SmoothReliabilityCurve
+        Grid coordinates (probability and logit scale) and the smoothed
+        event rate at each point.
+    """
     y_arr, p_arr, _ = _prep(y, p, sample_weight)
     grid = _grid(p_arr, grid_size)
     rate = np.clip(loess(p_arr, y_arr, frac=frac, xeval=grid), 0.0, 1.0)
@@ -108,8 +128,26 @@ def reliability_spline(
     grid_size: int = 100,
     sample_weight: object = None,
 ) -> SmoothReliabilityCurve:
-    """Spline-smoothed reliability curve on a grid (penalized natural cubic
-    spline of the outcome on the logit prediction)."""
+    """Spline-smoothed reliability curve on a grid.
+
+    Penalized natural cubic spline of the outcome on the logit prediction.
+
+    Parameters
+    ----------
+    y, p : array_like
+        Outcomes and predicted probabilities.
+    grid_size : int, keyword-only
+        Number of evaluation points, spanning the 0.5th to 99.5th percentile
+        of ``p``.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights passed to the spline fit.
+
+    Returns
+    -------
+    SmoothReliabilityCurve
+        Grid coordinates (probability and logit scale) and the smoothed
+        event rate at each point.
+    """
     from .spline import SplineCalibrator
 
     y_arr, p_arr, w = _prep(y, p, sample_weight)
@@ -123,7 +161,22 @@ def reliability_spline(
 
 @dataclass(frozen=True)
 class EcceCurve:
-    """Cumulative-deviation walk over predictions sorted ascending (ECCE)."""
+    """Cumulative-deviation walk over predictions sorted ascending (ECCE).
+
+    Attributes
+    ----------
+    frac : numpy.ndarray
+        Cumulative fraction of observations, ``1/n .. 1``.
+    cumdev : numpy.ndarray
+        Cumulative-deviation walk value at each ``frac``.
+    sd_null : numpy.ndarray
+        Pointwise standard deviation of the walk under calibration.
+    stat_max : float
+        Maximum absolute value of ``cumdev`` (agrees with ``metrics.ecce``'s
+        ``stat_max``).
+    argmax_frac : float
+        ``frac`` at which the maximum is attained.
+    """
 
     frac: np.ndarray
     cumdev: np.ndarray
@@ -139,6 +192,18 @@ def ecce_curve(y: object, p: object, *, sample_weight: object = None) -> EcceCur
     ``metrics.ecce`` exactly so ``stat_max`` agrees with the metric.
     ``sd_null`` is the pointwise standard deviation of the walk under
     calibration — an envelope for reading, not a simultaneous band.
+
+    Parameters
+    ----------
+    y, p : array_like
+        Outcomes and predicted probabilities.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    EcceCurve
+        Cumulative walk, null-envelope SD, and the max-deviation summary.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     order = np.argsort(p_arr, kind="stable")
@@ -176,6 +241,25 @@ def calibration_belt(
     associated p-value tests the fitted polynomial against the identity.
     Where the band excludes the diagonal, the data reject calibration in
     that region.
+
+    Parameters
+    ----------
+    y, p : array_like
+        Outcomes and predicted probabilities.
+    confidence : tuple of float, keyword-only
+        The two (low, high) confidence levels for the bands, e.g. ``(0.8,
+        0.95)``.
+    grid_size : int, keyword-only
+        Number of evaluation points, spanning the 0.5th to 99.5th percentile
+        of ``p``.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    BeltResult
+        Grid coordinates, both confidence bands, selected polynomial degree,
+        and the associated calibration-test p-value.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     z = logit(p_arr)

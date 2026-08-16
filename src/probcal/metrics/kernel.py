@@ -102,6 +102,37 @@ def skce(
     (``random_state`` controls the pairing); ``"biased"`` the nonnegative
     V-statistic. ``bandwidth=None`` uses the deterministic median heuristic;
     ``scale="logit"`` transforms the kernel input only (the low-PD option).
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    estimator : {"uq", "ul", "biased"}, keyword-only
+        Estimator variant; see above.
+    kernel : {"laplace", "gaussian"}, keyword-only
+        Kernel family applied to the (scaled) score distance.
+    bandwidth : float or None, keyword-only
+        Kernel bandwidth; ``None`` (default) uses the median-heuristic
+        distance (mean fallback if the median is 0).
+    scale : {"probability", "logit"}, keyword-only
+        Scale on which the kernel input ``s`` is computed; residuals stay on
+        the probability scale regardless.
+    random_state : int, keyword-only
+        Seed for the ``"ul"`` estimator's disjoint-pairing permutation
+        (unused by ``"uq"``/``"biased"``).
+
+    Returns
+    -------
+    float
+        SKCE point estimate.
+
+    Raises
+    ------
+    ValueError
+        If ``estimator`` is not one of ``"uq"``, ``"ul"``, ``"biased"``, or if
+        fewer than 2 observations are given.
     """
     if estimator not in ("uq", "ul", "biased"):
         raise ValueError(f"estimator must be 'uq', 'ul', or 'biased', got {estimator!r}")
@@ -121,7 +152,27 @@ def skce(
 
 @dataclass(frozen=True)
 class SkceTestResult:
-    """One-sided SKCE calibration test (H0: calibrated; large positive rejects)."""
+    """One-sided SKCE calibration test (H0: calibrated; large positive rejects).
+
+    Attributes
+    ----------
+    statistic : float
+        SKCE point estimate (``"ul"`` for the asymptotic method, ``"uq"`` for
+        the bootstrap method).
+    estimator : str
+        Estimator used for ``statistic`` (``"ul"`` or ``"uq"``).
+    method : str
+        Test method used (``"asymptotic"`` or ``"bootstrap"``).
+    p_value : float
+        Test p-value.
+    p_value_bound : float
+        Distribution-free worst-case p-value bound (valid without asymptotics).
+    bandwidth : float
+        Kernel bandwidth used (resolved from ``bandwidth=None`` if applicable).
+    n_boot : int or None
+        Bootstrap replicate count for the bootstrap method; ``None`` for the
+        asymptotic method.
+    """
 
     statistic: float
     estimator: str
@@ -160,6 +211,33 @@ def skce_test(
     for n >~ 20 000, but a single random pairing can miss slope-type
     miscalibration that the bootstrap test rejects (the paper's documented
     power gap). ``p_value_bound`` is the distribution-free worst case.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    method : {"bootstrap", "asymptotic"}, keyword-only
+        Test method; see above.
+    n_boot : int, keyword-only
+        Bootstrap replicate count (``"bootstrap"`` method only).
+    kernel : {"laplace", "gaussian"}, keyword-only
+        Kernel family applied to the (scaled) score distance.
+    bandwidth : float or None, keyword-only
+        Kernel bandwidth; ``None`` (default) uses the median-heuristic
+        distance (mean fallback if the median is 0).
+    scale : {"probability", "logit"}, keyword-only
+        Scale on which the kernel input ``s`` is computed; residuals stay on
+        the probability scale regardless.
+    random_state : int, keyword-only
+        Seed for the resampling (``"bootstrap"``) or disjoint-pairing
+        (``"asymptotic"``) randomness.
+
+    Returns
+    -------
+    SkceTestResult
+        Test statistic, method, p-value, and worst-case bound.
     """
     if method not in ("bootstrap", "asymptotic"):
         raise ValueError(f"method must be 'bootstrap' or 'asymptotic', got {method!r}")

@@ -36,6 +36,12 @@ class IsotonicCalibrator(BaseCalibrator):
     level. ``interpolation="linear"`` instead joins block midpoints, removing
     the discontinuities.
 
+    Parameters
+    ----------
+    interpolation : {"none", "linear"}
+        ``"none"`` (default) keeps the raw step function; ``"linear"`` joins
+        the block midpoints, removing the tied-prediction plateaus.
+
     Attributes
     ----------
     n_blocks_ : int
@@ -140,6 +146,20 @@ class CenteredIsotonicCalibrator(IsotonicCalibrator):
     weight-centered score coordinate and interpolating linearly through the
     points (Oron & Flournoy, 2017). Removes the step function's tied
     predictions — preferred when downstream ranking must be strict.
+
+    Attributes
+    ----------
+    n_blocks_ : int
+        Number of pooled blocks — the effective complexity estimated from
+        the data. Inherited from the PAVA fit.
+    block_mean_ : numpy.ndarray
+        Event rate of each pooled block (the interpolation y-values).
+    block_first_s_, block_last_s_ : numpy.ndarray
+        Score range covered by each block (inherited; not used for
+        prediction, which interpolates through ``block_center_s_`` instead).
+    block_center_s_ : numpy.ndarray
+        Weight-centered score coordinate of each block — the interpolation
+        x-values that make CIR strictly increasing.
 
     References
     ----------

@@ -12,16 +12,35 @@ from .._math import loess, logit, norm_cdf
 from .scores import _prep
 
 
-def _smece_at_sigma(t: np.ndarray, r: np.ndarray, wn: np.ndarray, sigma: float) -> float:
+def _smece_at_sigma(loc: np.ndarray, mass: np.ndarray, sigma: float) -> float:
     """smECE at bandwidth sigma: integral of |kernel-smoothed signed residual measure|."""
-    grid = np.linspace(t.min() - 5.0 * sigma, t.max() + 5.0 * sigma, 257)
-    diff = (grid[:, None] - t[None, :]) / sigma
+    grid = np.linspace(loc.min() - 5.0 * sigma, loc.max() + 5.0 * sigma, 257)
+    diff = (grid[:, None] - loc[None, :]) / sigma
     kern = np.exp(-0.5 * diff**2) / (sigma * math.sqrt(2.0 * math.pi))
-    f = kern @ (wn * r)
-    return float(np.trapezoid(np.abs(f), grid))
+    return float(np.trapezoid(np.abs(kern @ mass), grid))
 
 
-def smooth_ece(y: object, p: object, *, sample_weight: object = None) -> float:
+def _smece_fixed_point(loc: np.ndarray, mass: np.ndarray) -> tuple[float, float]:
+    """Solve smECE(sigma) = sigma by bisection; return (value, sigma_used)."""
+    lo, hi = 1e-4, 2.0
+    if _smece_at_sigma(loc, mass, lo) - lo <= 0.0:  # near-perfectly calibrated
+        return _smece_at_sigma(loc, mass, lo), lo
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        f_mid = _smece_at_sigma(loc, mass, mid) - mid
+        if abs(hi - lo) < 1e-4:
+            break
+        if f_mid > 0.0:
+            lo = mid
+        else:
+            hi = mid
+    sigma = 0.5 * (lo + hi)
+    return sigma, sigma
+
+
+def smooth_ece(
+    y: object, p: object, *, sample_weight: object = None, bins: int | None = 8192
+) -> float:
     """Kernel-smoothed ECE with a self-consistent bandwidth (Błasiok–Nakkiran).
 
     Residuals are smoothed with a Gaussian kernel on the logit scale (the
@@ -29,25 +48,37 @@ def smooth_ece(y: object, p: object, *, sample_weight: object = None) -> float:
     unbounded logit scale no reflection is needed — DECISIONS entry), and the
     reported value is the fixed point ``smECE(sigma) = sigma`` found by
     bisection.
+
+    ``bins`` pre-aggregates the weighted residual measure onto a regular grid
+    over the logit range before solving the fixed point, cutting the cost of
+    the 257 x n kernel matrix built at every bisection step down to 257 x
+    bins. With ``bins=None``, or whenever ``n <= bins``, or the logit range is
+    degenerate (``t.max() == t.min()``), this reproduces the exact 0.1.2
+    computation bit-for-bit. Otherwise the solve is repeated once on an 8x
+    finer binning if the found ``sigma`` is smaller than 8 bin widths (the
+    kernel would then be under-resolved by the bins); if that still holds,
+    the exact computation is used as a silent fallback. That fallback is
+    O(n) per bisection step, matching the pre-0.1.3 cost, and can be reached
+    for near-perfectly-calibrated data spread over a wide logit range (e.g.
+    extreme/clipped scores), so worst-case cost is unchanged from 0.1.2.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     t = logit(p_arr)
-    r = y_arr - p_arr
-    wn = w / w.sum()
-    lo, hi = 1e-4, 2.0
-    f_lo = _smece_at_sigma(t, r, wn, lo) - lo
-    if f_lo <= 0.0:  # essentially perfectly calibrated at the finest scale
-        return _smece_at_sigma(t, r, wn, lo)
-    for _ in range(40):
-        mid = 0.5 * (lo + hi)
-        f_mid = _smece_at_sigma(t, r, wn, mid) - mid
-        if abs(hi - lo) < 1e-4:
-            break
-        if f_mid > 0.0:
-            lo = mid
-        else:
-            hi = mid
-    return 0.5 * (lo + hi)
+    mass = (w / w.sum()) * (y_arr - p_arr)
+    t_lo, t_hi = float(t.min()), float(t.max())
+    if bins is None or t.size <= bins or t_hi == t_lo:
+        return _smece_fixed_point(t, mass)[0]
+    b = bins
+    for _ in range(2):  # initial bin count, then one 8x refinement
+        width = (t_hi - t_lo) / b
+        idx = np.clip(((t - t_lo) / width).astype(np.int64), 0, b - 1)
+        m = np.bincount(idx, weights=mass, minlength=b)
+        centers = t_lo + (np.arange(b) + 0.5) * width
+        value, sigma = _smece_fixed_point(centers, m)
+        if sigma >= 8.0 * width:
+            return value
+        b *= 8
+    return _smece_fixed_point(t, mass)[0]  # exact fallback; O(n) worst case, no warning
 
 
 @dataclass(frozen=True)

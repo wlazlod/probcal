@@ -71,3 +71,23 @@ def test_ici_family_grid_default_close_to_exact(kw: dict) -> None:
     d = make_pd_portfolio(n=5000, **kw)
     for fn, tol in ((ici, 1e-4), (e50, 1e-4), (e90, 1e-4), (emax, 1e-3)):
         assert abs(fn(d.y, d.scores) - fn(d.y, d.scores, grid_size=None)) <= tol
+
+
+@pytest.mark.parametrize("kw", _GRID_CONFIGS)
+def test_smooth_ece_binned_close_to_exact(kw: dict) -> None:
+    d = make_pd_portfolio(n=5000, **kw)
+    assert abs(smooth_ece(d.y, d.scores, bins=1024) - smooth_ece(d.y, d.scores, bins=None)) <= 1e-3
+
+
+def test_smooth_ece_default_exact_below_bin_count() -> None:
+    d = make_pd_portfolio(n=2000)  # n <= 8192: default must be bit-identical to exact
+    assert smooth_ece(d.y, d.scores) == smooth_ece(d.y, d.scores, bins=None)
+
+
+def test_smooth_ece_guard_falls_back_to_exact() -> None:
+    rng = np.random.default_rng(3)
+    n = 4000
+    p = rng.uniform(0.45, 0.55, n)
+    p[:5] = 1e-12  # clipped scores: logit range ~55 wide -> huge bin width
+    y = (rng.uniform(size=n) < p).astype(float)
+    assert smooth_ece(y, p, bins=64) == smooth_ece(y, p, bins=None)

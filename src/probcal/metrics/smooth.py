@@ -38,6 +38,61 @@ def _smece_fixed_point(loc: np.ndarray, mass: np.ndarray) -> tuple[float, float]
     return sigma, sigma
 
 
+_SMECE_MAX_BINS = 1 << 20
+
+
+def _smece_at_sigma_lattice(m: np.ndarray, width: float, sigma: float) -> float:
+    """smECE of a lattice-binned measure at bandwidth sigma, by direct convolution.
+
+    The measure is first coarsened to spacing ``max(width, ~sigma/8)`` (integer
+    factor, mass-conserving), then convolved with a truncated Gaussian
+    (+-5 sigma, at most ~81 taps) and integrated by the midpoint rule on the
+    lattice. Cost is O(len(m)) per call, independent of n and of sigma. For
+    ``5 * sigma <= spacing`` the kernels are isolated and the integral is
+    exactly the total variation ``sum(|m|)`` (also its upper bound for every
+    sigma), which replaces the aliasing-prone coarse-grid evaluation that made
+    the pre-fix binned path spuriously report ~0 at small sigma.
+    """
+    factor = max(1, int(sigma / (8.0 * width)))
+    if factor > 1:
+        pad = (-m.shape[0]) % factor
+        mp = np.concatenate([m, np.zeros(pad)]) if pad else m
+        mc = mp.reshape(-1, factor).sum(axis=1)
+        w2 = width * factor
+    else:
+        mc, w2 = m, width
+    if 5.0 * sigma <= w2:  # isolated masses: integral is the total variation
+        return float(np.sum(np.abs(mc)))
+    k = int(math.ceil(5.0 * sigma / w2))
+    offs = np.arange(-k, k + 1) * w2
+    taps = np.exp(-0.5 * (offs / sigma) ** 2) / (sigma * math.sqrt(2.0 * math.pi))
+    f = np.convolve(mc, taps, mode="full")  # spans +-k cells beyond the lattice
+    return float(w2 * np.sum(np.abs(f)))
+
+
+def _smece_fixed_point_lattice(m: np.ndarray, width: float) -> tuple[float, float]:
+    """Bisection twin of ``_smece_fixed_point`` on the lattice evaluator.
+
+    Deliberately duplicates the 12-line skeleton (including the discarded
+    final-mid quirk) instead of parametrizing it, so the exact path's
+    bit-behavior is untouchable by construction.
+    """
+    lo, hi = 1e-4, 2.0
+    if _smece_at_sigma_lattice(m, width, lo) - lo <= 0.0:
+        return _smece_at_sigma_lattice(m, width, lo), lo
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        f_mid = _smece_at_sigma_lattice(m, width, mid) - mid
+        if abs(hi - lo) < 1e-4:
+            break
+        if f_mid > 0.0:
+            lo = mid
+        else:
+            hi = mid
+    sigma = 0.5 * (lo + hi)
+    return sigma, sigma
+
+
 def smooth_ece(
     y: object, p: object, *, sample_weight: object = None, bins: int | None = 8192
 ) -> float:
@@ -50,17 +105,25 @@ def smooth_ece(
     bisection.
 
     ``bins`` pre-aggregates the weighted residual measure onto a regular grid
-    over the logit range before solving the fixed point, cutting the cost of
-    the 257 x n kernel matrix built at every bisection step down to 257 x
-    bins. With ``bins=None``, or whenever ``n <= bins``, or the logit range is
-    degenerate (``t.max() == t.min()``), this reproduces the exact 0.1.2
-    computation bit-for-bit. Otherwise the solve is repeated once on an 8x
-    finer binning if the found ``sigma`` is smaller than 8 bin widths (the
-    kernel would then be under-resolved by the bins); if that still holds,
-    the exact computation is used as a silent fallback. That fallback is
+    over the logit range before solving the fixed point; the binned measure
+    is then evaluated in closed form on its own lattice by direct Gaussian
+    convolution, at a cost independent of n and of sigma. With ``bins=None``,
+    or whenever ``n <= bins``, or the logit range is degenerate
+    (``t.max() == t.min()``), this reproduces the exact 0.1.2 computation
+    bit-for-bit. Otherwise, if the found ``sigma`` is smaller than 8 bin
+    widths (the kernel would be under-resolved by the bins), the solve is
+    repeated once on an adaptively refined binning (``bins <- ceil(range /
+    (sigma/8))``); when that refined bin count would reach or exceed ``n``,
+    or exceed ``2**20``, the exact computation is used directly instead of
+    refining that far; otherwise the guard is retried once on the refined
+    binning, and the exact computation is used as a silent fallback if it
+    still trips. That fallback is
     O(n) per bisection step, matching the pre-0.1.3 cost, and can be reached
     for near-perfectly-calibrated data spread over a wide logit range (e.g.
-    extreme/clipped scores), so worst-case cost is unchanged from 0.1.2.
+    extreme/clipped scores), so worst-case cost is unchanged from 0.1.2. The
+    lattice integrator resolves the kernel at >= 8 samples per sigma, which
+    is more accurate than the pre-fix 257-point grid whenever sigma < range /
+    256.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     t = logit(p_arr)
@@ -68,17 +131,25 @@ def smooth_ece(
     t_lo, t_hi = float(t.min()), float(t.max())
     if bins is None or t.size <= bins or t_hi == t_lo:
         return _smece_fixed_point(t, mass)[0]
-    b = bins
-    for _ in range(2):  # initial bin count, then one 8x refinement
+
+    def _binned_solve(b: int) -> tuple[float, float, float]:
         width = (t_hi - t_lo) / b
         idx = np.clip(((t - t_lo) / width).astype(np.int64), 0, b - 1)
         m = np.bincount(idx, weights=mass, minlength=b)
-        centers = t_lo + (np.arange(b) + 0.5) * width
-        value, sigma = _smece_fixed_point(centers, m)
-        if sigma >= 8.0 * width:
-            return value
-        b *= 8
-    return _smece_fixed_point(t, mass)[0]  # exact fallback; O(n) worst case, no warning
+        value, sigma = _smece_fixed_point_lattice(m, width)
+        return value, sigma, width
+
+    value, sigma, width = _binned_solve(bins)
+    if sigma >= 8.0 * width:
+        return value
+    # Under-resolved: one adaptive refinement sized so 8 bins span sigma.
+    b2 = math.ceil((t_hi - t_lo) / (sigma / 8.0))
+    if b2 >= t.size or b2 > _SMECE_MAX_BINS:
+        return _smece_fixed_point(t, mass)[0]  # exact is cheaper or required
+    value, sigma, width = _binned_solve(b2)
+    if sigma >= 8.0 * width:
+        return value
+    return _smece_fixed_point(t, mass)[0]  # O(n) worst case, no warning
 
 
 @dataclass(frozen=True)

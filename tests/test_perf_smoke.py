@@ -2,13 +2,23 @@
 catch a regression to the pre-fast-path O(n^2)/O(n log n) behavior without being
 flaky on slower CI hardware.
 
-``evaluate`` is measured at n=5,000/n_boot=20 rather than the larger n=50,000/
-n_boot=50 scale: its default metric catalog includes ``ece_sweep``, which scans
-~99 candidate bin counts per call (untouched by this perf pass), so it -- not
-the grid-anchored LOESS / binned smECE fast paths this suite guards -- would
-dominate the timing at n=50,000 (measured ~537s on this host). The smaller
-scale still exercises the same bootstrap loop and metric dispatch and stays a
-practical smoke test.
+``evaluate`` is measured at n=20,000/n_boot=20 (raised from n=5,000 now that the
+binned smECE fast path this fix corrects no longer dominates timing at that
+scale -- measured 16.6s here, comfortably under the ceiling) rather than the
+larger n=50,000/n_boot=50 scale. Post-fix, ``smooth_ece``'s binned-path cost is
+negligible (a few ms) at every size this suite exercises, so it no longer
+drives the choice of scale here. An earlier draft of this comment claimed
+``ece_sweep`` -- its ~99-candidate bin-count scan, untouched by this fix --
+would dominate the timing at n=50,000, citing a ~537s figure; that figure was
+itself defect-contaminated (roughly 310s of it was ~50 bootstrap replicates
+each paying the pre-fix smECE aliasing defect's ~6.1s/call, not ``ece_sweep``;
+see DECISIONS 66) and is not reused. Measured post-fix on this host,
+``evaluate(n_boot=50)`` at n=50,000 takes ~88.0s, driven mainly by ``ici``
+(~1.09s/call) and ``ece_sweep`` (~0.49s/call) -- ``ici`` the larger single
+contributor of the two, neither dominating outright. n=20,000/n_boot=20 stays
+the smoke scale here (a faster check than the honest ~88s figure at
+n=50,000/n_boot=50) and exercises the bootstrap loop and metric dispatch above
+both the smECE bin-lattice default (8,192) and the LOESS anchor grid (512).
 
 ENIR's ceiling uses n=20,000, not the spec's m=1e5: the vectorized engine (the
 production memory fix; see DECISIONS) is O(m*G) in time, and 1e5 is not
@@ -31,6 +41,7 @@ from probcal import CalibratorSelector, ENIRCalibrator, VennAbersCalibrator
 from probcal._math import loess
 from probcal.datasets import make_pd_portfolio
 from probcal.metrics import evaluate, ici
+from probcal.metrics.smooth import smooth_ece
 
 pytestmark = pytest.mark.slow
 
@@ -43,8 +54,36 @@ def test_ici_n200k_under_30s() -> None:
     assert elapsed < 30.0
 
 
-def test_evaluate_n5k_boot20_under_130s() -> None:
-    d = make_pd_portfolio(n=5_000, random_state=42)
+def test_smooth_ece_default_n20k_under_ceiling() -> None:
+    # n=20,000 exercises the lattice-binned default path (n > 8192 bins); the
+    # pre-fix aliasing defect made this cost ~6s regardless of n, the fixed
+    # lattice integrator measures ~ms. 1s is a >100x-headroom ceiling that
+    # still restores a real (~6x) regression detector for the pre-fix defect.
+    d = make_pd_portfolio(n=20_000, random_state=42)
+    t0 = time.perf_counter()
+    smooth_ece(d.y, d.scores)
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 1.0
+
+
+def test_smooth_ece_default_wired_to_binned_path_n10k() -> None:
+    # End-to-end wiring check: the default (bins=8192) call must actually be
+    # exercising the fast binned path, not silently falling through to the
+    # exact O(n) computation -- a revert of the binned branch (e.g. `bins`
+    # quietly becoming a no-op) would pass every accuracy test in
+    # test_metrics_smooth.py (which calls the evaluator directly) but this
+    # timing check would catch it: exact at n=10^4 measures >1s on this host.
+    d = make_pd_portfolio(n=10_000, random_state=42)
+    t0 = time.perf_counter()
+    default_value = smooth_ece(d.y, d.scores)
+    elapsed = time.perf_counter() - t0
+    exact_value = smooth_ece(d.y, d.scores, bins=None)
+    assert abs(default_value - exact_value) <= 1e-3
+    assert elapsed < 1.0
+
+
+def test_evaluate_n20k_boot20_under_130s() -> None:
+    d = make_pd_portfolio(n=20_000, random_state=42)
     t0 = time.perf_counter()
     evaluate(d.y, d.scores, n_boot=20)
     elapsed = time.perf_counter() - t0

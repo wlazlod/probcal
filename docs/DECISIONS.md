@@ -576,3 +576,63 @@ Dated log of ambiguities resolved and design choices made during implementation.
     attribute read off the candidate *instance*. A user-supplied candidate that
     overrides `complexity_rank` on its own class can now win a tie against a
     built-in method, which a name-keyed table could never recognize. *(2026-08-16)*
+
+66. **`smooth_ece`'s binned path (entry 59) evaluated the smoothed measure on the
+    exact path's 257-point grid, which aliases against a regular bin lattice.**
+    With the default 8,192 bins, the small-bandwidth probe at `sigma=1e-4`
+    landed almost entirely between adjacent grid nodes and reported ~1.7e-7 mass
+    against a true total variation of 0.0749 (`n=10^4`) — a spurious
+    "perfectly calibrated" early exit. The guard (`sigma* < 8 * bin_width`, entry
+    59) always caught this and fell back to the exact O(n)-per-step computation,
+    so **every reported value stayed correct**; the defect was purely a cost
+    regression, ~3-6x slower than `bins=None` for `8192 < n <~ 6*10^4`, and a
+    blind ~6.1s per call at `n=10^4` regardless of `n` once the guard tripped.
+    The fix replaces the grid evaluator on the binned path with a lattice-native
+    one: `_smece_at_sigma_lattice` coarsens the bin measure to spacing
+    `~sigma/8` (mass-conserving integer-factor `reshape().sum()`) and convolves
+    it with a truncated Gaussian (+-5 sigma, at most ~161 taps); when the kernels
+    are isolated (`5*sigma <= spacing`) the integral is exactly the closed-form
+    total variation `sum(|m|)` — also its upper bound for every sigma — so the
+    generic `f(lo) - lo <= 0` early-exit test can never fire spuriously: if it
+    fires, `sigma = lo < 8 * width` by construction and routes through the same
+    adaptive-refinement guard as any other under-resolved fixed point. The single
+    8x-refinement retry (entry 59) is replaced by one adaptive refinement sized
+    to the found sigma, `bins <- ceil(range / (sigma*/8))`; if that refined bin
+    count would reach or exceed `n`, or exceed `2**20`, exact is used directly
+    instead of refining that far — reaching the right resolution in one step
+    instead of guessing 8x. Measured on this host (freshly re-measured for this
+    correction, not carried over from the design draft): the `_GRID_CONFIGS`
+    portfolios at `n=10^4` — fixed points differ from the exact path by
+    0.0 / 4.3e-4 / 0.0; cost 3-5ms (default) vs 1.3-1.6s (exact); against a
+    dense (sigma*/16-spaced trapezoid) reference the lattice integrator is
+    strictly more accurate than the old 257-point grid
+    (2.2e-6/2.3e-5/4.1e-6 vs 1.3e-5/6.9e-4/1.9e-5, all three configurations).
+    The aliasing-defect reproduction (the pre-fix module, re-run standalone on
+    the default `_GRID_CONFIGS` portfolio) measured 5.67s pre-fix on this host,
+    matching the design draft's 6.1s within host noise, against ~3ms post-fix
+    on the identical call (same seed, bit-identical fixed point,
+    `sigma=0.03143998565673828`, both runs); `n=10^5`: 19.7s (exact) ->
+    10.5ms (default), same fixed point as exact. `_smece_at_sigma` and
+    `_smece_fixed_point` (the exact path) are untouched; only the binned branch
+    changed.
+
+    **Correction to the 0.1.3 changelog:** its `### Performance` note
+    attributed `evaluate`'s dominant cost at `n=10^4`/`n=10^5` to `ece_sweep`
+    (~0.15s/call); the actual dominant cost at those scales was this defect
+    (~6.1s/call, guard-triggered on every `evaluate` call once `n > 8192`).
+    That changelog note also carried an `n=5*10^4` figure of ~537s
+    (`tests/test_perf_smoke.py`'s original docstring) offered as evidence that
+    `ece_sweep` dominates `evaluate` at larger n; that figure was itself
+    defect-contaminated — roughly 310s of it was ~50 bootstrap replicates each
+    paying this defect's ~6.1s/call, not `ece_sweep` — and is superseded below,
+    not reused. Post-fix single-call measurements on this host: at `n=10^4`,
+    `ece_sweep` 0.115s, `ici` 0.238s, `smooth_ece` 0.0024s; at `n=5*10^4`,
+    `ece_sweep` 0.488s, `ici` 1.087s, `smooth_ece` 0.0054s. `ici`, not
+    `ece_sweep`, is the largest single per-call contributor to the full-catalog
+    cost at both scales (roughly 2x `ece_sweep`'s cost there); neither
+    dominates outright — together with the rest of the catalog they roughly
+    account for the measured per-replicate cost. Post-fix wall times: `evaluate
+    (n_boot=100)` at `n=10^4` measures ~44s (foreground); `evaluate
+    (n_boot=50)` at `n=5*10^4` measures ~88.0s (foreground) — both now driven
+    by the catalog's ordinary O(n)-ish metrics (`ici` and `ece_sweep` chief
+    among them), not by this defect. *(2026-08-16)*

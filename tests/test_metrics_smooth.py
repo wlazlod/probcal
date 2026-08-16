@@ -7,6 +7,9 @@ from probcal._math import expit, logit
 from probcal.datasets import make_pd_portfolio
 from probcal.metrics.smooth import (
     _ici_distances,
+    _smece_at_sigma,
+    _smece_at_sigma_lattice,
+    _smece_fixed_point,
     e50,
     e90,
     ecce,
@@ -117,3 +120,53 @@ def test_smooth_ece_guard_falls_back_to_exact() -> None:
     p[:5] = 1e-12  # clipped scores: logit range ~55 wide -> huge bin width
     y = (rng.uniform(size=n) < p).astype(float)
     assert smooth_ece(y, p, bins=64) == smooth_ece(y, p, bins=None)
+
+
+def test_smece_lattice_no_spurious_early_exit() -> None:
+    # Pre-fix, the 257-point grid aliased against the 8192-bin lattice and
+    # reported ~1.7e-7 at sigma=1e-4 (spurious "perfectly calibrated" exit).
+    d = make_pd_portfolio(n=10_000)
+    y, p = d.y.astype(float), d.scores
+    t = logit(np.clip(p, 1e-12, 1 - 1e-12))
+    mass = (np.ones(t.size) / t.size) * (y - p)
+    t_lo, t_hi = float(t.min()), float(t.max())
+    width = (t_hi - t_lo) / 8192
+    idx = np.clip(((t - t_lo) / width).astype(np.int64), 0, 8191)
+    m = np.bincount(idx, weights=mass, minlength=8192)
+    tv = float(np.sum(np.abs(m)))
+    assert _smece_at_sigma_lattice(m, width, 1e-4) >= 0.5 * tv  # old path: ~2e-6 * tv
+
+
+def test_smece_lattice_evaluator_beats_257_grid_accuracy() -> None:
+    # Both integrators vs a dense (sigma/16-spaced trapezoid on the exact
+    # measure) reference at the exact path's own fixed point; the lattice must
+    # be at least as close as the 257-point grid.
+    d = make_pd_portfolio(n=10_000)
+    y, p = d.y.astype(float), d.scores
+    t = logit(np.clip(p, 1e-12, 1 - 1e-12))
+    mass = (np.ones(t.size) / t.size) * (y - p)
+    t_lo, t_hi = float(t.min()), float(t.max())
+    sigma_star = _smece_fixed_point(t, mass)[1]
+
+    # Chunked over grid blocks (rather than one (~4871, 10000) kernel matrix)
+    # to keep peak memory in the tens of MB instead of ~780MB; the reference
+    # value is unchanged (verified equal to the unchunked computation to
+    # machine precision during development).
+    dense_grid = np.arange(t_lo - 5.0 * sigma_star, t_hi + 5.0 * sigma_star, sigma_star / 16.0)
+    smoothed = np.empty_like(dense_grid)
+    block = 256
+    for i in range(0, dense_grid.size, block):
+        chunk = dense_grid[i : i + block]
+        diff = (chunk[:, None] - t[None, :]) / sigma_star
+        kern = np.exp(-0.5 * diff**2) / (sigma_star * np.sqrt(2.0 * np.pi))
+        smoothed[i : i + block] = kern @ mass
+    ref = float(np.trapezoid(np.abs(smoothed), dense_grid))
+
+    grid_value = _smece_at_sigma(t, mass, sigma_star)
+
+    width = (t_hi - t_lo) / 8192
+    idx = np.clip(((t - t_lo) / width).astype(np.int64), 0, 8191)
+    m = np.bincount(idx, weights=mass, minlength=8192)
+    lattice_value = _smece_at_sigma_lattice(m, width, sigma_star)
+
+    assert abs(lattice_value - ref) <= abs(grid_value - ref)

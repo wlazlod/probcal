@@ -6,23 +6,41 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
-## [0.1.3] - Unreleased
+## [0.1.3] - 2026-08-16
+
+### Fixed
+
+- ENIR (`ENIRCalibrator`) could exhaust memory well before m=50,000 because `path_solutions_` retained every breakpoint's full-length solution (`O(m^2)` memory); the path solver now retains only the lowest-BIC `max_solutions` (default 256) breakpoints, bounding memory at any m (DECISIONS 61); a pruning bound that skips provably negligible breakpoints previously crashed on sub-unit total `sample_weight` (`log(total weight) <= 0`) — the bound is now disabled in that case instead of raising, regression-tested against a sum-to-1.0 and a sum-below-1.0 case
+- `sample_weight` was accepted but silently had no effect on `e50`/`e90` and on `reliability_summary`'s internal `e90` call — both now honor weights via the new Hazen-position `weighted_quantile` (DECISIONS 64)
+- `evaluate`'s bootstrap silently substituted the point estimate for degenerate single-class i.i.d. resamples, artificially narrowing the reported CI; a degenerate draw is now redrawn (up to 100 times, then `RuntimeError`) instead of faked (DECISIONS 63)
+- `CalibratorSelector`'s name-keyed parsimony table ranked every user-supplied candidate last on a tie regardless of actual complexity; parsimony now reads `complexity_rank` off the candidate instance, so a user override can win a tie against a built-in method (DECISIONS 65)
 
 ### Changed
 
 - `ici`/`e50`/`e90`/`emax` and `reliability_summary` fit their LOESS smoother at 512 equal-mass anchors by default instead of at every observation (`loess`'s new `grid_size` argument, interpolated between anchors, precedent R `stats::lowess`'s `delta`); measured `|Δici| ≈ 1.3e-6` on `make_pd_portfolio(n=5000)`, far below bootstrap CI width; the underlying `_loess_fit_sorted` core was rewritten from an `argpartition` r-nearest-neighbor search to a sorted two-pointer window walk, differing from the old core only at exact distance ties (leftmost minimal-width window) (DECISIONS 58)
 - `smooth_ece` smooths a pre-binned (default `bins=8192` equal-width logit bins) residual measure instead of the raw per-observation one, cutting each bisection step from 257 x n to 257 x bins, with a small-bandwidth guard (`sigma* < 8 * bin_width` triggers one 8x rebin, then a silent exact fallback) (DECISIONS 59)
+- `ENIRCalibrator.path_solutions_` is now shaped `(K, m)` over `kept_breakpoints_` rather than every breakpoint; `path_lambdas_` still records every breakpoint (pre-1.0 attribute-shape change; DECISIONS 61)
+- `evaluate`'s bootstrap resamples negative and positive classes separately by default (`stratify=True`), conditioning the CI on the observed class balance instead of also capturing base-rate sampling variability; `stratify=False` restores i.i.d. resampling (DECISIONS 63)
+- `VennAbersCalibrator` predicts from precomputed `F0_`/`F1_` cumulative-sum-diagram sweeps fit once in `fit()` instead of refitting two PAVA passes per query (DECISIONS 62, amending entry 30)
 
 ### Added
 
 - `grid_size=` on `loess`/`ici`/`e50`/`e90`/`emax`/`reliability_summary` and `bins=` on `smooth_ece`, both defaulting to the new fast paths; `grid_size=None`/`bins=None` recover the exact pre-0.1.3 values and cost bit-for-bit
 - `evaluate` keyword-only `metrics=` subset of the catalog — computes and bootstraps only the requested metrics instead of the full catalog, with unknown names raising `ValueError` (DECISIONS 60)
 - `docs/scripts/benchmarks.py`: deterministic wall-time benchmarks for `ici`, `smooth_ece`, and `evaluate` at several portfolio sizes; `tests/test_perf_smoke.py`: `slow`-marked regression ceilings for the grid-anchored LOESS and binned smECE fast paths
+- `ENIRCalibrator(max_solutions=)` (default 256) bounding retained path solutions, plus `dropped_weight_` (retention loss, pruned breakpoints excluded) and `kept_breakpoints_`
+- `VennAbersCalibrator` fitted attributes `F0_`/`F1_`
+- `evaluate(stratify=)` keyword (default `True`)
+- `probcal._math.weighted_quantile` (Hazen positions)
+- `BaseCalibrator.complexity_rank` property (default 100.0), overridden by every built-in calibrator
+- ENIR/IVAP/selector rows and matching `slow`-marked ceilings added to the same benchmark and perf-smoke suites
 
 ### Performance
 
 - `ici` at n=50,000: 192.2s (v0.1.2) to 1.2s, single-core, measured on the benchmark host
 - `loess(grid_size=512)` fits n=1,000,000 points in under 30s
+- ENIR fit at m=10,000: 68.6s / 783MB (v0.1.2) to 1.6s / 40.8MB tracemalloc peak, memory now bounded at any m; IVAP fit at n=100,000: 0.91s (v0.1.2 needed 188s for a fit of only 2,000 plus a predict of 10,000), `predict_interval` at m=100,000: 0.016s; `CalibratorSelector()`'s default menu: 34.5s at n=4,000 (v0.1.2) to 7.9s at n=100,000
+- `evaluate`'s full-catalog cost at n=10⁴/10⁵ is now dominated by `ece_sweep`, which this release did not touch; `metrics=` subsetting (e.g. `metrics=("ici", "log_loss")`) is the lever until that scan is optimized
 
 ## [0.1.2] - 2026-08-12
 
@@ -86,7 +104,7 @@ First public release on PyPI.
 - Theory guidebook, chunk 3: `concepts/metrics.md` (full metric catalog with formulas and pathologies, bootstrap-CI protocol, report-reading order, selection-suitability table), `concepts/data-splitting.md` (prefit vs cv flows, ensemble vs pooled, calibration-set sizing, nested selection), `concepts/offset.md` (uniqueness of the bisection root, King–Zeng/Elkan/Tasche equivalences, worked re-anchoring, audit practice)
 - Theory guidebook, chunk 2: `concepts/methods-nonparametric.md` (PAVA with worked micro-example, CIR, histogram binning, scaling-binning sample-complexity argument, BBQ, ENIR, spline calibration, properties table) and `concepts/methods-distribution-free.md` (IVAP construction, validity guarantee scope, scalarization caveat, exchangeability limits, CVAP geometric-mean merge)
 
-[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.1.3...HEAD
 [0.1.3]: https://github.com/wlazlod/probcal/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/wlazlod/probcal/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/wlazlod/probcal/compare/v0.1.0...v0.1.1

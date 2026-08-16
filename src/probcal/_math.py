@@ -697,12 +697,55 @@ def irls_logistic(
 # ------------------------------------------------------------------ LOESS
 
 
+def _loess_fit_sorted(
+    xs: np.ndarray, ys: np.ndarray, evs: np.ndarray, r: int, degree: int
+) -> np.ndarray:
+    """LOESS at sorted eval points via the contiguous min-width r-window.
+
+    For 1-D x the r-nearest-neighbor window is contiguous in sorted order; the
+    two-pointer rule advances the window start while the point entering on the
+    right is strictly closer than the one leaving on the left. Distance ties
+    resolve to the leftmost minimal-width window (strict `<`).
+
+    ``xs`` and ``evs`` must already be sorted ascending.
+    """
+    n = xs.shape[0]
+    out = np.empty(evs.shape[0], dtype=np.float64)
+    i = 0
+    for j in range(evs.shape[0]):
+        x0 = evs[j]
+        while i + r < n and xs[i + r] - x0 < x0 - xs[i]:
+            i += 1
+        xw = xs[i : i + r]
+        yw = ys[i : i + r]
+        h = max(x0 - xs[i], xs[i + r - 1] - x0)
+        if h == 0.0:
+            out[j] = yw.mean()
+            continue
+        u = np.abs(xw - x0) / h
+        wts = np.clip(1.0 - u**3, 0.0, None) ** 3
+        if degree == 0:
+            out[j] = float(np.average(yw, weights=np.maximum(wts, _FPMIN)))
+            continue
+        xc = xw - x0
+        sw = wts.sum()
+        swx = (wts * xc).sum()
+        swxx = (wts * xc * xc).sum()
+        swy = (wts * yw).sum()
+        swxy = (wts * xc * yw).sum()
+        det = sw * swxx - swx * swx
+        out[j] = swy / sw if abs(det) < _FPMIN else (swxx * swy - swx * swxy) / det
+    return out
+
+
 def loess(
     x: object,
     y: object,
     frac: float = 0.75,
     degree: int = 1,
     xeval: object = None,
+    *,
+    grid_size: int | None = None,
 ) -> np.ndarray:
     """Tricube-weighted local polynomial regression (LOESS).
 
@@ -727,32 +770,21 @@ def loess(
     y_arr = np.asarray(y, dtype=np.float64)
     ev = x_arr if xeval is None else np.asarray(xeval, dtype=np.float64)
     n = x_arr.shape[0]
-    r = max(int(math.ceil(frac * n)), degree + 1)
-    r = min(r, n)
-    out = np.empty(ev.shape[0], dtype=np.float64)
-    for j, x0 in enumerate(ev):
-        dist = np.abs(x_arr - x0)
-        idx = np.argpartition(dist, r - 1)[:r]
-        h = dist[idx].max()
-        if h == 0.0:
-            out[j] = y_arr[idx].mean()
-            continue
-        u = dist[idx] / h
-        wts = np.clip(1.0 - u**3, 0.0, None) ** 3
-        if degree == 0:
-            out[j] = float(np.average(y_arr[idx], weights=np.maximum(wts, _FPMIN)))
-            continue
-        xc = x_arr[idx] - x0
-        sw = wts.sum()
-        swx = (wts * xc).sum()
-        swxx = (wts * xc * xc).sum()
-        swy = (wts * y_arr[idx]).sum()
-        swxy = (wts * xc * y_arr[idx]).sum()
-        det = sw * swxx - swx * swx
-        if abs(det) < _FPMIN:
-            out[j] = swy / sw
-        else:
-            out[j] = (swxx * swy - swx * swxy) / det
+    r = min(max(int(math.ceil(frac * n)), degree + 1), n)
+    order = np.argsort(x_arr, kind="stable")
+    xs, ys = x_arr[order], y_arr[order]
+    if grid_size is not None and ev.shape[0] > grid_size:
+        anchors = np.unique(np.quantile(ev, np.linspace(0.0, 1.0, grid_size)))
+        return np.interp(ev, anchors, _loess_fit_sorted(xs, ys, anchors, r, degree))
+    if xeval is None:
+        fit = _loess_fit_sorted(xs, ys, xs, r, degree)
+        out = np.empty_like(fit)
+        out[order] = fit
+    else:
+        ev_order = np.argsort(ev, kind="stable")
+        fit = _loess_fit_sorted(xs, ys, ev[ev_order], r, degree)
+        out = np.empty_like(fit)
+        out[ev_order] = fit
     return out
 
 

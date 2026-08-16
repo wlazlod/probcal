@@ -167,8 +167,11 @@ def test_forced_tie_custom_complexity_rank_wins() -> None:
         def complexity_rank(self) -> float:
             return 0.5
 
+    # "temperature" is listed FIRST so dict/iteration order favors the built-in;
+    # the test can only pass if complexity_rank (0.5 < 1.0) is actually consulted
+    # by the tie-break, not merely dict order.
     sel = CalibratorSelector(
-        candidates={"custom": _TinyRank(), "temperature": TemperatureCalibrator()},
+        candidates={"temperature": TemperatureCalibrator(), "custom": _TinyRank()},
         cv=5,
         random_state=11,
     ).fit(*_calibrated(1500))

@@ -179,6 +179,88 @@ def test_point_inverse_non_affine_monotone_raises() -> None:
         cal.point_inverse(np.array([0.3]))
 
 
+def _beta_with_params(a: float, b: float, c: float) -> BetaCalibrator:
+    cal = BetaCalibrator().fit(*_sample())
+    cal.a_, cal.b_, cal.c_ = a, b, c
+    return cal
+
+
+@pytest.mark.parametrize("ratio", [1, 3, 10, 50])
+def test_beta_point_inverse_round_trip_ratios(ratio: int) -> None:
+    a = 1.0
+    b = a * ratio
+    cal = _beta_with_params(a, b, 0.2)
+    p = np.concatenate([np.linspace(1e-5, 1 - 1e-5, 41), [1e-4, 1 - 1e-4]])
+    s = cal.point_inverse(p)
+    np.testing.assert_allclose(cal.predict_proba(s), p, atol=1e-10)
+
+
+def test_beta_point_inverse_abm_fit_round_trip() -> None:
+    s_train, y_train = _sample()
+    cal = BetaCalibrator().fit(s_train, y_train)
+    p = np.linspace(0.02, 0.9, 25)
+    s = cal.point_inverse(p)
+    np.testing.assert_allclose(cal.predict_proba(s), p, atol=1e-10)
+
+
+def test_beta_point_inverse_a_equals_b_matches_affine() -> None:
+    cal = _beta_with_params(0.7, 0.7, 0.3)
+    p = np.linspace(0.01, 0.99, 21)
+    z = cal.point_inverse(p, space="logit")
+    z_affine = (logit(p) - 0.3) / 0.7
+    np.testing.assert_allclose(z, z_affine, atol=1e-14)
+
+
+def test_beta_variant_a_point_inverse_round_trip() -> None:
+    cal = BetaCalibrator(variant="a").fit(*_sample())
+    p = np.linspace(0.02, 0.9, 15)
+    out = cal.point_inverse(p)
+    np.testing.assert_allclose(cal.predict_proba(out), p, atol=1e-10)
+
+
+def test_beta_variant_ab_point_inverse_round_trip() -> None:
+    cal = BetaCalibrator(variant="ab").fit(*_sample())
+    p = np.linspace(0.02, 0.9, 15)
+    out = cal.point_inverse(p)
+    np.testing.assert_allclose(cal.predict_proba(out), p, atol=1e-10)
+
+
+def test_beta_point_inverse_degenerate_a_zero() -> None:
+    cal = _beta_with_params(0.0, 2.0, 0.1)
+    lo = float(expit(np.array([0.1]))[0])
+    p_ok = np.linspace(lo + 1e-4, 1 - 1e-6, 10)
+    s = cal.point_inverse(p_ok)
+    np.testing.assert_allclose(cal.predict_proba(s), p_ok, atol=1e-8)
+    with pytest.raises(UnattainableTargetError, match="attainable"):
+        cal.point_inverse(np.array([max(lo - 1e-4, 1e-9)]))
+
+
+def test_beta_point_inverse_degenerate_b_zero() -> None:
+    cal = _beta_with_params(2.0, 0.0, -0.1)
+    hi = float(expit(np.array([-0.1]))[0])
+    p_ok = np.linspace(1e-6, hi - 1e-4, 10)
+    s = cal.point_inverse(p_ok)
+    np.testing.assert_allclose(cal.predict_proba(s), p_ok, atol=1e-8)
+    with pytest.raises(UnattainableTargetError, match="attainable"):
+        cal.point_inverse(np.array([min(hi + 1e-4, 1 - 1e-9)]))
+
+
+def test_beta_point_inverse_constant_map_raises() -> None:
+    cal = _beta_with_params(0.0, 0.0, 0.2)
+    with pytest.raises(NotImplementedError):
+        cal.point_inverse(np.array([0.5]))
+
+
+def test_beta_point_inverse_certificate_ratio_50() -> None:
+    from probcal.parametric import _beta_point_inverse_z
+
+    a, b = 0.1, 5.0
+    K = np.linspace(-25, 25, 51)
+    z = _beta_point_inverse_z(K, a, b)
+    resid = a * z + (b - a) * np.logaddexp(0.0, z) - K
+    assert np.max(np.abs(resid)) <= 1e-12
+
+
 def test_exports() -> None:
     import probcal
 

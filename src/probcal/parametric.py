@@ -14,7 +14,8 @@ import numpy as np
 
 from ._math import bisect, expit, irls_logistic, logit
 from ._results import Interpretation
-from .base import BaseCalibrator
+from ._validation import validate_scores
+from .base import BaseCalibrator, UnattainableTargetError
 
 _U_LO = 1e-6
 _U_HI = 1e6
@@ -23,6 +24,64 @@ _IRLS_NOT_CONVERGED = (
     "IRLS did not converge; coefficients may be unreliable — inspect interpret() "
     "and consider a nonparametric calibrator"
 )
+
+_BETA_INVERSE_KAPPA = 1.524  # minimax hyperbola parameter (max deviation 0.076), DECISIONS 67
+
+
+def _beta_point_inverse_z(
+    K: np.ndarray,
+    a: float,
+    b: float,
+    kappa: float = _BETA_INVERSE_KAPPA,
+    max_steps: int = 4,
+    rtol: float = 1e-13,
+) -> np.ndarray:
+    """Exact-to-machine-precision root of ``a*z + (b-a)*softplus(z) = K``.
+
+    Layer 1 seeds with the minimax-hyperbola approximation to softplus
+    (``kappa=1.524``, max deviation 0.076): the admissible root of the
+    resulting quadratic is exact at ``a=b`` and in both tails, with error
+    bounded by ``0.076*|b-a|/min(a,b)`` elsewhere (verified numerically over
+    ``a, b in (0, 5], |K| <= 30`` — no bound violations up to asymmetry
+    ratio 50). Layer 2 refines with up to ``max_steps`` (default 4) Halley
+    corrections, exiting early once the residual certificate
+    ``|f(z)| <= rtol * max(1, |K|)`` is met; the certificate bounds the
+    coordinate error by ``|f(z)| / min(a, b)``. The user's original
+    prescription was a fixed 2 steps (machine precision up to asymmetry
+    ratio 3, ~1e-10 at ratio 10, ~1e-4 at ratio 50 without a 3rd step); the
+    certified cap is a finite, bounded expression — not open-ended
+    iteration — that reaches machine precision at ratio 50 in <= 3 steps
+    without paying a 4th step in the common (low-asymmetry) case.
+
+    Parameters
+    ----------
+    K : numpy.ndarray
+        Target values ``logit(p) - c``.
+    a, b : float
+        Beta-calibration exponents, both strictly positive (degenerate
+        ``a=0``/``b=0``/``a=b`` cases are handled by the caller).
+    kappa : float
+        Minimax hyperbola parameter for the Layer-1 seed.
+    max_steps : int
+        Fixed Halley iteration cap.
+    rtol : float
+        Residual certificate tolerance, relative to ``max(1, |K|)``.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``z`` solving the equation, elementwise.
+    """
+    z = ((a + b) * K - (b - a) * np.sqrt(K**2 + kappa * a * b)) / (2.0 * a * b)
+    for _ in range(max_steps):
+        s = expit(z)
+        f = a * z + (b - a) * np.logaddexp(0.0, z) - K
+        if np.all(np.abs(f) <= rtol * np.maximum(1.0, np.abs(K))):
+            break
+        f1 = a + (b - a) * s
+        f2 = (b - a) * s * (1.0 - s)
+        z = z - 2.0 * f * f1 / (2.0 * f1**2 - f * f2)
+    return z
 
 
 class PlattCalibrator(BaseCalibrator):
@@ -343,6 +402,90 @@ class BetaCalibrator(BaseCalibrator):
         if self.variant in ("ab", "a"):
             return (self.a_, self.c_)
         return None
+
+    def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
+        """Raw scores whose calibrated probabilities equal ``p`` (exact preimage).
+
+        Overrides :meth:`BaseCalibrator.point_inverse` with the beta
+        family's own exact construction (DECISIONS 67), so the ``"abm"``
+        variant — not affine on the logit scale — still gets a closed-form
+        inverse instead of falling back to :meth:`interval_inverse`'s
+        bisection. With ``z = logit(s)`` and ``K = logit(p) - c``, the
+        forward map is ``a*z + (b-a)*softplus(z) = K``, solved by a
+        minimax-hyperbola seed refined by up to 4 certified Halley steps
+        (:func:`_beta_point_inverse_z`). Degenerate exponents are handled by
+        dedicated closed forms: ``a == b`` collapses to the affine formula
+        ``z = K/a``; ``a == 0`` (``h`` ranges over ``(0, inf)``, attainable
+        probability range ``(sigma(c), 1)``) gives ``z = ln(expm1(K/b))``;
+        ``b == 0`` (range ``(-inf, 0)``, attainable range ``(0, sigma(c))``)
+        gives ``z = -ln(expm1(-K/a))``; ``a == b == 0`` is a constant map
+        with no point inverse.
+
+        Parameters
+        ----------
+        p : array_like
+            Calibrated probabilities in ``[0, 1]``.
+        space : {"probability", "logit"}, keyword-only
+            Scale of the returned raw values.
+
+        Returns
+        -------
+        numpy.ndarray
+            Raw scores (or logits, if ``space="logit"``) whose calibrated
+            probability equals ``p``.
+
+        Raises
+        ------
+        RuntimeError
+            If not yet fitted.
+        ValueError
+            If ``space`` is not ``"probability"`` or ``"logit"``.
+        NotImplementedError
+            If the calibrator is not monotone, or the fit collapsed to a
+            constant map (``a == b == 0``): a constant map has no point
+            inverse.
+        UnattainableTargetError
+            If ``p`` lies outside the attainable range of a degenerate
+            (``a == 0`` or ``b == 0``) fit.
+        """
+        self._check_fitted()
+        if not self.is_monotone_:
+            raise NotImplementedError(
+                f"{type(self).__name__} is not monotone (is_monotone_=False); its preimage "
+                "may be a union of intervals. Use a monotone calibrator for thresholding "
+                "and recourse."
+            )
+        if space not in ("probability", "logit"):
+            raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
+        arr = validate_scores(p)
+        a, b = self.a_, self.b_
+        K = logit(arr) - self.c_
+        if a == 0.0 and b == 0.0:
+            raise NotImplementedError(
+                f"{type(self).__name__} fitted a constant map (a=b=0); it has no exact point "
+                "inverse; use interval_inverse"
+            )
+        if a == b:
+            z = K / a
+        elif a == 0.0:
+            lo = float(expit(np.array([self.c_]))[0])
+            if np.any(K <= 0.0):
+                raise UnattainableTargetError(
+                    f"calibrated target is outside the attainable probability range "
+                    f"({lo:.6g}, 1) of this degenerate (a=0) beta fit"
+                )
+            z = np.log(np.expm1(K / b))
+        elif b == 0.0:
+            hi = float(expit(np.array([self.c_]))[0])
+            if np.any(K >= 0.0):
+                raise UnattainableTargetError(
+                    f"calibrated target is outside the attainable probability range "
+                    f"(0, {hi:.6g}) of this degenerate (b=0) beta fit"
+                )
+            z = -np.log(np.expm1(-K / a))
+        else:
+            z = _beta_point_inverse_z(K, a, b)
+        return z if space == "logit" else expit(z)
 
     @property
     def complexity_rank(self) -> float:

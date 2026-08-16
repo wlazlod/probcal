@@ -35,6 +35,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 - `probcal._math.weighted_quantile` (Hazen positions)
 - `BaseCalibrator.complexity_rank` property (default 100.0), overridden by every built-in calibrator
 - ENIR/IVAP/selector rows and matching `slow`-marked ceilings added to the same benchmark and perf-smoke suites
+- `point_inverse(p, *, space)`: an exact single-point preimage (calibrated probability -> raw score/logit) alongside `interval_inverse`'s generalized-inverse interval. On `BaseCalibrator`, covers any affine-logit map (`PlattCalibrator`, `TemperatureCalibrator`, `BetaCalibrator`'s tied `"a"`/`"ab"` variants) in closed form; `BetaCalibrator` overrides it for all three variants, including the non-affine `"abm"` map, via a minimax-hyperbola seed refined by up to 4 certified Halley steps (DECISIONS 67); `LogitOffset` gets the same closed form as its `interval_inverse`. Non-affine monotone and step calibrators still raise `NotImplementedError` naming `interval_inverse`
 
 ### Performance
 

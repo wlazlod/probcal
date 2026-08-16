@@ -636,3 +636,57 @@ Dated log of ambiguities resolved and design choices made during implementation.
     (n_boot=50)` at `n=5*10^4` measures ~88.0s (foreground) — both now driven
     by the catalog's ordinary O(n)-ish metrics (`ici` and `ece_sweep` chief
     among them), not by this defect. *(2026-08-16)*
+
+67. **`point_inverse(p, *, space)` adds an exact single-point preimage alongside
+    `interval_inverse`'s generalized-inverse interval, on `BaseCalibrator`
+    (the affine-logit path — Platt, temperature, and beta's tied `"a"`/`"ab"`
+    variants), `BetaCalibrator` (overridden for all three variants, including
+    the non-affine `"abm"` map), and `LogitOffset`.** The beta construction —
+    seed, correction, and certified-cap refinement below — is user-specified;
+    this entry records the design and its verification, not a probcal-original
+    derivation. With `z = logit(s)` and `K = logit(p) - c`, the beta forward map
+    `h(z) = a*z + (b-a)*softplus(z) = K` has no elementary closed form when
+    `a != b`. Layer 1 seeds with the minimax-hyperbola approximation to
+    softplus (`kappa = 1.524`, max deviation 0.076), which turns the equation
+    quadratic with admissible root
+    `z0 = ((a+b)*K - (b-a)*sqrt(K^2 + kappa*a*b)) / (2*a*b)` — exact at `a = b`
+    (collapses to `K/a`) and in both tails, error bounded by
+    `0.076 * |b-a| / min(a, b)` elsewhere; verified numerically over a grid
+    `a, b in (0, 5]`, `|K| <= 30` with no bound violations at asymmetry ratios
+    up to 50 (the worst observed seed error, `a=0.02, b=5, K=0`, sat at 5.62
+    against a bound of 18.92). Layer 2 runs up to 4 fixed Newton–Halley steps
+    (`f = h(z) - K`, `f' = a + (b-a)*sigma(z)`, `f'' = (b-a)*sigma(z)*(1-sigma(z))`,
+    `z <- z - 2*f*f' / (2*f'^2 - f*f'')`), exiting early once the residual
+    certificate `|f(z)| <= 1e-13 * max(1, |K|)` is met; the certificate bounds
+    the coordinate error by `|f(z)| / min(a, b)` (also verified numerically:
+    the certificate never underestimated the true root error across the same
+    grid). This is a fixed, bounded expression — not open-ended iteration —
+    and it is a refinement of the user's original 2-step prescription (machine
+    precision to asymmetry ratio 3, ~1e-10 at ratio 10, ~1e-4 at ratio 50
+    without a 3rd step): measured convergence at ratio 50 (`a, b <= 5`) needed
+    at most 3 of the 4 available steps to satisfy the certificate, with
+    residuals `<= 1.5e-12` (within the `1e-13 * max(1, |K|)` bound for
+    `|K| <= 30`), so the certified cap buys ratio-50 machine precision without
+    spending a step in the common low-asymmetry case. The Halley denominator `2*f'^2 - f*f''`
+    cannot vanish while `f` is still large in this domain: `f' >= min(a, b) >
+    0` for `a, b >= 0` not both zero, so `f'^2` alone is bounded away from
+    zero, and the observed minimum `|denominator|` across the verification
+    grid (`a, b in {0.02, ..., 5}`) was `~8e-4` — order `2*min(a,b)^2` at the
+    smallest tested exponent, never closer to zero — so no epsilon guard was
+    needed or added. Degenerate exponents,
+    checked against `BetaCalibrator._fit`'s constraint-refit cascade (all
+    reachable via the betacal `a, b >= 0` monotonicity constraint, which never
+    touches `is_monotone_` — it stays the class default `True` even for the
+    constant-map case): `a == b` (including variants `"a"`/`"ab"`, which tie
+    the exponents by construction) skips the quadratic entirely, `z = K/a`;
+    `a == 0, b > 0` inverts `h(z) = b*softplus(z)` (range `(0, infinity)`) as
+    `z = ln(expm1(K/b))`, raising `UnattainableTargetError` for `p <= sigma(c)`;
+    `b == 0, a > 0` is the symmetric `z = -ln(expm1(-K/a))`, raising for
+    `p >= sigma(c)`; `a == b == 0` (both exponents dropped by the refit
+    cascade — a constant map) raises `NotImplementedError`, since `is_monotone_`
+    does not flag it and a constant map has no point inverse. A third,
+    unshipped layer is recorded as theory in `docs/concepts/inverse-maps.md`:
+    as `|z| -> infinity` the equation is exactly a Lambert-W form,
+    `z = K/a - W_0(((b-a)/a) * e^(K/a))` (left tail) with a symmetric
+    right-tail form — exact only in the limit, so the seed-plus-Halley
+    construction ships instead of a Lambert-W evaluator. *(2026-08-16)*

@@ -34,7 +34,10 @@ raw_lo, raw_hi = cal.interval_inverse(lo, hi, space="probability" | "logit",
 together with the `is_monotone_` flag. `space="logit"` returns bounds on the model's
 raw margin. Unattainable targets raise `UnattainableTargetError` — never a silent clamp.
 For a whole masterscale, `calibrated_bands_to_raw(cal, {grade: (lo, hi), ...})`
-translates every grade edge in one call. Details and the plateau/robustness caveats:
+translates every grade edge in one call. For a single calibrated probability rather than
+an interval, `cal.point_inverse(p, space=...)` gives the exact raw preimage on affine-logit
+and beta calibrators (and `LogitOffset`); non-affine monotone and step maps still need
+`interval_inverse`. Details and the plateau/robustness caveats:
 [Inverse maps](concepts/inverse-maps.md).
 
 ## How does this interoperate with a counterfactual engine (treecf)?

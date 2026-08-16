@@ -760,6 +760,14 @@ def loess(
     xeval : array_like or None
         Points at which to evaluate the smoother; ``None`` evaluates at ``x``
         (the ICI use case).
+    grid_size : int or None, keyword-only
+        When set and ``xeval`` has more than ``grid_size`` points, fit only at
+        ``grid_size`` equal-mass anchors (quantiles of the eval points, endpoints
+        included, no extrapolation) and linearly interpolate between them.
+        Windows and bandwidths are still computed against the full ``x``. This
+        mirrors R ``stats::lowess``, whose ``delta`` parameter (default
+        ``0.01 * diff(range(x))``) likewise fits at spaced points and
+        interpolates. ``None`` (default) evaluates exactly at every point.
 
     Returns
     -------

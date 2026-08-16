@@ -26,6 +26,7 @@ from probcal._math import (
     norm_ppf,
     pava,
 )
+from probcal.datasets import make_pd_portfolio
 
 RNG = np.random.default_rng(42)
 
@@ -370,6 +371,20 @@ def test_loess_tie_window_uses_min_width_rule() -> None:
     x = np.array([0.0, 1.0, 1.0, 2.0])
     y = np.array([0.0, 1.0, 2.0, 3.0])
     assert loess(x, y, frac=0.5, xeval=np.array([1.0]))[0] == 1.5  # h==0 fallback: mean
+
+
+def test_loess_grid_matches_exact_within_tolerance() -> None:
+    d = make_pd_portfolio(n=5000)
+    yf = d.y.astype(np.float64)
+    assert np.max(np.abs(loess(d.scores, yf) - loess(d.scores, yf, grid_size=512))) <= 5e-3
+
+
+def test_loess_grid_size_none_and_oversized_are_exact() -> None:
+    d = make_pd_portfolio(n=1000)
+    yf = d.y.astype(np.float64)
+    base = loess(d.scores, yf)
+    assert np.array_equal(loess(d.scores, yf, grid_size=None), base)
+    assert np.array_equal(loess(d.scores, yf, grid_size=5000), base)  # threshold not crossed
 
 
 # ---------------------------------------------------------------- natural cubic basis

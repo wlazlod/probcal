@@ -91,6 +91,11 @@ class BBQCalibrator(BaseCalibrator):
         probe = np.linspace(0.01, 0.99, 199)
         self.is_monotone_ = bool(np.all(np.diff(self._predict(probe)) >= -1e-12))
 
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank 40.0: a Bayesian model average over binnings."""
+        return 40.0
+
     def _predict(self, s: np.ndarray) -> np.ndarray:
         out = np.zeros(len(s))
         for weight, (edges, rate) in zip(self.weights_, self._models, strict=True):
@@ -312,6 +317,11 @@ class ENIRCalibrator(BaseCalibrator):
                 UserWarning,
                 stacklevel=2,
             )
+
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank 80.0: an ensemble over the full near-isotonic path."""
+        return 80.0
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         idx = np.clip(np.searchsorted(self._x, s, side="right") - 1, 0, len(self._x) - 1)

@@ -73,6 +73,11 @@ class PlattCalibrator(BaseCalibrator):
         self._check_fitted()
         return (self.a_, self.b_)
 
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank 2.0: a two-parameter map, simpler than the nonparametric methods."""
+        return 2.0
+
     def _closed_inverse(self, t: float) -> float:
         return float(expit(np.array([(logit(np.array([t]))[0] - self.b_) / self.a_]))[0])
 
@@ -156,6 +161,11 @@ class TemperatureCalibrator(BaseCalibrator):
         """``(1/T, 0)``: temperature scaling is affine on the logit scale."""
         self._check_fitted()
         return (1.0 / self.T_, 0.0)
+
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank 1.0: the simplest map, a single parameter."""
+        return 1.0
 
     def _closed_inverse(self, t: float) -> float:
         return float(expit(np.array([self.T_ * logit(np.array([t]))[0]]))[0])
@@ -323,6 +333,15 @@ class BetaCalibrator(BaseCalibrator):
         if self.variant in ("ab", "a"):
             return (self.a_, self.c_)
         return None
+
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank by variant: 1.5 ("a"), 2.5 ("ab"), 3.0 ("abm").
+
+        ``.get`` with a fallback because ``variant`` is validated only in
+        ``_fit``; the property must not raise pre-fit.
+        """
+        return {"a": 1.5, "ab": 2.5, "abm": 3.0}.get(self.variant, 100.0)
 
     def interpret(self) -> Interpretation:
         """Read the fitted exponents and intercept against the identity (1, 1, 0)."""

@@ -89,6 +89,11 @@ class HistogramBinningCalibrator(BaseCalibrator):
     def _predict(self, s: np.ndarray) -> np.ndarray:
         return self.bin_rate_[np.searchsorted(self.edges_, s, side="right")]
 
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank 10.0, for either strategy ("mass" or "width")."""
+        return 10.0
+
     def _output_range(self) -> tuple[float, float]:
         return float(self.bin_rate_[0]), float(self.bin_rate_[-1])
 
@@ -165,6 +170,11 @@ class ScalingBinningCalibrator(BaseCalibrator):
     def _predict(self, s: np.ndarray) -> np.ndarray:
         g = self.platt_.predict_proba(s)
         return self.bin_value_[np.searchsorted(self.edges_, g, side="right")]
+
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank 4.0: a Platt stage plus a bin count, still lightweight."""
+        return 4.0
 
     def _output_range(self) -> tuple[float, float]:
         return float(self.bin_value_[0]), float(self.bin_value_[-1])

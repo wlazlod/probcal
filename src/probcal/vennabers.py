@@ -143,6 +143,11 @@ class VennAbersCalibrator(BaseCalibrator):
         idx = np.searchsorted(self._s, arr, side="left")
         return np.column_stack([self.F0_[idx], self.F1_[idx]])
 
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank 60.0: a distribution-free interval predictor."""
+        return 60.0
+
     def _predict(self, s: np.ndarray) -> np.ndarray:
         intervals = self.predict_interval(s)
         p0, p1 = intervals[:, 0], intervals[:, 1]
@@ -204,6 +209,11 @@ class CrossVennAbersCalibrator(BaseCalibrator):
     def _fold_pairs(self, s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         pairs = np.stack([ivap.predict_interval(s) for ivap in self._ivaps])  # (K, n, 2)
         return pairs[:, :, 0], pairs[:, :, 1]
+
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank 60.0: same tier as IVAP, folded across cv splits."""
+        return 60.0
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         p0, p1 = self._fold_pairs(s)

@@ -372,19 +372,27 @@ from 192.2s to 1.2s, and `loess(grid_size=512)` fits n=1,000,000 points in under
 
 **`smooth_ece`** solves a bandwidth fixed point by bisection, and each step built a kernel
 matrix against every residual. `bins` (default 8192) pre-aggregates the weighted residual
-measure onto equal-width bins over the logit range before each step, with a small-bandwidth
-guard that re-bins 8x finer, then falls back to the exact computation, whenever the found
-bandwidth would be under-resolved by the bins — so accuracy never degrades silently. `bins=None`,
-or any call where `n <= bins`, is bit-identical to the pre-0.1.3 exact computation
-(DECISIONS 59).
+measure onto equal-width bins over the logit range once, up front (O(n)); each bisection step
+then evaluates that binned measure directly on its own lattice by truncated-Gaussian
+convolution, independent of n. A small-bandwidth guard retries once on an adaptively refined
+binning (`bins <- ceil(range / (sigma/8))`) whenever the found bandwidth would be under-resolved
+by the current bins, then falls back to the exact per-observation computation if the guard still
+trips — so accuracy never degrades silently, and the binned path no longer reuses the exact
+path's 257-point grid (that reuse aliased against the bin lattice and was a cost-only defect,
+DECISIONS 66). `bins=None`, or any call where `n <= bins`, is bit-identical to the pre-0.1.3
+exact computation (DECISIONS 59).
 
 **`evaluate`'s cost is dominated by the bootstrap**, not any single metric: every point
 estimate in the requested catalog is recomputed `n_boot` times (default 1000). Per replicate,
 scores, ECCE, and the regression framework are O(n); binned ECEs are O(n log n); the ICI
-family shares one LOESS fit at O(grid_size · frac · n); `smooth_ece` is
-O(n + 257 · bins) per bisection step. `metrics=` (DECISIONS 60) restricts the catalog to the
-names actually needed, which matters most for `ece_sweep` — its ~99-candidate bin-count scan
-dominates full-catalog `evaluate` calls at large n. For n above roughly 10⁶, reduce `n_boot`,
+family shares one LOESS fit at O(grid_size · frac · n); `smooth_ece` bins once in O(n) and then
+costs O(bins · taps) per bisection step, where taps is the truncated-Gaussian kernel width
+(at most ~161 taps), independent of n — measured at ~ms per call for n up to 10⁵. `metrics=`
+(DECISIONS 60) restricts the catalog to the names actually needed. Measured post-fix on this
+host, `ici` and `ece_sweep` are the largest remaining per-call contributors to the full-catalog
+cost (at n=5×10⁴: `ici` ≈ 1.1s, `ece_sweep` ≈ 0.5s per call — `ici` the larger of the two, not
+`ece_sweep` alone), rather than one metric dominating outright; `metrics=` is the lever for
+either. For n above roughly 10⁶, reduce `n_boot`,
 pass a `metrics=` subset, or both; `docs/scripts/benchmarks.py` measures wall time for `ici`,
 `smooth_ece`, and `evaluate` at several portfolio sizes on demand.
 

@@ -113,8 +113,11 @@ def smooth_ece(
     bit-for-bit. Otherwise, if the found ``sigma`` is smaller than 8 bin
     widths (the kernel would be under-resolved by the bins), the solve is
     repeated once on an adaptively refined binning (``bins <- ceil(range /
-    (sigma/8))``, capped at ``min(n, 2**20)``); if that guard still trips,
-    the exact computation is used as a silent fallback. That fallback is
+    (sigma/8))``); when that refined bin count would reach or exceed ``n``,
+    or exceed ``2**20``, the exact computation is used directly instead of
+    refining that far; otherwise the guard is retried once on the refined
+    binning, and the exact computation is used as a silent fallback if it
+    still trips. That fallback is
     O(n) per bisection step, matching the pre-0.1.3 cost, and can be reached
     for near-perfectly-calibrated data spread over a wide logit range (e.g.
     extreme/clipped scores), so worst-case cost is unchanged from 0.1.2. The

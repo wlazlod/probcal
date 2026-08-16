@@ -14,6 +14,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 - `sample_weight` was accepted but silently had no effect on `e50`/`e90` and on `reliability_summary`'s internal `e90` call — both now honor weights via the new Hazen-position `weighted_quantile` (DECISIONS 64)
 - `evaluate`'s bootstrap silently substituted the point estimate for degenerate single-class i.i.d. resamples, artificially narrowing the reported CI; a degenerate draw is now redrawn (up to 100 times, then `RuntimeError`) instead of faked (DECISIONS 63)
 - `CalibratorSelector`'s name-keyed parsimony table ranked every user-supplied candidate last on a tie regardless of actual complexity; parsimony now reads `complexity_rank` off the candidate instance, so a user override can win a tie against a built-in method (DECISIONS 65)
+- `smooth_ece`'s binned path (default `bins=8192`) evaluated the smoothed measure on the exact path's 257-point grid, which aliases against the bin lattice: at small bandwidths the probe landed almost entirely between grid nodes, reporting ~1.7e-7 mass against a true total variation of 0.0749 (`n=10⁴`) — a spurious near-zero reading that always tripped the small-bandwidth guard and fell back to the exact O(n)-per-step computation, so **every reported value stayed correct**, but at a cost of ~6.1s/call regardless of `n`, roughly 3-6x slower than `bins=None` for `8192 < n ≲ 6×10⁴`. The binned path now evaluates the measure natively on its own lattice by direct Gaussian convolution (closed-form total variation when the kernel is isolated, which also makes the early-exit test non-spurious by construction) with one adaptively sized refinement instead of a blind 8x retry; measured `n=10⁴`: 6.1s → ~ms; `n=10⁵`: 19.7s (exact) → ~10ms (default), same fixed point as exact (DECISIONS 66)
 
 ### Changed
 
@@ -40,7 +41,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 - `ici` at n=50,000: 192.2s (v0.1.2) to 1.2s, single-core, measured on the benchmark host
 - `loess(grid_size=512)` fits n=1,000,000 points in under 30s
 - ENIR fit at m=10,000: 68.6s / 783MB (v0.1.2) to 1.6s / 40.8MB tracemalloc peak, memory now bounded at any m; IVAP fit at n=100,000: 0.91s (v0.1.2 needed 188s for a fit of only 2,000 plus a predict of 10,000), `predict_interval` at m=100,000: 0.016s; `CalibratorSelector()`'s default menu: 34.5s at n=4,000 (v0.1.2) to 7.9s at n=100,000
-- `evaluate`'s full-catalog cost at n=10⁴/10⁵ is now dominated by `ece_sweep`, which this release did not touch; `metrics=` subsetting (e.g. `metrics=("ici", "log_loss")`) is the lever until that scan is optimized
+- `evaluate`'s full-catalog cost at n=10⁴ was previously misattributed here to `ece_sweep` (~0.15s/call); the actual dominant cost pre-fix was the `smooth_ece` binned-path aliasing defect above (~6.1s/call, guard-triggered on every call once `n > 8192`), corrected numbers: `evaluate(n_boot=100)` at n=10⁴ measures ~44s post-fix, now genuinely dominated by `ece_sweep`, which this release did not touch; `metrics=` subsetting (e.g. `metrics=("ici", "log_loss")`) is the lever until that scan is optimized (DECISIONS 66)
 
 ## [0.1.2] - 2026-08-12
 

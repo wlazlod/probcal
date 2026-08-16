@@ -183,6 +183,12 @@ class ENIRCalibrator(BaseCalibrator):
         self._path_fit(y_u, w_u)
         self._mixed = self.weights_ @ self.path_solutions_
 
+    # TODO(ENIR): an O(m log m) event-driven engine (heap-scheduled breakpoint
+    # trajectory) remains possible here if the equivalence gate is relaxed
+    # from bit-exact to atol=1e-10 against the frozen v0.1.2 reference — the
+    # exact-tie separation subtlety that blocked it (DECISIONS 61) is a
+    # tolerance artifact of the reference's 1e-15 threshold, not a
+    # mathematical obstacle to a lazily-scheduled replay.
     def _path_fit(self, y: np.ndarray, w: np.ndarray) -> None:
         """Nearly-isotonic path (modified PAVA) with BIC weights, in one sweep.
 

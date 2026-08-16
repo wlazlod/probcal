@@ -576,3 +576,42 @@ Dated log of ambiguities resolved and design choices made during implementation.
     attribute read off the candidate *instance*. A user-supplied candidate that
     overrides `complexity_rank` on its own class can now win a tie against a
     built-in method, which a name-keyed table could never recognize. *(2026-08-16)*
+
+66. **`smooth_ece`'s binned path (entry 59) evaluated the smoothed measure on the
+    exact path's 257-point grid, which aliases against a regular bin lattice.**
+    With the default 8,192 bins, the small-bandwidth probe at `sigma=1e-4`
+    landed almost entirely between adjacent grid nodes and reported ~1.7e-7 mass
+    against a true total variation of 0.0749 (`n=10^4`) — a spurious
+    "perfectly calibrated" early exit. The guard (`sigma* < 8 * bin_width`, entry
+    59) always caught this and fell back to the exact O(n)-per-step computation,
+    so **every reported value stayed correct**; the defect was purely a cost
+    regression, ~3-6x slower than `bins=None` for `8192 < n <~ 6*10^4`, and a
+    blind ~6.1s per call at `n=10^4` regardless of `n` once the guard tripped.
+    The fix replaces the grid evaluator on the binned path with a lattice-native
+    one: `_smece_at_sigma_lattice` coarsens the bin measure to spacing
+    `~sigma/8` (mass-conserving integer-factor `reshape().sum()`) and convolves
+    it with a truncated Gaussian (+-5 sigma, at most ~81 taps); when the kernels
+    are isolated (`5*sigma <= spacing`) the integral is exactly the closed-form
+    total variation `sum(|m|)` — also its upper bound for every sigma — so the
+    generic `f(lo) - lo <= 0` early-exit test can never fire spuriously: if it
+    fires, `sigma = lo < 8 * width` by construction and routes through the same
+    adaptive-refinement guard as any other under-resolved fixed point. The single
+    8x-refinement retry (entry 59) is replaced by one adaptive refinement sized
+    to the found sigma, `bins <- ceil(range / (sigma*/8))`, capped at
+    `min(n, 2**20)`, then exact — reaching the right resolution in one step
+    instead of guessing 8x. Measured on this host: the `_GRID_CONFIGS` portfolios
+    at `n=10^4` — fixed points differ from the exact path by 0.0 / 4.3e-4 / 0.0;
+    cost 4-7ms vs 1.3-1.6s exact; against a dense (sigma*/16-spaced trapezoid)
+    reference the lattice integrator is strictly more accurate than the old
+    257-point grid (2.2e-6/2.3e-5/4.1e-6 vs 1.3e-5/6.9e-4/1.9e-5); the aliasing
+    reproduction above measured 6.1s -> ~7ms at `n=10^4`; `n=10^5`: 19.7s (exact)
+    -> 10.5ms (default), same fixed point as exact. `_smece_at_sigma` and
+    `_smece_fixed_point` (the exact path) are untouched; only the binned branch
+    changed. **Correction to the 0.1.3 changelog:** its `### Performance` note
+    attributed `evaluate`'s dominant cost at `n=10^4`/`n=10^5` to `ece_sweep`
+    (~0.15s/call); the actual dominant cost at those scales was this defect
+    (~6.1s/call, guard-triggered on every `evaluate` call once `n > 8192`) —
+    `ece_sweep` does dominate `evaluate` at larger `n` (e.g. `n=5*10^4`,
+    measured ~537s, see `tests/test_perf_smoke.py`), but not at `n=10^4`/`10^5`
+    pre-fix. Post-fix, `evaluate(n_boot=100)` at `n=10^4` measures ~44s
+    (foreground), now genuinely dominated by `ece_sweep`. *(2026-08-16)*

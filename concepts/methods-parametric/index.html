@@ -1,0 +1,1630 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Universal post-hoc probability calibration for binary classifiers — numpy-only.">
+      
+      
+      
+        <link rel="canonical" href="https://wlazlod.github.io/probcal/concepts/methods-parametric/">
+      
+      
+        <link rel="prev" href="../why-calibration/">
+      
+      
+        <link rel="next" href="../methods-nonparametric/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Parametric methods - probcal</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#parametric-methods" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="probcal" class="md-header__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            probcal
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Parametric methods
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="probcal" class="md-nav__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    probcal
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-it-works/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../why-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parametric methods
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parametric methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#platt-scaling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platt scaling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#temperature-scaling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Temperature scaling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#beta-calibration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Beta calibration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parameter-interpretation-at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameter interpretation at a glance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-worked-reading" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A worked reading
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-within-the-parametric-family" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing within the parametric family
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#separation-steep-maps-and-convergence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Separation, steep maps, and convergence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-probcal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In probcal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-nonparametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nonparametric methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-distribution-free/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distribution-free methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-splitting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data splitting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../offset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Offset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shap-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SHAP and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inverse-maps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auto-selection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automatic selection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../visualization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/pd_calibration_walkthrough/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/calibrators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calibrators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#platt-scaling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platt scaling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#temperature-scaling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Temperature scaling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#beta-calibration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Beta calibration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parameter-interpretation-at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameter interpretation at a glance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-worked-reading" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A worked reading
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-within-the-parametric-family" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing within the parametric family
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#separation-steep-maps-and-convergence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Separation, steep maps, and convergence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-probcal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In probcal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="parametric-methods">Parametric methods<a class="headerlink" href="#parametric-methods" title="Permanent link">&para;</a></h1>
+<p>Parametric calibrators repair miscalibration with a map chosen from a small, named family —
+two or three interpretable parameters fitted by maximum likelihood. On the small calibration
+sets typical of credit risk they are usually the right first choice: few parameters mean low
+variance, the fitted values have direct diagnostic readings, and an auditor can reproduce the
+map from the reported parameters alone. This chapter derives the three families implemented in
+<code>probcal.parametric</code> — Platt scaling, temperature scaling, and beta calibration — and develops
+the interpretation of every parameter.</p>
+<p>Throughout, <span class="arithmatex">\( s \in (0, 1) \)</span> is the raw score being calibrated, <span class="arithmatex">\( z =
+\operatorname{logit}(s) = \ln\frac{s}{1-s} \)</span> its logit, <span class="arithmatex">\( \sigma(t) = 1/(1 + e^{-t}) \)</span> the
+logistic function, and <span class="arithmatex">\( g(s) \)</span> the calibrated probability. Following probcal's input
+convention, calibrators accept probabilities and convert to logits internally; users holding
+raw logits apply the exported <code>expit</code> first.</p>
+<h2 id="platt-scaling">Platt scaling<a class="headerlink" href="#platt-scaling" title="Permanent link">&para;</a></h2>
+<p>Platt (1999) faced scores that were not probabilities at all — support vector machine margins —
+and proposed passing them through a fitted sigmoid. In probcal's formulation the feature is the
+logit of the score, so the map is</p>
+<div class="arithmatex">\[
+g(s) = \sigma\bigl(a z + b\bigr), \qquad z = \operatorname{logit}(s),
+\]</div>
+<p>with slope <span class="arithmatex">\( a \)</span> and intercept <span class="arithmatex">\( b \)</span> fitted by maximum likelihood — an ordinary logistic
+regression of the outcome on a single covariate. <code>PlattCalibrator</code> fits it with the shared IRLS
+core (<code>probcal._math.irls_logistic</code>), whose step-halved Newton iteration decreases the objective
+at every step (see <a href="#separation-steep-maps-and-convergence">Separation, steep maps, and convergence</a>).</p>
+<p><strong>Fitting targets.</strong> Platt's original recipe does not regress on the hard labels
+<span class="arithmatex">\( y \in \{0, 1\} \)</span>. To keep the fitted sigmoid away from degenerate solutions when one class
+is scarce, the positive and negative targets are smoothed to</p>
+<div class="arithmatex">\[
+t_{+} = \frac{N_{+} + 1}{N_{+} + 2}, \qquad t_{-} = \frac{1}{N_{-} + 2},
+\]</div>
+<p>where <span class="arithmatex">\( N_{+} \)</span> and <span class="arithmatex">\( N_{-} \)</span> count positive and negative calibration observations. The
+smoothing has a Bayesian reading — it is the posterior mean of a uniform-prior Bernoulli
+probability within each class — and its practical value on small samples, together with a
+numerically robust fitting procedure, is analyzed by Lin, Lin and Weng (2007), whose treatment
+probcal follows. With a 3% event rate and 500 calibration points, <span class="arithmatex">\( N_{+} \approx 15 \)</span>, and
+the difference between regressing on <span class="arithmatex">\( \{0,1\} \)</span> and on the smoothed targets is material.</p>
+<p><strong>Interpretation.</strong> The slope corrects the spread of the score distribution: <span class="arithmatex">\( a &lt; 1 \)</span>
+shrinks over-dispersed, overconfident scores toward the base rate, while <span class="arithmatex">\( a &gt; 1 \)</span> sharpens
+underconfident ones. The intercept moves every prediction by <span class="arithmatex">\( b \)</span> log-odds units — it is
+calibration-in-the-large repair, the same role the standalone <a href="../offset/">offset</a> plays. The
+identity map corresponds exactly to <span class="arithmatex">\( (a, b) = (1, 0) \)</span>, so departures of the fitted pair
+from <span class="arithmatex">\( (1, 0) \)</span> <em>are</em> the diagnosis: probcal's <code>interpret()</code> states it in these terms, and
+the calibration slope and intercept metrics of <code>probcal.metrics.regression</code> are the same two
+quantities estimated as diagnostics rather than repairs.</p>
+<p><strong>A caveat on families.</strong> Fitted on logits, as here, the logistic family contains the identity
+<span class="arithmatex">\( (a, b) = (1, 0) \)</span>: if the input is already calibrated, maximum likelihood can leave it
+alone. Fitted on raw scores <span class="arithmatex">\( s \)</span> directly — Platt's original setting, where <span class="arithmatex">\( g(s) =
+\sigma(As + B) \)</span> — the family contains <em>no</em> identity on <span class="arithmatex">\( (0,1) \)</span>, so the calibrator
+distorts even perfectly calibrated inputs. This distinction, emphasized by Kull, Silva Filho
+and Flach (2017), is the design reason probcal fits on the logit scale and one of the two
+motivations for beta calibration below.</p>
+<h2 id="temperature-scaling">Temperature scaling<a class="headerlink" href="#temperature-scaling" title="Permanent link">&para;</a></h2>
+<p>Temperature scaling (Guo et al., 2017) is Platt scaling with the intercept removed and the
+slope reparameterized:</p>
+<div class="arithmatex">\[
+g(s) = \sigma\!\left(\frac{z}{T}\right), \qquad T &gt; 0 .
+\]</div>
+<p>The single parameter <span class="arithmatex">\( T \)</span> is fitted by minimizing the negative log-likelihood on the
+calibration set. The objective is smooth and, on the reparameterization <span class="arithmatex">\( u = 1/T \)</span>, convex
+— <code>TemperatureCalibrator</code> solves it with a guarded one-dimensional Newton iteration
+(<code>probcal._math.newton_1d</code>) and falls back to bisection when the Newton step leaves the
+bracket.</p>
+<p><strong>Interpretation.</strong> <span class="arithmatex">\( T &gt; 1 \)</span> divides every logit by more than one, pulling probabilities
+toward <span class="arithmatex">\( 1/2 \)</span>: the model was overconfident and is being softened. <span class="arithmatex">\( T &lt; 1 \)</span> sharpens an
+underconfident model. <span class="arithmatex">\( T = 1 \)</span> is the identity. Because there is no intercept, temperature
+scaling <em>cannot move the base rate</em>: the score <span class="arithmatex">\( s = 1/2 \)</span> maps to <span class="arithmatex">\( 1/2 \)</span> for every
+<span class="arithmatex">\( T \)</span>, and more generally the map is symmetric about the logit origin. A model whose only
+defect is a portfolio-level bias — the common credit-risk situation after a shift in central
+tendency — is beyond temperature's reach; use Platt scaling or the <a href="../offset/">offset</a> for
+that. Guo et al. (2017) found this one-parameter family remarkably effective for modern neural
+networks, whose miscalibration is often close to a pure confidence rescaling; on structured
+tabular scores with asymmetric distortion, expect the richer families below to win.</p>
+<p><strong>Degrees of freedom.</strong> Platt has two parameters, temperature one. Under the nested-validation
+<a href="../auto-selection/">selector</a> ties on the scoring criterion break toward fewer parameters, so
+temperature is preferred exactly when the data cannot distinguish the two — the parsimony
+principle applied to calibration.</p>
+<h2 id="beta-calibration">Beta calibration<a class="headerlink" href="#beta-calibration" title="Permanent link">&para;</a></h2>
+<p>Beta calibration (Kull, Silva Filho and Flach, 2017) starts from a generative question: if the
+score distributions within each class are Beta distributions — the natural family for
+quantities living on <span class="arithmatex">\( (0,1) \)</span> — what does the true calibration map look like? Let</p>
+<div class="arithmatex">\[
+s \mid Y = 1 \sim \mathrm{Beta}(\alpha_1, \beta_1),
+\qquad
+s \mid Y = 0 \sim \mathrm{Beta}(\alpha_0, \beta_0),
+\]</div>
+<p>with class prior <span class="arithmatex">\( \pi = \Pr(Y = 1) \)</span>. Bayes' rule gives
+<span class="arithmatex">\( \operatorname{logit} \Pr(Y = 1 \mid s) = \ln \frac{f_1(s)}{f_0(s)} +
+\operatorname{logit}\pi \)</span>, and taking the log-ratio of the two Beta densities,</p>
+<div class="arithmatex">\[
+\ln \frac{f_1(s)}{f_0(s)}
+= (\alpha_1 - \alpha_0) \ln s \;-\; (\beta_0 - \beta_1) \ln(1 - s) \;+\; \text{const}.
+\]</div>
+<p>Writing <span class="arithmatex">\( a = \alpha_1 - \alpha_0 \)</span>, <span class="arithmatex">\( b = \beta_0 - \beta_1 \)</span>, and absorbing the constants
+and the prior into <span class="arithmatex">\( c \)</span>, the calibration map is</p>
+<div class="arithmatex">\[
+\operatorname{logit} g(s) = a \ln s \;-\; b \ln(1 - s) \;+\; c ,
+\]</div>
+<p>a logistic regression on the two features <span class="arithmatex">\( \ln s \)</span> and <span class="arithmatex">\( -\ln(1-s) \)</span>. This is the "abm"
+variant of <code>BetaCalibrator</code> — the full three-parameter family. The constrained variants tie or
+drop parameters: <code>"ab"</code> imposes <span class="arithmatex">\( a = b \)</span>, which collapses the two features into
+<span class="arithmatex">\( a \,\operatorname{logit}(s) + c \)</span> — exactly Platt scaling on logits — and <code>"a"</code> retains a
+single free exponent (the exact tying is fixed, with a DECISIONS entry, when the calibrator is
+implemented). Temperature scaling is the further
+special case <span class="arithmatex">\( a = b = 1/T \)</span>, <span class="arithmatex">\( c = 0 \)</span>. The parametric families of this chapter thus form
+a nested hierarchy, which is what makes parsimony tie-breaking in the selector coherent.</p>
+<p><strong>The identity property.</strong> Setting <span class="arithmatex">\( (a, b, c) = (1, 1, 0) \)</span> gives
+<span class="arithmatex">\( \operatorname{logit} g(s) = \ln s - \ln(1-s) = \operatorname{logit}(s) \)</span>: the identity map
+is an interior point of the beta family. Kull, Silva Filho and Flach (2017) stress the
+consequence: beta calibration <em>cannot un-calibrate an already calibrated model</em> beyond
+sampling noise, because maximum likelihood at the identity has no gradient pushing away from
+it. The same authors' journal-length treatment (Kull et al., <em>Electronic Journal of
+Statistics</em>, 2017) develops the full theory, and the multiclass generalization appears as
+Dirichlet calibration (Kull et al., 2019) — out of probcal's binary scope but the natural
+pointer for multiclass readers.</p>
+<p><strong>Monotonicity constraint.</strong> The map is non-decreasing in <span class="arithmatex">\( s \)</span> iff <span class="arithmatex">\( a \ge 0 \)</span> and
+<span class="arithmatex">\( b \ge 0 \)</span>. Unconstrained maximum likelihood can violate this on noisy or tiny calibration
+sets, producing a map that <em>reverses</em> ranking somewhere — unacceptable when downstream
+decisions assume order preservation. probcal enforces the constraint by the refit strategy of
+the reference betacal implementation: if the unconstrained fit yields <span class="arithmatex">\( a &lt; 0 \)</span>, the
+<span class="arithmatex">\( \ln s \)</span> feature is dropped (fixing <span class="arithmatex">\( a = 0 \)</span>) and the model refitted; symmetrically for
+<span class="arithmatex">\( b &lt; 0 \)</span>. The fitted object records which constraint was active, <code>interpret()</code> reports it,
+and the behavior is logged as a DECISIONS entry.</p>
+<p><strong>Interpretation.</strong> The exponents control tail sensitivity independently — the asymmetry that
+Platt and temperature cannot express. Near <span class="arithmatex">\( s \to 0 \)</span> the map behaves like
+<span class="arithmatex">\( g(s) \propto s^{a} \)</span>, so <span class="arithmatex">\( a \)</span> governs the low-probability tail: for a PD model,
+<span class="arithmatex">\( a &lt; 1 \)</span> flattens and raises the smallest PDs (the model was too eager to assign near-zero
+risk), <span class="arithmatex">\( a &gt; 1 \)</span> deepens them. Near <span class="arithmatex">\( s \to 1 \)</span> the mirrored role belongs to <span class="arithmatex">\( b \)</span>. The
+intercept <span class="arithmatex">\( c \)</span> shifts all predictions in log-odds, as in Platt. A fit with
+<span class="arithmatex">\( a \approx b \)</span> says the distortion was symmetric and the extra parameter was not needed;
+<span class="arithmatex">\( a \neq b \)</span> quantifies exactly the kind of one-sided tail distortion that low-event-rate
+portfolios exhibit.</p>
+<h2 id="parameter-interpretation-at-a-glance">Parameter interpretation at a glance<a class="headerlink" href="#parameter-interpretation-at-a-glance" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Calibrator</th>
+<th>Parameters</th>
+<th>Identity at</th>
+<th>Reading of departures from identity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PlattCalibrator</code></td>
+<td><span class="arithmatex">\( a, b \)</span></td>
+<td><span class="arithmatex">\( (1, 0) \)</span></td>
+<td><span class="arithmatex">\( a \lessgtr 1 \)</span>: over/underconfident spread; <span class="arithmatex">\( b \neq 0 \)</span>: base-rate shift in log-odds</td>
+</tr>
+<tr>
+<td><code>TemperatureCalibrator</code></td>
+<td><span class="arithmatex">\( T \)</span></td>
+<td><span class="arithmatex">\( T = 1 \)</span></td>
+<td><span class="arithmatex">\( T &gt; 1 \)</span>: overconfident (soften); <span class="arithmatex">\( T &lt; 1 \)</span>: underconfident (sharpen); base rate untouchable</td>
+</tr>
+<tr>
+<td><code>BetaCalibrator</code></td>
+<td><span class="arithmatex">\( a, b, c \)</span></td>
+<td><span class="arithmatex">\( (1, 1, 0) \)</span></td>
+<td><span class="arithmatex">\( a \)</span>: low-<span class="arithmatex">\(s\)</span> tail sensitivity; <span class="arithmatex">\( b \)</span>: high-<span class="arithmatex">\(s\)</span> tail sensitivity; <span class="arithmatex">\( c \)</span>: base-rate shift; <span class="arithmatex">\( a \neq b \)</span>: asymmetric distortion</td>
+</tr>
+</tbody>
+</table>
+<p>Every fitted calibrator returns this reading through <code>interpret()</code>, populated with the actual
+fitted values — the table is the contract for what those interpretations must say.</p>
+<h2 id="a-worked-reading">A worked reading<a class="headerlink" href="#a-worked-reading" title="Permanent link">&para;</a></h2>
+<p>Numbers make the interpretation contract concrete. Suppose a PD model scores a calibration set
+with a realized default rate of 3.1%, and the fitted calibrators come back as follows.</p>
+<p><code>BetaCalibrator(variant="abm")</code> reports <span class="arithmatex">\( (a, b, c) = (0.82,\; 1.31,\; -0.42) \)</span>. Reading each
+parameter: <span class="arithmatex">\( a = 0.82 &lt; 1 \)</span> means that near the low-score tail the map behaves like
+<span class="arithmatex">\( s^{0.82} \)</span>, which decays more slowly than <span class="arithmatex">\( s \)</span> itself — the smallest raw PDs are pulled
+<em>up</em>. The model was too confident about its safest accounts, a familiar pattern when the
+development sample under-represents rare defaults among high-quality obligors. <span class="arithmatex">\( b = 1.31 &gt; 1 \)</span>
+sharpens the approach to the high-risk end: raw scores near the top understated risk.
+<span class="arithmatex">\( c = -0.42 \)</span> multiplies every odds by <span class="arithmatex">\( e^{-0.42} \approx 0.66 \)</span>, correcting a
+portfolio-level overestimation of about a third in odds terms. The asymmetry <span class="arithmatex">\( a \neq b \)</span> is
+the substantive finding — the distortion is different in the two tails, so no symmetric family
+could have repaired it fully.</p>
+<p>On the same data <code>PlattCalibrator</code> reports <span class="arithmatex">\( (a, b) = (1.05, -0.38) \)</span>. It captures nearly the
+same base-rate correction (the intercept), sees an almost-correct spread on average
+(<span class="arithmatex">\( a \approx 1 \)</span>), and is structurally blind to the tail asymmetry: the single slope averages
+the too-flat low tail against the too-steep high tail. If out-of-fold log loss barely
+distinguishes the two fits, the asymmetry was not estimable from this sample and parsimony
+favors Platt; if beta wins clearly, the tails carried real signal. This is precisely the
+comparison the <a href="../auto-selection/">selector</a> automates, and the reason its report shows the
+per-candidate scores rather than a bare winner.</p>
+<p><code>TemperatureCalibrator</code> on the same data is the wrong tool: whatever <span class="arithmatex">\( T \)</span> it fits, it cannot
+express the <span class="arithmatex">\( -0.42 \)</span> base-rate correction, and its fitted value will contort to compromise
+between the spread and the shift. A fitted <span class="arithmatex">\( T \)</span> far from 1 accompanied by a failing
+calibration-in-the-large guardrail (see <a href="../metrics/">Metrics and tests</a>) is the telltale of
+this misuse.</p>
+<h2 id="choosing-within-the-parametric-family">Choosing within the parametric family<a class="headerlink" href="#choosing-within-the-parametric-family" title="Permanent link">&para;</a></h2>
+<p>The nesting temperature ⊂ Platt ⊂ beta orders the families by flexibility, and the choice is a
+bias–variance decision made honestly by out-of-fold log loss in the
+<a href="../auto-selection/">selector</a>. Two rules of thumb survive contact with practice. First, if the
+diagnosed defect is purely a base-rate shift, none of these families is the parsimonious
+answer — a one-parameter <a href="../offset/">logit offset</a> fixes calibration-in-the-large without
+touching spread, and it composes transparently with any calibrator. Second, when the reliability
+diagram on the <em>logit scale</em> (see <a href="../visualization/">Visualization</a>) shows curvature — not just
+a wrong slope — the distortion is outside every family in this chapter, and the nonparametric
+methods of the <a href="../methods-nonparametric/">next chapter</a> apply.</p>
+<h2 id="separation-steep-maps-and-convergence">Separation, steep maps, and convergence<a class="headerlink" href="#separation-steep-maps-and-convergence" title="Permanent link">&para;</a></h2>
+<p>Logistic regression fitted by maximum likelihood has one genuine failure mode: <strong>separation</strong>.
+When binary outcomes are perfectly split by the covariate, the likelihood keeps improving as the
+slope grows without bound — no finite MLE exists. probcal's IRLS core detects this only where it
+can actually occur: when the targets are effectively binary, it declares separation once every
+observation sits on the correct side by more than 10 log-odds while the gradient shows the fit
+still improving, when the Hessian degenerates outright, or when the iteration exhausts its
+budget without converging (the divergence signature of quasi-separation, where tied boundary
+points keep the margin small) — then warns and refits with a tiny ridge penalty
+(<span class="arithmatex">\( 10^{-6} \)</span>). The ridged objective always has a finite minimizer, so the fallback converges
+by construction and its coefficients are finite.</p>
+<p><strong>Platt cannot separate.</strong> The Lin–Lin–Weng smoothed targets are strictly inside <span class="arithmatex">\( (0, 1) \)</span>,
+which makes the cross-entropy objective coercive — a finite maximum-likelihood solution always
+exists, however extreme the scores. A "separation" diagnostic for Platt would be a category
+error, and probcal never raises one there. The same applies to any call with soft targets;
+genuine separation is possible only for binary-target fits (the beta variants and the
+calibration belt).</p>
+<p>This matters because a legitimately <em>steep</em> calibration map is easy to mistake for separation.
+Scores are clipped to <span class="arithmatex">\( [10^{-12}, 1 - 10^{-12}] \)</span>, so <span class="arithmatex">\( |\operatorname{logit}(s)| \le 27.6 \)</span>;
+any true slope above about 1.1 pushes fitted log-odds past 30 at the extremes. Versions before
+0.1.2 aborted the iteration at that point and returned a biased interior iterate: on wide-score
+data with a true slope of 1.5, Platt reported <span class="arithmatex">\( a \approx 1.18 \)</span> alongside a misleading
+separation warning. The current core instead halves each Newton step until the objective
+decreases, so steep maps are simply fitted.</p>
+<p>What to check after fitting: <code>converged_</code> on <code>PlattCalibrator</code> and <code>BetaCalibrator</code> records
+whether IRLS converged (an unconverged fit warns at fit time and is noted by <code>interpret()</code>), and
+<code>separation_fallback_</code> on <code>BetaCalibrator</code> records that the ridge fallback produced the
+coefficients — <code>interpret()</code> states both, so the audit trail is complete.</p>
+<h2 id="in-probcal">In probcal<a class="headerlink" href="#in-probcal" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">probcal</span><span class="w"> </span><span class="kn">import</span> <span class="n">BetaCalibrator</span><span class="p">,</span> <span class="n">PlattCalibrator</span><span class="p">,</span> <span class="n">TemperatureCalibrator</span>
+
+<span class="n">platt</span> <span class="o">=</span> <span class="n">PlattCalibrator</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">s_cal</span><span class="p">,</span> <span class="n">y_cal</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">platt</span><span class="o">.</span><span class="n">a_</span><span class="p">,</span> <span class="n">platt</span><span class="o">.</span><span class="n">b_</span><span class="p">)</span>                  <span class="c1"># identity is (1, 0)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">platt</span><span class="o">.</span><span class="n">converged_</span><span class="p">)</span>                    <span class="c1"># IRLS convergence status</span>
+
+<span class="n">temp</span> <span class="o">=</span> <span class="n">TemperatureCalibrator</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">s_cal</span><span class="p">,</span> <span class="n">y_cal</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">temp</span><span class="o">.</span><span class="n">T_</span><span class="p">)</span>                             <span class="c1"># identity is 1; cannot move the base rate</span>
+
+<span class="n">beta</span> <span class="o">=</span> <span class="n">BetaCalibrator</span><span class="p">(</span><span class="n">variant</span><span class="o">=</span><span class="s2">"abm"</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">s_cal</span><span class="p">,</span> <span class="n">y_cal</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">beta</span><span class="o">.</span><span class="n">interpret</span><span class="p">())</span>                    <span class="c1"># a, b, c against the identity (1, 1, 0)</span>
+
+<span class="n">p</span> <span class="o">=</span> <span class="n">beta</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">s_new</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">platt</span><span class="o">.</span><span class="n">affine_logit_coeffs_</span><span class="p">)</span>          <span class="c1"># (a, b) — the affine-exact attribution hook</span>
+</code></pre></div>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Guo, C., Pleiss, G., Sun, Y., Weinberger, K. Q. (2017). "On Calibration of Modern Neural Networks." ICML, PMLR 70, 1321–1330.</li>
+<li>Kull, M., Silva Filho, T., Flach, P. (2017). "Beta calibration: a well-founded and easily implemented improvement on logistic calibration for binary classifiers." AISTATS, PMLR 54, 623–631.</li>
+<li>Kull, M., Silva Filho, T., Flach, P. (2017). "Beyond sigmoids: How to obtain well-calibrated probabilities from binary classifiers with beta calibration." <em>Electronic Journal of Statistics</em> 11(2), 5052–5080.</li>
+<li>Kull, M., Perello-Nieto, M., Kängsepp, M., Silva Filho, T., Song, H., Flach, P. (2019). "Beyond temperature scaling: Obtaining well-calibrated multi-class probabilities with Dirichlet calibration." NeurIPS 32.</li>
+<li>Lin, H.-T., Lin, C.-J., Weng, R. C. (2007). "A Note on Platt's Probabilistic Outputs for Support Vector Machines." <em>Machine Learning</em> 68(3), 267–276.</li>
+<li>Platt, J. C. (1999). "Probabilistic Outputs for Support Vector Machines and Comparisons to Regularized Likelihood Methods." In <em>Advances in Large Margin Classifiers</em>, MIT Press, 61–74.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.top", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

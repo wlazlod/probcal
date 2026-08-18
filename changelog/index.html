@@ -1,0 +1,1655 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Universal post-hoc probability calibration for binary classifiers — numpy-only.">
+      
+      
+      
+        <link rel="canonical" href="https://wlazlod.github.io/probcal/changelog/">
+      
+      
+        <link rel="prev" href="../faq/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Changelog - probcal</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="probcal" class="md-header__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            probcal
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Changelog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="probcal" class="md-nav__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    probcal
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../how-it-works/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/why-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/methods-parametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parametric methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/methods-nonparametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nonparametric methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/methods-distribution-free/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distribution-free methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/data-splitting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data splitting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/offset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Offset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/shap-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SHAP and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/inverse-maps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/auto-selection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automatic selection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/visualization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/pd_calibration_walkthrough/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/calibrators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calibrators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#013-2026-08-16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.3 - 2026-08-16
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.3 - 2026-08-16">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#012-2026-08-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.2 - 2026-08-12
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.2 - 2026-08-12">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#011-2026-08-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.1 - 2026-08-08
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.1 - 2026-08-08">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#010-2026-08-07" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.0 - 2026-08-07
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.0 - 2026-08-07">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#013-2026-08-16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.3 - 2026-08-16
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.3 - 2026-08-16">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#012-2026-08-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.2 - 2026-08-12
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.2 - 2026-08-12">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#011-2026-08-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.1 - 2026-08-08
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.1 - 2026-08-08">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#010-2026-08-07" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.0 - 2026-08-07
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.0 - 2026-08-07">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<p>All notable changes to this project will be documented in this file.</p>
+<p>Format: <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>; versioning: <a href="https://semver.org/spec/v2.0.0.html">SemVer</a>.</p>
+<h2 id="unreleased"><a href="https://github.com/wlazlod/probcal/compare/v0.1.3...HEAD">Unreleased</a><a class="headerlink" href="#unreleased" title="Permanent link">&para;</a></h2>
+<h2 id="013-2026-08-16"><a href="https://github.com/wlazlod/probcal/compare/v0.1.2...v0.1.3">0.1.3</a> - 2026-08-16<a class="headerlink" href="#013-2026-08-16" title="Permanent link">&para;</a></h2>
+<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<ul>
+<li>ENIR (<code>ENIRCalibrator</code>) could exhaust memory well before m=50,000 because <code>path_solutions_</code> retained every breakpoint's full-length solution (<code>O(m^2)</code> memory); the path solver now retains only the lowest-BIC <code>max_solutions</code> (default 256) breakpoints, bounding memory at any m (DECISIONS 61); a pruning bound that skips provably negligible breakpoints previously crashed on sub-unit total <code>sample_weight</code> (<code>log(total weight) &lt;= 0</code>) — the bound is now disabled in that case instead of raising, regression-tested against a sum-to-1.0 and a sum-below-1.0 case</li>
+<li><code>sample_weight</code> was accepted but silently had no effect on <code>e50</code>/<code>e90</code> and on <code>reliability_summary</code>'s internal <code>e90</code> call — both now honor weights via the new Hazen-position <code>weighted_quantile</code> (DECISIONS 64)</li>
+<li><code>evaluate</code>'s bootstrap silently substituted the point estimate for degenerate single-class i.i.d. resamples, artificially narrowing the reported CI; a degenerate draw is now redrawn (up to 100 times, then <code>RuntimeError</code>) instead of faked (DECISIONS 63)</li>
+<li><code>CalibratorSelector</code>'s name-keyed parsimony table ranked every user-supplied candidate last on a tie regardless of actual complexity; parsimony now reads <code>complexity_rank</code> off the candidate instance, so a user override can win a tie against a built-in method (DECISIONS 65)</li>
+<li><code>smooth_ece</code>'s binned path (default <code>bins=8192</code>) evaluated the smoothed measure on the exact path's 257-point grid, which aliases against the bin lattice: at small bandwidths the probe landed almost entirely between grid nodes, reporting ~1.7e-7 mass against a true total variation of 0.0749 (<code>n=10⁴</code>) — a spurious near-zero reading that always tripped the small-bandwidth guard and fell back to the exact O(n)-per-step computation, so <strong>every reported value stayed correct</strong>, but at a cost of ~5.7-6.1s/call regardless of <code>n</code>, roughly 3-6x slower than <code>bins=None</code> for <code>8192 &lt; n ≲ 6×10⁴</code>. The binned path now evaluates the measure natively on its own lattice by direct Gaussian convolution (closed-form total variation when the kernel is isolated, which also makes the early-exit test non-spurious by construction) with one adaptively sized refinement instead of a blind 8x retry; measured <code>n=10⁴</code>: ~5.7s → ~3ms; <code>n=10⁵</code>: 19.7s (exact) → ~10ms (default), same fixed point as exact (DECISIONS 66)</li>
+</ul>
+<h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>ici</code>/<code>e50</code>/<code>e90</code>/<code>emax</code> and <code>reliability_summary</code> fit their LOESS smoother at 512 equal-mass anchors by default instead of at every observation (<code>loess</code>'s new <code>grid_size</code> argument, interpolated between anchors, precedent R <code>stats::lowess</code>'s <code>delta</code>); measured <code>|Δici| ≈ 1.3e-6</code> on <code>make_pd_portfolio(n=5000)</code>, far below bootstrap CI width; the underlying <code>_loess_fit_sorted</code> core was rewritten from an <code>argpartition</code> r-nearest-neighbor search to a sorted two-pointer window walk, differing from the old core only at exact distance ties (leftmost minimal-width window) (DECISIONS 58)</li>
+<li><code>smooth_ece</code> smooths a pre-binned (default <code>bins=8192</code> equal-width logit bins) residual measure instead of the raw per-observation one, cutting each bisection step from 257 x n to a lattice-native evaluation independent of n, with a small-bandwidth guard (<code>sigma* &lt; 8 * bin_width</code> triggers one adaptively sized refinement, <code>bins &lt;- ceil(range / (sigma*/8))</code>, then a silent exact fallback if the guard still trips) (DECISIONS 59, refined by 66)</li>
+<li><code>ENIRCalibrator.path_solutions_</code> is now shaped <code>(K, m)</code> over <code>kept_breakpoints_</code> rather than every breakpoint; <code>path_lambdas_</code> still records every breakpoint (pre-1.0 attribute-shape change; DECISIONS 61)</li>
+<li><code>evaluate</code>'s bootstrap resamples negative and positive classes separately by default (<code>stratify=True</code>), conditioning the CI on the observed class balance instead of also capturing base-rate sampling variability; <code>stratify=False</code> restores i.i.d. resampling (DECISIONS 63)</li>
+<li><code>VennAbersCalibrator</code> predicts from precomputed <code>F0_</code>/<code>F1_</code> cumulative-sum-diagram sweeps fit once in <code>fit()</code> instead of refitting two PAVA passes per query (DECISIONS 62, amending entry 30)</li>
+</ul>
+<h3 id="added">Added<a class="headerlink" href="#added" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>grid_size=</code> on <code>loess</code>/<code>ici</code>/<code>e50</code>/<code>e90</code>/<code>emax</code>/<code>reliability_summary</code> and <code>bins=</code> on <code>smooth_ece</code>, both defaulting to the new fast paths; <code>grid_size=None</code>/<code>bins=None</code> recover the exact pre-0.1.3 values and cost bit-for-bit</li>
+<li><code>evaluate</code> keyword-only <code>metrics=</code> subset of the catalog — computes and bootstraps only the requested metrics instead of the full catalog, with unknown names raising <code>ValueError</code> (DECISIONS 60)</li>
+<li><code>docs/scripts/benchmarks.py</code>: deterministic wall-time benchmarks for <code>ici</code>, <code>smooth_ece</code>, and <code>evaluate</code> at several portfolio sizes; <code>tests/test_perf_smoke.py</code>: <code>slow</code>-marked regression ceilings for the grid-anchored LOESS and binned smECE fast paths</li>
+<li><code>ENIRCalibrator(max_solutions=)</code> (default 256) bounding retained path solutions, plus <code>dropped_weight_</code> (retention loss, pruned breakpoints excluded) and <code>kept_breakpoints_</code></li>
+<li><code>VennAbersCalibrator</code> fitted attributes <code>F0_</code>/<code>F1_</code></li>
+<li><code>evaluate(stratify=)</code> keyword (default <code>True</code>)</li>
+<li><code>probcal._math.weighted_quantile</code> (Hazen positions)</li>
+<li><code>BaseCalibrator.complexity_rank</code> property (default 100.0), overridden by every built-in calibrator</li>
+<li>ENIR/IVAP/selector rows and matching <code>slow</code>-marked ceilings added to the same benchmark and perf-smoke suites</li>
+<li><code>point_inverse(p, *, space)</code>: an exact single-point preimage (calibrated probability -&gt; raw score/logit) alongside <code>interval_inverse</code>'s generalized-inverse interval. On <code>BaseCalibrator</code>, covers any affine-logit map (<code>PlattCalibrator</code>, <code>TemperatureCalibrator</code>, <code>BetaCalibrator</code>'s tied <code>"a"</code>/<code>"ab"</code> variants) in closed form; <code>BetaCalibrator</code> overrides it for all three variants, including the non-affine <code>"abm"</code> map, via a minimax-hyperbola seed refined by up to 4 certified Halley steps (DECISIONS 67); <code>LogitOffset</code> gets the same closed form as its <code>interval_inverse</code>. Non-affine monotone and step calibrators still raise <code>NotImplementedError</code> naming <code>interval_inverse</code></li>
+</ul>
+<h3 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>ici</code> at n=50,000: 192.2s (v0.1.2) to 1.2s, single-core, measured on the benchmark host</li>
+<li><code>loess(grid_size=512)</code> fits n=1,000,000 points in under 30s</li>
+<li>ENIR fit at m=10,000: 68.6s / 783MB (v0.1.2) to 1.6s / 40.8MB tracemalloc peak, memory now bounded at any m; IVAP fit at n=100,000: 0.91s (v0.1.2 needed 188s for a fit of only 2,000 plus a predict of 10,000), <code>predict_interval</code> at m=100,000: 0.016s; <code>CalibratorSelector()</code>'s default menu: 34.5s at n=4,000 (v0.1.2) to 7.9s at n=100,000</li>
+<li><code>evaluate</code>'s full-catalog cost at n=10⁴ was previously misattributed here to <code>ece_sweep</code> (~0.15s/call); the actual dominant cost pre-fix was the <code>smooth_ece</code> binned-path aliasing defect above (~5.7-6.1s/call, guard-triggered on every call once <code>n &gt; 8192</code>). Post-fix, <code>smooth_ece</code>'s per-call cost is negligible (a few ms up to n=10⁵); measured single-call costs at n=10⁴ / n=5×10⁴: <code>ici</code> 0.24s / 1.09s, <code>ece_sweep</code> 0.12s / 0.49s — <code>ici</code>, not <code>ece_sweep</code>, is now the largest single per-call contributor to the full-catalog cost, though neither dominates outright (together with the rest of the catalog they roughly account for the measured totals). Corrected wall times: <code>evaluate(n_boot=100)</code> at n=10⁴ measures ~44s, <code>evaluate(n_boot=50)</code> at n=5×10⁴ measures ~88s, both post-fix, driven by the catalog's ordinary O(n)-ish metrics, not by this defect; <code>metrics=</code> subsetting (e.g. <code>metrics=("ici", "log_loss")</code>) is the lever for either (DECISIONS 66)</li>
+</ul>
+<h2 id="012-2026-08-12"><a href="https://github.com/wlazlod/probcal/compare/v0.1.1...v0.1.2">0.1.2</a> - 2026-08-12<a class="headerlink" href="#012-2026-08-12" title="Permanent link">&para;</a></h2>
+<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>irls_logistic</code> no longer aborts at <code>max|eta| &gt; 30</code> — a false "separation" that biased Platt/beta fits on wide-score data (z ~ N(0, 8) with true slope 1.5: v0.1.1 returned a ≈ 1.18 plus a spurious separation warning); Newton now step-halves on an overflow-safe softplus objective, separation is detected only for effectively binary targets (all-correct-by-10-log-odds by the design's own contribution <code>eta - offset</code> with non-vanishing gradient, singular Hessian, or unconverged divergence — the quasi-separation signature), and the ridge-1e-6 fallback converges instead of hitting the same abort (DECISIONS 57); note <code>calibration_belt</code> may now select higher polynomial degrees on wide-score data where the old cap silently truncated the forward search</li>
+<li><code>PlattCalibrator</code> and <code>BetaCalibrator</code> no longer swallow IRLS convergence status: an unconverged fit raises a distinct <code>UserWarning</code> (never the separation message) and is recorded by <code>interpret()</code>; <code>calibration_belt</code> stops forward degree extension at a separated fit instead of consuming its ridge-fallback coefficients</li>
+</ul>
+<h3 id="added_1">Added<a class="headerlink" href="#added_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>IrlsResult.nll</code> — final penalized objective value (backward-compatible field append)</li>
+<li><code>converged_</code> on <code>PlattCalibrator</code>/<code>BetaCalibrator</code> and <code>separation_fallback_</code> on <code>BetaCalibrator</code>, with matching <code>interpret()</code> audit lines; docs section "Separation, steep maps, and convergence" in the parametric-methods chapter</li>
+</ul>
+<h2 id="011-2026-08-08"><a href="https://github.com/wlazlod/probcal/compare/v0.1.0...v0.1.1">0.1.1</a> - 2026-08-08<a class="headerlink" href="#011-2026-08-08" title="Permanent link">&para;</a></h2>
+<h3 id="added_2">Added<a class="headerlink" href="#added_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>probcal.metrics.kernel</code>: squared kernel calibration error <code>skce</code> (estimators <code>uq</code>/<code>ul</code>/<code>biased</code>, Laplacian/Gaussian kernels, deterministic median-heuristic bandwidth with strided-subsample and tie fallbacks, probability/logit kernel scale, seeded <code>ul</code> pairing) and <code>skce_test</code> (Arcones–Giné centered bootstrap per the paper's Appendix G and the O(n) asymptotic-normal linear method, one-sided, with the distribution-free <code>p_value_bound</code>), after Widmann et al. (2019); report-only — deliberately excluded from <code>evaluate()</code> and the selector (DECISIONS 53); 21 tests incl. hand-computed anchors, brute-force references, bootstrap-identity check, and level/power studies</li>
+<li>Documentation: SKCE section and selection-table row in the metrics chapter, <code>probcal.metrics.kernel</code> API page, namesake-disambiguation FAQ entry (the unaffiliated R package <code>probcal</code> and the ECAI 2025 research codebase), and a README feature-matrix column for the R package</li>
+<li>Tooling: mypy targets Python 3.12 in config and CI (numpy ≥ 2 stubs use PEP 695 <code>type</code> statements that mypy only parses for target ≥ 3.12; DECISIONS 54); runtime 3.11 support unchanged</li>
+<li>Visualization: annotated <code>plot_reliability</code> (stats box via the new <code>probcal.metrics.reliability_summary</code> aggregate, deterministic event/non-event rug thinned to ≤ 1000 marks per class), <code>plot_ecce</code> cumulative-drift walks with the pointwise ±2 SD envelope (on the new <code>probcal.curves.ecce_curve</code>, whose <code>stat_max</code> agrees exactly with <code>metrics.ecce</code>), <code>plot_grade_backtest</code> traffic-light chart with 90% display intervals (new <code>ci_low</code>/<code>ci_high</code> fields on both grade results, Jeffreys central / Clopper–Pearson, powered by the new numpy-only <code>probcal._math.beta_ppf</code>), and <code>plot_offset_audit</code> for fitted <code>LogitOffset</code> stages; seeded <code>docs/scripts/generate_figures.py</code> regenerates every documentation figure deterministically; DECISIONS 55; 16 tests incl. hand anchors, a scipy <code>beta.ppf</code> reference, and rug/annotation determinism checks</li>
+</ul>
+<h3 id="changed_1">Changed<a class="headerlink" href="#changed_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>All plots now style themselves via a per-call <code>rc_context</code> house style (muted palette, no top/right spines, light grid) — global matplotlib <code>rcParams</code> are never touched, verified by test</li>
+<li><code>plot_reliability</code>: the twin-axis count-bar margin is now opt-in (<code>counts=False</code> default) — the rug replaces it as the density view</li>
+<li>All documentation figures regenerated under the house style by the new figure script (the logit-scale reliability figure is now the annotated variant)</li>
+</ul>
+<h2 id="010-2026-08-07"><a href="https://github.com/wlazlod/probcal/releases/tag/v0.1.0">0.1.0</a> - 2026-08-07<a class="headerlink" href="#010-2026-08-07" title="Permanent link">&para;</a></h2>
+<p>First public release on PyPI.</p>
+<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>reliability_binned</code>: Wilson interval bounds are now forced to contain the point estimate (floating-point noise at zero-event bins could push <code>ci_low</code> above a 0.0 event rate, breaking error-bar rendering)</li>
+<li><code>plot_reliability(scale="logit")</code>: bins with an event rate of exactly 0 or 1 (no finite logit) are omitted from the point layer instead of rendering at the clipping floor and crushing the axis; they remain visible in the count margin</li>
+</ul>
+<h3 id="added_3">Added<a class="headerlink" href="#added_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Packaging and CI: PEP 639 license metadata (SPDX <code>license = "MIT"</code> plus <code>license-files</code>, replacing the deprecated table form), Python 3.13 classifier, <code>Development Status :: 4 - Beta</code>, a tag-vs-version consistency check in the publish workflow, and a <code>ci.yml</code> matrix running lint, type-check, and the test suite on Python 3.11/3.12/3.13</li>
+<li>
+<p>Documentation: generated example figures in the visualization chapter, "In probcal" code snippets in every concept chapter, and a probcal-vs-netcal guidance note in the FAQ</p>
+</li>
+<li>
+<p>Polish: README quickstart with real printed output, feature matrix vs scikit-learn/netcal/single-method packages, performance note on the deliberate absence of Rust acceleration, docs cross-linking pass</p>
+</li>
+<li>Datasets, tutorial, and user docs: <code>make_pd_portfolio</code> (beta-family generative miscalibration with exact event-rate anchoring), executed tutorial notebook <code>pd_calibration_walkthrough.ipynb</code> (diagnose → select → fit → re-anchor → backtest → threshold translation, incl. the counterfactual-engine interop recipe), <code>getting-started.md</code> with a runnable quickstart and its printed output, <code>how-it-works.md</code> pipeline walkthrough with schema, three-page mkdocstrings API reference, and the FAQ (inverse-map protocol, <code>Target.probability</code> trap, selection rules)</li>
+<li>Automatic selection: <code>CalibratorSelector</code> — default 8-candidate menu per spec, inner stratified seeded K-fold with structurally out-of-fold-only scoring, criteria log_loss/brier/ici/smooth_ece/ece_sweep (plain ECE and Hosmer–Lemeshow refused), guardrail flags on pooled out-of-fold predictions, one-standard-error parsimony tie-break, winner refit on the full set, ranked <code>SelectionReport</code>; 9 tests incl. a spy-calibrator structural no-leakage check and the parsimony-on-calibrated-data behavior</li>
+<li>Wrapper flows: <code>CalibratedModel</code> — prefit flow (score + calibrate, the credit-risk canon), cv flow with duck-typed cloning (sklearn <code>clone</code> if installed, else deepcopy) and stratified seeded folds, <code>ensemble=False</code> pooled default (one calibrator on out-of-fold scores, final model refit) vs <code>ensemble=True</code> fold averaging; <code>offset_to</code> appending inspectable <code>LogitOffset</code> stages; composed <code>interval_inverse</code> and <code>affine_logit_coeffs_</code>; <code>predict_proba</code>/<code>predict_proba_2d</code>; structural no-leakage tests with a clone-surviving spy model (out-of-fold scoring disjoint from training rows, each row scored exactly once)</li>
+<li>Inverse maps and thresholds: <code>interval_inverse(lo, hi, *, space, buffer_logit)</code> implemented across the catalog — closed forms (Platt, temperature, <code>LogitOffset</code>), block-structure searchsorted (isotonic, CIR, histogram, scaling-binning), monotone bisection (beta, spline, Venn–Abers); <code>UnattainableTargetError</code> instead of silent clamping; non-monotone calibrators refuse with an explanatory <code>NotImplementedError</code>; <code>thresholds.py</code> with <code>calibrated_interval_to_raw</code> and the masterscale <code>calibrated_bands_to_raw</code>; 16 tests covering the full spec §10 list (round-trips, block-edge semantics, offset −δ shift, buffer monotonicity, space consistency)</li>
+<li>Attribution adjustment: <code>adjust_attributions</code> → <code>AdjustedAttribution</code> — affine-exact mode (exact composed Shapley values for Platt/temperature/offset via <code>affine_logit_coeffs_</code>) and Aumann–Shapley mode (exact additivity for any calibrator, central-difference fallback on degenerate rows); logit and probability scales; shap.Explanation duck-typing without a shap import; 10 tests incl. affine/AS 1e-12 equivalence and sign/rank invariance</li>
+<li>Logit offset: <code>LogitOffset</code> — explicit-delta and target-mean modes (unique bisection root, unit-tested against a brute-force grid), audit trail (<code>delta_</code>, <code>pre_mean_</code>, <code>post_mean_</code>, timestamp), <code>audit_report()</code> with pre/post guardrails, <code>interpret()</code> with odds-factor and central-tendency readings, affine logit coefficients for attribution composition</li>
+<li>Curves, belt, and plots: <code>curves.py</code> — <code>reliability_binned</code> (Wilson CIs, both scales), <code>reliability_loess</code>, <code>reliability_spline</code>, <code>calibration_belt</code> (GiViTI-style: forward LR degree selection ≤4, information-matrix pointwise bands, identity-test p-value; reimplemented from the Nattino papers); <code>plots.py</code> ([viz]-guarded) — <code>plot_reliability</code> with logit-scale probability-labeled ticks and count margin, <code>plot_belt</code>, <code>plot_comparison</code>, <code>plot_interval</code>, <code>plot_selection</code>; <code>SmoothReliabilityCurve</code> result dataclass; 11 tests incl. a hand-checked Wilson interval and belt null/alternative behavior</li>
+<li>Metrics catalog: <code>probcal.metrics</code> complete — proper scores (<code>log_loss</code>, <code>brier_score</code>, <code>brier_skill_score</code>, Murphy decomposition with optional bias correction, log-loss calibration/refinement split), binned estimators (<code>ece</code> l1/l2/max, <code>ece_debiased</code>, <code>ece_sweep</code>, <code>adaptive_ece</code>, <code>hosmer_lemeshow</code>), binning-free estimators (<code>smooth_ece</code> with self-consistent bandwidth, <code>ecce</code>, <code>ici</code>/<code>e50</code>/<code>e90</code>/<code>emax</code>, <code>spiegelhalter_z</code>), the recalibration-regression framework (<code>calibration_intercept</code>/<code>_slope</code>/<code>_test</code>, <code>calibration_guardrails</code>), per-grade backtests (<code>binomial_grade_test</code>, <code>jeffreys_grade_test</code> with traffic lights), and <code>evaluate()</code> with seeded bootstrap percentile CIs; 38 tests incl. hand-computed cases and sklearn/scipy references</li>
+<li>Spline calibrator: <code>SplineCalibrator</code> — natural cubic basis on the logit scale, penalized IRLS with second-difference roughness penalty, λ by stratified K-fold CV on log loss, effective degrees of freedom reported, post-fit monotonicity check with warning; completes the spec §6 calibrator catalog (11 of 11)</li>
+<li>Binning + Bayesian calibrators: <code>HistogramBinningCalibrator</code> (equal-mass/equal-width, Jeffreys shrinkage, empty-bin fallback, post-fit monotonicity flag), <code>ScalingBinningCalibrator</code> (Platt stage + equal-mass binning of fitted values), <code>BBQCalibrator</code> (Beta–Binomial marginal likelihood over a B-grid, Jeffreys prior, top-3 reporting), <code>ENIRCalibrator</code> (nearly-isotonic mPAVA path from raw data to the isotonic fit, BIC-weighted ensemble, <code>is_monotone_ = False</code>); 20 tests incl. hand-computed bin rates and the path-endpoint-equals-PAVA anchor</li>
+<li>Isotonic family + Venn–Abers: <code>IsotonicCalibrator</code> (PAVA step map, tie pooling, clamping, optional linear interpolation, block-structure attributes), <code>CenteredIsotonicCalibrator</code> (CIR through weight-centered block points), <code>VennAbersCalibrator</code> (IVAP with <code>predict_interval()</code>, log-loss-minimax scalarization, width reporting in <code>interpret()</code>), <code>CrossVennAbersCalibrator</code> (stratified seeded folds, geometric-mean merge, conservative envelope interval); 19 tests incl. direct-refit agreement and width-shrinkage checks</li>
+<li>Base API + parametric calibrators: <code>BaseCalibrator</code> (fit/predict_proba/predict_proba_2d/interpret, manual get_params/set_params, <code>is_monotone_</code>, <code>affine_logit_coeffs_</code>, <code>interval_inverse</code> contract stub), <code>PlattCalibrator</code> (Lin–Lin–Weng target smoothing), <code>TemperatureCalibrator</code> (safeguarded 1-D NLL solve), <code>BetaCalibrator</code> (variants abm/ab/a, betacal negative-coefficient refit, <code>constraint_active_</code>); public exports incl. <code>logit</code>/<code>expit</code>; 30 tests (identity/distortion recovery, monotonicity, small-sample stability, interpret contract)</li>
+<li>Numerical core: <code>_math.py</code> (overflow-safe logit/expit, weighted PAVA with block structure, IRLS logistic regression with ridge stabilization and separation detection, safeguarded 1-D Newton and bisection, vectorized lgamma/erf, regularized incomplete beta and lower incomplete gamma, chi-square and normal quantiles, tricube LOESS, natural cubic spline basis), <code>_validation.py</code> (score/target/weight validation with 1e-12 clipping), <code>_results.py</code> (frozen result dataclasses with <code>as_dict()</code> and aligned-table reprs); 49 unit tests plus 9 reference tests against scipy/scikit-learn/statsmodels (betainc and gammainc within 1e-12, IRLS within rtol 1e-8)</li>
+<li>Repository scaffold: src layout with docstring-only modules, tooling (uv, ruff, black, mypy, pytest), CI workflows (docs deploy, PyPI publish — tag-gated), documentation skeleton (mkdocs-material + MathJax), MIT license, citation metadata</li>
+<li>Reference verification: all 12 ⚠ references of the spec verified against primary sources; completed bibliographic records logged in <code>docs/DECISIONS.md</code> entries 10–21</li>
+<li>Theory guidebook, chunk 1: <code>concepts/why-calibration.md</code> (definitions, sources of miscalibration, decisioning and regulatory consequences, proper-scoring-rule lens) and <code>concepts/methods-parametric.md</code> (Platt, temperature, beta: derivations, parameter interpretation, worked reading)</li>
+<li>Theory guidebook, chunk 4 (completes the guidebook — ~16,400 words total): <code>concepts/shap-calibration.md</code> (identifiability obstacle, affine-exact class, Aumann–Shapley mode, invariance properties), <code>concepts/inverse-maps.md</code> (preimage identity, generalized inverses, attainability, buffer_logit drift robustness, masterscale workflow), <code>concepts/auto-selection.md</code> (selector protocol, structural no-leakage, report reading), <code>concepts/visualization.md</code> (reliability constructions, logit-scale rationale, calibration belt)</li>
+<li>Theory guidebook, chunk 3: <code>concepts/metrics.md</code> (full metric catalog with formulas and pathologies, bootstrap-CI protocol, report-reading order, selection-suitability table), <code>concepts/data-splitting.md</code> (prefit vs cv flows, ensemble vs pooled, calibration-set sizing, nested selection), <code>concepts/offset.md</code> (uniqueness of the bisection root, King–Zeng/Elkan/Tasche equivalences, worked re-anchoring, audit practice)</li>
+<li>Theory guidebook, chunk 2: <code>concepts/methods-nonparametric.md</code> (PAVA with worked micro-example, CIR, histogram binning, scaling-binning sample-complexity argument, BBQ, ENIR, spline calibration, properties table) and <code>concepts/methods-distribution-free.md</code> (IVAP construction, validity guarantee scope, scalarization caveat, exchangeability limits, CVAP geometric-mean merge)</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

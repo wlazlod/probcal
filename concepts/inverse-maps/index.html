@@ -1,0 +1,1511 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Universal post-hoc probability calibration for binary classifiers — numpy-only.">
+      
+      
+      
+        <link rel="canonical" href="https://wlazlod.github.io/probcal/concepts/inverse-maps/">
+      
+      
+        <link rel="prev" href="../shap-calibration/">
+      
+      
+        <link rel="next" href="../auto-selection/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Inverse maps - probcal</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#inverse-maps" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="probcal" class="md-header__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            probcal
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Inverse maps
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="probcal" class="md-nav__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    probcal
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-it-works/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../why-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-parametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parametric methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-nonparametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nonparametric methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-distribution-free/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distribution-free methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-splitting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data splitting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../offset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Offset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shap-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SHAP and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse maps
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-preimage-identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The preimage identity
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generalized-inverses-and-plateau-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generalized inverses and plateau semantics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robustness-plateaus-and-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Robustness: plateaus and drift
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-masterscale-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The masterscale workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-probcal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In probcal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#point-inverses-an-exact-preimage-for-the-parametric-family" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Point inverses: an exact preimage for the parametric family
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-beta-inverse-a-layered-exact-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The beta inverse: a layered exact construction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auto-selection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automatic selection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../visualization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/pd_calibration_walkthrough/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/calibrators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calibrators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-preimage-identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The preimage identity
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generalized-inverses-and-plateau-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generalized inverses and plateau semantics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robustness-plateaus-and-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Robustness: plateaus and drift
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-masterscale-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The masterscale workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-probcal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In probcal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#point-inverses-an-exact-preimage-for-the-parametric-family" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Point inverses: an exact preimage for the parametric family
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-beta-inverse-a-layered-exact-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The beta inverse: a layered exact construction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="inverse-maps">Inverse maps<a class="headerlink" href="#inverse-maps" title="Permanent link">&para;</a></h1>
+<p>Once decisions are made on calibrated probabilities, every consumer that lives on the raw
+score needs a translation service. A credit policy says "approve below 2% PD"; the deployed
+model emits raw margins; the cutoff engine, the masterscale, and the counterfactual generator
+all operate upstream of the calibrator. The capability to translate calibrated intervals back
+to raw-score intervals belongs to the calibrator itself — only it knows its functional form,
+its block structure, and its output range — so probcal builds it into the base contract:
+<code>interval_inverse(lo, hi, *, space, buffer_logit)</code>, with <code>thresholds.py</code> providing thin
+functional wrappers.</p>
+<h2 id="the-preimage-identity">The preimage identity<a class="headerlink" href="#the-preimage-identity" title="Permanent link">&para;</a></h2>
+<p>For a <strong>monotone</strong> calibration map <span class="arithmatex">\( g \)</span>, inverting a decision interval commutes with
+composition:</p>
+<div class="arithmatex">\[
+\{\,x : g(f(x)) \in [\mathrm{lo}, \mathrm{hi}]\,\}
+\;=\;
+\{\,x : f(x) \in [\,g^{-1}(\mathrm{lo}),\; g^{-1}(\mathrm{hi})\,]\,\}.
+\]</div>
+<p>The consequence reaches further than notation: calibration does not change counterfactual
+<em>geometry</em>, only the target interval. A counterfactual engine searching for the smallest
+feature change that lands <span class="arithmatex">\( f(x) \)</span> in a raw interval works unchanged after calibration is
+deployed — it just needs the translated interval. This is the designed hand-off to treecf:
+probcal computes <code>lo_z, hi_z = cal.interval_inverse(0.0, 0.02, space="logit")</code> and the
+engine consumes <code>Target.raw(range=(lo_z, hi_z))</code>. The division of responsibilities is
+deliberate and recorded as a DECISIONS entry — probcal owns the capability and publishes the
+duck-typed protocol (<code>interval_inverse</code> plus <code>is_monotone_</code>); target-construction ergonomics
+belong to the consumer.</p>
+<p>One trap deserves its single sentence here and a longer one in the FAQ: after calibration is
+deployed, a consumer-side <code>Target.probability(...)</code> silently inverts the <em>model's own</em>
+sigmoid link rather than the calibrator, and therefore targets the uncalibrated probability.</p>
+<h2 id="generalized-inverses-and-plateau-semantics">Generalized inverses and plateau semantics<a class="headerlink" href="#generalized-inverses-and-plateau-semantics" title="Permanent link">&para;</a></h2>
+<p>Step calibrators have no literal inverse, so the contract is defined by generalized
+inverses: for non-decreasing <span class="arithmatex">\( g \)</span>,</p>
+<div class="arithmatex">\[
+\mathrm{raw\_lo} = \inf\{\, s : g(s) \ge \mathrm{lo} \,\},
+\qquad
+\mathrm{raw\_hi} = \sup\{\, s : g(s) \le \mathrm{hi} \,\},
+\]</div>
+<p>with <span class="arithmatex">\( \mathrm{lo} = 0 \)</span> and <span class="arithmatex">\( \mathrm{hi} = 1 \)</span> mapping to <span class="arithmatex">\( -\infty \)</span> and
+<span class="arithmatex">\( +\infty \)</span>. For an <a href="../methods-nonparametric/">isotonic map</a> this means the preimage of a
+target begins exactly at the left edge of the first qualifying block — a semantics the tests
+pin down explicitly. Implementations follow the map's structure: closed form for Platt,
+temperature and the offset; monotone bisection for beta and monotone splines;
+<code>searchsorted</code> on the block structure for isotonic, CIR, binning, scaling-binning and the
+scalarized Venn–Abers (whose monotonicity the
+<a href="../methods-distribution-free/">distribution-free chapter</a> establishes). The wrapper composes
+right-to-left through the pipeline — the offset inverts first, subtracting <span class="arithmatex">\( \delta \)</span> on
+the logit, then the calibrator's inverse applies.</p>
+<p>Two refusals are part of the contract. If <span class="arithmatex">\( [\mathrm{lo}, \mathrm{hi}] \)</span> does not
+intersect the calibrator's output range — routine for isotonic maps on low-PD data, whose
+range is the span of block means — the method raises <code>UnattainableTargetError</code> naming both
+intervals; silent clamping would convert a policy error into a wrong cutoff. And a
+non-monotone calibrator (<code>is_monotone_ = False</code>, ENIR being the resident example) has
+preimages that may be unions of intervals; the method raises <code>NotImplementedError</code> with an
+explanation, and the documented recommendation is simply to use a monotone calibrator when
+recourse or thresholding is downstream.</p>
+<h2 id="robustness-plateaus-and-drift">Robustness: plateaus and drift<a class="headerlink" href="#robustness-plateaus-and-drift" title="Permanent link">&para;</a></h2>
+<p>A counterfactual that lands just past a block edge of a step calibrator is fragile twice
+over: the calibrated value jumps discretely at the edge, and any refit moves the edge. The
+first fragility argues for continuous calibrators — beta or <a href="../methods-nonparametric/">CIR</a>
+— wherever recourse is in scope. The second is addressed by <code>buffer_logit</code>: the calibrated
+interval is shrunk by a margin in logit space <em>before</em> inversion, so the produced raw
+interval is conservative by that margin. The guarantee it buys is concrete because the
+<a href="../offset/">offset</a> is a pure logit translation: a central-tendency update of magnitude at
+most <span class="arithmatex">\( m \)</span> cannot invalidate a counterfactual built with <code>buffer_logit = m</code>. Larger buffers
+give tighter raw intervals — a monotonicity the tests check — and the trade is explicit:
+robustness against recalibration drift, paid in recourse difficulty. The concern is the one
+the algorithmic-recourse literature formalizes: recourse recommendations invalidated by
+model updates and distribution shift (Rawal, Kamar and Lakkaraju, 2020), and the case for
+building recourse robust to such shifts (Upadhyay, Joshi and Lakkaraju, 2021).</p>
+<h2 id="the-masterscale-workflow">The masterscale workflow<a class="headerlink" href="#the-masterscale-workflow" title="Permanent link">&para;</a></h2>
+<p>Rating systems define grades on calibrated PD — a masterscale
+<span class="arithmatex">\( \{\text{grade } j : [\mathrm{lo}_j, \mathrm{hi}_j)\} \)</span> — while the model emits raw
+margins, with calibration sitting between. <code>calibrated_bands_to_raw(calibrator, bands, ...)</code>
+maps the entire masterscale to raw intervals in one call, which is the canonical workflow:
+grade edges translated once per recalibration, consumed by cutoff engines and counterfactual
+targeting alike (the output plugs directly into band-style targets on the raw scale). Since
+grade boundaries are policy artifacts that outlive model versions, the translation — not the
+masterscale — is what changes when the calibrator is refitted, and the audit story stays
+clean: policy fixed, mapping versioned.</p>
+<h2 id="in-probcal">In probcal<a class="headerlink" href="#in-probcal" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">probcal</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnattainableTargetError</span><span class="p">,</span> <span class="n">calibrated_bands_to_raw</span>
+
+<span class="n">lo_s</span><span class="p">,</span> <span class="n">hi_s</span> <span class="o">=</span> <span class="n">cal</span><span class="o">.</span><span class="n">interval_inverse</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">)</span>               <span class="c1"># "PD &lt;= 2%" in score space</span>
+<span class="n">lo_z</span><span class="p">,</span> <span class="n">hi_z</span> <span class="o">=</span> <span class="n">cal</span><span class="o">.</span><span class="n">interval_inverse</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="s2">"logit"</span><span class="p">)</span>  <span class="c1"># ... in raw margins</span>
+
+<span class="c1"># Robust to the next re-anchoring of magnitude &lt;= 0.1 log-odds:</span>
+<span class="n">lo_z</span><span class="p">,</span> <span class="n">hi_z</span> <span class="o">=</span> <span class="n">cal</span><span class="o">.</span><span class="n">interval_inverse</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="s2">"logit"</span><span class="p">,</span> <span class="n">buffer_logit</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+
+<span class="n">masterscale</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"A"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">),</span> <span class="s2">"B"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">),</span> <span class="s2">"C"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.03</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)}</span>
+<span class="n">raw_bands</span> <span class="o">=</span> <span class="n">calibrated_bands_to_raw</span><span class="p">(</span><span class="n">cal</span><span class="p">,</span> <span class="n">masterscale</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="s2">"logit"</span><span class="p">)</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">cal</span><span class="o">.</span><span class="n">interval_inverse</span><span class="p">(</span><span class="mf">0.95</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>     <span class="c1"># beyond an isotonic map's output range</span>
+<span class="k">except</span> <span class="n">UnattainableTargetError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>                           <span class="c1"># named intervals — never a silent clamp</span>
+</code></pre></div>
+<h2 id="point-inverses-an-exact-preimage-for-the-parametric-family">Point inverses: an exact preimage for the parametric family<a class="headerlink" href="#point-inverses-an-exact-preimage-for-the-parametric-family" title="Permanent link">&para;</a></h2>
+<p><code>interval_inverse</code> answers "what raw range maps into this calibrated interval"; a second
+question is narrower and, for the affine and beta families, answerable exactly: "what raw
+score maps to <em>this one</em> calibrated probability". <code>point_inverse(p, *, space)</code> is that exact
+preimage — a single closed-form (or fixed, certified-precision) computation, not bisection.</p>
+<p>It is defined on:</p>
+<ul>
+<li><code>BaseCalibrator</code> (inherited by every calibrator): the affine-logit path. Any calibrator
+  whose <code>affine_logit_coeffs_</code> is not <code>None</code> — <code>PlattCalibrator</code>, <code>TemperatureCalibrator</code>,
+  and <code>BetaCalibrator</code>'s tied <code>"a"</code>/<code>"ab"</code> variants — inverts
+  <code>logit g(s) = a * logit(s) + b</code> in one line: <code>z = (logit(p) - b) / a</code>.</li>
+<li><code>BetaCalibrator</code> (all three variants, overriding the base method): the full <code>"abm"</code> map is
+  not affine on the logit scale, so it gets its own layered exact construction — see below.</li>
+<li><code>LogitOffset</code>: <code>z = logit(p) - delta</code>, the same closed form as its <code>interval_inverse</code>.</li>
+</ul>
+<p>A non-monotone calibrator, or a monotone one with no affine-logit or beta closed form
+(isotonic/CIR/binning/scaling-binning, splines, Venn–Abers, ENIR), raises
+<code>NotImplementedError</code> naming <code>interval_inverse</code> — the right tool wherever the map is a step
+function (plateaus have no single preimage) or an otherwise non-affine monotone curve
+(only a generalized inverse is well-defined).</p>
+<h2 id="the-beta-inverse-a-layered-exact-construction">The beta inverse: a layered exact construction<a class="headerlink" href="#the-beta-inverse-a-layered-exact-construction" title="Permanent link">&para;</a></h2>
+<p><code>BetaCalibrator.point_inverse</code> solves, with <code>z = logit(s)</code> and <code>K = logit(p) - c</code>,</p>
+<div class="arithmatex">\[
+h(z) = a z + (b - a)\,\mathrm{softplus}(z) = K, \qquad \mathrm{softplus}(z) = \ln(1 + e^{z}),
+\]</div>
+<p>which has no elementary closed form when <code>a != b</code> (it is transcendental — see the Lambert-W
+connection below). The construction layers three ideas, each exact in a different regime:</p>
+<p><strong>Layer 1 — minimax hyperbola seed.</strong> Replacing <code>softplus(z)</code> by the minimax hyperbola
+<code>(z + sqrt(z^2 + kappa)) / 2</code> with <code>kappa = 1.524</code> (max pointwise deviation 0.076) turns the
+equation quadratic, with admissible root</p>
+<div class="arithmatex">\[
+z_0 = \frac{(a+b) K - (b-a)\sqrt{K^2 + \kappa a b}}{2 a b},
+\]</div>
+<p>exact at <code>a = b</code> (collapses to <code>K / a</code>) and in both tails, with error bounded by
+<code>0.076 * |b - a| / min(a, b)</code> elsewhere.</p>
+<p><strong>Layer 2 — certified Halley correction.</strong> Up to 4 fixed Newton–Halley steps refine <code>z_0</code> to
+machine precision, exiting as soon as the residual certificate <code>|h(z) - K| &lt;= 1e-13 *
+max(1, |K|)</code> is met — a bounded, finite expression, not open-ended iteration. The residual is
+itself a certificate: <code>|z - z*| &lt;= |h(z) - K| / min(a, b)</code>.</p>
+<p><strong>Layer 3 — the Lambert-W tail form (theory, not shipped code).</strong> As <code>|z| -&gt; infinity</code> the
+equation admits a closed form in the Lambert-W function. For the left tail (<code>z -&gt; -infinity</code>,
+<code>softplus(z) -&gt; 0</code>):</p>
+<div class="arithmatex">\[
+z = \frac{K}{a} - W_0\!\left(\frac{b-a}{a}\, e^{K/a}\right),
+\]</div>
+<p>with the symmetric right-tail form (<code>z -&gt; +infinity</code>) obtained by the <code>a &lt;-&gt; b</code>, <code>z -&gt; -z</code>,
+<code>K -&gt; -K</code> swap. Both are exact only in the limit; away from the tails the correct branch and
+argument regime are case-dependent, so probcal ships the seed-plus-Halley construction above
+rather than a Lambert-W evaluator — recorded here as the closed form the numerics are
+approximating, not as an implementation.</p>
+<p>Degenerate exponents fall back to their own closed forms: <code>a == b</code> uses the affine formula
+directly; <code>a == 0</code> (<code>h</code> ranges over <code>(0, infinity)</code>, so <code>p</code> above <code>sigma(c)</code> only) and
+<code>b == 0</code> (range <code>(-infinity, 0)</code>, <code>p</code> below <code>sigma(c)</code> only) invert via <code>expm1</code>/<code>log</code>, and
+raise <code>UnattainableTargetError</code> outside the attainable range; <code>a == b == 0</code> (a constant map)
+raises <code>NotImplementedError</code> — no point has a well-defined preimage.</p>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Rawal, K., Kamar, E., Lakkaraju, H. (2020). "Algorithmic Recourse in the Wild: Understanding the Impact of Data and Model Shifts." arXiv:2012.11788.</li>
+<li>Upadhyay, S., Joshi, S., Lakkaraju, H. (2021). "Towards Robust and Reliable Algorithmic Recourse." <em>Advances in Neural Information Processing Systems</em> 34 (NeurIPS 2021).</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.top", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

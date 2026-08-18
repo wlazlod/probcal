@@ -92,6 +92,4 @@ nav:
       - Metrics and tests: api/metrics.md
       - Tools: api/tools.md
   - FAQ: faq.md
-  - Decisions: DECISIONS.md
-  - Licensing: LICENSING.md
   - Changelog: changelog.md

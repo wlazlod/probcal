@@ -122,5 +122,5 @@ gallery of every plot, regenerated deterministically by `docs/scripts/generate_f
 
 ## License
 
-MIT. See [LICENSE](LICENSE) and `docs/LICENSING.md` for the conceptual-reference policy on
-GPL-licensed R packages.
+MIT. See [LICENSE](LICENSE). GPL-licensed R packages are used as conceptual references
+only; no GPL code is included.

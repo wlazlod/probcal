@@ -1,13 +1,24 @@
 """BaseCalibrator: the common fit / predict_proba / interpret contract."""
 
 import inspect
+import json
+import os
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime
 from typing import Self
 
 import numpy as np
 
 from ._math import _LOGIT_CLIP, expit, logit
 from ._results import Interpretation
+from ._serialize import (
+    SCHEMA_VERSION,
+    check_schema,
+    data_fingerprint,
+    decode_value,
+    encode_value,
+    fingerprint_of_dict,
+)
 from ._validation import EPS, validate_binary_y, validate_scores, validate_weights
 
 
@@ -115,6 +126,13 @@ class BaseCalibrator(ABC):
             )
         w_arr = validate_weights(sample_weight, s_arr.shape[0])
         self._fit(s_arr, y_arr, w_arr)
+        self.fit_meta_ = {
+            "n_obs": int(s_arr.shape[0]),
+            "n_events": float(np.sum(w_arr * y_arr)),
+            "weight_sum": float(w_arr.sum()),
+            "fitted_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+            "data_fingerprint": data_fingerprint(s_arr, y_arr, w_arr),
+        }
         self.fitted_ = True
         return self
 
@@ -378,3 +396,157 @@ class BaseCalibrator(ABC):
                 )
             setattr(self, key, value)
         return self
+
+    # ------------------------------------------------------------- serialization
+
+    _STATE_ATTRS: tuple[str, ...] = ()
+
+    def _state(self) -> dict[str, object]:
+        """Fitted state as JSON-native values (generic: reads ``_STATE_ATTRS``)."""
+        return {a: encode_value(getattr(self, a)) for a in type(self)._STATE_ATTRS}
+
+    def _set_state(self, state: dict[str, object]) -> None:
+        """Inverse of :meth:`_state`."""
+        for a, v in state.items():
+            setattr(self, a, decode_value(v))
+
+    def _params_for_dict(self) -> dict[str, object]:
+        """Constructor parameters as stored in :meth:`to_dict` (hook for
+        classes whose params are not JSON-native, e.g. the selector)."""
+        return self.get_params()
+
+    @classmethod
+    def _params_from_dict(cls, params: dict[str, object]) -> dict[str, object]:
+        """Inverse of :meth:`_params_for_dict`."""
+        return params
+
+    def to_dict(self) -> dict[str, object]:
+        """Versioned JSON-native snapshot of the fitted object.
+
+        Returns
+        -------
+        dict
+            ``{"probcal_schema", "probcal_version", "class", "params",
+            "state", "fit_meta"}``. ``fit_meta`` records ``n_obs``,
+            ``n_events``, ``weight_sum``, ``fitted_at_utc`` (ISO 8601), the
+            ``data_fingerprint`` (SHA-256 of the sorted ``(s, y, w)``
+            triple), and convergence flags where they exist.
+
+        Raises
+        ------
+        RuntimeError
+            If not yet fitted.
+        """
+        self._check_fitted()
+        from . import __version__
+
+        fit_meta = dict(getattr(self, "fit_meta_", {}))
+        for flag in ("converged_", "separation_fallback_"):
+            if hasattr(self, flag):
+                fit_meta[flag] = bool(getattr(self, flag))
+        return {
+            "probcal_schema": SCHEMA_VERSION,
+            "probcal_version": __version__,
+            "class": type(self).__name__,
+            "params": encode_value(self._params_for_dict()),
+            "state": self._state(),
+            "fit_meta": fit_meta,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "BaseCalibrator":
+        """Rebuild a fitted object from :meth:`to_dict` output.
+
+        Called on :class:`BaseCalibrator` itself, dispatches through the
+        class registry to whatever class wrote ``d``; called on a subclass,
+        requires ``d["class"]`` to match that subclass.
+
+        Parameters
+        ----------
+        d : dict
+            Output of :meth:`to_dict` (parsed JSON).
+
+        Returns
+        -------
+        BaseCalibrator
+            A fitted instance.
+
+        Raises
+        ------
+        ValueError
+            If the schema version is unknown (naming the writing version),
+            the class is not registered, or ``d["class"]`` does not match
+            the subclass this was called on.
+        """
+        check_schema(d)
+        if cls is BaseCalibrator:
+            from ._registry import load
+
+            return load(d)  # type: ignore[return-value]
+        if cls.__name__ != d.get("class"):
+            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
+        params = cls._params_from_dict(decode_value(d.get("params", {})))  # type: ignore[arg-type]
+        obj = cls(**params)  # type: ignore[arg-type]
+        obj._set_state(dict(d.get("state", {})))  # type: ignore[arg-type]
+        obj.fit_meta_ = dict(d.get("fit_meta", {}))  # type: ignore[arg-type]
+        obj.fitted_ = True
+        return obj
+
+    def to_json(
+        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
+    ) -> str | None:
+        """Serialize to JSON — never pickle (auditable, no code execution on load).
+
+        Parameters
+        ----------
+        path : path-like or None
+            When given, write to this file and return ``None``; otherwise
+            return the JSON text.
+        indent : int, keyword-only
+            JSON indentation.
+
+        Returns
+        -------
+        str or None
+            JSON text, or ``None`` when written to ``path``.
+        """
+        text = json.dumps(self.to_dict(), indent=indent)
+        if path is None:
+            return text
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return None
+
+    @classmethod
+    def from_json(cls, path_or_str: object) -> "BaseCalibrator":
+        """Load from a JSON string or a filesystem path.
+
+        Parameters
+        ----------
+        path_or_str : str or path-like
+            JSON text (starting with ``{``) or a path to a JSON file.
+
+        Returns
+        -------
+        BaseCalibrator
+            A fitted instance (see :meth:`from_dict`).
+        """
+        text = str(path_or_str)
+        if not text.lstrip().startswith("{"):
+            with open(text, encoding="utf-8") as fh:
+                text = fh.read()
+        return cls.from_dict(json.loads(text))
+
+    def fingerprint(self) -> str:
+        """SHA-256 of the canonical serialized form, version- and timestamp-blind.
+
+        Two identical fits on identical data produce the same fingerprint;
+        consumers (model registries, monitors, recourse engines) record it
+        as provenance.
+
+        Returns
+        -------
+        str
+            Hex digest.
+        """
+        return fingerprint_of_dict(self.to_dict())

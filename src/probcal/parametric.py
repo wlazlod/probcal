@@ -13,6 +13,7 @@ import warnings
 import numpy as np
 
 from ._math import bisect, expit, irls_logistic, logit
+from ._registry import register
 from ._results import Interpretation
 from .base import (
     BaseCalibrator,
@@ -121,6 +122,7 @@ def _beta_point_inverse_z(
     return z
 
 
+@register
 class PlattCalibrator(BaseCalibrator):
     """Logistic recalibration on the logit scale (Platt scaling).
 
@@ -145,6 +147,8 @@ class PlattCalibrator(BaseCalibrator):
     SVM outputs (Platt's original setting) does not contain the identity; on
     logits it does — see the parametric-methods chapter.
     """
+
+    _STATE_ATTRS = ("a_", "b_", "is_monotone_", "converged_")
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         z = logit(s)
@@ -215,6 +219,7 @@ class PlattCalibrator(BaseCalibrator):
         )
 
 
+@register
 class TemperatureCalibrator(BaseCalibrator):
     """Temperature scaling: ``g(s) = sigma(logit(s) / T)``.
 
@@ -233,6 +238,8 @@ class TemperatureCalibrator(BaseCalibrator):
     ----------
     Guo, Pleiss, Sun & Weinberger (2017).
     """
+
+    _STATE_ATTRS = ("T_",)
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         z = logit(s)
@@ -301,6 +308,7 @@ class TemperatureCalibrator(BaseCalibrator):
         )
 
 
+@register
 class BetaCalibrator(BaseCalibrator):
     """Beta calibration: ``logit g(s) = a·ln s − b·ln(1 − s) + c``.
 
@@ -343,6 +351,15 @@ class BetaCalibrator(BaseCalibrator):
     already calibrated model. ``a != b`` captures asymmetric tail distortion;
     temperature is the special case ``a = b = 1/T, c = 0``.
     """
+
+    _STATE_ATTRS = (
+        "a_",
+        "b_",
+        "c_",
+        "constraint_active_",
+        "converged_",
+        "separation_fallback_",
+    )
 
     def __init__(self, variant: str = "abm") -> None:
         self.variant = variant

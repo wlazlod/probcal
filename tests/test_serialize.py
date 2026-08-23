@@ -58,10 +58,137 @@ def test_check_schema_rejects_unknown_naming_writer() -> None:
         check_schema({"probcal_schema": 999, "probcal_version": "9.9.9"})
 
 
-@pytest.mark.xfail(strict=False, reason="registry filled from Task B2 onward")
 def test_registry_load_dispatches_and_rejects_unknown_class() -> None:
     from probcal._registry import SERIALIZABLE, load
 
     assert "BetaCalibrator" in SERIALIZABLE
     with pytest.raises(ValueError, match="NoSuchClass"):
         load({"probcal_schema": SCHEMA_VERSION, "class": "NoSuchClass"})
+
+
+# ---------------------------------------------------------------- battery
+# Parametrized over the registry: registering a class adds it to every test
+# below. Special construction cases are handled in _fitted/_predict.
+
+from probcal import make_pd_portfolio  # noqa: E402
+from probcal._registry import SERIALIZABLE  # noqa: E402
+
+_D = make_pd_portfolio(n=1200, random_state=7)
+_Q = make_pd_portfolio(n=400, random_state=8).scores  # held-out query
+
+
+class _StubModel:
+    """Deterministic sklearn-free model over a single score column."""
+
+    def fit(self, X, y):  # noqa: ARG002 - signature parity for the cv flow
+        return self
+
+    def predict_proba(self, X):
+        s = np.asarray(X)[:, 0]
+        return np.column_stack([1.0 - s, s])
+
+    def get_params(self):
+        return {"stub": True}
+
+
+def _fitted(name: str):
+    cls = SERIALIZABLE[name]
+    if name == "LogitOffset":
+        return cls(delta=0.3).fit(_D.scores)
+    if name == "CalibratedModel":
+        from probcal import BetaCalibrator
+
+        wrapped = cls(_StubModel(), BetaCalibrator(), flow="prefit").fit(
+            _D.scores.reshape(-1, 1), _D.y
+        )
+        wrapped.offset_to(delta=0.15)
+        return wrapped
+    return cls().fit(_D.scores, _D.y)
+
+
+def _predict(obj, q):
+    if type(obj).__name__ == "LogitOffset":
+        return obj.transform(q)
+    if type(obj).__name__ == "CalibratedModel":
+        return obj.predict_proba(q.reshape(-1, 1))
+    return obj.predict_proba(q)
+
+
+@pytest.fixture(scope="module", params=sorted(SERIALIZABLE))
+def fitted(request):
+    return request.param, _fitted(request.param)
+
+
+def test_round_trip_bit_identical(fitted) -> None:
+    name, obj = fitted
+    cls = SERIALIZABLE[name]
+    js = obj.to_json()
+    obj2 = cls.from_json(js)
+    np.testing.assert_array_equal(_predict(obj, _Q), _predict(obj2, _Q))
+
+
+def test_interpret_survives_round_trip(fitted) -> None:
+    name, obj = fitted
+    if not hasattr(obj, "interpret"):
+        pytest.skip("no interpret()")
+    obj2 = SERIALIZABLE[name].from_dict(obj.to_dict())
+    assert repr(obj.interpret()) == repr(obj2.interpret())
+
+
+def test_to_dict_idempotent(fitted) -> None:
+    name, obj = fitted
+    d = obj.to_dict()
+    assert SERIALIZABLE[name].from_dict(d).to_dict() == d
+
+
+def test_fingerprint_stable_and_data_sensitive(fitted) -> None:
+    name, obj = fitted
+    twin = _fitted(name)
+    assert obj.fingerprint() == twin.fingerprint()  # identical data -> identical print
+    other = make_pd_portfolio(n=1200, random_state=99)
+    if name == "LogitOffset":
+        alt = SERIALIZABLE[name](delta=0.3).fit(other.scores)
+    elif name == "CalibratedModel":
+        from probcal import BetaCalibrator
+
+        alt = SERIALIZABLE[name](_StubModel(), BetaCalibrator(), flow="prefit").fit(
+            other.scores.reshape(-1, 1), other.y
+        )
+    else:
+        alt = SERIALIZABLE[name]().fit(other.scores, other.y)
+    assert obj.fingerprint() != alt.fingerprint()
+
+
+def test_unknown_schema_raises(fitted) -> None:
+    name, obj = fitted
+    d = obj.to_dict()
+    d["probcal_schema"] = 999
+    with pytest.raises(ValueError, match="probcal_schema"):
+        SERIALIZABLE[name].from_dict(d)
+
+
+def test_wrong_class_from_dict_raises() -> None:
+    from probcal import BetaCalibrator, PlattCalibrator
+
+    d = BetaCalibrator().fit(_D.scores, _D.y).to_dict()
+    with pytest.raises(ValueError, match="BetaCalibrator"):
+        PlattCalibrator.from_dict(d)
+
+
+def test_base_from_dict_dispatches() -> None:
+    from probcal import BetaCalibrator
+    from probcal.base import BaseCalibrator
+
+    cal = BetaCalibrator().fit(_D.scores, _D.y)
+    obj = BaseCalibrator.from_dict(cal.to_dict())
+    assert isinstance(obj, BetaCalibrator)
+
+
+def test_to_json_writes_file(tmp_path) -> None:
+    from probcal import PlattCalibrator
+
+    cal = PlattCalibrator().fit(_D.scores, _D.y)
+    path = tmp_path / "cal.json"
+    assert cal.to_json(path) is None
+    loaded = PlattCalibrator.from_json(path)
+    np.testing.assert_array_equal(cal.predict_proba(_Q), loaded.predict_proba(_Q))

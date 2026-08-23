@@ -350,6 +350,9 @@ def test_point_inverse_boundary_p_raises() -> None:
         for bad in (np.array([0.0]), np.array([1.0]), np.array([0.5, 1.0])):
             with pytest.raises(UnattainableTargetError, match="strictly inside"):
                 cal.point_inverse(bad)
+    # The error names at most 5 offending values, never the whole array.
+    with pytest.raises(UnattainableTargetError, match=r"and 2 more"):
+        platt.point_inverse(np.array([0.0, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]))
 
 
 def test_point_inverse_probability_space_overflow_raises() -> None:
@@ -382,9 +385,9 @@ def test_point_and_interval_inverse_agree_on_attainability() -> None:
     cal = _beta_with_params(0.0, 2.0, 0.1)
     lo = float(expit(np.array([0.1]))[0])
     p_bad = lo - 0.05
-    with pytest.raises(UnattainableTargetError):
+    with pytest.raises(UnattainableTargetError, match="attainable"):
         cal.point_inverse(np.array([p_bad]))
-    with pytest.raises(UnattainableTargetError):
+    with pytest.raises(UnattainableTargetError, match="intersect"):
         cal.interval_inverse(0.0, p_bad)
     p_ok = lo + 0.1
     cal.point_inverse(np.array([p_ok]))  # must not raise
@@ -394,7 +397,7 @@ def test_point_and_interval_inverse_agree_on_attainability() -> None:
     platt = PlattCalibrator().fit(*_sample())
     gmax = float(platt.predict_proba(np.array([1.0 - 1e-12]))[0])
     p_above = 0.5 * (gmax + 1.0)
-    with pytest.raises(UnattainableTargetError):
+    with pytest.raises(UnattainableTargetError, match="logit"):
         platt.point_inverse(np.array([p_above]))
-    with pytest.raises(UnattainableTargetError):
+    with pytest.raises(UnattainableTargetError, match="intersect"):
         platt.interval_inverse(p_above, 1.0)

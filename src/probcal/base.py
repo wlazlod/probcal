@@ -12,11 +12,13 @@ from ._validation import EPS, validate_binary_y, validate_scores, validate_weigh
 
 
 class UnattainableTargetError(ValueError):
-    """The requested calibrated interval is unattainable.
+    """The requested calibrated target is unattainable.
 
-    Raised when the interval does not intersect the calibrator's output
-    range (or was emptied by ``buffer_logit``), instead of silently
-    clamping — spec §10.
+    Raised instead of silently clamping — spec §10 — when an interval does
+    not intersect the calibrator's output range (or was emptied by
+    ``buffer_logit``), when a point-inverse target lies outside the open
+    interval ``(0, 1)``, or when a probability-space point-inverse result
+    would round to 0.0/1.0 (raw logit beyond ``logit(1 - 1e-12)``).
     """
 
 
@@ -35,9 +37,12 @@ def _validate_point_targets(p: object) -> np.ndarray:
         raise ValueError("p must contain only finite values")
     bad = (arr <= 0.0) | (arr >= 1.0)
     if np.any(bad):
+        vals = np.unique(arr[bad])
+        shown = vals[:5].tolist()
+        more = f" (and {vals.size - 5} more)" if vals.size > 5 else ""
         raise UnattainableTargetError(
             "point-inverse targets must lie strictly inside (0, 1); got "
-            f"{np.unique(arr[bad]).tolist()} — p = 0 and p = 1 are not attained by any "
+            f"{shown}{more} — p = 0 and p = 1 are not attained by any "
             "finite raw score (no silent clamp); use interval_inverse with lo=0/hi=1 "
             "for one-sided targets"
         )
@@ -51,7 +56,7 @@ def _check_representable(z: np.ndarray, space: str) -> None:
     clipping zone: ``predict_proba`` would clip it back and the round trip
     silently breaks. ``space="logit"`` is exact there, so the error names it.
     """
-    if space == "probability" and np.any(np.abs(z) > _LOGIT_CLIP):
+    if space == "probability" and not np.all(np.abs(z) <= _LOGIT_CLIP):
         worst = float(np.max(np.abs(np.asarray(z))))
         raise UnattainableTargetError(
             f"the requested target needs a raw logit of magnitude {worst:.6g} > "

@@ -1,6 +1,9 @@
 """Tests for probcal.bayesian: BBQ and ENIR."""
 
+import warnings
+
 import numpy as np
+import pytest
 
 from probcal._math import pava
 from probcal.bayesian import BBQCalibrator, ENIRCalibrator
@@ -99,3 +102,23 @@ def test_exports() -> None:
         "ENIRCalibrator",
     ):
         assert name in probcal.__all__
+
+
+def test_enir_fit_warns_above_unique_score_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The real threshold (50,000 unique scores, ~35s quadratic fit) is too
+    # slow to cross in a fast test; patching the module constant exercises
+    # the real emission path at test scale.
+    import probcal.bayesian as bayesian_mod
+
+    monkeypatch.setattr(bayesian_mod, "_ENIR_UNIQUE_WARN", 100)
+    with pytest.warns(UserWarning, match="quadratic in unique scores"):
+        ENIRCalibrator().fit(*_sample(300))
+
+
+def test_enir_fit_no_scale_warning_below_threshold() -> None:
+    s, y = _sample(300)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        ENIRCalibrator().fit(s, y)

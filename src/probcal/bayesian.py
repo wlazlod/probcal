@@ -121,6 +121,9 @@ class BBQCalibrator(BaseCalibrator):
         )
 
 
+_ENIR_UNIQUE_WARN = 50_000
+
+
 class ENIRCalibrator(BaseCalibrator):
     """Ensemble of near-isotonic regressions (ENIR).
 
@@ -129,7 +132,9 @@ class ENIRCalibrator(BaseCalibrator):
     to the fully isotonic fit, then averages the breakpoint solutions with
     BIC weights. The combined map may be non-monotone: ``is_monotone_`` is
     ``False`` and consumers requiring order preservation should prefer a
-    monotone calibrator.
+    monotone calibrator. Fitting is quadratic in the number of unique scores
+    and intended for m <= 50,000; above that, ``fit`` emits a single
+    ``UserWarning`` stating the expected minutes.
 
     Parameters
     ----------
@@ -177,6 +182,18 @@ class ENIRCalibrator(BaseCalibrator):
         order = np.argsort(s, kind="stable")
         s_sorted, y_sorted, w_sorted = s[order], y[order], w[order]
         s_u, start = np.unique(s_sorted, return_index=True)
+        if s_u.size > _ENIR_UNIQUE_WARN:
+            est_min = max(1.0, round((s_u.size / _ENIR_UNIQUE_WARN) ** 2 * 0.6))
+            warnings.warn(
+                f"ENIRCalibrator.fit: {s_u.size:,} unique scores; the near-isotonic "
+                f"path solver is quadratic in unique scores and intended for m <= "
+                f"{_ENIR_UNIQUE_WARN:,} — expect on the order of {est_min:.0f} "
+                "minute(s) of fit time (measured ~0.6 min at m=50,000 on the "
+                "benchmark host). Consider IsotonicCalibrator, or reduce unique "
+                "scores (e.g. round/quantize before fitting).",
+                UserWarning,
+                stacklevel=2,
+            )
         w_u = np.add.reduceat(w_sorted, start)
         y_u = np.add.reduceat(w_sorted * y_sorted, start) / w_u
         self._x = s_u

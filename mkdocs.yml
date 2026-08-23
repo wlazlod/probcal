@@ -85,6 +85,7 @@ nav:
       - SHAP and calibration: concepts/shap-calibration.md
       - Inverse maps: concepts/inverse-maps.md
       - Serialization: concepts/serialization.md
+      - Monitoring: concepts/monitoring.md
       - Automatic selection: concepts/auto-selection.md
       - Visualization: concepts/visualization.md
   - Tutorials:

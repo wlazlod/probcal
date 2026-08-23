@@ -92,6 +92,9 @@ class MonitorReport:
         evidence; see the monitoring chapter).
     reasoning : tuple[str, ...]
         Plain-language trail behind the recommendation.
+    alpha : float
+        The monitor's alarm level (drawn as the 1/alpha line by
+        ``probcal.plots.plot_e_process``).
     grade_table : dict[str, float]
         Latest per-grade e-values.
     """
@@ -100,6 +103,7 @@ class MonitorReport:
     alarm_at: str | None
     recommendation: str
     reasoning: tuple[str, ...]
+    alpha: float = 0.05
     grade_table: dict[str, float] = field(default_factory=dict)
 
     def to_frame(self) -> object:
@@ -372,6 +376,7 @@ class CalibrationMonitor:
                 alarm_at=None,
                 recommendation="none",
                 reasoning=("no alarm: the global e-process never reached 1/alpha",),
+                alpha=self.alpha,
                 grade_table=grade_table,
             )
         pz, py, pw = self._past()
@@ -404,6 +409,7 @@ class CalibrationMonitor:
             alarm_at=alarm_at,
             recommendation=recommendation,
             reasoning=tuple(reasoning),
+            alpha=self.alpha,
             grade_table=grade_table,
         )
 

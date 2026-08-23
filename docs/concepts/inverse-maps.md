@@ -136,6 +136,21 @@ A non-monotone calibrator, or a monotone one with no affine-logit or beta closed
 function (plateaus have no single preimage) or an otherwise non-affine monotone curve
 (only a generalized inverse is well-defined).
 
+### The probability boundary
+
+Two refusals keep `point_inverse` inside the no-silent-clamp doctrine. Targets are
+validated strictly inside `(0, 1)` *before* any clipping: `p = 0` and `p = 1` are not
+attained by any finite raw score, so the whole call raises `UnattainableTargetError`
+(naming the offending values) rather than clipping to `[1e-12, 1 − 1e-12]` and returning a
+finite "inverse" — the same all-or-nothing convention the degenerate beta branches already
+used. And when `space="probability"`, any root with `|z| > logit(1 − 1e-12) ≈ 27.631` is
+refused with a pointer at `space="logit"`: `σ(z)` beyond that bound rounds into the
+clipping zone, `predict_proba` clips it back, and the round trip breaks silently (target
+0.998 → raw 1.0 → forward 0.17 was the failure this closes). On the logit scale the answer
+is exact, so nothing is lost — only the lossy representation is refused. For affine-logit
+maps the bound aligns `point_inverse` with `interval_inverse` exactly:
+`p > g(1 − 1e-12) ⟺ z > logit(1 − 1e-12)`.
+
 ## The beta inverse: a layered exact construction
 
 `BetaCalibrator.point_inverse` solves, with `z = logit(s)` and `K = logit(p) - c`,

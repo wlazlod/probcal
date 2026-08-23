@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
+### Fixed
+
+- `point_inverse` honoured neither end of the no-silent-clamp doctrine at the probability boundary: `p ∈ {0, 1}` was clipped to `[1e-12, 1 − 1e-12]` before inversion (a finite "inverse" for an unattainable target), and a certified root with `|z| > logit(1 − 1e-12) ≈ 27.63` was returned as `σ(z)`, which rounds to 0.0/1.0 and cannot round-trip through `predict_proba` (target 0.998 → raw 1.0 → forward 0.17, no warning). Both now raise `UnattainableTargetError`: boundary targets all-or-nothing with the offending values named; over-range roots only for `space="probability"`, with the error pointing at `space="logit"`, where the answer is exact (DECISIONS 69)
+
+### Changed
+
+- `smooth_ece`'s lattice path now engages for every `n >= 64` instead of only `n > bins`, removing the size cliff at typical calibration-set sizes (0.1.3: exact path at n=4000 cost ~1s/call on the benchmark host and made `evaluate(n=6000)` bootstrap runs smECE-bound; n=8193 took ~2ms). Path selection is decoupled from n: bin at `bins` (default 8192), accept when the fixed point satisfies `sigma* >= 8·width`, refine adaptively once, fall back to exact only when refinement is infeasible or still under-resolved, or `n < 64`. Values for `n <= bins` may differ from the 0.1.2/0.1.3 exact grid at the ~1e-4 level — the lattice integrator is the more accurate one (≥ 8 samples per sigma vs the 257-point grid); `bins=None` recovers old values bit-for-bit (DECISIONS 68)
+
+### Performance
+
+- `smooth_ece` measures 1.0–3.6ms for n ∈ [64, 8192] on `make_pd_portfolio` (0.1.3: exact path, ~1s at n=4000 on the benchmark host), 3–6ms at n=10⁴–10⁵ and ~43ms at n=10⁶ (the O(n) pre-binning, unchanged from 0.1.3); observed lattice-vs-exact deviation ≤ 6.1e-5 across the swept sizes. `evaluate(n=6000, n_boot=1000)` measures 198.9s on the benchmark host (0.1.3: ≈10min, extrapolated from the 60s `n_boot=100` measurement)
+
 ## [0.1.3] - 2026-08-16
 
 ### Fixed

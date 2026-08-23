@@ -8,8 +8,9 @@ probcal calibrator, `LogitOffset`, `Chain`, `CalibratedModel`,
 `CalibratedScorecard` conform (pinned by
 `tests/test_calibrator_protocol.py`). treecf never imports probcal at
 runtime; the coupling is one duck-typed protocol. Extra:
-`pip install "probcal[treecf]"` (treecf ≥ 0.2.1); the joint smoke test
-runs whenever both are installed.
+`pip install "probcal[treecf]"` (treecf ≥ 0.2.1; use ≥ 0.2.3 — see the
+boundary-routing note under T4); the joint smoke test runs whenever both
+are installed.
 
 ## Case 1 — parametric: "below 2% calibrated PD"
 
@@ -118,10 +119,10 @@ release spec until merged there:
   exact backend stamped `proof="optimal"` on an `x_cf` whose true
   `decision_function` margin was 3.09 raw units away. treecf#21
   re-expresses thresholds as the exact float64 boundary of the float32
-  cast, making routing bit-exact for every input; released treecf 0.2.2
-  still carries the defect, so pin the fixed release once it ships.
-  XGBoost also casts features to float32 natively — the analogous fix is
-  a treecf follow-up.
+  cast, making routing bit-exact for every input; fixed as of treecf
+  0.2.3, which the `probcal[treecf]` extra pins. XGBoost also casts
+  features to float32 natively — the analogous fix is a treecf
+  follow-up.
 - **T5 — docs:** link this guide from treecf's `concepts/calibration.md`,
   mirror the three focus cases, and verify (add a test) that target
   inversion is computed once per `Target` in batch mode.

@@ -15,7 +15,7 @@ from typing import Self
 
 import numpy as np
 
-from ._math import bisect, expit, logit
+from ._math import _LOGIT_CLIP, bisect, expit, logit
 from ._results import Interpretation
 from ._validation import validate_scores, validate_weights
 from .metrics.regression import GuardrailReport, calibration_guardrails
@@ -206,7 +206,12 @@ class LogitOffset:
         Raises
         ------
         UnattainableTargetError
-            If a crossed ``buffer_logit`` empties the calibrated interval.
+            If a crossed ``buffer_logit`` empties the calibrated interval,
+            or the (buffered) interval does not intersect the offset map's
+            representable output range ``[sigma(delta - logit(1 - 1e-12)),
+            sigma(delta + logit(1 - 1e-12))]`` — bounds beyond that range
+            collapse to the full-range sentinels (0/1, ±inf) instead of raw
+            values below the clip that ``transform`` could not round-trip.
         ValueError
             If ``lo``, ``hi`` are not ordered in ``[0, 1]``.
         """
@@ -226,8 +231,22 @@ class LogitOffset:
                 raise UnattainableTargetError(
                     f"buffer_logit={buffer_logit} empties the calibrated interval [{lo}, {hi}]"
                 )
-        lo_z = -np.inf if lo_b <= 0.0 else float(logit(np.array([lo_b]))[0]) - self.delta_
-        hi_z = np.inf if hi_b >= 1.0 else float(logit(np.array([hi_b]))[0]) - self.delta_
+        # Representable output range: raw scores are clipped to
+        # [1e-12, 1 - 1e-12] by every forward entry point, so the shifted map
+        # attains only [sigma(delta - _LOGIT_CLIP), sigma(delta + _LOGIT_CLIP)].
+        # Bounds beyond it collapse to the full-range sentinels (0.0/1.0,
+        # -inf/+inf) exactly as in BaseCalibrator.interval_inverse; a raw
+        # bound below the clip (e.g. 4.5e-14) could not round-trip through
+        # transform — the silent break the no-silent-clamp doctrine forbids.
+        gmin = float(expit(np.array([self.delta_ - _LOGIT_CLIP]))[0])
+        gmax = float(expit(np.array([self.delta_ + _LOGIT_CLIP]))[0])
+        if lo_b > gmax or hi_b < gmin:
+            raise UnattainableTargetError(
+                f"calibrated target [{lo_b:.6g}, {hi_b:.6g}] does not intersect the "
+                f"offset map's representable output range [{gmin:.6g}, {gmax:.6g}]"
+            )
+        lo_z = -np.inf if lo_b <= gmin else float(logit(np.array([lo_b]))[0]) - self.delta_
+        hi_z = np.inf if hi_b >= gmax else float(logit(np.array([hi_b]))[0]) - self.delta_
         if space == "logit":
             return lo_z, hi_z
         raw_lo = 0.0 if np.isneginf(lo_z) else float(expit(np.array([lo_z]))[0])

@@ -379,6 +379,27 @@ def test_point_inverse_probability_space_overflow_raises() -> None:
     assert np.isfinite(off.point_inverse(np.array([1e-9]), space="logit")).all()
 
 
+def test_offset_interval_inverse_respects_representable_range() -> None:
+    # A bound whose preimage would fall below the 1e-12 clip cannot round-trip
+    # through transform (raw_lo=4.5e-14 for target 1e-9 at delta=10 was the
+    # silent break); such a bound collapses to the full-range sentinel (0.0 /
+    # -inf), matching BaseCalibrator.interval_inverse's convention, and an
+    # interval entirely outside the representable output range raises.
+    off = LogitOffset(delta=10.0).fit(expit(RNG.normal(-1.0, 1.0, 200)))
+    raw_lo, raw_hi = off.interval_inverse(1e-9, 0.5)
+    assert raw_lo == 0.0  # no lower constraint: every representable raw qualifies
+    assert 1e-12 < raw_hi < 1.0 - 1e-12  # in-range bound still exact
+    np.testing.assert_allclose(off.transform(np.array([raw_hi])), 0.5, atol=1e-12)
+    lo_z, hi_z = off.interval_inverse(1e-9, 0.5, space="logit")
+    assert np.isneginf(lo_z) and np.isfinite(hi_z)
+    with pytest.raises(UnattainableTargetError, match="intersect"):
+        off.interval_inverse(1e-10, 1e-9)  # entirely below the representable range
+    # Moderate targets are untouched by the range guard.
+    off2 = LogitOffset(delta=0.35).fit(expit(RNG.normal(-1.0, 1.0, 200)))
+    lo_r, hi_r = off2.interval_inverse(0.02, 0.1)
+    np.testing.assert_allclose(off2.transform(np.array([lo_r, hi_r])), [0.02, 0.1], atol=1e-12)
+
+
 def test_point_and_interval_inverse_agree_on_attainability() -> None:
     # Spec W2: the two inverse maps must classify the same target the same way.
     # (a) Degenerate beta a=0: attainable range is (sigma(c), 1).

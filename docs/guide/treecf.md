@@ -8,9 +8,8 @@ probcal calibrator, `LogitOffset`, `Chain`, `CalibratedModel`,
 `CalibratedScorecard` conform (pinned by
 `tests/test_calibrator_protocol.py`). treecf never imports probcal at
 runtime; the coupling is one duck-typed protocol. Extra:
-`pip install "probcal[treecf]"` (treecf ≥ 0.2.1; use ≥ 0.2.3 — see the
-boundary-routing note under T4); the joint smoke test runs whenever both
-are installed.
+`pip install "probcal[treecf]"` (treecf ≥ 0.2.3); the joint smoke test
+runs whenever both are installed.
 
 ## Case 1 — parametric: "below 2% calibrated PD"
 

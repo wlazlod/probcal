@@ -2546,8 +2546,8 @@ requires-dist = [
     { name = "scikit-learn", marker = "extra == 'sklearn'", specifier = ">=1.4" },
     { name = "scipy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "statsmodels", marker = "extra == 'dev'", specifier = ">=0.14" },
-    { name = "treecf", marker = "extra == 'all'", specifier = ">=0.2.1" },
-    { name = "treecf", marker = "extra == 'treecf'", specifier = ">=0.2.1" },
+    { name = "treecf", marker = "extra == 'all'", specifier = ">=0.2.3" },
+    { name = "treecf", marker = "extra == 'treecf'", specifier = ">=0.2.3" },
 ]
 provides-extras = ["viz", "sklearn", "optbinning", "treecf", "bench", "all", "dev", "docs"]
 
@@ -3605,20 +3605,20 @@ wheels = [
 
 [[package]]
 name = "treecf"
-version = "0.2.2"
+version = "0.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/89/9c/32a8a72ba1c9ad5a53fa6712302a905917b907ba3870eb489719534654ca/treecf-0.2.2.tar.gz", hash = "sha256:6af125808d22292cf9c43fbeea40680f6989bea18da4215b633942a7d67609df", size = 183248, upload-time = "2026-08-18T23:02:35.562Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/f3/2188c620fc6a8e986549c8b20af5bdaa3914584ed4b013527bf76112588f/treecf-0.2.3.tar.gz", hash = "sha256:4841968fc367a7dc36183bdf403113454e422d3fc9b31bd09a8fe776f51b81c5", size = 183851, upload-time = "2026-08-23T14:26:49.623Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5b/c4/c70e5f10574631056826a8ef30e36565e4e36d8b65e86ffd0f71a4873672/treecf-0.2.2-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:c3f5ecf649fac1d8148a91e75a0e929c876ae77acef5b67c34016b7f1208a76d", size = 566159, upload-time = "2026-08-18T23:02:26.167Z" },
-    { url = "https://files.pythonhosted.org/packages/df/32/39ada2d6114ce523342fbba0373492a07b507f75efb26b40882cafa1dc11/treecf-0.2.2-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:6f61b4b12c65fcbd45f775bd115b502420af4ffef24b1ba8c4c90580d4cd71ec", size = 550111, upload-time = "2026-08-18T23:02:27.779Z" },
-    { url = "https://files.pythonhosted.org/packages/99/8e/3bff0ab7860ea216b0e0b9b99651fbc48004cc3cc4b26183f0464187faf3/treecf-0.2.2-cp311-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0ccf6798b5c2b815e96fe6cbf7debb2cd7efee00bd1bf947725ce43467455e05", size = 585628, upload-time = "2026-08-18T23:02:29.326Z" },
-    { url = "https://files.pythonhosted.org/packages/64/3e/5f6a868689f715581e6c94ed2b50abcfdd1d67ee260e2c9b3b468e369269/treecf-0.2.2-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8bae474a08619fc92b18d617907a6653b41aa9f96e4be754cf01c78119c2d4c4", size = 604588, upload-time = "2026-08-18T23:02:31.32Z" },
-    { url = "https://files.pythonhosted.org/packages/39/95/a0f8057c6bde828a877c6008b2ff593786ecd80a6da6ad6e58027bb24f7c/treecf-0.2.2-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:b9bbeb9cbc15f2e3148390672e987f1267d321c355fc21e3fdcc28f3f4b8cb70", size = 816228, upload-time = "2026-08-18T23:02:32.735Z" },
-    { url = "https://files.pythonhosted.org/packages/35/8f/bbfc2af21cf21d763f70fd0b18619d0b52ea0c9cd00c2173923ec0c7de55/treecf-0.2.2-cp311-abi3-win_amd64.whl", hash = "sha256:e889dab7aac97dc4af20423c1138d9ec4b07646aae296f34ca6b2da6130e3644", size = 491500, upload-time = "2026-08-18T23:02:34.111Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/e0/37b21f996bf75f1394075255d2831193af1b3fa9d20f8550ec0976f78438/treecf-0.2.3-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:24e1192f4f609625a0ad6479538386d176762f7a956ebe0d6a19b5de982f8bb8", size = 566711, upload-time = "2026-08-23T14:26:41.788Z" },
+    { url = "https://files.pythonhosted.org/packages/87/e6/d7a82d3cbfa5def8159a38b9b3937a1644118d1acef686484942c02384a0/treecf-0.2.3-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:6e1a3315abd420686efe6a493303ca91918c903ea6a502f9d4a613581b424d4d", size = 550777, upload-time = "2026-08-23T14:26:43.294Z" },
+    { url = "https://files.pythonhosted.org/packages/83/22/0ecb783c623b4afbf9c68610167ec9333f6ef4fb7d511a0f1a14c0e4403f/treecf-0.2.3-cp311-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:419da2063a4921fc01044c66fbbe8bf571c3705386a6554a4e1ff7371512762e", size = 587144, upload-time = "2026-08-23T14:26:44.619Z" },
+    { url = "https://files.pythonhosted.org/packages/89/a0/4a88693773aba737e989289fd63e169943776a2a042c1cc07b47abd7faef/treecf-0.2.3-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3c3f63e99288054d0d5d78f931e4ce80bd1efe62b640ee183a4921705b4ede8c", size = 606287, upload-time = "2026-08-23T14:26:45.89Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/5a/4eb7b86e33a62ea18bc07b6428d353996a09e80966f596186a8763f60cd5/treecf-0.2.3-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:c46984c9e917681b2c7ef8ae3e4d380feec55328e56c46b4c34fa815c9cda105", size = 818117, upload-time = "2026-08-23T14:26:47.243Z" },
+    { url = "https://files.pythonhosted.org/packages/b6/67/b93f0b36cae23a68a3bd7e73c3af881dea884bf1d5aea6c21237cff11a7c/treecf-0.2.3-cp311-abi3-win_amd64.whl", hash = "sha256:8fd2c1ecfc40fc48a18e89bbfce973684753d2ff6f224ebf8540abef2f2210ed", size = 492126, upload-time = "2026-08-23T14:26:48.484Z" },
 ]
 
 [[package]]

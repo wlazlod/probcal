@@ -36,9 +36,9 @@ Issues = "https://github.com/wlazlod/probcal/issues"
 viz = ["matplotlib>=3.8"]
 sklearn = ["scikit-learn>=1.4"]
 optbinning = ["optbinning>=0.21"]
-treecf = ["treecf>=0.2.1"]
+treecf = ["treecf>=0.2.3"]
 bench = ["scikit-learn>=1.4", "netcal>=1.3.5", "betacal>=1.1.0", "pandas>=2"]
-all = ["matplotlib>=3.8", "scikit-learn>=1.4", "optbinning>=0.21", "treecf>=0.2.1"]
+all = ["matplotlib>=3.8", "scikit-learn>=1.4", "optbinning>=0.21", "treecf>=0.2.3"]
 dev = [
     "pytest>=8",
     "ruff>=0.4",

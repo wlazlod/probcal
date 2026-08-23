@@ -118,7 +118,11 @@ def test_enir_fit_warns_above_unique_score_threshold(
 
 
 def test_enir_fit_no_scale_warning_below_threshold() -> None:
+    # Filter on the message, not simplefilter("error"): an unrelated future
+    # warning from the path solver must not fail this test for the wrong
+    # reason.
     s, y = _sample(300)
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
         ENIRCalibrator().fit(s, y)
+    assert not any("quadratic in unique scores" in str(w.message) for w in rec)

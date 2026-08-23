@@ -183,6 +183,8 @@ class ENIRCalibrator(BaseCalibrator):
         s_sorted, y_sorted, w_sorted = s[order], y[order], w[order]
         s_u, start = np.unique(s_sorted, return_index=True)
         if s_u.size > _ENIR_UNIQUE_WARN:
+            # Quadratic extrapolation anchored at the measured ~0.6 min
+            # (35.5s) fit at m = 50,000 on the benchmark host (DECISIONS 70).
             est_min = max(1.0, round((s_u.size / _ENIR_UNIQUE_WARN) ** 2 * 0.6))
             warnings.warn(
                 f"ENIRCalibrator.fit: {s_u.size:,} unique scores; the near-isotonic "

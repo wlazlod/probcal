@@ -5,12 +5,17 @@ variant is the recommended default): ``docs/concepts/data-splitting.md``.
 """
 
 import copy
+import json
+import os
+from datetime import UTC, datetime
 from typing import Any, Self
 
 import numpy as np
 
 from ._math import expit, logit
+from ._registry import register
 from ._results import Interpretation
+from ._serialize import SCHEMA_VERSION, check_schema, data_fingerprint, fingerprint_of_dict
 from ._validation import validate_binary_y, validate_weights
 from .base import BaseCalibrator, UnattainableTargetError
 from .offset import LogitOffset
@@ -40,6 +45,7 @@ def _clone(model: Any) -> Any:
         return copy.deepcopy(model)
 
 
+@register
 class CalibratedModel:
     """Wrap any scoring model with a probcal calibrator (and optional offsets).
 
@@ -88,6 +94,8 @@ class CalibratedModel:
         cv: int = 5,
         ensemble: bool = False,
         random_state: int = 42,
+        *,
+        model_id: str | None = None,
     ) -> None:
         self.model = model
         self.calibrator = calibrator
@@ -95,6 +103,7 @@ class CalibratedModel:
         self.cv = cv
         self.ensemble = ensemble
         self.random_state = random_state
+        self.model_id = model_id
 
     # ------------------------------------------------------------------ fitting
 
@@ -137,6 +146,13 @@ class CalibratedModel:
             self._cal_scores = s
         else:
             self._fit_cv(X_arr, y_arr, w_arr)
+        self.fit_meta_ = {
+            "n_obs": int(len(y_arr)),
+            "n_events": float(np.sum(w_arr * y_arr)),
+            "weight_sum": float(w_arr.sum()),
+            "fitted_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+            "data_fingerprint": data_fingerprint(self._cal_scores, y_arr, w_arr),
+        }
         self.fitted_ = True
         return self
 
@@ -246,6 +262,11 @@ class CalibratedModel:
         if X is not None:
             p_now = self.predict_proba(X)
         else:
+            if self._cal_scores is None:
+                raise RuntimeError(
+                    "calibration scores are not serialized; after from_dict, pass X so "
+                    "the offset stage can record its audit means on current output"
+                )
             p_now = self._base_predict_from_scores(self._cal_scores)
         off = LogitOffset(delta=delta, target_mean=target_mean)
         off.fit(p_now)
@@ -380,3 +401,131 @@ class CalibratedModel:
             param_values=values,
             messages=messages,
         )
+
+    # ------------------------------------------------------------------ serialization
+
+    def to_dict(self) -> dict[str, object]:
+        """Versioned snapshot: nested calibrator, offsets, and a model *reference*.
+
+        The base model is never serialized — only a reference (class name,
+        the user-supplied ``model_id``, and ``get_params()`` when available
+        and JSON-encodable); reattach it on load via
+        ``CalibratedModel.from_dict(d, model=...)``. The stored calibration
+        scores are not serialized either: after a reload,
+        ``offset_to`` needs an explicit ``X``.
+
+        Raises
+        ------
+        RuntimeError
+            If not yet fitted.
+        NotImplementedError
+            For the ensemble flow: K fold models cannot be referenced.
+        """
+        self._check_fitted()
+        if self.ensemble_:
+            raise NotImplementedError(
+                "the ensemble flow holds K fold models that cannot be referenced; "
+                "serialize a pooled (ensemble=False) or prefit wrapper instead"
+            )
+        from . import __version__
+
+        ref_model = self.model_ if self.model_ is not None else self.model
+        model_params: object = None
+        if hasattr(ref_model, "get_params"):
+            try:
+                candidate = ref_model.get_params()
+                json.dumps(candidate)
+                model_params = candidate
+            except (TypeError, ValueError):
+                model_params = None
+        return {
+            "probcal_schema": SCHEMA_VERSION,
+            "probcal_version": __version__,
+            "class": type(self).__name__,
+            "params": {
+                "flow": self.flow,
+                "cv": self.cv,
+                "ensemble": self.ensemble,
+                "random_state": self.random_state,
+                "model_id": self.model_id,
+            },
+            "state": {
+                "calibrator": self.calibrator_.to_dict(),
+                "offsets": [off.to_dict() for off in self.offsets_],
+                "model_ref": {
+                    "class_name": type(ref_model).__name__,
+                    "model_id": self.model_id,
+                    "params": model_params,
+                },
+            },
+            "fit_meta": dict(getattr(self, "fit_meta_", {})),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict, model: Any = None) -> "CalibratedModel":
+        """Rebuild a fitted wrapper, reattaching the base model.
+
+        Parameters
+        ----------
+        d : dict
+            Output of :meth:`to_dict`.
+        model : object or None
+            The base model to reattach (matched against the stored reference
+            is the caller's responsibility). With ``None``, the loaded
+            wrapper can serialize and introspect but ``predict_proba``
+            raises until a model is assigned to ``model_``.
+
+        Raises
+        ------
+        ValueError
+            If the schema version is unknown or the payload class differs.
+        """
+        check_schema(d)
+        if d.get("class") != cls.__name__:
+            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
+        from ._registry import load
+
+        params = d.get("params", {})
+        state = d.get("state", {})
+        calibrator = load(state["calibrator"])
+        obj = cls(
+            model,
+            calibrator,  # type: ignore[arg-type]
+            flow=params.get("flow", "prefit"),
+            cv=params.get("cv", 5),
+            ensemble=params.get("ensemble", False),
+            random_state=params.get("random_state", 42),
+            model_id=params.get("model_id"),
+        )
+        obj.calibrator_ = calibrator  # type: ignore[assignment]
+        obj.offsets_ = [LogitOffset.from_dict(o) for o in state.get("offsets", [])]
+        obj.ensemble_ = []
+        obj.model_ = model
+        obj._cal_scores = None  # type: ignore[assignment]
+        obj.fit_meta_ = dict(d.get("fit_meta", {}))
+        obj.fitted_ = True
+        return obj
+
+    def to_json(
+        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
+    ) -> str | None:
+        """Serialize to JSON text, or to ``path`` when given (returns None then)."""
+        text = json.dumps(self.to_dict(), indent=indent)
+        if path is None:
+            return text
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return None
+
+    @classmethod
+    def from_json(cls, path_or_str: object, model: Any = None) -> "CalibratedModel":
+        """Load from a JSON string or a filesystem path (see :meth:`from_dict`)."""
+        text = str(path_or_str)
+        if not text.lstrip().startswith("{"):
+            with open(text, encoding="utf-8") as fh:
+                text = fh.read()
+        return cls.from_dict(json.loads(text), model=model)
+
+    def fingerprint(self) -> str:
+        """SHA-256 of the canonical serialized form, version- and timestamp-blind."""
+        return fingerprint_of_dict(self.to_dict())

@@ -123,7 +123,10 @@ def test_round_trip_bit_identical(fitted) -> None:
     name, obj = fitted
     cls = SERIALIZABLE[name]
     js = obj.to_json()
-    obj2 = cls.from_json(js)
+    if name == "CalibratedModel":  # the model is a reference: reattach on load
+        obj2 = cls.from_json(js, model=_StubModel())
+    else:
+        obj2 = cls.from_json(js)
     np.testing.assert_array_equal(_predict(obj, _Q), _predict(obj2, _Q))
 
 
@@ -138,7 +141,10 @@ def test_interpret_survives_round_trip(fitted) -> None:
 def test_to_dict_idempotent(fitted) -> None:
     name, obj = fitted
     d = obj.to_dict()
-    assert SERIALIZABLE[name].from_dict(d).to_dict() == d
+    if name == "CalibratedModel":
+        assert SERIALIZABLE[name].from_dict(d, model=_StubModel()).to_dict() == d
+    else:
+        assert SERIALIZABLE[name].from_dict(d).to_dict() == d
 
 
 def test_fingerprint_stable_and_data_sensitive(fitted) -> None:
@@ -192,3 +198,32 @@ def test_to_json_writes_file(tmp_path) -> None:
     assert cal.to_json(path) is None
     loaded = PlattCalibrator.from_json(path)
     np.testing.assert_array_equal(cal.predict_proba(_Q), loaded.predict_proba(_Q))
+
+
+def test_calibrated_model_from_dict_reattaches_model() -> None:
+    from probcal import BetaCalibrator, CalibratedModel
+
+    model = _StubModel()
+    w = CalibratedModel(model, BetaCalibrator(), flow="prefit", model_id="stub-1").fit(
+        _D.scores.reshape(-1, 1), _D.y
+    )
+    d = w.to_dict()
+    assert d["state"]["model_ref"]["model_id"] == "stub-1"
+    assert d["state"]["model_ref"]["class_name"] == "_StubModel"
+    w2 = CalibratedModel.from_dict(d, model=model)
+    np.testing.assert_array_equal(
+        w.predict_proba(_Q.reshape(-1, 1)), w2.predict_proba(_Q.reshape(-1, 1))
+    )
+    with pytest.raises(RuntimeError, match="pass X"):
+        w2.offset_to(target_mean=0.05)
+    w2.offset_to(delta=0.1, X=_Q.reshape(-1, 1))  # explicit X works after reload
+
+
+def test_calibrated_model_ensemble_refuses_serialization() -> None:
+    from probcal import BetaCalibrator, CalibratedModel
+
+    w = CalibratedModel(_StubModel(), BetaCalibrator(), flow="cv", ensemble=True, cv=3).fit(
+        _D.scores.reshape(-1, 1), _D.y
+    )
+    with pytest.raises(NotImplementedError, match="ensemble"):
+        w.to_dict()

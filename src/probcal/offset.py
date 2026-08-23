@@ -9,6 +9,8 @@ King & Zeng (2001); Elkan (2001); Tasche (2013) — full records in the
 documentation.
 """
 
+import json
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Self
@@ -16,7 +18,9 @@ from typing import Self
 import numpy as np
 
 from ._math import _LOGIT_CLIP, bisect, expit, logit
+from ._registry import register
 from ._results import Interpretation
+from ._serialize import SCHEMA_VERSION, check_schema, data_fingerprint, fingerprint_of_dict
 from ._validation import validate_scores, validate_weights
 from .metrics.regression import GuardrailReport, calibration_guardrails
 
@@ -61,6 +65,7 @@ class AuditReport:
         return "\n".join(lines)
 
 
+@register
 class LogitOffset:
     """Uniform log-odds shift: ``p' = sigma(logit(p) + delta)``.
 
@@ -135,6 +140,12 @@ class LogitOffset:
             self.delta_ = bisect(gap, -_DELTA_BRACKET, _DELTA_BRACKET, tol=1e-14)
         self.post_mean_ = float(np.average(expit(z + self.delta_), weights=w))
         self.timestamp_ = datetime.now(UTC).isoformat(timespec="seconds")
+        self.fit_meta_ = {
+            "n_obs": int(p_arr.shape[0]),
+            "weight_sum": float(w.sum()),
+            "fitted_at_utc": self.timestamp_,
+            "data_fingerprint": data_fingerprint(p_arr, w),
+        }
         self.fitted_ = True
         return self
 
@@ -315,3 +326,78 @@ class LogitOffset:
             guardrails_before=before,
             guardrails_after=after,
         )
+
+    # ------------------------------------------------------------- serialization
+    # LogitOffset is not a BaseCalibrator subclass, so the protocol is
+    # implemented here with the shared _serialize helpers (the existing
+    # offset.py duplication precedent, e.g. interval_inverse's fit guard).
+
+    def to_dict(self) -> dict[str, object]:
+        """Versioned JSON-native snapshot (see ``BaseCalibrator.to_dict``).
+
+        ``fit_meta`` records ``n_obs``, ``weight_sum``, ``fitted_at_utc``,
+        and the ``data_fingerprint`` of the ``(p, w)`` pair — no ``n_events``
+        because the offset is fitted on probabilities alone.
+        """
+        if not self.fitted_:
+            raise RuntimeError("LogitOffset is not fitted; call fit() first")
+        from . import __version__
+
+        return {
+            "probcal_schema": SCHEMA_VERSION,
+            "probcal_version": __version__,
+            "class": type(self).__name__,
+            "params": {"delta": self.delta, "target_mean": self.target_mean},
+            "state": {
+                "delta_": self.delta_,
+                "pre_mean_": self.pre_mean_,
+                "post_mean_": self.post_mean_,
+                "timestamp_": self.timestamp_,
+            },
+            "fit_meta": dict(getattr(self, "fit_meta_", {})),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "LogitOffset":
+        """Rebuild a fitted offset from :meth:`to_dict` output.
+
+        Raises
+        ------
+        ValueError
+            If the schema version is unknown or the payload class differs.
+        """
+        check_schema(d)
+        if d.get("class") != cls.__name__:
+            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
+        params = d.get("params", {})
+        obj = cls(delta=params.get("delta"), target_mean=params.get("target_mean"))
+        for key, value in d.get("state", {}).items():
+            setattr(obj, key, value)
+        obj.fit_meta_ = dict(d.get("fit_meta", {}))
+        obj.fitted_ = True
+        return obj
+
+    def to_json(
+        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
+    ) -> str | None:
+        """Serialize to JSON text, or to ``path`` when given (returns None then)."""
+        text = json.dumps(self.to_dict(), indent=indent)
+        if path is None:
+            return text
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return None
+
+    @classmethod
+    def from_json(cls, path_or_str: object) -> "LogitOffset":
+        """Load from a JSON string or a filesystem path."""
+        text = str(path_or_str)
+        if not text.lstrip().startswith("{"):
+            with open(text, encoding="utf-8") as fh:
+                text = fh.read()
+        return cls.from_dict(json.loads(text))
+
+    def fingerprint(self) -> str:
+        """SHA-256 of the canonical serialized form, blind to versions and
+        to the audit ``timestamp_`` — identical fits fingerprint identically."""
+        return fingerprint_of_dict(self.to_dict())

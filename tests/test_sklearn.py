@@ -108,3 +108,121 @@ def test_import_error_names_extra(monkeypatch: pytest.MonkeyPatch) -> None:
         with pytest.raises(ImportError, match=r"probcal\[sklearn\]"):
             importlib.reload(mod)
     importlib.reload(mod)  # restore for the rest of the session
+
+
+# ---------------------------------------------------------------- CalibratedClassifier
+
+
+def _feature_data(n=1500, seed=5):
+    rng = np.random.default_rng(seed)
+    X = rng.normal(size=(n, 3))
+    z = 1.4 * X[:, 0] - 0.8 * X[:, 1] + 0.3 * X[:, 2] - 2.0
+    y = (rng.random(n) < 1.0 / (1.0 + np.exp(-z))).astype(int)
+    return X, y
+
+
+def test_calibrated_classifier_matches_manual_oof_protocol() -> None:
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import StratifiedKFold, cross_val_predict
+
+    from probcal.sklearn import CalibratedClassifier
+
+    X, y = _feature_data()
+    clf = CalibratedClassifier(LogisticRegression(max_iter=1000), cv=5, random_state=0).fit(X, y)
+
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+    oof = cross_val_predict(
+        LogisticRegression(max_iter=1000), X, y, cv=skf, method="predict_proba"
+    )[:, 1]
+    manual = BetaCalibrator().fit(oof, y.astype(float))
+    final = LogisticRegression(max_iter=1000).fit(X, y)
+    expected = manual.predict_proba(final.predict_proba(X)[:, 1])
+    np.testing.assert_allclose(clf.predict_proba(X)[:, 1], expected, atol=1e-12)
+    assert list(clf.classes_) == [0, 1]
+
+
+def test_calibrated_classifier_prefit() -> None:
+    from sklearn.linear_model import LogisticRegression
+
+    from probcal.sklearn import CalibratedClassifier
+
+    X, y = _feature_data()
+    model = LogisticRegression(max_iter=1000).fit(X[:1000], y[:1000])
+    clf = CalibratedClassifier(model, cv="prefit").fit(X[1000:], y[1000:])
+    assert clf.estimator_ is model
+    manual = BetaCalibrator().fit(model.predict_proba(X[1000:])[:, 1], y[1000:].astype(float))
+    np.testing.assert_allclose(
+        clf.predict_proba(X)[:, 1],
+        manual.predict_proba(model.predict_proba(X)[:, 1]),
+        atol=1e-12,
+    )
+
+
+def test_calibrated_classifier_decision_function_maps_through_expit() -> None:
+    from sklearn.svm import LinearSVC
+
+    from probcal.sklearn import CalibratedClassifier
+
+    X, y = _feature_data(800)
+    svc = LinearSVC().fit(X, y)
+    clf = CalibratedClassifier(svc, cv="prefit", method="decision_function").fit(X, y)
+    from probcal._math import expit as _expit
+
+    manual = BetaCalibrator().fit(_expit(svc.decision_function(X)), y.astype(float))
+    np.testing.assert_allclose(
+        clf.predict_proba(X)[:, 1],
+        manual.predict_proba(_expit(svc.decision_function(X))),
+        atol=1e-12,
+    )
+
+
+def test_calibrated_classifier_multiclass_raises() -> None:
+    from probcal.sklearn import CalibratedClassifier
+
+    X, y = _feature_data(300)
+    y3 = y.copy()
+    y3[:20] = 2
+    with pytest.raises(ValueError, match="binary"):
+        CalibratedClassifier().fit(X, y3)
+
+
+def test_calibrated_classifier_exposes_calibrator_protocol() -> None:
+    from probcal.sklearn import CalibratedClassifier
+
+    X, y = _feature_data()
+    clf = CalibratedClassifier(random_state=1).fit(X, y)
+    assert clf.is_monotone_ is True
+    lo, hi = clf.interval_inverse(0.0, 0.02, space="logit", buffer_logit=0.1)
+    assert np.isneginf(lo) and np.isfinite(hi)
+    s = clf.point_inverse(np.array([0.3]))
+    np.testing.assert_allclose(clf.calibrator_.predict_proba(s), [0.3], atol=1e-9)
+    assert clf.affine_logit_coeffs_ is None  # abm beta is not affine
+    assert len(clf.fingerprint()) == 64
+    assert clf.to_dict()["class"] == "BetaCalibrator"
+    assert "a =" in repr(clf.interpret())
+
+
+def test_calibrated_classifier_gridsearch_over_calibrator_variant() -> None:
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import GridSearchCV
+
+    from probcal.sklearn import CalibratedClassifier
+
+    X, y = _feature_data(600)
+    gs = GridSearchCV(
+        CalibratedClassifier(LogisticRegression(max_iter=1000), calibrator=BetaCalibrator()),
+        {"calibrator__variant": ["ab", "abm"]},
+        cv=3,
+        scoring="neg_log_loss",
+    ).fit(X, y)
+    assert gs.best_params_["calibrator__variant"] in ("ab", "abm")
+
+
+def test_calibrated_classifier_clone_and_pickle() -> None:
+    from probcal.sklearn import CalibratedClassifier
+
+    X, y = _feature_data(600)
+    clf = CalibratedClassifier(random_state=3).fit(X, y)
+    clf2 = pickle.loads(pickle.dumps(clf))
+    np.testing.assert_array_equal(clf.predict_proba(X), clf2.predict_proba(X))
+    clone(clf).fit(X, y)  # clone-safe

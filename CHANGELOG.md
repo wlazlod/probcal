@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- treecf guide: the cross-repo work list is now documented as implemented in treecf 0.2.4 (provenance, `score_calibrated` read-out, plateau suite, matrix, docs), and the `probcal[treecf]`/`all` optional-dependency floor is raised to `treecf>=0.2.4`; the joint smoke tests additionally pin the read-out and the certificate provenance loop
+
 ## [0.2.0] - 2026-08-23
 
 ### Fixed

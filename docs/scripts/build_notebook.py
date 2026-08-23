@@ -140,7 +140,10 @@ pd.DataFrame(
         "n": [len(y_cal), len(y_test)],
         "event rate": [f"{y_cal.mean():.2%}", f"{y_test.mean():.2%}"],
         "mean score": [f"{s_cal.mean():.2%}", f"{s_test.mean():.2%}"],
-        "AUC": [round(float(roc_auc_score(y_cal, s_cal)), 4), round(float(roc_auc_score(y_test, s_test)), 4)],
+        "AUC": [
+            round(float(roc_auc_score(y_cal, s_cal)), 4),
+            round(float(roc_auc_score(y_test, s_test)), 4),
+        ],
     }
 )
 """)
@@ -203,7 +206,8 @@ for name, proto in (("beta_abm", BetaCalibrator()), ("isotonic", IsotonicCalibra
         y_test, cal_fit.predict_proba(s_test), n_boot=200,
         metrics=("log_loss", "brier", "smooth_ece"),
     )
-    for m, v, lo, hi in zip(rep.names, rep.values, rep.ci_low, rep.ci_high):
+    stats = zip(rep.names, rep.values, rep.ci_low, rep.ci_high, strict=True)
+    for m, v, lo, hi in stats:
         rows.append({"calibrator": name, "metric": m, "estimate": round(float(v), 5),
                      "ci": (round(float(lo), 5), round(float(hi), 5))})
 pd.DataFrame(rows)

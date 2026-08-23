@@ -95,6 +95,8 @@ nav:
   - Tutorials:
       - End-to-end on a rare-event portfolio: notebooks/pd_end_to_end.ipynb
       - PD calibration walkthrough: notebooks/pd_calibration_walkthrough.ipynb
+  - Benchmarks:
+      - Comparison: benchmarks/comparison.md
   - API reference:
       - Overview: api.md
       - Calibrators: api/calibrators.md

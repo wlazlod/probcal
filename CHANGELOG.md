@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-08-23
 
 ### Fixed
 
@@ -31,6 +31,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ### Documentation
 
+- End-to-end notebook on a rare-event portfolio (`docs/notebooks/pd_end_to_end.ipynb`): GBM baseline → logit-scale reliability → selection with bootstrap CIs → Jeffreys per-grade backtests → auditable offset → policy-to-raw translation and a treecf counterfactual → anytime-valid monitoring with an injected drift → JSON round-trips. Home Credit via `kagglehub` under the user's credentials with a documented synthetic fallback; the fallback executes in CI via a new `nbmake` job (spec W12)
+- Comparison benchmark (`docs/benchmarks/comparison.md`, reproducible via `docs/scripts/comparison.py` under `probcal[bench]`): probcal (beta abm, spline, IVAP, selector) vs `sklearn` sigmoid/isotonic, `netcal` BBQ/ENIR/beta, and `betacal`, on five OpenML datasets spanning ~1.5–30% event rates, with `evaluate` bootstrap CIs, Jeffreys grade pass rates, and fit times — including where probcal loses (spec W13)
+- Docs restructured (spec W14): Guide (install/quickstart, sklearn, optbinning, treecf, monitoring, serialization), Concepts, Tutorials, Benchmarks, API reference + `docs/api-stability.md` (public surface, deprecation policy, support matrix). The spec's "Decisions" nav section is not restored — commit 77018f2 removed the internal decision log from published docs after the spec was written
+- README front page rewritten around the wedge (regulated PD, audit trail, exact inverses, anytime-valid monitoring, numpy-only core) with the end-to-end notebook above the fold and the pypistats badge (spec W15)
 - Removed conversation-context phrasing from the `_beta_point_inverse_z` docstring; internal decision log entry 67 rephrased to match
 
 ### Performance

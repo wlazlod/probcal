@@ -74,6 +74,7 @@ nav:
   - How it works: how-it-works.md
   - Guide:
       - scikit-learn adapter: guide/sklearn.md
+      - optbinning scorecards: guide/optbinning.md
   - Concepts:
       - Why calibration: concepts/why-calibration.md
       - Parametric methods: concepts/methods-parametric.md

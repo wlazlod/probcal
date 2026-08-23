@@ -58,3 +58,23 @@ jobs:
 
       - name: Run the sklearn adapter suite
         run: pytest -q tests/test_sklearn.py
+
+  integrations:
+    name: optbinning integration on the pinned version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies with the pinned optbinning
+        run: uv pip install --system -e ".[dev,viz]" "optbinning==0.21.0"
+
+      - name: Run the integration suites
+        run: pytest -q tests/test_optbinning.py tests/test_calibrator_protocol.py

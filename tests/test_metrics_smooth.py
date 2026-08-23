@@ -91,8 +91,18 @@ def test_smooth_ece_binned_close_to_exact(kw: dict) -> None:
     assert abs(smooth_ece(d.y, d.scores, bins=1024) - smooth_ece(d.y, d.scores, bins=None)) <= 1e-3
 
 
-def test_smooth_ece_default_exact_below_bin_count() -> None:
-    d = make_pd_portfolio(n=2000)  # n <= 8192: default must be bit-identical to exact
+def test_smooth_ece_default_close_to_exact_small_n() -> None:
+    # n <= 8192 now takes the lattice path too (0.1.3 ran exact here — the
+    # "size cliff"); values may differ from bins=None at the ~1e-4 level
+    # because the lattice integrator resolves the kernel at >= 8 samples per
+    # sigma vs the exact path's 257-point grid (DECISIONS 68).
+    d = make_pd_portfolio(n=2000)
+    assert abs(smooth_ece(d.y, d.scores) - smooth_ece(d.y, d.scores, bins=None)) <= 1e-3
+
+
+def test_smooth_ece_default_exact_below_min_n() -> None:
+    # n < 64: the lattice buys nothing; default must stay bit-identical to exact.
+    d = make_pd_portfolio(n=50, event_rate=0.3, random_state=0)
     assert smooth_ece(d.y, d.scores) == smooth_ece(d.y, d.scores, bins=None)
 
 
@@ -113,11 +123,19 @@ def test_e50_weighted_moves_when_tail_upweighted() -> None:
     assert weighted > baseline
 
 
-def test_smooth_ece_guard_falls_back_to_exact() -> None:
+def test_smooth_ece_guard_falls_back_to_exact(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Wide clipped-score logit range + tiny bin budget: the refinement size
+    # b2 = ceil(range / (sigma/8)) exceeds the (patched) lattice cap, so the
+    # exact path must run — and must equal bins=None bit-for-bit. (Under the
+    # real 2**20 cap this data would refine successfully instead; the patch
+    # keeps the infeasible-refinement fallback reachable at test scale.)
+    import probcal.metrics.smooth as smooth_mod
+
+    monkeypatch.setattr(smooth_mod, "_SMECE_MAX_BINS", 1024)
     rng = np.random.default_rng(3)
     n = 4000
     p = rng.uniform(0.45, 0.55, n)
-    p[:5] = 1e-12  # clipped scores: logit range ~55 wide -> huge bin width
+    p[:5] = 1e-12  # clipped scores: logit range ~28 wide -> huge refinement size
     y = (rng.uniform(size=n) < p).astype(float)
     assert smooth_ece(y, p, bins=64) == smooth_ece(y, p, bins=None)
 

@@ -82,6 +82,18 @@ def test_smooth_ece_default_wired_to_binned_path_n10k() -> None:
     assert elapsed < 1.0
 
 
+def test_smooth_ece_default_n4000_under_ceiling() -> None:
+    # The 0.1.3 "size cliff": n <= 8192 ran the exact O(n)-per-step path
+    # (~0.35s at n=4000 on this host) while n=8193 took ~2ms. The lattice
+    # path now engages for all n >= 64 and measures ~2ms here; 0.25s keeps
+    # ~100x headroom for slow CI while staying below the pre-fix exact cost.
+    d = make_pd_portfolio(n=4000, random_state=42)
+    t0 = time.perf_counter()
+    smooth_ece(d.y, d.scores)
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 0.25
+
+
 def test_evaluate_n20k_boot20_under_130s() -> None:
     d = make_pd_portfolio(n=20_000, random_state=42)
     t0 = time.perf_counter()

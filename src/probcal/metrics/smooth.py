@@ -39,6 +39,7 @@ def _smece_fixed_point(loc: np.ndarray, mass: np.ndarray) -> tuple[float, float]
 
 
 _SMECE_MAX_BINS = 1 << 20
+_SMECE_MIN_N = 64
 
 
 def _smece_at_sigma_lattice(m: np.ndarray, width: float, sigma: float) -> float:
@@ -107,23 +108,23 @@ def smooth_ece(
     ``bins`` pre-aggregates the weighted residual measure onto a regular grid
     over the logit range before solving the fixed point; the binned measure
     is then evaluated in closed form on its own lattice by direct Gaussian
-    convolution, at a cost independent of n and of sigma. With ``bins=None``,
-    or whenever ``n <= bins``, or the logit range is degenerate
-    (``t.max() == t.min()``), this reproduces the exact 0.1.2 computation
-    bit-for-bit. Otherwise, if the found ``sigma`` is smaller than 8 bin
-    widths (the kernel would be under-resolved by the bins), the solve is
-    repeated once on an adaptively refined binning (``bins <- ceil(range /
-    (sigma/8))``); when that refined bin count would reach or exceed ``n``,
-    or exceed ``2**20``, the exact computation is used directly instead of
-    refining that far; otherwise the guard is retried once on the refined
-    binning, and the exact computation is used as a silent fallback if it
-    still trips. That fallback is
-    O(n) per bisection step, matching the pre-0.1.3 cost, and can be reached
+    convolution, at a cost independent of n and of sigma. The lattice path
+    engages for every call with ``n >= 64`` and a non-degenerate logit range
+    (0.1.3 engaged it only for ``n > bins``, leaving typical calibration-set
+    sizes on the exact O(n)-per-step path — the "size cliff", DECISIONS 68).
+    With ``bins=None``, ``n < 64``, or a degenerate range
+    (``t.max() == t.min()``), the exact 0.1.2 computation runs bit-for-bit.
+    Otherwise, if the found ``sigma`` is smaller than 8 bin widths (the
+    kernel would be under-resolved by the bins), the solve is repeated once
+    on an adaptively refined binning (``bins <- ceil(range / (sigma/8))``);
+    the exact computation is used only when that refinement is infeasible
+    (refined bin count above ``2**20``) or still under-resolved — reachable
     for near-perfectly-calibrated data spread over a wide logit range (e.g.
-    extreme/clipped scores), so worst-case cost is unchanged from 0.1.2. The
-    lattice integrator resolves the kernel at >= 8 samples per sigma, which
-    is more accurate than the pre-fix 257-point grid whenever sigma < range /
-    256.
+    extreme/clipped scores), so the worst case matches the pre-0.1.3 O(n)
+    cost. For ``n <= bins`` the lattice value may differ from the exact
+    grid at the ~1e-4 level; the lattice integrator is the more accurate of
+    the two (it resolves the kernel at >= 8 samples per sigma, vs the exact
+    path's fixed 257-point grid) — ``bins=None`` recovers the old values.
 
     Parameters
     ----------
@@ -146,7 +147,7 @@ def smooth_ece(
     t = logit(p_arr)
     mass = (w / w.sum()) * (y_arr - p_arr)
     t_lo, t_hi = float(t.min()), float(t.max())
-    if bins is None or t.size <= bins or t_hi == t_lo:
+    if bins is None or t.size < _SMECE_MIN_N or t_hi == t_lo:
         return _smece_fixed_point(t, mass)[0]
 
     def _binned_solve(b: int) -> tuple[float, float, float]:
@@ -161,8 +162,8 @@ def smooth_ece(
         return value
     # Under-resolved: one adaptive refinement sized so 8 bins span sigma.
     b2 = math.ceil((t_hi - t_lo) / (sigma / 8.0))
-    if b2 >= t.size or b2 > _SMECE_MAX_BINS:
-        return _smece_fixed_point(t, mass)[0]  # exact is cheaper or required
+    if b2 > _SMECE_MAX_BINS:
+        return _smece_fixed_point(t, mass)[0]  # refinement infeasible: exact
     value, sigma, width = _binned_solve(b2)
     if sigma >= 8.0 * width:
         return value

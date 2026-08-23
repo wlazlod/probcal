@@ -140,6 +140,21 @@ def test_smooth_ece_guard_falls_back_to_exact(monkeypatch: pytest.MonkeyPatch) -
     assert smooth_ece(y, p, bins=64) == smooth_ece(y, p, bins=None)
 
 
+def test_smooth_ece_second_guard_falls_back_to_exact(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Force the refined solve to stay under-resolved: a fake lattice solver
+    # returning sigma = 4*width fails the sigma >= 8*width acceptance at the
+    # initial and the refined binning alike (b2 = 2*bins stays far below the
+    # 2**20 cap), so the last-resort exact fallback must run and match
+    # bins=None bit-for-bit.
+    import probcal.metrics.smooth as smooth_mod
+
+    monkeypatch.setattr(
+        smooth_mod, "_smece_fixed_point_lattice", lambda m, width: (4.0 * width, 4.0 * width)
+    )
+    d = make_pd_portfolio(n=2000)
+    assert smooth_ece(d.y, d.scores) == smooth_ece(d.y, d.scores, bins=None)
+
+
 def test_smece_lattice_no_spurious_early_exit() -> None:
     # Pre-fix, the 257-point grid aliased against the 8192-bin lattice and
     # reported ~1.7e-7 at sigma=1e-4 (spurious "perfectly calibrated" exit).

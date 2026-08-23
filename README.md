@@ -124,7 +124,7 @@ to `grid_size=512` quantile points instead of refitting at every observation —
 device R's `stats::lowess` uses via its `delta` parameter (fit at spaced points, interpolate
 the rest) — and `smooth_ece` pre-aggregates its residual measure onto `bins=8192` cells
 before the bandwidth bisection — for every n ≥ 64 as of this release (0.1.3 ran the exact
-path for n ≤ 8192: ~1s at n=4000 on this host; now 1–4ms across n ∈ [64, 10⁵] and ~43ms at
+path for n ≤ 8192: ~1s at n=4000 on this host; now 1–6ms across n ∈ [64, 10⁵] and ~43ms at
 n=10⁶, where the O(n) pre-binning dominates). Measured on this host: `ici` at n=50,000 dropped from 192.2s
 (v0.1.2) to 1.2s, and `loess(grid_size=512)` now fits n=1,000,000 points in under 30s.
 `grid_size=None` and `bins=None` recover the exact pre-0.1.3 values and cost, so nothing is

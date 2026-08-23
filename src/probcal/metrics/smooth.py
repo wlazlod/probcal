@@ -39,6 +39,10 @@ def _smece_fixed_point(loc: np.ndarray, mass: np.ndarray) -> tuple[float, float]
 
 
 _SMECE_MAX_BINS = 1 << 20
+# Below this n the lattice buys nothing over the exact path and the default
+# stays bit-identical to bins=None (spec W1). Note the exact path's 257-point
+# grid can under-resolve small-sigma kernels on wide logit ranges (DECISIONS
+# 66/68), so on such data the two sides of this threshold can differ.
 _SMECE_MIN_N = 64
 
 
@@ -122,9 +126,12 @@ def smooth_ece(
     for near-perfectly-calibrated data spread over a wide logit range (e.g.
     extreme/clipped scores), so the worst case matches the pre-0.1.3 O(n)
     cost. For ``n <= bins`` the lattice value may differ from the exact
-    grid at the ~1e-4 level; the lattice integrator is the more accurate of
-    the two (it resolves the kernel at >= 8 samples per sigma, vs the exact
-    path's fixed 257-point grid) — ``bins=None`` recovers the old values.
+    grid at the ~1e-4 level on typical portfolios (measured <= 2.4e-4 on
+    ``make_pd_portfolio``); on wide clipped-logit-range data the gap can be
+    much larger because the exact path's fixed 257-point grid under-resolves
+    small-sigma kernels there — in that regime the lattice value is the
+    better one (>= 8 samples per sigma). ``bins=None`` recovers the old
+    values.
 
     Parameters
     ----------

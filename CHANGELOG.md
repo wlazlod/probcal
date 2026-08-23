@@ -14,6 +14,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 - `smooth_ece`'s lattice path now engages for every `n >= 64` instead of only `n > bins`, removing the size cliff at typical calibration-set sizes (0.1.3: exact path at n=4000 cost ~1s/call on the benchmark host and made `evaluate(n=6000)` bootstrap runs smECE-bound; n=8193 took ~2ms). Path selection is decoupled from n: bin at `bins` (default 8192), accept when the fixed point satisfies `sigma* >= 8·width`, refine adaptively once, fall back to exact only when refinement is infeasible or still under-resolved, or `n < 64`. Values for `n <= bins` may differ from the 0.1.2/0.1.3 exact grid at the ~1e-4 level — the lattice integrator is the more accurate one (≥ 8 samples per sigma vs the 257-point grid); `bins=None` recovers old values bit-for-bit (DECISIONS 68)
 
+### Added
+
+- `ENIRCalibrator.fit` emits a single `UserWarning` above 50,000 unique scores stating the expected fit minutes — the path solver is quadratic in unique scores (DECISIONS 70)
+- README "Calibrators at a glance" table: one-line scaling note per method (DECISIONS 70)
+
+### Documentation
+
+- Removed conversation-context phrasing from the `_beta_point_inverse_z` docstring; internal decision log entry 67 rephrased to match
+
 ### Performance
 
 - `smooth_ece` measures 1.0–3.6ms for n ∈ [64, 8192] on `make_pd_portfolio` (0.1.3: exact path, ~1s at n=4000 on the benchmark host), 3–6ms at n=10⁴–10⁵ and ~43ms at n=10⁶ (the O(n) pre-binning, unchanged from 0.1.3); observed lattice-vs-exact deviation ≤ 6.1e-5 across the swept sizes. `evaluate(n=6000, n_boot=1000)` measures 198.9s on the benchmark host (0.1.3: ≈10min, extrapolated from the 60s `n_boot=100` measurement)

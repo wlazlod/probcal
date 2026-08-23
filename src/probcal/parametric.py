@@ -14,7 +14,6 @@ import numpy as np
 
 from ._math import bisect, expit, irls_logistic, logit
 from ._results import Interpretation
-from ._validation import validate_scores
 from .base import (
     BaseCalibrator,
     UnattainableTargetError,
@@ -51,7 +50,7 @@ def _beta_point_inverse_z(
     ``max_steps`` (default 4) Halley corrections, exiting early once the
     residual certificate ``|f(z)| <= rtol * max(1, |K|)`` is met; the
     certificate bounds the coordinate error by ``|f(z)| / min(a, b)``. The
-    user's original prescription was a fixed 2 steps (machine precision up to
+    initial design was a fixed 2 steps (machine precision up to
     asymmetry ratio 3, ~1e-10 at ratio 10, ~1e-4 at ratio 50 without a 3rd
     step); the certified cap is a finite, bounded expression — not
     open-ended iteration — that reaches machine precision at ratio 50 in

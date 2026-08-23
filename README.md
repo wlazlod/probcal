@@ -103,6 +103,22 @@ lo_z, hi_z = wrapped.interval_inverse(0.0, 0.02, space="logit")   # "PD <= 2%" i
 ² prdm0/probcal (P. R. Diniz Marinho), unaffiliated — see the FAQ. Verified against v0.2.0, 2026-08-08.
 ³ Platt, temperature, beta, isotonic, histogram binning; its multiclass methods (Dirichlet, vector scaling, one-vs-rest) are out of probcal's binary scope.
 
+### Calibrators at a glance
+
+| Method | Class | Scaling |
+|---|---|---|
+| Platt scaling | `PlattCalibrator` | O(n) per IRLS iteration |
+| Temperature scaling | `TemperatureCalibrator` | O(n) per IRLS iteration |
+| Beta calibration | `BetaCalibrator` | O(n) per IRLS iteration |
+| Isotonic regression | `IsotonicCalibrator` | O(n log n) fit (sort + PAVA) |
+| Centered isotonic (CIR) | `CenteredIsotonicCalibrator` | O(n log n) fit |
+| Histogram binning | `HistogramBinningCalibrator` | O(n log n) fit |
+| Scaling-binning | `ScalingBinningCalibrator` | O(n log n) fit |
+| BBQ | `BBQCalibrator` | O(n log n) fit per candidate binning |
+| ENIR | `ENIRCalibrator` | quadratic in unique scores; intended for m ≲ 50,000 (`fit` warns above) |
+| Venn–Abers (IVAP) | `VennAbersCalibrator` | O(n log n) fit, O(log n) per prediction |
+| Spline calibration | `SplineCalibrator` | O(n · k) per IRLS iteration (k knots) |
+
 Performance note: the ICI family (`ici`/`e50`/`e90`/`emax`) shares one LOESS fit anchored
 to `grid_size=512` quantile points instead of refitting at every observation — the same
 device R's `stats::lowess` uses via its `delta` parameter (fit at spaced points, interpolate

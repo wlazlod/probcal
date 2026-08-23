@@ -17,6 +17,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ### Added
 
+- Versioned JSON serialization on every fitted object (spec W5): `to_dict`/`from_dict`/`to_json`/`from_json` with a schema-checked envelope (`probcal_schema` 1, `probcal_version`, class name, params, state, fit metadata) and a class registry for `from_dict` dispatch; `fingerprint()` (SHA-256, version- and timestamp-blind — identical fits fingerprint identically) plus `fit_meta["data_fingerprint"]` (permutation-invariant SHA-256 of the sorted training triple). Covers all 12 calibrators, `LogitOffset`, `CalibratorSelector`, and `CalibratedModel` (which stores a model *reference* — class name, `model_id`, `get_params()` — never the model object; reattach via `from_dict(d, model=...)`; the ensemble flow refuses serialization). JSON only, no pickle anywhere. Compatibility promise — every 0.x release reads schema 1 — enforced by committed golden files verified in CI (`tests/golden/`); new docs chapter `concepts/serialization.md` (DECISIONS 73)
+- `CalibratedModel(model_id=...)` keyword-only constructor parameter naming the wrapped model in the serialized reference (DECISIONS 73)
+- `CalibratorSelector` is now a `BaseCalibrator` subclass: same `fit`/`predict_proba`/`interpret` surface, plus inherited `get_params`/`set_params`, serialization, and the inverse-map machinery delegating to the refitted winner; `is_monotone_` mirrors the winner (DECISIONS 73)
 - `ENIRCalibrator.fit` emits a single `UserWarning` above 50,000 unique scores stating the expected fit minutes — the path solver is quadratic in unique scores (DECISIONS 70)
 - README "Calibrators at a glance" table: one-line scaling note per method (DECISIONS 70)
 

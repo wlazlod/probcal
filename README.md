@@ -103,6 +103,21 @@ lo_z, hi_z = wrapped.interval_inverse(0.0, 0.02, space="logit")   # "PD <= 2%" i
 ² prdm0/probcal (P. R. Diniz Marinho), unaffiliated — see the FAQ. Verified against v0.2.0, 2026-08-08.
 ³ Platt, temperature, beta, isotonic, histogram binning; its multiclass methods (Dirichlet, vector scaling, one-vs-rest) are out of probcal's binary scope.
 
+### Serialization
+
+Every fitted object round-trips through versioned, human-readable JSON — never pickle
+(auditable; loading executes no code):
+
+```python
+cal.to_json("beta.json")
+loaded = BetaCalibrator.from_json("beta.json")   # bit-identical predictions
+cal.fingerprint()                                # sha-256 provenance id
+```
+
+Compatibility promise: every 0.x release reads schema 1, enforced by committed golden
+files in CI; schema bumps ship only with a converter. Details: the *Serialization*
+concepts chapter.
+
 ### Calibrators at a glance
 
 | Method | Class | Scaling |

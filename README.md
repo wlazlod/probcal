@@ -1,22 +1,49 @@
 # probcal
 
 [![PyPI](https://img.shields.io/pypi/v/probcal.svg)](https://pypi.org/project/probcal/)
+[![Downloads](https://img.shields.io/pypi/dm/probcal.svg)](https://pypistats.org/packages/probcal)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
-Universal post-hoc probability calibration for binary classifiers: methods, metrics,
-diagnostics, and auditable offsetting — **numpy-only**.
+Probability calibration you can put in front of a validator: **numpy-only**
+methods, metrics, and diagnostics for binary classifiers — built for
+regulated PD models, fully general in practice.
 
-`probcal` unifies the binary calibration literature (Platt, temperature, beta, isotonic,
-centered isotonic, histogram binning, scaling-binning, BBQ, ENIR, Venn–Abers, spline
-calibration), an extensive catalog of calibration evaluation metrics and statistical tests,
-calibration visualization on both probability and logit scales, an auditable logit-offset
-(central tendency) adjustment, automatic method selection under nested validation, and two
-data flows (prefit and cross-validation). Primary application domain: credit-risk PD models;
-the package is fully general.
+What the wedge is, concretely:
+
+- **Regulated-PD first.** Logit-scale diagnostics that keep 1% readable,
+  per-grade regulatory backtests (binomial, Jeffreys), and a central-tendency
+  adjustment that ships as an auditable `LogitOffset` stage — never a silent
+  refit.
+- **Audit trail everywhere.** Every method explains its own parameters
+  (`interpret()`); every fitted object serializes to versioned JSON (never
+  pickle) with provenance fingerprints; every refusal names the reason and
+  the alternative — no silent clamps, no silent approximations.
+- **Exact inverse maps.** "PD ≤ 2%" translates to a raw-score threshold,
+  scorecard point cut-offs, or a counterfactual target, exactly
+  (`interval_inverse` / `point_inverse` / `Chain`) — the contract recourse
+  engines like [treecf](https://github.com/wlazlod/treecf) build on.
+- **Anytime-valid monitoring.** `probcal.monitor` watches deployed
+  calibration with e-processes: the alarm keeps its type-I guarantee at
+  *every* look, and reports whether a re-offset is enough or a re-fit is due.
+- **numpy-only core.** `import probcal` pulls numpy and nothing else —
+  enforced by a test. scikit-learn/optbinning/treecf adapters are opt-in
+  extras.
+
+**Start here:** the executed
+[end-to-end notebook](https://wlazlod.github.io/probcal/notebooks/pd_end_to_end/)
+takes one rare-event portfolio from GBM baseline to reliability diagnosis,
+selection with CIs, per-grade backtests, offsetting, threshold translation,
+a counterfactual, monitoring, and JSON round-trips.
+
+`probcal` covers the binary calibration literature (Platt, temperature, beta,
+isotonic, centered isotonic, histogram binning, scaling-binning, BBQ, ENIR,
+Venn–Abers, spline), an extensive metric catalog with bootstrap CIs,
+automatic method selection under nested validation, and prefit/cv data flows.
 
 **Status:** released on PyPI, beta. The API is stable enough to build on; breaking changes
-bump the minor version until 1.0.
+bump the minor version until 1.0 (see *API stability* in the docs). Serialized artifacts
+have a stronger promise: every 0.x release reads schema 1, enforced by golden files in CI.
 
 ## Installation
 

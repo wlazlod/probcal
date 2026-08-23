@@ -156,7 +156,7 @@
     "fit_meta": {
       "converged_": true,
       "data_fingerprint": "29e2b0eb217ebb4b49725e90a3e92be7b5c7f28aa15774eeedab941ab53628d1",
-      "fitted_at_utc": "2026-08-23T11:50:50+00:00",
+      "fitted_at_utc": "2026-08-23T12:25:07+00:00",
       "n_events": 10.0,
       "n_obs": 400,
       "separation_fallback_": false,
@@ -166,7 +166,7 @@
       "variant": "abm"
     },
     "probcal_schema": 1,
-    "probcal_version": "0.1.3",
+    "probcal_version": "0.2.0",
     "state": {
       "a_": 0.809946482523828,
       "b_": 5.473742160481538,

@@ -155,7 +155,7 @@
     "class": "CalibratedModel",
     "fit_meta": {
       "data_fingerprint": "29e2b0eb217ebb4b49725e90a3e92be7b5c7f28aa15774eeedab941ab53628d1",
-      "fitted_at_utc": "2026-08-23T11:50:50+00:00",
+      "fitted_at_utc": "2026-08-23T12:25:07+00:00",
       "n_events": 10.0,
       "n_obs": 400,
       "weight_sum": 400.0
@@ -168,14 +168,14 @@
       "random_state": 42
     },
     "probcal_schema": 1,
-    "probcal_version": "0.1.3",
+    "probcal_version": "0.2.0",
     "state": {
       "calibrator": {
         "class": "BetaCalibrator",
         "fit_meta": {
           "converged_": true,
           "data_fingerprint": "29e2b0eb217ebb4b49725e90a3e92be7b5c7f28aa15774eeedab941ab53628d1",
-          "fitted_at_utc": "2026-08-23T11:50:50+00:00",
+          "fitted_at_utc": "2026-08-23T12:25:07+00:00",
           "n_events": 10.0,
           "n_obs": 400,
           "separation_fallback_": false,
@@ -185,7 +185,7 @@
           "variant": "abm"
         },
         "probcal_schema": 1,
-        "probcal_version": "0.1.3",
+        "probcal_version": "0.2.0",
         "state": {
           "a_": 0.809946482523828,
           "b_": 5.473742160481538,
@@ -207,7 +207,7 @@
           "class": "LogitOffset",
           "fit_meta": {
             "data_fingerprint": "e808611c890911a9964b97e8ed211fc6fe1e724ecc590770e77668dea2ebeb44",
-            "fitted_at_utc": "2026-08-23T11:50:50+00:00",
+            "fitted_at_utc": "2026-08-23T12:25:07+00:00",
             "n_obs": 400,
             "weight_sum": 400.0
           },
@@ -216,12 +216,12 @@
             "target_mean": null
           },
           "probcal_schema": 1,
-          "probcal_version": "0.1.3",
+          "probcal_version": "0.2.0",
           "state": {
             "delta_": 0.15,
             "post_mean_": 0.02863208154069762,
             "pre_mean_": 0.02499999999999999,
-            "timestamp_": "2026-08-23T11:50:50+00:00"
+            "timestamp_": "2026-08-23T12:25:07+00:00"
           }
         }
       ]

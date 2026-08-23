@@ -70,12 +70,14 @@ extra_javascript:
 
 nav:
   - Home: index.md
-  - Getting started: getting-started.md
   - How it works: how-it-works.md
   - Guide:
+      - Install and quickstart: getting-started.md
       - scikit-learn adapter: guide/sklearn.md
       - optbinning scorecards: guide/optbinning.md
       - treecf counterfactuals: guide/treecf.md
+      - Monitoring: guide/monitoring.md
+      - Serialization: guide/serialization.md
   - Concepts:
       - Why calibration: concepts/why-calibration.md
       - Parametric methods: concepts/methods-parametric.md
@@ -97,5 +99,6 @@ nav:
       - Calibrators: api/calibrators.md
       - Metrics and tests: api/metrics.md
       - Tools: api/tools.md
+      - API stability: api-stability.md
   - FAQ: faq.md
   - Changelog: changelog.md

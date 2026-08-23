@@ -136,6 +136,57 @@ A non-monotone calibrator, or a monotone one with no affine-logit or beta closed
 function (plateaus have no single preimage) or an otherwise non-affine monotone curve
 (only a generalized inverse is well-defined).
 
+### The step-calibrator contract (what a recourse engine may rely on)
+
+For the step calibrators (`IsotonicCalibrator`,
+`HistogramBinningCalibrator`), `interval_inverse` implements the exact
+generalized-inverse rule below — pinned by regression tests
+(`tests/test_calibrator_protocol.py`) because counterfactual engines
+(treecf) treat it as a contract:
+
+- **Left inverse** `inf{s : g(s) ≥ lo}`: the *left edge* of the first
+  block/bin whose level reaches `lo`.
+- **Right inverse** `sup{s : g(s) ≤ hi}`: the *boundary after* the last
+  block/bin whose level stays within `hi` (or the raw score 1.0 when that
+  is the last block).
+- **Closed intervals.** A target *equal* to a plateau level qualifies the
+  whole plateau: `interval_inverse(t, t)` at a block level `t` returns the
+  block's full raw extent, closed on the left.
+- **Constant extension.** Beyond the outer block levels the map is
+  constant, so a one-sided target (`lo = 0` or `hi ≥` the top level) maps
+  to the full raw range on that side — `0.0`/`1.0` in probability space,
+  `∓inf` in logit space. An interval that misses the output range entirely
+  raises `UnattainableTargetError`, never a clamp.
+
+Worked example: an isotonic fit with block levels `(0.01, 0.04, 0.04,
+0.11)` over blocks `[0, 0.2) [0.2, 0.5) [0.5, 0.8) [0.8, 1]`. The target
+`t = 0.04` gives `interval_inverse(0.04, 0.04) = (0.2, 0.8)` — the left
+edge of the first 0.04 block and the boundary after the second — so a
+counterfactual that must land *at* 0.04 calibrated lands anywhere in
+`[0.2, 0.8)`, and the cheapest feasible point is the block boundary
+nearest the applicant. `interval_inverse(0.12, 1.0)` raises: 0.12 exceeds
+every level.
+
+`CenteredIsotonicCalibrator` is *not* a step function — it interpolates
+linearly between block centers — so a block level is attained at a single
+point unless adjacent block means tie: `interval_inverse(t, t)` returns a
+point preimage. That distinction is also pinned by test.
+
+### The probability boundary
+
+Two refusals keep `point_inverse` inside the no-silent-clamp doctrine. Targets are
+validated strictly inside `(0, 1)` *before* any clipping: `p = 0` and `p = 1` are not
+attained by any finite raw score, so the whole call raises `UnattainableTargetError`
+(naming the offending values) rather than clipping to `[1e-12, 1 − 1e-12]` and returning a
+finite "inverse" — the same all-or-nothing convention the degenerate beta branches already
+used. And when `space="probability"`, any root with `|z| > logit(1 − 1e-12) ≈ 27.631` is
+refused with a pointer at `space="logit"`: `σ(z)` beyond that bound rounds into the
+clipping zone, `predict_proba` clips it back, and the round trip breaks silently (target
+0.998 → raw 1.0 → forward 0.17 was the failure this closes). On the logit scale the answer
+is exact, so nothing is lost — only the lossy representation is refused. For affine-logit
+maps the bound aligns `point_inverse` with `interval_inverse` exactly:
+`p > g(1 − 1e-12) ⟺ z > logit(1 − 1e-12)`.
+
 ## The beta inverse: a layered exact construction
 
 `BetaCalibrator.point_inverse` solves, with `z = logit(s)` and `K = logit(p) - c`,

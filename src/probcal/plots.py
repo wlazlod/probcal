@@ -579,3 +579,59 @@ def plot_offset_audit(offset: Any, *, ax: Any = None) -> Any:
         ax.set_title("logit offset audit")
         ax.legend(loc="lower right")
         return ax
+
+
+def plot_e_process(report: Any, *, ax: Any = None) -> Any:
+    """Monitoring wealth per component on a log scale, with the 1/alpha line.
+
+    Parameters
+    ----------
+    report : MonitorReport
+        Result of :meth:`probcal.monitor.CalibrationMonitor.report`.
+    ax : matplotlib.axes.Axes or None, keyword-only
+        Axes to draw on; a new figure and axes are created if ``None``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes the e-processes were drawn on.
+    """
+    _require_mpl()
+    with _plt.rc_context(_STYLE):
+        if ax is None:
+            _, ax = _plt.subplots(figsize=(7.5, 4.2))
+        steps = report.steps
+        x = np.arange(1, len(steps) + 1)
+        series = [
+            ("global", [s.e_global for s in steps], "black", 2.0),
+            ("offset", [s.e_offset for s in steps], _BLUE, 1.4),
+            ("shape", [s.e_shape for s in steps], _ORANGE, 1.4),
+        ]
+        grades = sorted({g for s in steps for g in s.e_grades})
+        for g in grades:
+            series.append((f"grade {g}", [s.e_grades.get(g, np.nan) for s in steps], _GREY, 1.0))
+        for name, values, color, lw in series:
+            vals = np.asarray(values, dtype=np.float64)
+            if np.all(np.isnan(vals)):
+                continue
+            ax.plot(x, vals, label=name, color=color, linewidth=lw, marker=".")
+        ax.set_yscale("log")
+        ax.axhline(1.0 / report.alpha, color=_RED, linestyle="--", linewidth=1.2, label="1/alpha")
+        alarm_x = next((i + 1 for i, s in enumerate(steps) if s.alarm), None)
+        if alarm_x is not None:
+            ax.axvline(alarm_x, color=_RED, linestyle=":", linewidth=1.0)
+            ax.annotate(
+                f"alarm: {report.alarm_at}",
+                xy=(alarm_x, 1.0),
+                xytext=(4, 6),
+                textcoords="offset points",
+                color=_RED,
+                fontsize=9,
+            )
+        ax.axhline(1.0, color=_GREY, linewidth=0.8)
+        ax.set_xticks(x)
+        ax.set_xticklabels([s.label for s in steps], rotation=45, ha="right", fontsize=8)
+        ax.set_ylabel("e-process wealth (log scale)")
+        ax.set_title("anytime-valid calibration monitoring")
+        ax.legend(loc="upper left", fontsize=9)
+        return ax

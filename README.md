@@ -1,28 +1,56 @@
 # probcal
 
 [![PyPI](https://img.shields.io/pypi/v/probcal.svg)](https://pypi.org/project/probcal/)
+[![Downloads](https://img.shields.io/pypi/dm/probcal.svg)](https://pypistats.org/packages/probcal)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
-Universal post-hoc probability calibration for binary classifiers: methods, metrics,
-diagnostics, and auditable offsetting — **numpy-only**.
+Probability calibration you can put in front of a validator: **numpy-only**
+methods, metrics, and diagnostics for binary classifiers — built for
+regulated PD models, fully general in practice.
 
-`probcal` unifies the binary calibration literature (Platt, temperature, beta, isotonic,
-centered isotonic, histogram binning, scaling-binning, BBQ, ENIR, Venn–Abers, spline
-calibration), an extensive catalog of calibration evaluation metrics and statistical tests,
-calibration visualization on both probability and logit scales, an auditable logit-offset
-(central tendency) adjustment, automatic method selection under nested validation, and two
-data flows (prefit and cross-validation). Primary application domain: credit-risk PD models;
-the package is fully general.
+What the wedge is, concretely:
+
+- **Regulated-PD first.** Logit-scale diagnostics that keep 1% readable,
+  per-grade regulatory backtests (binomial, Jeffreys), and a central-tendency
+  adjustment that ships as an auditable `LogitOffset` stage — never a silent
+  refit.
+- **Audit trail everywhere.** Every method explains its own parameters
+  (`interpret()`); every fitted object serializes to versioned JSON (never
+  pickle) with provenance fingerprints; every refusal names the reason and
+  the alternative — no silent clamps, no silent approximations.
+- **Exact inverse maps.** "PD ≤ 2%" translates to a raw-score threshold,
+  scorecard point cut-offs, or a counterfactual target, exactly
+  (`interval_inverse` / `point_inverse` / `Chain`) — the contract recourse
+  engines like [treecf](https://github.com/wlazlod/treecf) build on.
+- **Anytime-valid monitoring.** `probcal.monitor` watches deployed
+  calibration with e-processes: the alarm keeps its type-I guarantee at
+  *every* look, and reports whether a re-offset is enough or a re-fit is due.
+- **numpy-only core.** `import probcal` pulls numpy and nothing else —
+  enforced by a test. scikit-learn/optbinning/treecf adapters are opt-in
+  extras.
+
+**Start here:** the executed
+[end-to-end notebook](https://wlazlod.github.io/probcal/notebooks/pd_end_to_end/)
+takes one rare-event portfolio from GBM baseline to reliability diagnosis,
+selection with CIs, per-grade backtests, offsetting, threshold translation,
+a counterfactual, monitoring, and JSON round-trips.
+
+`probcal` covers the binary calibration literature (Platt, temperature, beta,
+isotonic, centered isotonic, histogram binning, scaling-binning, BBQ, ENIR,
+Venn–Abers, spline), an extensive metric catalog with bootstrap CIs,
+automatic method selection under nested validation, and prefit/cv data flows.
 
 **Status:** released on PyPI, beta. The API is stable enough to build on; breaking changes
-bump the minor version until 1.0.
+bump the minor version until 1.0 (see *API stability* in the docs). Serialized artifacts
+have a stronger promise: every 0.x release reads schema 1, enforced by golden files in CI.
 
 ## Installation
 
 ```bash
 pip install probcal            # runtime: numpy only
 pip install "probcal[viz]"     # + matplotlib for probcal.plots
+pip install "probcal[sklearn]" # + scikit-learn for probcal.sklearn adapters
 ```
 
 Development setup (tests, lint, type-check):
@@ -103,11 +131,44 @@ lo_z, hi_z = wrapped.interval_inverse(0.0, 0.02, space="logit")   # "PD <= 2%" i
 ² prdm0/probcal (P. R. Diniz Marinho), unaffiliated — see the FAQ. Verified against v0.2.0, 2026-08-08.
 ³ Platt, temperature, beta, isotonic, histogram binning; its multiclass methods (Dirichlet, vector scaling, one-vs-rest) are out of probcal's binary scope.
 
+### Serialization
+
+Every fitted object round-trips through versioned, human-readable JSON — never pickle
+(auditable; loading executes no code):
+
+```python
+cal.to_json("beta.json")
+loaded = BetaCalibrator.from_json("beta.json")   # bit-identical predictions
+cal.fingerprint()                                # sha-256 provenance id
+```
+
+Compatibility promise: every 0.x release reads schema 1, enforced by committed golden
+files in CI; schema bumps ship only with a converter. Details: the *Serialization*
+concepts chapter.
+
+### Calibrators at a glance
+
+| Method | Class | Scaling |
+|---|---|---|
+| Platt scaling | `PlattCalibrator` | O(n) per IRLS iteration |
+| Temperature scaling | `TemperatureCalibrator` | O(n) per IRLS iteration |
+| Beta calibration | `BetaCalibrator` | O(n) per IRLS iteration |
+| Isotonic regression | `IsotonicCalibrator` | O(n log n) fit (sort + PAVA) |
+| Centered isotonic (CIR) | `CenteredIsotonicCalibrator` | O(n log n) fit |
+| Histogram binning | `HistogramBinningCalibrator` | O(n log n) fit |
+| Scaling-binning | `ScalingBinningCalibrator` | O(n log n) fit |
+| BBQ | `BBQCalibrator` | O(n log n) fit per candidate binning |
+| ENIR | `ENIRCalibrator` | quadratic in unique scores; intended for m ≲ 50,000 (`fit` warns above) |
+| Venn–Abers (IVAP) | `VennAbersCalibrator` | O(n log n) fit, O(log n) per prediction |
+| Spline calibration | `SplineCalibrator` | O(n · k) per IRLS iteration (k knots) |
+
 Performance note: the ICI family (`ici`/`e50`/`e90`/`emax`) shares one LOESS fit anchored
 to `grid_size=512` quantile points instead of refitting at every observation — the same
 device R's `stats::lowess` uses via its `delta` parameter (fit at spaced points, interpolate
 the rest) — and `smooth_ece` pre-aggregates its residual measure onto `bins=8192` cells
-before the bandwidth bisection. Measured on this host: `ici` at n=50,000 dropped from 192.2s
+before the bandwidth bisection — for every n as of this release (0.1.3 ran the exact
+path for n ≤ 8192: ~1s at n=4000 on this host; now 1–6ms for all n up to 10⁵ and ~43ms at
+n=10⁶, where the O(n) pre-binning dominates). Measured on this host: `ici` at n=50,000 dropped from 192.2s
 (v0.1.2) to 1.2s, and `loess(grid_size=512)` now fits n=1,000,000 points in under 30s.
 `grid_size=None` and `bins=None` recover the exact pre-0.1.3 values and cost, so nothing is
 lost for portfolios small enough to afford it. Still numpy-only; Rust acceleration remains

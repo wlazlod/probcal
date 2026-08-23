@@ -15,7 +15,9 @@ import warnings
 import numpy as np
 
 from ._math import lgamma_vec, pava
+from ._registry import register
 from ._results import Interpretation
+from ._serialize import decode_value, encode_value
 from ._validation import EPS
 from .base import BaseCalibrator
 from .binning import _equal_mass_edges
@@ -23,6 +25,7 @@ from .binning import _equal_mass_edges
 _JEFFREYS = 0.5
 
 
+@register
 class BBQCalibrator(BaseCalibrator):
     """Bayesian Binning into Quantiles: model averaging over equal-mass binnings.
 
@@ -49,9 +52,25 @@ class BBQCalibrator(BaseCalibrator):
     Naeini, Cooper & Hauskrecht (2015).
     """
 
+    _STATE_ATTRS = ("bins_grid_", "weights_", "is_monotone_")
+
     def __init__(self, min_bins: int | None = None, max_bins: int | None = None) -> None:
         self.min_bins = min_bins
         self.max_bins = max_bins
+
+    def _state(self) -> dict[str, object]:
+        base = super()._state()
+        base["models"] = [[encode_value(e), encode_value(r)] for e, r in self._models]
+        return base
+
+    def _set_state(self, state: dict[str, object]) -> None:
+        state = dict(state)
+        models = state.pop("models")
+        super()._set_state(state)
+        self._models = [
+            (np.asarray(decode_value(e)), np.asarray(decode_value(r)))
+            for e, r in models  # type: ignore[attr-defined, union-attr]
+        ]
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         n = len(s)
@@ -121,6 +140,10 @@ class BBQCalibrator(BaseCalibrator):
         )
 
 
+_ENIR_UNIQUE_WARN = 50_000
+
+
+@register
 class ENIRCalibrator(BaseCalibrator):
     """Ensemble of near-isotonic regressions (ENIR).
 
@@ -129,7 +152,9 @@ class ENIRCalibrator(BaseCalibrator):
     to the fully isotonic fit, then averages the breakpoint solutions with
     BIC weights. The combined map may be non-monotone: ``is_monotone_`` is
     ``False`` and consumers requiring order preservation should prefer a
-    monotone calibrator.
+    monotone calibrator. Fitting is quadratic in the number of unique scores
+    and intended for m <= 50,000; above that, ``fit`` emits a single
+    ``UserWarning`` stating the expected minutes.
 
     Parameters
     ----------
@@ -168,8 +193,21 @@ class ENIRCalibrator(BaseCalibrator):
 
     is_monotone_: bool = False
 
+    _STATE_ATTRS = (
+        "_x",
+        "path_lambdas_",
+        "path_solutions_",
+        "kept_breakpoints_",
+        "weights_",
+        "dropped_weight_",
+    )
+
     def __init__(self, max_solutions: int | None = 256) -> None:
         self.max_solutions = max_solutions
+
+    def _set_state(self, state: dict[str, object]) -> None:
+        super()._set_state(state)
+        self._mixed = self.weights_ @ self.path_solutions_  # recomputed, not stored
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         if self.max_solutions is not None and self.max_solutions < 1:
@@ -177,6 +215,20 @@ class ENIRCalibrator(BaseCalibrator):
         order = np.argsort(s, kind="stable")
         s_sorted, y_sorted, w_sorted = s[order], y[order], w[order]
         s_u, start = np.unique(s_sorted, return_index=True)
+        if s_u.size > _ENIR_UNIQUE_WARN:
+            # Quadratic extrapolation anchored at the measured ~0.6 min
+            # (35.5s) fit at m = 50,000 on the benchmark host (DECISIONS 70).
+            est_min = max(1.0, round((s_u.size / _ENIR_UNIQUE_WARN) ** 2 * 0.6))
+            warnings.warn(
+                f"ENIRCalibrator.fit: {s_u.size:,} unique scores; the near-isotonic "
+                f"path solver is quadratic in unique scores and intended for m <= "
+                f"{_ENIR_UNIQUE_WARN:,} — expect on the order of {est_min:.0f} "
+                "minute(s) of fit time (measured ~0.6 min at m=50,000 on the "
+                "benchmark host). Consider IsotonicCalibrator, or reduce unique "
+                "scores (e.g. round/quantize before fitting).",
+                UserWarning,
+                stacklevel=2,
+            )
         w_u = np.add.reduceat(w_sorted, start)
         y_u = np.add.reduceat(w_sorted * y_sorted, start) / w_u
         self._x = s_u

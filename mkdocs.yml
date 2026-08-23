@@ -70,8 +70,14 @@ extra_javascript:
 
 nav:
   - Home: index.md
-  - Getting started: getting-started.md
   - How it works: how-it-works.md
+  - Guide:
+      - Install and quickstart: getting-started.md
+      - scikit-learn adapter: guide/sklearn.md
+      - optbinning scorecards: guide/optbinning.md
+      - treecf counterfactuals: guide/treecf.md
+      - Monitoring: guide/monitoring.md
+      - Serialization: guide/serialization.md
   - Concepts:
       - Why calibration: concepts/why-calibration.md
       - Parametric methods: concepts/methods-parametric.md
@@ -82,14 +88,20 @@ nav:
       - Offset: concepts/offset.md
       - SHAP and calibration: concepts/shap-calibration.md
       - Inverse maps: concepts/inverse-maps.md
+      - Serialization: concepts/serialization.md
+      - Monitoring: concepts/monitoring.md
       - Automatic selection: concepts/auto-selection.md
       - Visualization: concepts/visualization.md
   - Tutorials:
+      - End-to-end on a rare-event portfolio: notebooks/pd_end_to_end.ipynb
       - PD calibration walkthrough: notebooks/pd_calibration_walkthrough.ipynb
+  - Benchmarks:
+      - Comparison: benchmarks/comparison.md
   - API reference:
       - Overview: api.md
       - Calibrators: api/calibrators.md
       - Metrics and tests: api/metrics.md
       - Tools: api/tools.md
+      - API stability: api-stability.md
   - FAQ: faq.md
   - Changelog: changelog.md

@@ -376,11 +376,18 @@ measure onto equal-width bins over the logit range once, up front (O(n)); each b
 then evaluates that binned measure directly on its own lattice by truncated-Gaussian
 convolution, independent of n. A small-bandwidth guard retries once on an adaptively refined
 binning (`bins <- ceil(range / (sigma/8))`) whenever the found bandwidth would be under-resolved
-by the current bins, then falls back to the exact per-observation computation if the guard still
-trips — so accuracy never degrades silently, and the binned path no longer reuses the exact
+by the current bins, then falls back to the exact per-observation computation only if that
+refinement is infeasible (above 2^20 bins) or still under-resolved — so accuracy never degrades
+silently, and the binned path no longer reuses the exact
 path's 257-point grid (that reuse aliased against the bin lattice and was a cost-only defect,
-DECISIONS 66). `bins=None`, or any call where `n <= bins`, is bit-identical to the pre-0.1.3
-exact computation (DECISIONS 59).
+DECISIONS 66). The lattice path engages for every call with a non-degenerate
+logit range (0.1.3 engaged it only for `n > bins`, leaving typical calibration-set sizes on
+the exact path — the "size cliff", removed in DECISIONS 68); `bins=None` or a
+degenerate range is bit-identical to the pre-0.1.3 exact computation (DECISIONS 59). For
+`n <= bins` the lattice value may differ from the exact grid at the ~1e-4 level on typical
+portfolios (measured ≤ 2.4e-4 on `make_pd_portfolio`); on wide clipped-logit-range data the
+gap can be much larger, because there the exact path's fixed 257-point grid under-resolves
+small-sigma kernels and the lattice value (≥ 8 samples per sigma) is the better one.
 
 **`evaluate`'s cost is dominated by the bootstrap**, not any single metric: every point
 estimate in the requested catalog is recomputed `n_boot` times (default 1000). Per replicate,

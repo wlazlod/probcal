@@ -1,6 +1,6 @@
 [project]
 name = "probcal"
-version = "0.1.3"
+version = "0.2.0"
 description = "Universal post-hoc probability calibration for binary classifiers: methods, metrics, diagnostics, and auditable offsetting — numpy-only."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -34,6 +34,11 @@ Issues = "https://github.com/wlazlod/probcal/issues"
 
 [project.optional-dependencies]
 viz = ["matplotlib>=3.8"]
+sklearn = ["scikit-learn>=1.4"]
+optbinning = ["optbinning>=0.21"]
+treecf = ["treecf>=0.2.3"]
+bench = ["scikit-learn>=1.4", "netcal>=1.3.5", "betacal>=1.1.0", "pandas>=2"]
+all = ["matplotlib>=3.8", "scikit-learn>=1.4", "optbinning>=0.21", "treecf>=0.2.3"]
 dev = [
     "pytest>=8",
     "ruff>=0.4",
@@ -42,6 +47,7 @@ dev = [
     "scipy>=1.11",          # reference for tests ONLY — never imported by src/probcal
     "scikit-learn>=1.4",    # reference for tests ONLY
     "statsmodels>=0.14",    # reference for tests ONLY
+    "nbmake>=1.5",          # executes the end-to-end notebook in CI (W12)
 ]
 docs = [
     "mkdocs-material>=9.5",

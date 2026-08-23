@@ -10,6 +10,7 @@ documentation.
 
 import numpy as np
 
+from ._registry import register
 from ._results import Interpretation
 from .base import BaseCalibrator
 from .parametric import PlattCalibrator
@@ -21,6 +22,7 @@ def _equal_mass_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
     return np.unique(np.quantile(values, qs))
 
 
+@register
 class HistogramBinningCalibrator(BaseCalibrator):
     """Histogram binning: per-bin event rates with optional Jeffreys shrinkage.
 
@@ -48,6 +50,8 @@ class HistogramBinningCalibrator(BaseCalibrator):
     ----------
     Zadrozny & Elkan (2001).
     """
+
+    _STATE_ATTRS = ("edges_", "bin_rate_", "bin_weight_", "is_monotone_")
 
     def __init__(
         self, n_bins: int = 10, strategy: str = "mass", shrinkage: str | None = "jeffreys"
@@ -102,10 +106,12 @@ class HistogramBinningCalibrator(BaseCalibrator):
         return 0.0 if j == 0 else float(self.edges_[j - 1])
 
     def _inverse_right(self, t: float) -> float:
+        # One float below the next bin's edge: the bound is in the preimage,
+        # so closed-bound consumers cannot overshoot a plateau (spec W11 P3).
         j = int(np.searchsorted(self.bin_rate_, t, side="right")) - 1
         if j >= len(self.bin_rate_) - 1:
             return 1.0
-        return float(self.edges_[j])
+        return float(np.nextafter(self.edges_[j], 0.0))
 
     def interpret(self) -> Interpretation:
         """Read bin rates as local event frequencies and B as the complexity dial."""
@@ -132,6 +138,7 @@ class HistogramBinningCalibrator(BaseCalibrator):
         )
 
 
+@register
 class ScalingBinningCalibrator(BaseCalibrator):
     """Scaling-binning (Kumar–Liang–Ma): Platt stage, then bin the fitted values.
 
@@ -158,6 +165,8 @@ class ScalingBinningCalibrator(BaseCalibrator):
     ----------
     Kumar, Liang & Ma (2019).
     """
+
+    _STATE_ATTRS = ("platt_", "edges_", "bin_value_")
 
     def __init__(self, n_bins: int = 10) -> None:
         self.n_bins = n_bins

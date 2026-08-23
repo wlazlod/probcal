@@ -229,3 +229,22 @@ def test_plots_do_not_mutate_global_rcparams() -> None:
     plot_ecce(ecce_curve(y, p))
     assert dict(plt.rcParams) == before
     plt.close("all")
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_plot_e_process_smoke() -> None:
+    from probcal import make_pd_portfolio
+    from probcal._math import expit, logit
+    from probcal.monitor import CalibrationMonitor
+    from probcal.plots import plot_e_process
+
+    mon = CalibrationMonitor(delta_ci_grid=(-2.0, 2.0, 21))
+    rng = np.random.default_rng(4)
+    for k in range(4):
+        d = make_pd_portfolio(n=400, random_state=700 + k)
+        y = (rng.random(400) < expit(logit(d.scores) + 0.9)).astype(float)
+        mon.update(y, d.scores, grade=np.array(["A", "B"] * 200), label=f"m{k}")
+    ax = plot_e_process(mon.report())
+    assert ax.get_yscale() == "log"
+    labels = [t.get_text() for t in ax.get_xticklabels()]
+    assert labels == [f"m{k}" for k in range(4)]

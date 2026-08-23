@@ -9,14 +9,18 @@ King & Zeng (2001); Elkan (2001); Tasche (2013) — full records in the
 documentation.
 """
 
+import json
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Self
 
 import numpy as np
 
-from ._math import bisect, expit, logit
+from ._math import _LOGIT_CLIP, bisect, expit, logit
+from ._registry import register
 from ._results import Interpretation
+from ._serialize import SCHEMA_VERSION, check_schema, data_fingerprint, fingerprint_of_dict
 from ._validation import validate_scores, validate_weights
 from .metrics.regression import GuardrailReport, calibration_guardrails
 
@@ -61,6 +65,7 @@ class AuditReport:
         return "\n".join(lines)
 
 
+@register
 class LogitOffset:
     """Uniform log-odds shift: ``p' = sigma(logit(p) + delta)``.
 
@@ -135,6 +140,12 @@ class LogitOffset:
             self.delta_ = bisect(gap, -_DELTA_BRACKET, _DELTA_BRACKET, tol=1e-14)
         self.post_mean_ = float(np.average(expit(z + self.delta_), weights=w))
         self.timestamp_ = datetime.now(UTC).isoformat(timespec="seconds")
+        self.fit_meta_ = {
+            "n_obs": int(p_arr.shape[0]),
+            "weight_sum": float(w.sum()),
+            "fitted_at_utc": self.timestamp_,
+            "data_fingerprint": data_fingerprint(p_arr, w),
+        }
         self.fitted_ = True
         return self
 
@@ -206,7 +217,12 @@ class LogitOffset:
         Raises
         ------
         UnattainableTargetError
-            If a crossed ``buffer_logit`` empties the calibrated interval.
+            If a crossed ``buffer_logit`` empties the calibrated interval,
+            or the (buffered) interval does not intersect the offset map's
+            representable output range ``[sigma(delta - logit(1 - 1e-12)),
+            sigma(delta + logit(1 - 1e-12))]`` — bounds beyond that range
+            collapse to the full-range sentinels (0/1, ±inf) instead of raw
+            values below the clip that ``transform`` could not round-trip.
         ValueError
             If ``lo``, ``hi`` are not ordered in ``[0, 1]``.
         """
@@ -226,8 +242,22 @@ class LogitOffset:
                 raise UnattainableTargetError(
                     f"buffer_logit={buffer_logit} empties the calibrated interval [{lo}, {hi}]"
                 )
-        lo_z = -np.inf if lo_b <= 0.0 else float(logit(np.array([lo_b]))[0]) - self.delta_
-        hi_z = np.inf if hi_b >= 1.0 else float(logit(np.array([hi_b]))[0]) - self.delta_
+        # Representable output range: raw scores are clipped to
+        # [1e-12, 1 - 1e-12] by every forward entry point, so the shifted map
+        # attains only [sigma(delta - _LOGIT_CLIP), sigma(delta + _LOGIT_CLIP)].
+        # Bounds beyond it collapse to the full-range sentinels (0.0/1.0,
+        # -inf/+inf) exactly as in BaseCalibrator.interval_inverse; a raw
+        # bound below the clip (e.g. 4.5e-14) could not round-trip through
+        # transform — the silent break the no-silent-clamp doctrine forbids.
+        gmin = float(expit(np.array([self.delta_ - _LOGIT_CLIP]))[0])
+        gmax = float(expit(np.array([self.delta_ + _LOGIT_CLIP]))[0])
+        if lo_b > gmax or hi_b < gmin:
+            raise UnattainableTargetError(
+                f"calibrated target [{lo_b:.6g}, {hi_b:.6g}] does not intersect the "
+                f"offset map's representable output range [{gmin:.6g}, {gmax:.6g}]"
+            )
+        lo_z = -np.inf if lo_b <= gmin else float(logit(np.array([lo_b]))[0]) - self.delta_
+        hi_z = np.inf if hi_b >= gmax else float(logit(np.array([hi_b]))[0]) - self.delta_
         if space == "logit":
             return lo_z, hi_z
         raw_lo = 0.0 if np.isneginf(lo_z) else float(expit(np.array([lo_z]))[0])
@@ -246,7 +276,9 @@ class LogitOffset:
         Parameters
         ----------
         p : array_like
-            Shifted probabilities in ``[0, 1]``.
+            Shifted probabilities strictly inside ``(0, 1)``; boundary and
+            out-of-range values raise ``UnattainableTargetError``
+            (all-or-nothing, no silent clamp).
         space : {"probability", "logit"}, keyword-only
             Scale of the returned raw values.
 
@@ -262,13 +294,22 @@ class LogitOffset:
             If not yet fitted.
         ValueError
             If ``space`` is not ``"probability"`` or ``"logit"``.
+        UnattainableTargetError
+            If any element of ``p`` lies outside the open interval
+            ``(0, 1)``; or if ``space="probability"`` and the raw logit of
+            any result exceeds ``logit(1 - 1e-12)`` in magnitude — the
+            probability representation would round to 0.0/1.0 and silently
+            fail to round-trip; ``space="logit"`` is exact there.
         """
         if not self.fitted_:
             raise RuntimeError("LogitOffset is not fitted; call fit() first")
         if space not in ("probability", "logit"):
             raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
-        arr = validate_scores(p, name="p")
+        from .base import _check_representable, _validate_point_targets
+
+        arr = _validate_point_targets(p)
         z = logit(arr) - self.delta_
+        _check_representable(z, space)
         return z if space == "logit" else expit(z)
 
     def audit_report(self, y: object, p: object, *, sample_weight: object = None) -> AuditReport:
@@ -285,3 +326,78 @@ class LogitOffset:
             guardrails_before=before,
             guardrails_after=after,
         )
+
+    # ------------------------------------------------------------- serialization
+    # LogitOffset is not a BaseCalibrator subclass, so the protocol is
+    # implemented here with the shared _serialize helpers (the existing
+    # offset.py duplication precedent, e.g. interval_inverse's fit guard).
+
+    def to_dict(self) -> dict[str, object]:
+        """Versioned JSON-native snapshot (see ``BaseCalibrator.to_dict``).
+
+        ``fit_meta`` records ``n_obs``, ``weight_sum``, ``fitted_at_utc``,
+        and the ``data_fingerprint`` of the ``(p, w)`` pair — no ``n_events``
+        because the offset is fitted on probabilities alone.
+        """
+        if not self.fitted_:
+            raise RuntimeError("LogitOffset is not fitted; call fit() first")
+        from . import __version__
+
+        return {
+            "probcal_schema": SCHEMA_VERSION,
+            "probcal_version": __version__,
+            "class": type(self).__name__,
+            "params": {"delta": self.delta, "target_mean": self.target_mean},
+            "state": {
+                "delta_": self.delta_,
+                "pre_mean_": self.pre_mean_,
+                "post_mean_": self.post_mean_,
+                "timestamp_": self.timestamp_,
+            },
+            "fit_meta": dict(getattr(self, "fit_meta_", {})),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "LogitOffset":
+        """Rebuild a fitted offset from :meth:`to_dict` output.
+
+        Raises
+        ------
+        ValueError
+            If the schema version is unknown or the payload class differs.
+        """
+        check_schema(d)
+        if d.get("class") != cls.__name__:
+            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
+        params = d.get("params", {})
+        obj = cls(delta=params.get("delta"), target_mean=params.get("target_mean"))
+        for key, value in d.get("state", {}).items():
+            setattr(obj, key, value)
+        obj.fit_meta_ = dict(d.get("fit_meta", {}))
+        obj.fitted_ = True
+        return obj
+
+    def to_json(
+        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
+    ) -> str | None:
+        """Serialize to JSON text, or to ``path`` when given (returns None then)."""
+        text = json.dumps(self.to_dict(), indent=indent)
+        if path is None:
+            return text
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return None
+
+    @classmethod
+    def from_json(cls, path_or_str: object) -> "LogitOffset":
+        """Load from a JSON string or a filesystem path."""
+        text = str(path_or_str)
+        if not text.lstrip().startswith("{"):
+            with open(text, encoding="utf-8") as fh:
+                text = fh.read()
+        return cls.from_dict(json.loads(text))
+
+    def fingerprint(self) -> str:
+        """SHA-256 of the canonical serialized form, blind to versions and
+        to the audit ``timestamp_`` — identical fits fingerprint identically."""
+        return fingerprint_of_dict(self.to_dict())

@@ -13,9 +13,14 @@ import warnings
 import numpy as np
 
 from ._math import bisect, expit, irls_logistic, logit
+from ._registry import register
 from ._results import Interpretation
-from ._validation import validate_scores
-from .base import BaseCalibrator, UnattainableTargetError
+from .base import (
+    BaseCalibrator,
+    UnattainableTargetError,
+    _check_representable,
+    _validate_point_targets,
+)
 
 _U_LO = 1e-6
 _U_HI = 1e6
@@ -46,7 +51,7 @@ def _beta_point_inverse_z(
     ``max_steps`` (default 4) Halley corrections, exiting early once the
     residual certificate ``|f(z)| <= rtol * max(1, |K|)`` is met; the
     certificate bounds the coordinate error by ``|f(z)| / min(a, b)``. The
-    user's original prescription was a fixed 2 steps (machine precision up to
+    initial design was a fixed 2 steps (machine precision up to
     asymmetry ratio 3, ~1e-10 at ratio 10, ~1e-4 at ratio 50 without a 3rd
     step); the certified cap is a finite, bounded expression — not
     open-ended iteration — that reaches machine precision at ratio 50 in
@@ -117,6 +122,7 @@ def _beta_point_inverse_z(
     return z
 
 
+@register
 class PlattCalibrator(BaseCalibrator):
     """Logistic recalibration on the logit scale (Platt scaling).
 
@@ -141,6 +147,8 @@ class PlattCalibrator(BaseCalibrator):
     SVM outputs (Platt's original setting) does not contain the identity; on
     logits it does — see the parametric-methods chapter.
     """
+
+    _STATE_ATTRS = ("a_", "b_", "is_monotone_", "converged_")
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         z = logit(s)
@@ -211,6 +219,7 @@ class PlattCalibrator(BaseCalibrator):
         )
 
 
+@register
 class TemperatureCalibrator(BaseCalibrator):
     """Temperature scaling: ``g(s) = sigma(logit(s) / T)``.
 
@@ -229,6 +238,8 @@ class TemperatureCalibrator(BaseCalibrator):
     ----------
     Guo, Pleiss, Sun & Weinberger (2017).
     """
+
+    _STATE_ATTRS = ("T_",)
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         z = logit(s)
@@ -297,6 +308,7 @@ class TemperatureCalibrator(BaseCalibrator):
         )
 
 
+@register
 class BetaCalibrator(BaseCalibrator):
     """Beta calibration: ``logit g(s) = a·ln s − b·ln(1 − s) + c``.
 
@@ -339,6 +351,15 @@ class BetaCalibrator(BaseCalibrator):
     already calibrated model. ``a != b`` captures asymmetric tail distortion;
     temperature is the special case ``a = b = 1/T, c = 0``.
     """
+
+    _STATE_ATTRS = (
+        "a_",
+        "b_",
+        "c_",
+        "constraint_active_",
+        "converged_",
+        "separation_fallback_",
+    )
 
     def __init__(self, variant: str = "abm") -> None:
         self.variant = variant
@@ -457,7 +478,9 @@ class BetaCalibrator(BaseCalibrator):
         Parameters
         ----------
         p : array_like
-            Calibrated probabilities in ``[0, 1]``.
+            Calibrated probabilities strictly inside ``(0, 1)``; boundary
+            and out-of-range values raise ``UnattainableTargetError``
+            (all-or-nothing, no silent clamp).
         space : {"probability", "logit"}, keyword-only
             Scale of the returned raw values.
 
@@ -482,11 +505,16 @@ class BetaCalibrator(BaseCalibrator):
             constant map (``a == b == 0``): a constant map has no point
             inverse.
         UnattainableTargetError
-            If any element of ``p`` lies outside the attainable probability
-            range of a degenerate (``a == 0`` or ``b == 0``) fit — ``p`` is
-            validated all-or-nothing: if any element is outside the range
-            (named in the error message), the whole call raises and no
-            element is silently clamped.
+            If any element of ``p`` lies outside the open interval
+            ``(0, 1)``, or outside the attainable probability range of a
+            degenerate (``a == 0`` or ``b == 0``) fit — ``p`` is validated
+            all-or-nothing: if any element is outside the range (named in
+            the error message), the whole call raises and no element is
+            silently clamped. Also raised when ``space="probability"`` and
+            the raw logit of any result exceeds ``logit(1 - 1e-12)`` in
+            magnitude — the probability representation would round to
+            0.0/1.0 and silently fail to round-trip; ``space="logit"`` is
+            exact there.
         """
         self._check_fitted()
         if not self.is_monotone_:
@@ -497,7 +525,7 @@ class BetaCalibrator(BaseCalibrator):
             )
         if space not in ("probability", "logit"):
             raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
-        arr = validate_scores(p, name="p")
+        arr = _validate_point_targets(p)
         a, b = self.a_, self.b_
         K = logit(arr) - self.c_
         if a == 0.0 and b == 0.0:
@@ -525,6 +553,7 @@ class BetaCalibrator(BaseCalibrator):
             z = -np.log(np.expm1(-K / a))
         else:
             z = _beta_point_inverse_z(K, a, b)
+        _check_representable(z, space)
         return z if space == "logit" else expit(z)
 
     @property

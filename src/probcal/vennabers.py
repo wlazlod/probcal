@@ -13,6 +13,7 @@ Vovk & Petej (2014) — full record in the documentation.
 
 import numpy as np
 
+from ._registry import register
 from ._results import Interpretation
 from .base import BaseCalibrator
 
@@ -85,6 +86,7 @@ def _csd_sweep(c: np.ndarray, z: np.ndarray, dy: float) -> np.ndarray:
     return out
 
 
+@register
 class VennAbersCalibrator(BaseCalibrator):
     """Inductive Venn–Abers predictor (IVAP).
 
@@ -110,12 +112,19 @@ class VennAbersCalibrator(BaseCalibrator):
     the scope note in ``docs/concepts/methods-distribution-free.md``.
     """
 
+    _STATE_ATTRS = ("_s", "_y", "_w", "F0_", "F1_")  # O(n) by design, documented
+
+    def _set_state(self, state: dict[str, object]) -> None:
+        super()._set_state(state)
+        # Lazy interval-width cache, rebuilt on demand.
+        self._widths_cache: tuple[float, float] | None = None
+
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         order = np.argsort(s, kind="stable")
         self._s = s[order]
         self._y = y[order]
         self._w = w[order]
-        self._widths_cache: tuple[float, float] | None = None
+        self._widths_cache = None
         c = np.concatenate([[0.0], np.cumsum(self._w)])
         z = np.concatenate([[0.0], np.cumsum(self._w * self._y)])
         self.F0_ = _csd_sweep(c, z, 0.0)
@@ -175,6 +184,7 @@ class VennAbersCalibrator(BaseCalibrator):
         )
 
 
+@register
 class CrossVennAbersCalibrator(BaseCalibrator):
     """Cross Venn–Abers predictor (CVAP): fold-wise IVAPs, geometric-mean merge.
 
@@ -203,6 +213,8 @@ class CrossVennAbersCalibrator(BaseCalibrator):
     ----------
     Vovk & Petej (2014).
     """
+
+    _STATE_ATTRS = ("_ivaps",)
 
     def __init__(self, cv: int = 5, random_state: int = 42) -> None:
         self.cv = cv

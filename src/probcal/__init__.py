@@ -3,12 +3,13 @@
 Methods, metrics, diagnostics, and auditable offsetting — numpy-only.
 """
 
-from . import metrics
+from . import metrics, monitor
 from ._math import expit, logit
 from .attribution import AdjustedAttribution, adjust_attributions
 from .base import BaseCalibrator, UnattainableTargetError
 from .bayesian import BBQCalibrator, ENIRCalibrator
 from .binning import HistogramBinningCalibrator, ScalingBinningCalibrator
+from .chain import Chain
 from .curves import calibration_belt, reliability_binned, reliability_loess, reliability_spline
 from .datasets import make_pd_portfolio
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
@@ -20,7 +21,7 @@ from .thresholds import calibrated_bands_to_raw, calibrated_interval_to_raw
 from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
 from .wrapper import CalibratedModel
 
-__version__ = "0.1.3"
+__version__ = "0.2.0"
 
 __all__: list[str] = [
     "AdjustedAttribution",
@@ -30,6 +31,7 @@ __all__: list[str] = [
     "CalibratorSelector",
     "BetaCalibrator",
     "CenteredIsotonicCalibrator",
+    "Chain",
     "CrossVennAbersCalibrator",
     "ENIRCalibrator",
     "HistogramBinningCalibrator",
@@ -47,6 +49,7 @@ __all__: list[str] = [
     "calibration_belt",
     "expit",
     "metrics",
+    "monitor",
     "reliability_binned",
     "reliability_loess",
     "reliability_spline",

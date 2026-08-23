@@ -13,6 +13,7 @@ import warnings
 import numpy as np
 
 from ._math import expit, logit, natural_cubic_basis
+from ._registry import register
 from ._results import Interpretation
 from .base import BaseCalibrator
 
@@ -56,6 +57,7 @@ def _penalized_irls(
     return theta, bwb
 
 
+@register
 class SplineCalibrator(BaseCalibrator):
     """Natural cubic spline calibration on the logit scale.
 
@@ -93,6 +95,16 @@ class SplineCalibrator(BaseCalibrator):
     ----------
     Lucena (2018); Hastie, Tibshirani & Friedman (2009), §5.2.1.
     """
+
+    _STATE_ATTRS = (
+        "_knots",
+        "n_knots_",
+        "lambdas_grid_",
+        "lambda_",
+        "_theta",
+        "edof_",
+        "is_monotone_",
+    )
 
     def __init__(
         self,

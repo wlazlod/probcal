@@ -1,23 +1,80 @@
 """BaseCalibrator: the common fit / predict_proba / interpret contract."""
 
 import inspect
+import json
+import os
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime
 from typing import Self
 
 import numpy as np
 
-from ._math import expit, logit
+from ._math import _LOGIT_CLIP, expit, logit
 from ._results import Interpretation
+from ._serialize import (
+    SCHEMA_VERSION,
+    check_schema,
+    data_fingerprint,
+    decode_value,
+    encode_value,
+    fingerprint_of_dict,
+)
 from ._validation import EPS, validate_binary_y, validate_scores, validate_weights
 
 
 class UnattainableTargetError(ValueError):
-    """The requested calibrated interval is unattainable.
+    """The requested calibrated target is unattainable.
 
-    Raised when the interval does not intersect the calibrator's output
-    range (or was emptied by ``buffer_logit``), instead of silently
-    clamping — spec §10.
+    Raised instead of silently clamping — spec §10 — when an interval does
+    not intersect the calibrator's output range (or was emptied by
+    ``buffer_logit``), when a point-inverse target lies outside the open
+    interval ``(0, 1)``, or when a probability-space point-inverse result
+    would round to 0.0/1.0 (raw logit beyond ``logit(1 - 1e-12)``).
     """
+
+
+def _validate_point_targets(p: object) -> np.ndarray:
+    """Validate point-inverse targets: 1-D, finite, strictly inside ``(0, 1)``.
+
+    Unlike :func:`~probcal._validation.validate_scores` (the forward-entry
+    convention), no clipping happens here: ``p = 0`` and ``p = 1`` are not
+    attained by any finite raw score, so a finite "inverse" for them would be
+    a silent clamp. Refusal is all-or-nothing and names the offending values.
+    """
+    arr = np.asarray(p, dtype=np.float64)
+    if arr.ndim != 1:
+        raise ValueError(f"p must be a 1-D array, got shape {arr.shape}")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError("p must contain only finite values")
+    bad = (arr <= 0.0) | (arr >= 1.0)
+    if np.any(bad):
+        vals = np.unique(arr[bad])
+        shown = vals[:5].tolist()
+        more = f" (and {vals.size - 5} more)" if vals.size > 5 else ""
+        raise UnattainableTargetError(
+            "point-inverse targets must lie strictly inside (0, 1); got "
+            f"{shown}{more} — p = 0 and p = 1 are not attained by any "
+            "finite raw score (no silent clamp); use interval_inverse with lo=0/hi=1 "
+            "for one-sided targets"
+        )
+    return arr
+
+
+def _check_representable(z: np.ndarray, space: str) -> None:
+    """Refuse probability-space output whose raw logit exceeds ``_LOGIT_CLIP``.
+
+    ``sigma(z)`` for ``|z| > _LOGIT_CLIP`` rounds into the ``[1e-12, 1 - 1e-12]``
+    clipping zone: ``predict_proba`` would clip it back and the round trip
+    silently breaks. ``space="logit"`` is exact there, so the error names it.
+    """
+    if space == "probability" and not np.all(np.abs(z) <= _LOGIT_CLIP):
+        worst = float(np.max(np.abs(np.asarray(z))))
+        raise UnattainableTargetError(
+            f"the requested target needs a raw logit of magnitude {worst:.6g} > "
+            f"{_LOGIT_CLIP:.6g} = logit(1 - 1e-12); its probability-space "
+            "representation rounds to 0.0/1.0 and cannot round-trip through "
+            'predict_proba. Use space="logit", where the answer is exact.'
+        )
 
 
 class BaseCalibrator(ABC):
@@ -69,6 +126,13 @@ class BaseCalibrator(ABC):
             )
         w_arr = validate_weights(sample_weight, s_arr.shape[0])
         self._fit(s_arr, y_arr, w_arr)
+        self.fit_meta_ = {
+            "n_obs": int(s_arr.shape[0]),
+            "n_events": float(np.sum(w_arr * y_arr)),
+            "weight_sum": float(w_arr.sum()),
+            "fitted_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+            "data_fingerprint": data_fingerprint(s_arr, y_arr, w_arr),
+        }
         self.fitted_ = True
         return self
 
@@ -224,9 +288,9 @@ class BaseCalibrator(ABC):
         Parameters
         ----------
         p : array_like
-            Calibrated probabilities in ``[0, 1]`` (clipped to
-            ``[1e-12, 1 - 1e-12]``, the same convention as every forward
-            entry point).
+            Calibrated probabilities strictly inside ``(0, 1)``; boundary
+            and out-of-range values raise ``UnattainableTargetError``
+            (all-or-nothing, no silent clamp).
         space : {"probability", "logit"}, keyword-only
             Scale of the returned raw values. ``"logit"`` returns the raw
             logit directly; ``"probability"`` (default) returns the raw
@@ -248,6 +312,12 @@ class BaseCalibrator(ABC):
             If the calibrator is not monotone (``is_monotone_ = False``), or
             has no affine-logit closed form (``affine_logit_coeffs_`` is
             ``None``).
+        UnattainableTargetError
+            If any element of ``p`` lies outside the open interval
+            ``(0, 1)``; or if ``space="probability"`` and the raw logit of
+            any result exceeds ``logit(1 - 1e-12)`` in magnitude — the
+            probability representation would round to 0.0/1.0 and silently
+            fail to round-trip; ``space="logit"`` is exact there.
         """
         self._check_fitted()
         if not self.is_monotone_:
@@ -258,7 +328,7 @@ class BaseCalibrator(ABC):
             )
         if space not in ("probability", "logit"):
             raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
-        arr = validate_scores(p, name="p")
+        arr = _validate_point_targets(p)
         coeffs = self.affine_logit_coeffs_
         if coeffs is None:
             raise NotImplementedError(
@@ -266,6 +336,7 @@ class BaseCalibrator(ABC):
             )
         a, b = coeffs
         z = (logit(arr) - b) / a
+        _check_representable(z, space)
         return z if space == "logit" else expit(z)
 
     # Hooks for interval_inverse — overridden by closed-form / block calibrators.
@@ -325,3 +396,157 @@ class BaseCalibrator(ABC):
                 )
             setattr(self, key, value)
         return self
+
+    # ------------------------------------------------------------- serialization
+
+    _STATE_ATTRS: tuple[str, ...] = ()
+
+    def _state(self) -> dict[str, object]:
+        """Fitted state as JSON-native values (generic: reads ``_STATE_ATTRS``)."""
+        return {a: encode_value(getattr(self, a)) for a in type(self)._STATE_ATTRS}
+
+    def _set_state(self, state: dict[str, object]) -> None:
+        """Inverse of :meth:`_state`."""
+        for a, v in state.items():
+            setattr(self, a, decode_value(v))
+
+    def _params_for_dict(self) -> dict[str, object]:
+        """Constructor parameters as stored in :meth:`to_dict` (hook for
+        classes whose params are not JSON-native, e.g. the selector)."""
+        return self.get_params()
+
+    @classmethod
+    def _params_from_dict(cls, params: dict[str, object]) -> dict[str, object]:
+        """Inverse of :meth:`_params_for_dict`."""
+        return params
+
+    def to_dict(self) -> dict[str, object]:
+        """Versioned JSON-native snapshot of the fitted object.
+
+        Returns
+        -------
+        dict
+            ``{"probcal_schema", "probcal_version", "class", "params",
+            "state", "fit_meta"}``. ``fit_meta`` records ``n_obs``,
+            ``n_events``, ``weight_sum``, ``fitted_at_utc`` (ISO 8601), the
+            ``data_fingerprint`` (SHA-256 of the sorted ``(s, y, w)``
+            triple), and convergence flags where they exist.
+
+        Raises
+        ------
+        RuntimeError
+            If not yet fitted.
+        """
+        self._check_fitted()
+        from . import __version__
+
+        fit_meta = dict(getattr(self, "fit_meta_", {}))
+        for flag in ("converged_", "separation_fallback_"):
+            if hasattr(self, flag):
+                fit_meta[flag] = bool(getattr(self, flag))
+        return {
+            "probcal_schema": SCHEMA_VERSION,
+            "probcal_version": __version__,
+            "class": type(self).__name__,
+            "params": encode_value(self._params_for_dict()),
+            "state": self._state(),
+            "fit_meta": fit_meta,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "BaseCalibrator":
+        """Rebuild a fitted object from :meth:`to_dict` output.
+
+        Called on :class:`BaseCalibrator` itself, dispatches through the
+        class registry to whatever class wrote ``d``; called on a subclass,
+        requires ``d["class"]`` to match that subclass.
+
+        Parameters
+        ----------
+        d : dict
+            Output of :meth:`to_dict` (parsed JSON).
+
+        Returns
+        -------
+        BaseCalibrator
+            A fitted instance.
+
+        Raises
+        ------
+        ValueError
+            If the schema version is unknown (naming the writing version),
+            the class is not registered, or ``d["class"]`` does not match
+            the subclass this was called on.
+        """
+        check_schema(d)
+        if cls is BaseCalibrator:
+            from ._registry import load
+
+            return load(d)  # type: ignore[return-value]
+        if cls.__name__ != d.get("class"):
+            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
+        params = cls._params_from_dict(decode_value(d.get("params", {})))  # type: ignore[arg-type]
+        obj = cls(**params)  # type: ignore[arg-type]
+        obj._set_state(dict(d.get("state", {})))  # type: ignore[arg-type]
+        obj.fit_meta_ = dict(d.get("fit_meta", {}))  # type: ignore[arg-type]
+        obj.fitted_ = True
+        return obj
+
+    def to_json(
+        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
+    ) -> str | None:
+        """Serialize to JSON — never pickle (auditable, no code execution on load).
+
+        Parameters
+        ----------
+        path : path-like or None
+            When given, write to this file and return ``None``; otherwise
+            return the JSON text.
+        indent : int, keyword-only
+            JSON indentation.
+
+        Returns
+        -------
+        str or None
+            JSON text, or ``None`` when written to ``path``.
+        """
+        text = json.dumps(self.to_dict(), indent=indent)
+        if path is None:
+            return text
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return None
+
+    @classmethod
+    def from_json(cls, path_or_str: object) -> "BaseCalibrator":
+        """Load from a JSON string or a filesystem path.
+
+        Parameters
+        ----------
+        path_or_str : str or path-like
+            JSON text (starting with ``{``) or a path to a JSON file.
+
+        Returns
+        -------
+        BaseCalibrator
+            A fitted instance (see :meth:`from_dict`).
+        """
+        text = str(path_or_str)
+        if not text.lstrip().startswith("{"):
+            with open(text, encoding="utf-8") as fh:
+                text = fh.read()
+        return cls.from_dict(json.loads(text))
+
+    def fingerprint(self) -> str:
+        """SHA-256 of the canonical serialized form, version- and timestamp-blind.
+
+        Two identical fits on identical data produce the same fingerprint;
+        consumers (model registries, monitors, recourse engines) record it
+        as provenance.
+
+        Returns
+        -------
+        str
+            Hex digest.
+        """
+        return fingerprint_of_dict(self.to_dict())

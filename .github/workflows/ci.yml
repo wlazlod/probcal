@@ -38,3 +38,63 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+  sklearn-min:
+    name: sklearn adapter on the pinned minimum (1.4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies with the oldest supported scikit-learn
+        run: uv pip install --system -e ".[dev,viz]" "scikit-learn==1.4.2"
+
+      - name: Run the sklearn adapter suite
+        run: pytest -q tests/test_sklearn.py
+
+  integrations:
+    name: optbinning integration on the pinned version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies with the pinned optbinning
+        run: uv pip install --system -e ".[dev,viz]" "optbinning==0.21.0"
+
+      - name: Run the integration suites
+        run: pytest -q tests/test_optbinning.py tests/test_calibrator_protocol.py
+
+  notebook:
+    name: end-to-end notebook executes on the synthetic fallback
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev,viz]"
+
+      - name: Execute the notebook (no kagglehub -> synthetic fallback)
+        run: pytest -q --nbmake --nbmake-timeout=1200 docs/notebooks/pd_end_to_end.ipynb

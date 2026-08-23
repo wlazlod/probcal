@@ -11,6 +11,7 @@ Oron & Flournoy (2017) — full records in the documentation.
 import numpy as np
 
 from ._math import pava
+from ._registry import register
 from ._results import Interpretation
 from .base import BaseCalibrator
 
@@ -27,6 +28,7 @@ def _aggregate_ties(
     return s_unique, wy_sum / w_sum, w_sum
 
 
+@register
 class IsotonicCalibrator(BaseCalibrator):
     """Isotonic calibration: the PAVA step function.
 
@@ -59,6 +61,14 @@ class IsotonicCalibrator(BaseCalibrator):
     Barlow et al. (1972) for PAVA; Zadrozny & Elkan (2002) for its use in
     classifier calibration.
     """
+
+    _STATE_ATTRS = (
+        "block_mean_",
+        "block_first_s_",
+        "block_last_s_",
+        "block_center_s_",
+        "n_blocks_",
+    )
 
     def __init__(self, interpolation: str = "none") -> None:
         self.interpolation = interpolation
@@ -103,11 +113,13 @@ class IsotonicCalibrator(BaseCalibrator):
         return float(self.block_first_s_[j])
 
     def _inverse_right(self, t: float) -> float:
-        # Boundary after the last block whose level stays within t.
+        # Largest raw score whose level stays within t: one float below the
+        # next block's left edge, so the returned bound is itself in the
+        # preimage — consumers may treat both bounds as closed (spec W11 P3).
         j = int(np.searchsorted(self.block_mean_, t, side="right")) - 1
         if j >= self.n_blocks_ - 1:
             return 1.0
-        return float(self.block_first_s_[j + 1])
+        return float(np.nextafter(self.block_first_s_[j + 1], 0.0))
 
     def interpret(self) -> Interpretation:
         """Read the block structure as effective complexity and local event rates."""
@@ -139,6 +151,7 @@ class IsotonicCalibrator(BaseCalibrator):
         )
 
 
+@register
 class CenteredIsotonicCalibrator(IsotonicCalibrator):
     """Centered isotonic regression (CIR): strictly increasing where data permit.
 

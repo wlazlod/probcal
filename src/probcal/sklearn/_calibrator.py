@@ -8,7 +8,7 @@ from sklearn.utils.validation import _check_sample_weight, check_is_fitted
 from .._math import expit
 from ..base import BaseCalibrator
 from ..parametric import BetaCalibrator
-from ._compat import validate_X, validate_X_y
+from ._compat import CALIBRATOR_XFAIL_CHECKS, validate_X, validate_X_y
 
 
 class SklearnCalibrator(ClassifierMixin, TransformerMixin, BaseEstimator):
@@ -141,4 +141,8 @@ class SklearnCalibrator(ClassifierMixin, TransformerMixin, BaseEstimator):
         return tags
 
     def _more_tags(self) -> dict[str, object]:  # sklearn < 1.6
-        return {"binary_only": True, "requires_y": True}
+        return {
+            "binary_only": True,
+            "requires_y": True,
+            "_xfail_checks": dict(CALIBRATOR_XFAIL_CHECKS),
+        }

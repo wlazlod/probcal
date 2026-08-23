@@ -241,78 +241,31 @@ def _compliance_estimators():
     return [SklearnCalibrator(input="logit"), CalibratedClassifier()]
 
 
-# The score-level contract (exactly one column, spec W6) is structurally
-# incompatible with every generic check that fits on multi-feature data;
-# sklearn's own precedent is IsotonicRegression, which is special-cased
-# inside estimator_checks itself. These checks are declared expected
-# failures through sklearn's sanctioned mechanism; the remaining ~29
-# convention checks (params, clone, tags, set_params, repr, ...) run live.
-_SCORE_LEVEL_REASON = (
-    "score-level estimator takes exactly one column by contract (spec W6); "
-    "this check fits on generic multi-feature data"
+# Expected-failure tables live in probcal.sklearn._compat (one source of
+# truth for the >=1.6 expected_failed_checks mechanism and the <1.6
+# _xfail_checks tag).
+from probcal.sklearn._compat import (  # noqa: E402
+    CALIBRATOR_XFAIL_CHECKS,
+    CLASSIFIER_XFAIL_CHECKS,
 )
-_SKLEARN_CALIBRATOR_XFAIL = dict.fromkeys(
-    [
-        "check_classifier_data_not_an_array",
-        "check_classifiers_classes",
-        "check_classifiers_one_label_sample_weights",
-        "check_classifiers_train",
-        "check_dict_unchanged",
-        "check_dont_overwrite_parameters",
-        "check_dtype_object",
-        "check_estimators_dtypes",
-        "check_estimators_fit_returns_self",
-        "check_estimators_nan_inf",
-        "check_estimators_overwrite_params",
-        "check_estimators_pickle",
-        "check_f_contiguous_array_estimator",
-        "check_fit_check_is_fitted",
-        "check_fit_idempotent",
-        "check_fit_score_takes_y",
-        "check_fit2d_predict1d",
-        "check_methods_sample_order_invariance",
-        "check_methods_subset_invariance",
-        "check_n_features_in",
-        "check_n_features_in_after_fitting",
-        "check_pipeline_consistency",
-        "check_positive_only_tag_during_fit",
-        "check_readonly_memmap_input",
-        "check_sample_weight_equivalence_on_dense_data",
-        "check_sample_weights_list",
-        "check_sample_weights_not_an_array",
-        "check_sample_weights_not_overwritten",
-        "check_sample_weights_pandas_series",
-        "check_sample_weights_shape",
-        "check_supervised_y_2d",
-        "check_transformer_data_not_an_array",
-        "check_transformer_general",
-        "check_transformer_preserve_dtypes",
-    ],
-    _SCORE_LEVEL_REASON,
-)
-_SKLEARN_CALIBRATOR_XFAIL["check_fit1d"] = (
-    "accepts 1-D score arrays by design (spec W6); the check expects a raise"
-)
-_CLASSIFIER_XFAIL = {
-    "check_sample_weight_equivalence_on_dense_data": (
-        "weighting cannot equal duplication through a CV split: fold "
-        "assignment changes with n (sklearn's own CV wrappers share this)"
-    ),
-}
 
 
 def _expected_failures(estimator) -> dict:
     if isinstance(estimator, SklearnCalibrator):
-        return dict(_SKLEARN_CALIBRATOR_XFAIL)
-    return dict(_CLASSIFIER_XFAIL)
+        return dict(CALIBRATOR_XFAIL_CHECKS)
+    return dict(CLASSIFIER_XFAIL_CHECKS)
 
+
+from sklearn.utils.estimator_checks import parametrize_with_checks  # noqa: E402
 
 try:
-    from sklearn.utils.estimator_checks import parametrize_with_checks
+    _checks_decorator = parametrize_with_checks(
+        _compliance_estimators(), expected_failed_checks=_expected_failures
+    )
+except TypeError:  # pragma: no cover - sklearn < 1.6 reads _xfail_checks tags instead
+    _checks_decorator = parametrize_with_checks(_compliance_estimators())
 
-    @parametrize_with_checks(_compliance_estimators(), expected_failed_checks=_expected_failures)
-    def test_sklearn_estimator_checks(estimator, check) -> None:
-        check(estimator)
 
-except ImportError:  # pragma: no cover
-    pass
+@_checks_decorator
+def test_sklearn_estimator_checks(estimator, check) -> None:
+    check(estimator)

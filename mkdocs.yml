@@ -72,6 +72,8 @@ nav:
   - Home: index.md
   - Getting started: getting-started.md
   - How it works: how-it-works.md
+  - Guide:
+      - scikit-learn adapter: guide/sklearn.md
   - Concepts:
       - Why calibration: concepts/why-calibration.md
       - Parametric methods: concepts/methods-parametric.md

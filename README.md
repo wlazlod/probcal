@@ -23,6 +23,7 @@ bump the minor version until 1.0.
 ```bash
 pip install probcal            # runtime: numpy only
 pip install "probcal[viz]"     # + matplotlib for probcal.plots
+pip install "probcal[sklearn]" # + scikit-learn for probcal.sklearn adapters
 ```
 
 Development setup (tests, lint, type-check):

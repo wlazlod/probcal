@@ -38,3 +38,23 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+  sklearn-min:
+    name: sklearn adapter on the pinned minimum (1.4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies with the oldest supported scikit-learn
+        run: uv pip install --system -e ".[dev,viz]" "scikit-learn==1.4.2"
+
+      - name: Run the sklearn adapter suite
+        run: pytest -q tests/test_sklearn.py

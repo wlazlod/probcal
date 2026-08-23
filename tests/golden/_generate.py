@@ -1,0 +1,81 @@
+"""Regenerate the golden serialization files (run manually, outputs committed).
+
+Usage: ``uv run python tests/golden/_generate.py``
+
+One JSON per registered class: ``{"object": to_dict(), "query": [...],
+"expected": [...]}`` with fixed seeds identical to tests/test_serialize.py's
+battery. These files are the enforcement of the compatibility promise: every
+0.x release must load them (schema 1) and reproduce ``expected`` on
+``query`` to within 1e-12. Regenerate ONLY when the schema version bumps —
+that bump requires a converter and a DECISIONS entry.
+"""
+
+import json
+import pathlib
+
+import numpy as np
+
+from probcal import BetaCalibrator, make_pd_portfolio
+from probcal._registry import SERIALIZABLE
+
+# Smaller than the battery's fixtures on purpose: the heavy classes (ENIR
+# path solutions, CVAP's fold IVAPs) serialize O(n) state and these files
+# are committed.
+_D = make_pd_portfolio(n=400, random_state=7)
+_Q = make_pd_portfolio(n=150, random_state=8).scores
+
+
+class _StubModel:
+    """Deterministic sklearn-free model over a single score column.
+
+    Mirrored in tests/test_golden.py — keep the two definitions identical.
+    """
+
+    def fit(self, X, y):  # noqa: ARG002
+        return self
+
+    def predict_proba(self, X):
+        s = np.asarray(X)[:, 0]
+        return np.column_stack([1.0 - s, s])
+
+    def get_params(self):
+        return {"stub": True}
+
+
+def _fitted(name: str):
+    cls = SERIALIZABLE[name]
+    if name == "LogitOffset":
+        return cls(delta=0.3).fit(_D.scores)
+    if name == "CalibratedModel":
+        wrapped = cls(_StubModel(), BetaCalibrator(), flow="prefit").fit(
+            _D.scores.reshape(-1, 1), _D.y
+        )
+        wrapped.offset_to(delta=0.15)
+        return wrapped
+    return cls().fit(_D.scores, _D.y)
+
+
+def _predict(obj, q):
+    if type(obj).__name__ == "LogitOffset":
+        return obj.transform(q)
+    if type(obj).__name__ == "CalibratedModel":
+        return obj.predict_proba(q.reshape(-1, 1))
+    return obj.predict_proba(q)
+
+
+def main() -> None:
+    out_dir = pathlib.Path(__file__).parent
+    for name in sorted(SERIALIZABLE):
+        obj = _fitted(name)
+        payload = {
+            "object": obj.to_dict(),
+            "query": _Q.tolist(),
+            "expected": _predict(obj, _Q).tolist(),
+        }
+        path = out_dir / f"{name}.json"
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        print(f"wrote {path.name}")
+
+
+if __name__ == "__main__":
+    main()

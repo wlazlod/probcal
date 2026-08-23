@@ -50,7 +50,10 @@ def test_golden_loads_and_reproduces(path: pathlib.Path) -> None:
     d = payload["object"]
     check_schema(d)
     q = np.asarray(payload["query"], dtype=np.float64)
-    if path.stem == "CalibratedModel":
+    if path.stem == "CalibrationMonitor":
+        obj = load(d)
+        result = np.asarray([s.e_global for s in obj.steps_])
+    elif path.stem == "CalibratedModel":
         obj = CalibratedModel.from_dict(d, model=_StubModel())
         result = obj.predict_proba(q.reshape(-1, 1))
     else:

@@ -93,12 +93,17 @@ the sequence cannot invalidate a buffered counterfactual.
 
 ## The recommendation rule — a diagnostic, not a test
 
-After an alarm the monitor reports one of `re-offset` / `re-fit`:
-fit `LogitOffset` on the trailing window; recommend **re-offset** when the
-shape process sits below `1/alpha` *and* the trailing-window Cox slope
-bootstrap CI contains 1; otherwise **re-fit**. This rule is a *diagnostic
-summary with no error guarantee* — both component processes are always
-reported so the reader can disagree with it.
+After an alarm the monitor reports one of `re-offset` / `re-fit`, from two
+trailing-window diagnostics: recommend **re-offset** when the Cox slope
+bootstrap CI contains 1 *and* the Cox-vs-offset residual likelihood ratio
+(does the 2-parameter correction explain the window materially better than
+the offset-only correction?) stays within the chi-square(1) 5% bound;
+otherwise **re-fit**. The shape *e-process* is always reported alongside
+but is deliberately not the discriminator: its alternative family contains
+the intercept, so it fires under pure level drift too and cannot separate
+the two failure modes on its own. The rule is a *diagnostic summary with no
+error guarantee* — every component process is reported so the reader can
+disagree with it.
 
 ## Validity conditions
 

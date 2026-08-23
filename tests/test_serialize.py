@@ -91,8 +91,22 @@ class _StubModel:
         return {"stub": True}
 
 
+def _monitor(seed0: int = 50):
+    from probcal.monitor import CalibrationMonitor
+
+    mon = CalibrationMonitor(delta_ci_grid=(-2.0, 2.0, 41))
+    for k in range(3):
+        d = make_pd_portfolio(n=300, event_rate=0.1, random_state=seed0 + k)
+        rng = np.random.default_rng(seed0 + 100 + k)
+        y = (rng.random(300) < d.scores).astype(float)
+        mon.update(y, d.scores, label=f"b{k}")
+    return mon
+
+
 def _fitted(name: str):
     cls = SERIALIZABLE[name]
+    if name == "CalibrationMonitor":
+        return _monitor()
     if name == "LogitOffset":
         return cls(delta=0.3).fit(_D.scores)
     if name == "CalibratedModel":
@@ -107,6 +121,8 @@ def _fitted(name: str):
 
 
 def _predict(obj, q):
+    if type(obj).__name__ == "CalibrationMonitor":
+        return np.asarray([s.e_global for s in obj.steps_])
     if type(obj).__name__ == "LogitOffset":
         return obj.transform(q)
     if type(obj).__name__ == "CalibratedModel":
@@ -152,6 +168,10 @@ def test_fingerprint_stable_and_data_sensitive(fitted) -> None:
     twin = _fitted(name)
     assert obj.fingerprint() == twin.fingerprint()  # identical data -> identical print
     other = make_pd_portfolio(n=1200, random_state=99)
+    if name == "CalibrationMonitor":
+        alt = _monitor(seed0=77)
+        assert obj.fingerprint() != alt.fingerprint()
+        return
     if name == "LogitOffset":
         alt = SERIALIZABLE[name](delta=0.3).fit(other.scores)
     elif name == "CalibratedModel":

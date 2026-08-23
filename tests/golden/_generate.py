@@ -42,8 +42,23 @@ class _StubModel:
         return {"stub": True}
 
 
+def _monitor_batches():
+    out = []
+    for k in range(3):
+        d = make_pd_portfolio(n=300, event_rate=0.1, random_state=50 + k)
+        rng = np.random.default_rng(150 + k)
+        y = (rng.random(300) < d.scores).astype(float)
+        out.append((y, d.scores))
+    return out
+
+
 def _fitted(name: str):
     cls = SERIALIZABLE[name]
+    if name == "CalibrationMonitor":
+        mon = cls(delta_ci_grid=(-2.0, 2.0, 41))
+        for k, (y, p) in enumerate(_monitor_batches()):
+            mon.update(y, p, label=f"g{k}")
+        return mon
     if name == "LogitOffset":
         return cls(delta=0.3).fit(_D.scores)
     if name == "CalibratedModel":
@@ -56,6 +71,8 @@ def _fitted(name: str):
 
 
 def _predict(obj, q):
+    if type(obj).__name__ == "CalibrationMonitor":
+        return np.asarray([s.e_global for s in obj.steps_])
     if type(obj).__name__ == "LogitOffset":
         return obj.transform(q)
     if type(obj).__name__ == "CalibratedModel":

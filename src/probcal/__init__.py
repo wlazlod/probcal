@@ -3,7 +3,7 @@
 Methods, metrics, diagnostics, and auditable offsetting — numpy-only.
 """
 
-from . import metrics
+from . import metrics, monitor
 from ._math import expit, logit
 from .attribution import AdjustedAttribution, adjust_attributions
 from .base import BaseCalibrator, UnattainableTargetError
@@ -47,6 +47,7 @@ __all__: list[str] = [
     "calibration_belt",
     "expit",
     "metrics",
+    "monitor",
     "reliability_binned",
     "reliability_loess",
     "reliability_spline",

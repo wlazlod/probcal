@@ -155,7 +155,7 @@
     "class": "CalibratedModel",
     "fit_meta": {
       "data_fingerprint": "29e2b0eb217ebb4b49725e90a3e92be7b5c7f28aa15774eeedab941ab53628d1",
-      "fitted_at_utc": "2026-08-23T11:03:23+00:00",
+      "fitted_at_utc": "2026-08-23T11:35:11+00:00",
       "n_events": 10.0,
       "n_obs": 400,
       "weight_sum": 400.0
@@ -175,7 +175,7 @@
         "fit_meta": {
           "converged_": true,
           "data_fingerprint": "29e2b0eb217ebb4b49725e90a3e92be7b5c7f28aa15774eeedab941ab53628d1",
-          "fitted_at_utc": "2026-08-23T11:03:23+00:00",
+          "fitted_at_utc": "2026-08-23T11:35:11+00:00",
           "n_events": 10.0,
           "n_obs": 400,
           "separation_fallback_": false,
@@ -207,7 +207,7 @@
           "class": "LogitOffset",
           "fit_meta": {
             "data_fingerprint": "e808611c890911a9964b97e8ed211fc6fe1e724ecc590770e77668dea2ebeb44",
-            "fitted_at_utc": "2026-08-23T11:03:23+00:00",
+            "fitted_at_utc": "2026-08-23T11:35:11+00:00",
             "n_obs": 400,
             "weight_sum": 400.0
           },
@@ -221,7 +221,7 @@
             "delta_": 0.15,
             "post_mean_": 0.02863208154069762,
             "pre_mean_": 0.02499999999999999,
-            "timestamp_": "2026-08-23T11:03:23+00:00"
+            "timestamp_": "2026-08-23T11:35:11+00:00"
           }
         }
       ]

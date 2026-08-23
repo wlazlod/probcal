@@ -6,6 +6,11 @@ authors:
   - family-names: "Wlazło"
     given-names: "Daniel"
 version: 0.2.0
+doi: 10.5281/zenodo.22069680
 date-released: 2026-08-23
 license: MIT
 repository-code: "https://github.com/wlazlod/probcal"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.22069679
+    description: "Concept DOI (all versions)"

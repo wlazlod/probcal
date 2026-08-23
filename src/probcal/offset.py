@@ -246,7 +246,9 @@ class LogitOffset:
         Parameters
         ----------
         p : array_like
-            Shifted probabilities in ``[0, 1]``.
+            Shifted probabilities strictly inside ``(0, 1)``; boundary and
+            out-of-range values raise ``UnattainableTargetError``
+            (all-or-nothing, no silent clamp).
         space : {"probability", "logit"}, keyword-only
             Scale of the returned raw values.
 
@@ -262,12 +264,17 @@ class LogitOffset:
             If not yet fitted.
         ValueError
             If ``space`` is not ``"probability"`` or ``"logit"``.
+        UnattainableTargetError
+            If any element of ``p`` lies outside the open interval
+            ``(0, 1)``.
         """
         if not self.fitted_:
             raise RuntimeError("LogitOffset is not fitted; call fit() first")
         if space not in ("probability", "logit"):
             raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
-        arr = validate_scores(p, name="p")
+        from .base import _validate_point_targets
+
+        arr = _validate_point_targets(p)
         z = logit(arr) - self.delta_
         return z if space == "logit" else expit(z)
 

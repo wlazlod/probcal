@@ -337,3 +337,16 @@ def test_exports() -> None:
         "calibrated_bands_to_raw",
     ):
         assert name in probcal.__all__
+
+
+def test_point_inverse_boundary_p_raises() -> None:
+    # p = 0 and p = 1 are not attained by any finite raw score: refusal is
+    # all-or-nothing (one bad element fails the whole call), never a silent
+    # clip to [1e-12, 1 - 1e-12] followed by a finite "inverse" (W2 doctrine).
+    platt = PlattCalibrator().fit(*_sample())
+    beta = BetaCalibrator().fit(*_sample())
+    off = LogitOffset(delta=0.3).fit(expit(RNG.normal(-1.0, 1.0, 200)))
+    for cal in (platt, beta, off):
+        for bad in (np.array([0.0]), np.array([1.0]), np.array([0.5, 1.0])):
+            with pytest.raises(UnattainableTargetError, match="strictly inside"):
+                cal.point_inverse(bad)

@@ -20,6 +20,30 @@ class UnattainableTargetError(ValueError):
     """
 
 
+def _validate_point_targets(p: object) -> np.ndarray:
+    """Validate point-inverse targets: 1-D, finite, strictly inside ``(0, 1)``.
+
+    Unlike :func:`~probcal._validation.validate_scores` (the forward-entry
+    convention), no clipping happens here: ``p = 0`` and ``p = 1`` are not
+    attained by any finite raw score, so a finite "inverse" for them would be
+    a silent clamp. Refusal is all-or-nothing and names the offending values.
+    """
+    arr = np.asarray(p, dtype=np.float64)
+    if arr.ndim != 1:
+        raise ValueError(f"p must be a 1-D array, got shape {arr.shape}")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError("p must contain only finite values")
+    bad = (arr <= 0.0) | (arr >= 1.0)
+    if np.any(bad):
+        raise UnattainableTargetError(
+            "point-inverse targets must lie strictly inside (0, 1); got "
+            f"{np.unique(arr[bad]).tolist()} — p = 0 and p = 1 are not attained by any "
+            "finite raw score (no silent clamp); use interval_inverse with lo=0/hi=1 "
+            "for one-sided targets"
+        )
+    return arr
+
+
 class BaseCalibrator(ABC):
     """Common contract for all probcal calibrators.
 
@@ -224,9 +248,9 @@ class BaseCalibrator(ABC):
         Parameters
         ----------
         p : array_like
-            Calibrated probabilities in ``[0, 1]`` (clipped to
-            ``[1e-12, 1 - 1e-12]``, the same convention as every forward
-            entry point).
+            Calibrated probabilities strictly inside ``(0, 1)``; boundary
+            and out-of-range values raise ``UnattainableTargetError``
+            (all-or-nothing, no silent clamp).
         space : {"probability", "logit"}, keyword-only
             Scale of the returned raw values. ``"logit"`` returns the raw
             logit directly; ``"probability"`` (default) returns the raw
@@ -248,6 +272,9 @@ class BaseCalibrator(ABC):
             If the calibrator is not monotone (``is_monotone_ = False``), or
             has no affine-logit closed form (``affine_logit_coeffs_`` is
             ``None``).
+        UnattainableTargetError
+            If any element of ``p`` lies outside the open interval
+            ``(0, 1)``.
         """
         self._check_fitted()
         if not self.is_monotone_:
@@ -258,7 +285,7 @@ class BaseCalibrator(ABC):
             )
         if space not in ("probability", "logit"):
             raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
-        arr = validate_scores(p, name="p")
+        arr = _validate_point_targets(p)
         coeffs = self.affine_logit_coeffs_
         if coeffs is None:
             raise NotImplementedError(

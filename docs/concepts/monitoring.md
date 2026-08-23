@@ -139,11 +139,34 @@ one-shot audit with e-value semantics — and are a natural later addition to
 
 ## Simulation verification
 
-Filled by `docs/scripts/monitor_sim.py` (spec W9); the table below is
-regenerated with the script and the acceptance gates are enforced by
-`tests/test_monitor_sim.py`.
+Produced by `docs/scripts/monitor_sim.py` (spec W9): 2000 seeded runs × 24
+monthly batches of n=2000 at a 5% event rate; drift experiments inject the
+shift at batch 12; reduced-size versions of the same gates run in CI
+(`tests/test_monitor_sim.py`), which also cross-checks the vectorized
+simulator against the shipped `CalibrationMonitor` class.
 
-<!-- MONITOR_SIM_TABLE -->
+| experiment                               | result | gate |
+|------------------------------------------|--------|------|
+| type-I offset (alpha=0.05)               | 0.0135 | <= 0.0597 |
+| type-I shape (alpha=0.05)                | 0.0195 | <= 0.0597 |
+| type-I global (alpha=0.05)               | 0.0155 | <= 0.0597 |
+| type-I offset (alpha=0.01)               | 0.0025 | <= 0.0144 |
+| type-I shape (alpha=0.01)                | 0.0040 | <= 0.0144 |
+| type-I global (alpha=0.01)               | 0.0040 | <= 0.0144 |
+| type-I global, per-grade (alpha=0.05)    | 0.0155 | <= 0.0597 |
+| type-I global, hetero sizes (alpha=0.05) | 0.0275 | <= 0.0597 |
+| type-I global, per-grade (alpha=0.01)    | 0.0020 | <= 0.0144 |
+| type-I global, hetero sizes (alpha=0.01) | 0.0050 | <= 0.0144 |
+| power delta=0.2                          | detect 0.94, median delay 6.0 | reported |
+| power delta=0.4                          | detect 0.99, median delay 2.0 | median delay <= 6 |
+| power slope=0.8                          | detect 0.99, median delay 2.0 | median delay <= 12 |
+| power slope=1.25                         | detect 0.99, median delay 3.0 | reported |
+| CS time-uniform coverage (delta=0)       | 0.9920 | >= 0.95 |
+| CS time-uniform coverage (delta=0.4)     | 1.0000 | >= 0.95 |
+
+The recommendation gate (correct call in ≥ 90% of pure-offset and
+pure-slope runs) is enforced through the real `CalibrationMonitor` in the
+same CI suite.
 
 ## References
 

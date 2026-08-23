@@ -47,7 +47,8 @@ def test_isotonic_block_edge_semantics() -> None:
     cal = IsotonicCalibrator().fit(s, y)  # blocks: 0 @0.1 | 1/3 @0.2-0.4 | 1 @0.5
     raw_lo, raw_hi = cal.interval_inverse(0.2, 0.9)
     assert raw_lo == 0.2  # left edge of the first block with mean >= 0.2
-    assert raw_hi == 0.5  # boundary where the map exceeds 0.9 (last block start)
+    assert raw_hi == np.nextafter(0.5, 0.0)  # one float below the last block start:
+    # the bound is itself in the preimage, so closed-bound consumers are safe (W11 P3)
 
 
 def test_isotonic_unattainable_raises() -> None:

@@ -218,5 +218,9 @@ def test_plateau_right_inverse_is_next_block_edge() -> None:
     _, hi_s = cal.interval_inverse(0.0, t)
     js = np.flatnonzero(np.isclose(levels, t))
     j_last = int(js[-1])
-    expected = 1.0 if j_last >= cal.n_blocks_ - 1 else float(cal.block_first_s_[j_last + 1])
+    expected = (
+        1.0
+        if j_last >= cal.n_blocks_ - 1
+        else float(np.nextafter(cal.block_first_s_[j_last + 1], 0.0))
+    )
     assert hi_s == expected

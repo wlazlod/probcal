@@ -113,11 +113,13 @@ class IsotonicCalibrator(BaseCalibrator):
         return float(self.block_first_s_[j])
 
     def _inverse_right(self, t: float) -> float:
-        # Boundary after the last block whose level stays within t.
+        # Largest raw score whose level stays within t: one float below the
+        # next block's left edge, so the returned bound is itself in the
+        # preimage — consumers may treat both bounds as closed (spec W11 P3).
         j = int(np.searchsorted(self.block_mean_, t, side="right")) - 1
         if j >= self.n_blocks_ - 1:
             return 1.0
-        return float(self.block_first_s_[j + 1])
+        return float(np.nextafter(self.block_first_s_[j + 1], 0.0))
 
     def interpret(self) -> Interpretation:
         """Read the block structure as effective complexity and local event rates."""

@@ -75,6 +75,7 @@ nav:
   - Guide:
       - scikit-learn adapter: guide/sklearn.md
       - optbinning scorecards: guide/optbinning.md
+      - treecf counterfactuals: guide/treecf.md
   - Concepts:
       - Why calibration: concepts/why-calibration.md
       - Parametric methods: concepts/methods-parametric.md

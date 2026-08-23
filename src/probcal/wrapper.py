@@ -402,6 +402,21 @@ class CalibratedModel:
             messages=messages,
         )
 
+    @property
+    def chain_(self) -> "object":
+        """The equivalent model-free :class:`probcal.Chain` (calibrator + offsets).
+
+        Hand this to a recourse engine when the base model stays behind:
+        the chain calibrates on the model *probability*, so its
+        ``space="logit"`` bounds are bounds on the raw margin.
+        """
+        self._check_fitted()
+        if self.ensemble_:
+            raise NotImplementedError("the ensemble flow has no single equivalent chain")
+        from .chain import Chain
+
+        return Chain([self.calibrator_, *self.offsets_])
+
     # ------------------------------------------------------------------ serialization
 
     def to_dict(self) -> dict[str, object]:

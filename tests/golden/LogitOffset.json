@@ -155,7 +155,7 @@
     "class": "LogitOffset",
     "fit_meta": {
       "data_fingerprint": "11f9ce48c024ebcb372ae65125d4e95c93c4547c617d44b87cbb561382b8b6d2",
-      "fitted_at_utc": "2026-08-23T11:35:11+00:00",
+      "fitted_at_utc": "2026-08-23T11:50:50+00:00",
       "n_obs": 400,
       "weight_sum": 400.0
     },
@@ -169,7 +169,7 @@
       "delta_": 0.3,
       "post_mean_": 0.06879218523244832,
       "pre_mean_": 0.05282309925401101,
-      "timestamp_": "2026-08-23T11:35:11+00:00"
+      "timestamp_": "2026-08-23T11:50:50+00:00"
     }
   },
   "query": [

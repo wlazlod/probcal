@@ -59,6 +59,12 @@ def _fitted(name: str):
         for k, (y, p) in enumerate(_monitor_batches()):
             mon.update(y, p, label=f"g{k}")
         return mon
+    if name == "Chain":
+        from probcal import Chain, LogitOffset
+
+        cal = BetaCalibrator().fit(_D.scores, _D.y)
+        off = LogitOffset(delta=0.2).fit(cal.predict_proba(_D.scores))
+        return Chain([cal, off])
     if name == "LogitOffset":
         return cls(delta=0.3).fit(_D.scores)
     if name == "CalibratedModel":

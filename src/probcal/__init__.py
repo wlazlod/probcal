@@ -9,6 +9,7 @@ from .attribution import AdjustedAttribution, adjust_attributions
 from .base import BaseCalibrator, UnattainableTargetError
 from .bayesian import BBQCalibrator, ENIRCalibrator
 from .binning import HistogramBinningCalibrator, ScalingBinningCalibrator
+from .chain import Chain
 from .curves import calibration_belt, reliability_binned, reliability_loess, reliability_spline
 from .datasets import make_pd_portfolio
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
@@ -30,6 +31,7 @@ __all__: list[str] = [
     "CalibratorSelector",
     "BetaCalibrator",
     "CenteredIsotonicCalibrator",
+    "Chain",
     "CrossVennAbersCalibrator",
     "ENIRCalibrator",
     "HistogramBinningCalibrator",

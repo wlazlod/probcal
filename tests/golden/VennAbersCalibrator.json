@@ -155,7 +155,7 @@
     "class": "VennAbersCalibrator",
     "fit_meta": {
       "data_fingerprint": "29e2b0eb217ebb4b49725e90a3e92be7b5c7f28aa15774eeedab941ab53628d1",
-      "fitted_at_utc": "2026-08-23T11:35:11+00:00",
+      "fitted_at_utc": "2026-08-23T11:50:50+00:00",
       "n_events": 10.0,
       "n_obs": 400,
       "weight_sum": 400.0

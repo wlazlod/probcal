@@ -107,6 +107,12 @@ def _fitted(name: str):
     cls = SERIALIZABLE[name]
     if name == "CalibrationMonitor":
         return _monitor()
+    if name == "Chain":
+        from probcal import BetaCalibrator, Chain, LogitOffset
+
+        cal = BetaCalibrator().fit(_D.scores, _D.y)
+        off = LogitOffset(delta=0.2).fit(cal.predict_proba(_D.scores))
+        return Chain([cal, off])
     if name == "LogitOffset":
         return cls(delta=0.3).fit(_D.scores)
     if name == "CalibratedModel":
@@ -172,6 +178,19 @@ def test_fingerprint_stable_and_data_sensitive(fitted) -> None:
         alt = _monitor(seed0=77)
         assert obj.fingerprint() != alt.fingerprint()
         return
+    if name == "Chain":
+        from probcal import BetaCalibrator, Chain, LogitOffset
+
+        cal = BetaCalibrator().fit(other.scores, other.y)
+        off = LogitOffset(delta=0.2).fit(cal.predict_proba(other.scores))
+        assert obj.fingerprint() != Chain([cal, off]).fingerprint()
+        return
+    if name == "Chain":
+        from probcal import BetaCalibrator, Chain, LogitOffset
+
+        cal = BetaCalibrator().fit(_D.scores, _D.y)
+        off = LogitOffset(delta=0.2).fit(cal.predict_proba(_D.scores))
+        return Chain([cal, off])
     if name == "LogitOffset":
         alt = SERIALIZABLE[name](delta=0.3).fit(other.scores)
     elif name == "CalibratedModel":

@@ -155,7 +155,7 @@
     "class": "CrossVennAbersCalibrator",
     "fit_meta": {
       "data_fingerprint": "29e2b0eb217ebb4b49725e90a3e92be7b5c7f28aa15774eeedab941ab53628d1",
-      "fitted_at_utc": "2026-08-23T11:35:11+00:00",
+      "fitted_at_utc": "2026-08-23T11:50:50+00:00",
       "n_events": 10.0,
       "n_obs": 400,
       "weight_sum": 400.0
@@ -173,7 +173,7 @@
             "class": "VennAbersCalibrator",
             "fit_meta": {
               "data_fingerprint": "4b74b46fc0c1b2fcc8c33fe66909e06d98ea51f78ec70dcc17d34f25dcdee762",
-              "fitted_at_utc": "2026-08-23T11:35:11+00:00",
+              "fitted_at_utc": "2026-08-23T11:50:50+00:00",
               "n_events": 8.0,
               "n_obs": 320,
               "weight_sum": 320.0
@@ -1802,7 +1802,7 @@
             "class": "VennAbersCalibrator",
             "fit_meta": {
               "data_fingerprint": "8691a7e8147991badd5c4b666bf1f5686472f79f6c0f1bcfe85b460139e86650",
-              "fitted_at_utc": "2026-08-23T11:35:11+00:00",
+              "fitted_at_utc": "2026-08-23T11:50:50+00:00",
               "n_events": 8.0,
               "n_obs": 320,
               "weight_sum": 320.0
@@ -3431,7 +3431,7 @@
             "class": "VennAbersCalibrator",
             "fit_meta": {
               "data_fingerprint": "d734c62e20437930e2990a88ca4ebb42be9d81bd46b85b81facc11fa796480b1",
-              "fitted_at_utc": "2026-08-23T11:35:11+00:00",
+              "fitted_at_utc": "2026-08-23T11:50:50+00:00",
               "n_events": 8.0,
               "n_obs": 320,
               "weight_sum": 320.0
@@ -5060,7 +5060,7 @@
             "class": "VennAbersCalibrator",
             "fit_meta": {
               "data_fingerprint": "f82d750f8e8f630a45b8879c1e80e0e25dbb90da9724173c316b490a093791d1",
-              "fitted_at_utc": "2026-08-23T11:35:11+00:00",
+              "fitted_at_utc": "2026-08-23T11:50:50+00:00",
               "n_events": 8.0,
               "n_obs": 320,
               "weight_sum": 320.0
@@ -6689,7 +6689,7 @@
             "class": "VennAbersCalibrator",
             "fit_meta": {
               "data_fingerprint": "6f25ea2ed1f14676d75881a4af6af88f793af30d67fdf2ccc815d792a0484631",
-              "fitted_at_utc": "2026-08-23T11:35:11+00:00",
+              "fitted_at_utc": "2026-08-23T11:50:50+00:00",
               "n_events": 8.0,
               "n_obs": 320,
               "weight_sum": 320.0

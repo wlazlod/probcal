@@ -125,8 +125,9 @@ code("""\
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import roc_auc_score
 
-# subsample deliberately left at 1.0: treecf 0.2.2 mis-parses sklearn GBC
-# ensembles trained with subsample < 1 (see guide/treecf.md, item T4)
+# subsample left at 1.0: released treecf 0.2.2 routes split boundaries in
+# float64 while sklearn casts inputs to float32, which surfaced most often
+# on subsampled GBCs here; fixed upstream in treecf#21 (guide/treecf.md T4)
 model = GradientBoostingClassifier(
     n_estimators=120, max_depth=3, random_state=0
 ).fit(X_train, y_train)

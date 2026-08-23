@@ -108,17 +108,20 @@ release spec until merged there:
   {Platt, Temperature, Beta `abm`, Isotonic, CenteredIsotonic,
   `LogitOffset`, `Chain(Beta + offset)`, `CalibratedModel`} ×
   {`op="<="`, `op=">="`, `range`, `bands`} × {`buffer_logit` 0, 0.2} on
-  LightGBM/XGBoost/sklearn ensembles. **Two findings from the joint
-  smoke tests (treecf 0.2.2, sklearn `GradientBoostingClassifier`):**
-  (a) with `subsample < 1.0` the parsed ensemble deviates from the model —
-  at a returned counterfactual, treecf's raw −4.148 vs sklearn's
-  `decision_function` −1.057, for **both** backends, with the exact
-  backend still stamping `proof="optimal"`; `subsample=1.0` agrees to the
-  last bit. (b) independently, the heuristic backend on an unsubsampled
-  60-tree GBC reported `score_raw` −1.034 while `decision_function` at
-  its `x_cf` gives −0.643 (no snapping). The sklearn parser and both
-  evaluation paths need an equivalence test against
-  `decision_function` across `subsample`, depths, and learning rates.
+  LightGBM/XGBoost/sklearn ensembles. **Boundary-routing defect, found by
+  these smoke tests and fixed upstream in
+  [treecf#21](https://github.com/wlazlod/treecf/pull/21):** sklearn
+  `tree_` ensembles route `float32(x) <= float64(threshold)` while
+  treecf's IR evaluated in float64, so a counterfactual coordinate placed
+  exactly on a split threshold (the natural optimum of a smallest-change
+  search) could flip through many trees — in the reproducing case the
+  exact backend stamped `proof="optimal"` on an `x_cf` whose true
+  `decision_function` margin was 3.09 raw units away. treecf#21
+  re-expresses thresholds as the exact float64 boundary of the float32
+  cast, making routing bit-exact for every input; released treecf 0.2.2
+  still carries the defect, so pin the fixed release once it ships.
+  XGBoost also casts features to float32 natively — the analogous fix is
+  a treecf follow-up.
 - **T5 — docs:** link this guide from treecf's `concepts/calibration.md`,
   mirror the three focus cases, and verify (add a test) that target
   inversion is computed once per `Target` in batch mode.

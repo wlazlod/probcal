@@ -1,11 +1,12 @@
 """Joint smoke test with treecf (spec W11 P4). Skipped without treecf.
 
-All correctness assertions run the exact backend: during development the
-heuristic backend returned an x_cf whose true sklearn margin (-0.64)
-disagreed with its own reported score_raw (-1.03) on a sklearn
-GradientBoostingClassifier (no snapping involved) — a treecf-side
-evaluation/parser discrepancy recorded in guide/treecf.md's cross-repo
-work list. The exact backend's certificates verified correct throughout.
+Correctness is always re-verified through sklearn's own predict — never
+trusted from treecf's report. These tests surfaced a treecf boundary-routing
+defect (sklearn casts inputs to float32 before comparing against float64
+thresholds; treecf routed in float64, so an x_cf placed exactly on a split
+threshold could flip trees), fixed upstream in treecf#21; released treecf
+0.2.2 still carries it, which is one more reason the assertions below go
+through the model, not the report.
 """
 
 import numpy as np

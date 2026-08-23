@@ -100,10 +100,19 @@ def test_smooth_ece_default_close_to_exact_small_n() -> None:
     assert abs(smooth_ece(d.y, d.scores) - smooth_ece(d.y, d.scores, bins=None)) <= 1e-3
 
 
-def test_smooth_ece_default_exact_below_min_n() -> None:
-    # n < 64: the lattice buys nothing; default must stay bit-identical to exact.
-    d = make_pd_portfolio(n=50, event_rate=0.3, random_state=0)
-    assert smooth_ece(d.y, d.scores) == smooth_ece(d.y, d.scores, bins=None)
+def test_smooth_ece_small_n_wide_range_uses_lattice() -> None:
+    # The lattice path engages at every n (no small-n exact carve-out): on a
+    # wide clipped-logit range the exact 257-point grid misses the isolated
+    # small-sigma kernels entirely and spuriously early-exits at ~1e-13
+    # (the DECISIONS 66 aliasing mechanism); the lattice integrator reports
+    # the real total variation. bins=None remains the exact escape hatch.
+    rng = np.random.default_rng(5)
+    n = 50
+    p = rng.uniform(0.4, 0.6, n)
+    p[:3] = 1e-12  # clipped scores: logit range ~28 wide
+    y = (rng.uniform(size=n) < p).astype(float)
+    assert smooth_ece(y, p) > 0.01
+    assert smooth_ece(y, p, bins=None) < 1e-3  # the aliasing-prone exact value
 
 
 def test_e50_unweighted_equals_all_equal_weight() -> None:

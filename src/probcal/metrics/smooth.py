@@ -39,11 +39,6 @@ def _smece_fixed_point(loc: np.ndarray, mass: np.ndarray) -> tuple[float, float]
 
 
 _SMECE_MAX_BINS = 1 << 20
-# Below this n the lattice buys nothing over the exact path and the default
-# stays bit-identical to bins=None (spec W1). Note the exact path's 257-point
-# grid can under-resolve small-sigma kernels on wide logit ranges (DECISIONS
-# 66/68), so on such data the two sides of this threshold can differ.
-_SMECE_MIN_N = 64
 
 
 def _smece_at_sigma_lattice(m: np.ndarray, width: float, sigma: float) -> float:
@@ -113,10 +108,10 @@ def smooth_ece(
     over the logit range before solving the fixed point; the binned measure
     is then evaluated in closed form on its own lattice by direct Gaussian
     convolution, at a cost independent of n and of sigma. The lattice path
-    engages for every call with ``n >= 64`` and a non-degenerate logit range
+    engages for every call with a non-degenerate logit range
     (0.1.3 engaged it only for ``n > bins``, leaving typical calibration-set
     sizes on the exact O(n)-per-step path — the "size cliff", DECISIONS 68).
-    With ``bins=None``, ``n < 64``, or a degenerate range
+    With ``bins=None``, or a degenerate range
     (``t.max() == t.min()``), the exact 0.1.2 computation runs bit-for-bit.
     Otherwise, if the found ``sigma`` is smaller than 8 bin widths (the
     kernel would be under-resolved by the bins), the solve is repeated once
@@ -154,7 +149,7 @@ def smooth_ece(
     t = logit(p_arr)
     mass = (w / w.sum()) * (y_arr - p_arr)
     t_lo, t_hi = float(t.min()), float(t.max())
-    if bins is None or t.size < _SMECE_MIN_N or t_hi == t_lo:
+    if bins is None or t_hi == t_lo:
         return _smece_fixed_point(t, mass)[0]
 
     def _binned_solve(b: int) -> tuple[float, float, float]:

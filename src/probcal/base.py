@@ -6,7 +6,7 @@ from typing import Self
 
 import numpy as np
 
-from ._math import expit, logit
+from ._math import _LOGIT_CLIP, expit, logit
 from ._results import Interpretation
 from ._validation import EPS, validate_binary_y, validate_scores, validate_weights
 
@@ -42,6 +42,23 @@ def _validate_point_targets(p: object) -> np.ndarray:
             "for one-sided targets"
         )
     return arr
+
+
+def _check_representable(z: np.ndarray, space: str) -> None:
+    """Refuse probability-space output whose raw logit exceeds ``_LOGIT_CLIP``.
+
+    ``sigma(z)`` for ``|z| > _LOGIT_CLIP`` rounds into the ``[1e-12, 1 - 1e-12]``
+    clipping zone: ``predict_proba`` would clip it back and the round trip
+    silently breaks. ``space="logit"`` is exact there, so the error names it.
+    """
+    if space == "probability" and np.any(np.abs(z) > _LOGIT_CLIP):
+        worst = float(np.max(np.abs(np.asarray(z))))
+        raise UnattainableTargetError(
+            f"the requested target needs a raw logit of magnitude {worst:.6g} > "
+            f"{_LOGIT_CLIP:.6g} = logit(1 - 1e-12); its probability-space "
+            "representation rounds to 0.0/1.0 and cannot round-trip through "
+            'predict_proba. Use space="logit", where the answer is exact.'
+        )
 
 
 class BaseCalibrator(ABC):
@@ -274,7 +291,10 @@ class BaseCalibrator(ABC):
             ``None``).
         UnattainableTargetError
             If any element of ``p`` lies outside the open interval
-            ``(0, 1)``.
+            ``(0, 1)``; or if ``space="probability"`` and the raw logit of
+            any result exceeds ``logit(1 - 1e-12)`` in magnitude — the
+            probability representation would round to 0.0/1.0 and silently
+            fail to round-trip; ``space="logit"`` is exact there.
         """
         self._check_fitted()
         if not self.is_monotone_:
@@ -293,6 +313,7 @@ class BaseCalibrator(ABC):
             )
         a, b = coeffs
         z = (logit(arr) - b) / a
+        _check_representable(z, space)
         return z if space == "logit" else expit(z)
 
     # Hooks for interval_inverse — overridden by closed-form / block calibrators.

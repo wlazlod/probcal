@@ -35,6 +35,15 @@ def logit(p: object) -> np.ndarray:
     return np.log(arr) - np.log1p(-arr)
 
 
+_LOGIT_CLIP = float(logit(1.0 - 1e-12))
+"""``logit`` of the upper clipping bound, ~27.631 (== ``-logit(1e-12)``).
+
+A probability-space result whose raw logit exceeds this magnitude rounds into
+the package-wide ``[1e-12, 1 - 1e-12]`` clipping zone and cannot round-trip
+through any forward entry point; inverse maps refuse rather than return it.
+"""
+
+
 def expit(z: object) -> np.ndarray:
     """Logistic sigmoid ``1 / (1 + exp(-z))``, overflow-safe.
 

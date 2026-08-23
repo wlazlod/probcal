@@ -266,16 +266,20 @@ class LogitOffset:
             If ``space`` is not ``"probability"`` or ``"logit"``.
         UnattainableTargetError
             If any element of ``p`` lies outside the open interval
-            ``(0, 1)``.
+            ``(0, 1)``; or if ``space="probability"`` and the raw logit of
+            any result exceeds ``logit(1 - 1e-12)`` in magnitude — the
+            probability representation would round to 0.0/1.0 and silently
+            fail to round-trip; ``space="logit"`` is exact there.
         """
         if not self.fitted_:
             raise RuntimeError("LogitOffset is not fitted; call fit() first")
         if space not in ("probability", "logit"):
             raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
-        from .base import _validate_point_targets
+        from .base import _check_representable, _validate_point_targets
 
         arr = _validate_point_targets(p)
         z = logit(arr) - self.delta_
+        _check_representable(z, space)
         return z if space == "logit" else expit(z)
 
     def audit_report(self, y: object, p: object, *, sample_weight: object = None) -> AuditReport:

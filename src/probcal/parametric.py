@@ -15,7 +15,12 @@ import numpy as np
 from ._math import bisect, expit, irls_logistic, logit
 from ._results import Interpretation
 from ._validation import validate_scores
-from .base import BaseCalibrator, UnattainableTargetError, _validate_point_targets
+from .base import (
+    BaseCalibrator,
+    UnattainableTargetError,
+    _check_representable,
+    _validate_point_targets,
+)
 
 _U_LO = 1e-6
 _U_HI = 1e6
@@ -489,7 +494,11 @@ class BetaCalibrator(BaseCalibrator):
             degenerate (``a == 0`` or ``b == 0``) fit — ``p`` is validated
             all-or-nothing: if any element is outside the range (named in
             the error message), the whole call raises and no element is
-            silently clamped.
+            silently clamped. Also raised when ``space="probability"`` and
+            the raw logit of any result exceeds ``logit(1 - 1e-12)`` in
+            magnitude — the probability representation would round to
+            0.0/1.0 and silently fail to round-trip; ``space="logit"`` is
+            exact there.
         """
         self._check_fitted()
         if not self.is_monotone_:
@@ -528,6 +537,7 @@ class BetaCalibrator(BaseCalibrator):
             z = -np.log(np.expm1(-K / a))
         else:
             z = _beta_point_inverse_z(K, a, b)
+        _check_representable(z, space)
         return z if space == "logit" else expit(z)
 
     @property

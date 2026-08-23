@@ -2,6 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/probcal.svg)](https://pypi.org/project/probcal/)
 [![Downloads](https://img.shields.io/pypi/dm/probcal.svg)](https://pypistats.org/packages/probcal)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22069679.svg)](https://doi.org/10.5281/zenodo.22069679)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 

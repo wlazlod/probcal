@@ -3,6 +3,7 @@
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import _check_sample_weight, check_is_fitted
 
 from .._math import expit
@@ -123,10 +124,11 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
             )
         X_arr, y_arr = validate_X_y(self, X, y, reset=True)
         sw = None if sample_weight is None else _check_sample_weight(sample_weight, X_arr)
+        check_classification_targets(y_arr)
         self.classes_ = np.unique(y_arr)
         if len(self.classes_) != 2:
             raise ValueError(
-                f"CalibratedClassifier is binary-only, got {len(self.classes_)} classes"
+                "Only binary classification is supported. Got " f"{len(self.classes_)} classes."
             )
         y_bin = (y_arr == self.classes_[1]).astype(np.float64)
 
@@ -143,7 +145,10 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
                 )
             else:
                 splitter = n_splits
-            raw = cross_val_predict(clone(base), X_arr, y_arr, cv=splitter, method=self.method)
+            fit_params = {} if sw is None else {"params": {"sample_weight": sw}}
+            raw = cross_val_predict(
+                clone(base), X_arr, y_arr, cv=splitter, method=self.method, **fit_params
+            )
             oof = self._to_scores(np.asarray(raw))
             refit = clone(base)
             try:
@@ -152,6 +157,16 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
                 refit.fit(X_arr, y_arr)
             self.estimator_ = refit
 
+        if sw is not None:
+            # Zero weight means excluded (sklearn semantics); probcal requires
+            # strictly positive weights, so drop those rows here.
+            keep = sw > 0.0
+            oof, y_bin, sw = oof[keep], y_bin[keep], sw[keep]
+            if np.unique(y_bin).size < 2:
+                raise ValueError(
+                    "Only one class remains after removing zero-weight samples; "
+                    "both classes are required."
+                )
         proto = self.calibrator if self.calibrator is not None else BetaCalibrator()
         self.calibrator_ = type(proto)(**proto.get_params())
         self.calibrator_.fit(oof, y_bin, sample_weight=sw)

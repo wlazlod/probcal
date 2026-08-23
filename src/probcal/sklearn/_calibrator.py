@@ -2,6 +2,7 @@
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
+from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import _check_sample_weight, check_is_fitted
 
 from .._math import expit
@@ -90,21 +91,35 @@ class SklearnCalibrator(ClassifierMixin, TransformerMixin, BaseEstimator):
         """
         if self.input not in ("probability", "logit"):
             raise ValueError(f"input must be 'probability' or 'logit', got {self.input!r}")
-        X_arr, y_arr = validate_X_y(self, X, y, reset=True)
+        X_arr, y_arr = validate_X_y(self, X, y, reset=True, allow_1d=True)
         sw = None if sample_weight is None else _check_sample_weight(sample_weight, X_arr)
+        check_classification_targets(y_arr)
         self.classes_ = np.unique(y_arr)
         if len(self.classes_) != 2:
-            raise ValueError(f"SklearnCalibrator is binary-only, got {len(self.classes_)} classes")
+            raise ValueError(
+                "Only binary classification is supported. Got " f"{len(self.classes_)} classes."
+            )
         y_bin = (y_arr == self.classes_[1]).astype(np.float64)
+        s = self._scores(X_arr)
+        if sw is not None:
+            # Zero weight means excluded (sklearn semantics); probcal requires
+            # strictly positive weights, so drop those rows here.
+            keep = sw > 0.0
+            s, y_bin, sw = s[keep], y_bin[keep], sw[keep]
+            if np.unique(y_bin).size < 2:
+                raise ValueError(
+                    "Only one class remains after removing zero-weight samples; "
+                    "both classes are required."
+                )
         proto = self.calibrator if self.calibrator is not None else BetaCalibrator()
         self.calibrator_ = type(proto)(**proto.get_params())
-        self.calibrator_.fit(self._scores(X_arr), y_bin, sample_weight=sw)
+        self.calibrator_.fit(s, y_bin, sample_weight=sw)
         return self
 
     def predict_proba(self, X: object) -> np.ndarray:
         """Calibrated ``(n, 2)`` probabilities ``[P(classes_[0]), P(classes_[1])]``."""
         check_is_fitted(self, "calibrator_")
-        X_arr = validate_X(self, X)
+        X_arr = validate_X(self, X, allow_1d=True)
         p = self.calibrator_.predict_proba(self._scores(X_arr))
         return np.column_stack([1.0 - p, p])
 
@@ -123,8 +138,7 @@ class SklearnCalibrator(ClassifierMixin, TransformerMixin, BaseEstimator):
         tags = super().__sklearn_tags__()
         tags.classifier_tags.multi_class = False
         tags.target_tags.required = True
-        tags.input_tags.one_d_array = True
         return tags
 
     def _more_tags(self) -> dict[str, object]:  # sklearn < 1.6
-        return {"binary_only": True, "requires_y": True, "X_types": ["2darray", "1darray"]}
+        return {"binary_only": True, "requires_y": True}

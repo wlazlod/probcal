@@ -8,8 +8,9 @@ misuse. Protocol, criteria, and report reading:
 
 import numpy as np
 
+from ._registry import SERIALIZABLE, register
 from ._results import Interpretation, SelectionReport
-from ._validation import validate_binary_y, validate_scores, validate_weights
+from ._serialize import decode_value, encode_value
 from .base import BaseCalibrator
 from .binning import HistogramBinningCalibrator, ScalingBinningCalibrator
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
@@ -41,7 +42,8 @@ def _default_candidates() -> dict[str, BaseCalibrator]:
     }
 
 
-class CalibratorSelector:
+@register
+class CalibratorSelector(BaseCalibrator):
     """Choose a calibrator by inner cross-validation on the calibration data.
 
     Custom candidates declare their tie-break position by overriding
@@ -85,6 +87,66 @@ class CalibratorSelector:
         self.cv = cv
         self.random_state = random_state
 
+    _STATE_ATTRS = ("best_name_", "best_calibrator_", "is_monotone_")
+
+    def _state(self) -> dict[str, object]:
+        base = super()._state()
+        r = self.report_
+        base["report"] = {
+            "methods": list(r.methods),
+            "score_mean": encode_value(r.score_mean),
+            "score_sd": encode_value(r.score_sd),
+            "guardrails_ok": encode_value(r.guardrails_ok),
+            "chosen": encode_value(r.chosen),
+            "criterion": r.criterion,
+        }
+        return base
+
+    def _set_state(self, state: dict[str, object]) -> None:
+        state = dict(state)
+        rep = state.pop("report")
+        super()._set_state(state)
+        self.report_ = SelectionReport(
+            methods=tuple(rep["methods"]),  # type: ignore[index]
+            score_mean=decode_value(rep["score_mean"]),  # type: ignore[index, arg-type]
+            score_sd=decode_value(rep["score_sd"]),  # type: ignore[index, arg-type]
+            guardrails_ok=decode_value(rep["guardrails_ok"]),  # type: ignore[index, arg-type]
+            chosen=decode_value(rep["chosen"]),  # type: ignore[index, arg-type]
+            criterion=rep["criterion"],  # type: ignore[index]
+        )
+
+    def _params_for_dict(self) -> dict[str, object]:
+        """Encode candidate prototypes by registry name (DECISIONS 73).
+
+        Custom candidate classes outside the registry cannot be rebuilt on
+        load and raise ``ValueError`` naming the class.
+        """
+        params = dict(self.get_params())
+        cands = params.get("candidates")
+        if cands is not None:
+            enc = {}
+            for name, proto in cands.items():  # type: ignore[attr-defined]
+                cls_name = type(proto).__name__
+                if cls_name not in SERIALIZABLE:
+                    raise ValueError(
+                        f"cannot serialize candidate {name!r}: {cls_name} is not a "
+                        "registered probcal class"
+                    )
+                enc[name] = {"class": cls_name, "params": proto.get_params()}
+            params["candidates"] = {"__candidates__": enc}
+        return params
+
+    @classmethod
+    def _params_from_dict(cls, params: dict[str, object]) -> dict[str, object]:
+        params = dict(params)
+        cands = params.get("candidates")
+        if isinstance(cands, dict) and "__candidates__" in cands:
+            params["candidates"] = {
+                name: SERIALIZABLE[spec["class"]](**spec["params"])
+                for name, spec in cands["__candidates__"].items()  # type: ignore[attr-defined, index]
+            }
+        return params
+
     def fit(self, s: object, y: object, sample_weight: object = None) -> "CalibratorSelector":
         """Run the nested selection and refit the winner on all data.
 
@@ -109,6 +171,10 @@ class CalibratorSelector:
             If ``scoring`` is not one of the accepted criteria (plain ECE
             and Hosmer–Lemeshow are refused as selection criteria).
         """
+        super().fit(s, y, sample_weight)
+        return self
+
+    def _fit(self, s_arr: np.ndarray, y_arr: np.ndarray, w_arr: np.ndarray) -> None:
         if self.scoring not in _SCORERS:
             raise ValueError(
                 f"scoring must be one of {sorted(_SCORERS)} (proper scores and accepted "
@@ -117,9 +183,6 @@ class CalibratorSelector:
             )
         scorer = _SCORERS[self.scoring]
         menu = self.candidates if self.candidates is not None else _default_candidates()
-        s_arr = validate_scores(s)
-        y_arr = validate_binary_y(y)
-        w_arr = validate_weights(sample_weight, len(s_arr))
 
         rng = np.random.default_rng(self.random_state)
         folds = np.empty(len(y_arr), dtype=np.int64)
@@ -171,9 +234,9 @@ class CalibratorSelector:
         proto = menu[self.best_name_]
         self.best_calibrator_ = type(proto)(**proto.get_params())
         self.best_calibrator_.fit(s_arr, y_arr, sample_weight=w_arr)
-        return self
+        self.is_monotone_ = bool(getattr(self.best_calibrator_, "is_monotone_", True))
 
-    def predict_proba(self, s: object) -> np.ndarray:
+    def _predict(self, s: np.ndarray) -> np.ndarray:
         """Delegate to the refitted winner."""
         return self.best_calibrator_.predict_proba(s)
 

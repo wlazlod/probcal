@@ -108,13 +108,17 @@ release spec until merged there:
   {Platt, Temperature, Beta `abm`, Isotonic, CenteredIsotonic,
   `LogitOffset`, `Chain(Beta + offset)`, `CalibratedModel`} ×
   {`op="<="`, `op=">="`, `range`, `bands`} × {`buffer_logit` 0, 0.2} on
-  LightGBM/XGBoost/sklearn ensembles. **Finding from the joint smoke test
-  (treecf 0.2.2, sklearn GradientBoostingClassifier):** the heuristic
-  backend returned an `x_cf` whose true `decision_function` margin
-  (−0.643) disagreed with treecf's own reported `score_raw` (−1.034), with
-  no snapping involved — the sklearn-ensemble evaluation path needs a
-  parser/eval equivalence test against `decision_function`; the exact
-  backend verified correct throughout.
+  LightGBM/XGBoost/sklearn ensembles. **Two findings from the joint
+  smoke tests (treecf 0.2.2, sklearn `GradientBoostingClassifier`):**
+  (a) with `subsample < 1.0` the parsed ensemble deviates from the model —
+  at a returned counterfactual, treecf's raw −4.148 vs sklearn's
+  `decision_function` −1.057, for **both** backends, with the exact
+  backend still stamping `proof="optimal"`; `subsample=1.0` agrees to the
+  last bit. (b) independently, the heuristic backend on an unsubsampled
+  60-tree GBC reported `score_raw` −1.034 while `decision_function` at
+  its `x_cf` gives −0.643 (no snapping). The sklearn parser and both
+  evaluation paths need an equivalence test against
+  `decision_function` across `subsample`, depths, and learning rates.
 - **T5 — docs:** link this guide from treecf's `concepts/calibration.md`,
   mirror the three focus cases, and verify (add a test) that target
   inversion is computed once per `Target` in batch mode.

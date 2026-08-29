@@ -65,6 +65,60 @@ gs = GridSearchCV(
 ).fit(X, y)
 ```
 
+## Sample weights and metadata routing
+
+Both estimators declare `sample_weight` in `fit`, so the weights always reach
+the probcal calibrator. What depends on `enable_metadata_routing` is how they
+reach the *wrapped* classifier.
+
+**Routing off (sklearn's default).** Weights are handed down directly:
+`CalibratedClassifier` forwards them to `cross_val_predict`'s fold fits and to
+the full-data refit whenever the base estimator's `fit` takes a
+`sample_weight` argument.
+
+**Routing on.** Every consumer must ask for the metadata, ours included:
+
+```python
+import sklearn
+from sklearn.pipeline import Pipeline
+from probcal.sklearn import SklearnCalibrator
+
+with sklearn.config_context(enable_metadata_routing=True):
+    pipe = Pipeline(
+        [("cal", SklearnCalibrator().set_fit_request(sample_weight=True))]
+    )
+    pipe.fit(scores.reshape(-1, 1), y, sample_weight=w)
+```
+
+Inside a search, the base estimator declares its own request and the wrapper
+declares one per method the search calls:
+
+```python
+with sklearn.config_context(enable_metadata_routing=True):
+    clf = CalibratedClassifier(
+        LogisticRegression().set_fit_request(sample_weight=True), cv=3
+    )
+    GridSearchCV(
+        clf.set_fit_request(sample_weight=True).set_score_request(sample_weight=True),
+        {"calibrator__variant": ["ab", "abm"]},
+        cv=3,
+    ).fit(X, y, sample_weight=w)
+```
+
+An undeclared request raises sklearn's `UnsetMetadataPassedError`; the adapter
+does not soften that into a silent drop.
+
+**Base estimators that cannot take weights.** If the base estimator's `fit` has
+no `sample_weight` parameter (`KNeighborsClassifier`, for instance),
+`CalibratedClassifier.fit` warns once (`UserWarning`, naming the class), runs
+the fold fits and the refit unweighted, and still fits the calibrator with the
+weights — the calibration map is weighted, the scores it calibrates are not.
+Under routing, a router base (a `Pipeline`, say) counts as weight-capable: it
+takes weights through `**params`, and sklearn's routing has the final word.
+
+This behaviour is pinned by `tests/test_sklearn_routing.py`, verified on
+scikit-learn 1.4.2, 1.6.1 and 1.9.0.
+
 ## Against `CalibratedClassifierCV`
 
 | | `CalibratedClassifierCV(ensemble=False)` | `probcal.sklearn.CalibratedClassifier` |

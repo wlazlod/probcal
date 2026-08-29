@@ -30,7 +30,7 @@ _IRLS_NOT_CONVERGED = (
     "and consider a nonparametric calibrator"
 )
 
-_BETA_INVERSE_KAPPA = 1.524  # minimax hyperbola parameter (max deviation 0.076), DECISIONS 67
+_BETA_INVERSE_KAPPA = 1.524  # minimax hyperbola parameter (max deviation 0.076)
 
 
 def _beta_point_inverse_z(
@@ -57,7 +57,7 @@ def _beta_point_inverse_z(
     open-ended iteration — that reaches machine precision at ratio 50 in
     <= 3 steps without paying a 4th step in the common (low-asymmetry) case.
 
-    Machine precision is verified numerically (DECISIONS 67) over
+    Machine precision is verified numerically over
     ``a, b in (0, 5]`` and asymmetry ratio ``<= 50`` — the realistic fit
     domain. Outside it (extreme exponent ratios, e.g. ``a=1e-4, b=5``), the
     seed can be far off and 4 Halley steps may not recover full precision;
@@ -312,7 +312,7 @@ class TemperatureCalibrator(BaseCalibrator):
 class BetaCalibrator(BaseCalibrator):
     """Beta calibration: ``logit g(s) = a·ln s − b·ln(1 − s) + c``.
 
-    Variants (spec §6; DECISIONS entry 27): ``"abm"`` fits ``(a, b, c)``;
+    Variants (spec §6): ``"abm"`` fits ``(a, b, c)``;
     ``"ab"`` ties ``a = b`` (equivalent to Platt scaling on logits); ``"a"``
     additionally fixes ``c = 0`` (a single-parameter map, the temperature
     family in a different parameterization). The monotonicity constraint
@@ -461,7 +461,7 @@ class BetaCalibrator(BaseCalibrator):
         """Raw scores whose calibrated probabilities equal ``p`` (exact preimage).
 
         Overrides :meth:`BaseCalibrator.point_inverse` with the beta
-        family's own exact construction (DECISIONS 67), so the ``"abm"``
+        family's own exact construction, so the ``"abm"``
         variant — not affine on the logit scale — still gets a closed-form
         inverse instead of falling back to :meth:`interval_inverse`'s
         bisection. With ``z = logit(s)`` and ``K = logit(p) - c``, the

@@ -240,7 +240,7 @@ class SegmentedCalibrator(BaseCalibrator):
 
     # ------------------------------------------------------------- prediction
 
-    def _lookup_deltas(self, labels: np.ndarray) -> np.ndarray:
+    def _lookup_deltas(self, labels: np.ndarray, *, stacklevel: int = 3) -> np.ndarray:
         delta_map = dict(zip(self.segments_, self.delta_tilde_.tolist(), strict=True))
         out = np.zeros(len(labels), dtype=np.float64)
         unseen_found: set[str] = set()
@@ -258,11 +258,13 @@ class SegmentedCalibrator(BaseCalibrator):
             )
         if self.unseen == "global" and len(labels) > 0 and n_seen == 0:
             warnings.warn(
-                f"SegmentedCalibrator: none of the {len(labels)} segment labels passed to "
-                f"predict_proba were seen at fit time ({self.segments_}); the global map "
+                f"SegmentedCalibrator: none of the {len(labels)} segment labels passed at "
+                f"predict time were seen at fit time ({self.segments_}); the global map "
                 "(delta=0) is applied to every row — check the label representation",
                 UserWarning,
-                stacklevel=2,
+                # 3 frames out of here is predict_proba's caller; the inverse
+                # paths reach this through _segment_chain_or_base and pass 4.
+                stacklevel=stacklevel,
             )
         return out
 
@@ -317,7 +319,7 @@ class SegmentedCalibrator(BaseCalibrator):
     def _segment_chain_or_base(self, segment: object) -> BaseCalibrator | Chain:
         if segment is None:
             return self.base_
-        delta = float(self._lookup_deltas(_coerce_segments([segment], 1))[0])
+        delta = float(self._lookup_deltas(_coerce_segments([segment], 1), stacklevel=4)[0])
         if delta == 0.0:
             return self.base_
         return Chain([self.base_, LogitOffset(delta=delta).fit(np.array([0.5]))])

@@ -7,7 +7,9 @@ from probcal._math import expit
 from probcal._results import MetricReport
 from probcal.datasets import make_pd_portfolio
 from probcal.metrics import (
+    _METRIC_CATALOG,
     ReliabilitySummary,
+    _point_metrics,
     calibration_intercept,
     calibration_slope,
     e90,
@@ -213,3 +215,102 @@ def test_evaluate_stratify_false_runs_and_is_reproducible() -> None:
     np.testing.assert_array_equal(a.ci_low, b.ci_low)
     np.testing.assert_array_equal(a.ci_high, b.ci_high)
     assert len(a.names) == len(a.values)
+
+
+# --------------------------------------- point-estimate guard for the 0.3.0 bootstrap sort
+
+
+def _old_point_metrics(
+    y: np.ndarray,
+    p: np.ndarray,
+    w: np.ndarray | None,
+    names: tuple[str, ...] | None = None,
+) -> dict[str, float]:
+    """``_point_metrics`` exactly as it stood before the 0.3.0 throughput work.
+
+    The bootstrap loop now sorts each replicate once and takes a shared-sort
+    fast path (``presorted=True``); the *point* estimates must keep coming off
+    this original path bit-for-bit. Copied verbatim so a later refactor of the
+    live function is compared against the released numerics, not against
+    itself.
+    """
+    from probcal._math import loess, weighted_quantile
+    from probcal.metrics import (
+        brier_score,
+        brier_skill_score,
+        calibration_intercept,
+        calibration_slope,
+        ecce,
+        log_loss,
+        smooth_ece,
+        spiegelhalter_z,
+    )
+    from probcal.metrics.binned import ece, ece_debiased, ece_sweep
+
+    sel = set(_METRIC_CATALOG if names is None else names)
+    dispatch = {
+        "log_loss": lambda: log_loss(y, p, sample_weight=w),
+        "brier": lambda: brier_score(y, p, sample_weight=w),
+        "brier_skill": lambda: brier_skill_score(y, p, sample_weight=w),
+        "ece": lambda: ece(y, p, sample_weight=w),
+        "ece_debiased": lambda: ece_debiased(y, p, sample_weight=w),
+        "mce": lambda: ece(y, p, norm="max", sample_weight=w),
+        "ece_sweep": lambda: ece_sweep(y, p, sample_weight=w),
+        "smooth_ece": lambda: smooth_ece(y, p, sample_weight=w),
+        "intercept": lambda: calibration_intercept(y, p, sample_weight=w),
+        "slope": lambda: calibration_slope(y, p, sample_weight=w),
+    }
+    out: dict[str, float] = {k: fn() for k, fn in dispatch.items() if k in sel}
+
+    if sel & {"ecce_max", "ecce_mean"}:
+        ec = ecce(y, p, sample_weight=w)
+        out["ecce_max"] = ec.stat_max
+        out["ecce_mean"] = ec.stat_mean
+
+    if sel & {"ici", "e50", "e90", "emax"}:
+        d = np.abs(loess(p, y, frac=0.75, grid_size=512) - p)
+        w_arr = np.ones(len(p)) if w is None else w
+        uniform_w = w is None or bool(np.all(w == w[0]))
+        if "ici" in sel:
+            out["ici"] = float(np.average(d, weights=w_arr))
+        if "e50" in sel:
+            out["e50"] = (
+                float(np.quantile(d, 0.5)) if uniform_w else float(weighted_quantile(d, 0.5, w))
+            )
+        if "e90" in sel:
+            out["e90"] = (
+                float(np.quantile(d, 0.9)) if uniform_w else float(weighted_quantile(d, 0.9, w))
+            )
+        if "emax" in sel:
+            out["emax"] = float(np.max(d))
+
+    if sel & {"spiegelhalter_z", "spiegelhalter_p"}:
+        sp = spiegelhalter_z(y, p, sample_weight=w)
+        if "spiegelhalter_z" in sel:
+            out["spiegelhalter_z"] = sp.z
+        if "spiegelhalter_p" in sel:
+            out["spiegelhalter_p"] = sp.p_value
+
+    return {k: out[k] for k in _METRIC_CATALOG if k in sel}
+
+
+@pytest.mark.parametrize("weighted", [False, True])
+def test_evaluate_point_estimates_unchanged_by_e3(weighted: bool) -> None:
+    d = make_pd_portfolio(n=600, random_state=9)
+    w = np.linspace(0.5, 2.0, 600) if weighted else np.ones(600)
+    got = _point_metrics(d.y, d.scores, w, _METRIC_CATALOG)
+    want = _old_point_metrics(d.y, d.scores, w, _METRIC_CATALOG)
+    assert list(got) == list(want) == list(_METRIC_CATALOG)
+    for name in _METRIC_CATALOG:
+        assert got[name] == want[name], name
+
+
+def test_point_metrics_presorted_matches_the_default_path() -> None:
+    """The bootstrap fast path may only move values by summation order (~1e-15)."""
+    d = make_pd_portfolio(n=1500, random_state=6)
+    order = np.argsort(d.scores, kind="stable")
+    y, p, w = d.y[order], d.scores[order], np.ones(1500)
+    slow = _point_metrics(y, p, w, _METRIC_CATALOG)
+    fast = _point_metrics(y, p, w, _METRIC_CATALOG, presorted=True)
+    for name in _METRIC_CATALOG:
+        assert fast[name] == pytest.approx(slow[name], rel=1e-12, abs=1e-15), name

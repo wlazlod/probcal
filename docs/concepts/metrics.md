@@ -88,7 +88,7 @@ gaps with Kullback–Leibler terms: with \( c(p) = \Pr(Y=1 \mid \hat p = p) \) e
 recalibration curve, calibration is the mean divergence between \( \mathrm{Bernoulli}(c(p)) \)
 and \( \mathrm{Bernoulli}(p) \), refinement the mean entropy of \( \mathrm{Bernoulli}(c(p)) \).
 The split is only as good as the plug-in estimate of \( c \); the estimator choice is recorded
-as a DECISIONS entry when implemented.
+in the changelog when implemented.
 
 ## Binned estimators
 
@@ -138,7 +138,7 @@ the logit scale) and the calibration error is read from the smoothed curve, with
 chosen by the paper's self-consistency principle — the reported error is the fixed point where
 the measurement scale matches the error magnitude. The result is a continuous, reparametrization-
 robust quantity with none of ECE's edge artifacts; any implementation simplification is
-recorded as a DECISIONS entry.
+recorded in the changelog.
 
 **ECCE**, the empirical cumulative calibration error (Arrieta-Ibarra, Gujral, Tannen, Tygert
 and Xu, 2022), sorts observations by \( p \) and tracks the cumulative deviation
@@ -303,6 +303,16 @@ perfectly calibrated model. The report pairs ECE with its debiased variant preci
 artifact is visible rather than misread. Bootstrap-heavy computations carry the `slow` pytest
 marker and a fixed default seed, per the package's reproducibility conventions.
 
+**Grouping (`by=`).** `evaluate(..., by=labels)` runs the exact same pooled call above on the
+full data plus one independent call per sorted group, returning a `GroupedMetricReport`
+instead of a plain `MetricReport`. Group `i` (in sorted-label order) uses `seed + 1000 * i`
+rather than reusing `seed` for every group — a fixed, label-independent offset, so
+reproducibility does not depend on how many groups exist or what they are named, and no two
+groups' bootstrap draws can coincide by construction. This is side-by-side reporting, not a
+test: no comparison across groups is computed, and no multiple-comparison correction is
+applied, because none is implied by returning several independent reports. Formal
+group-conditional calibration testing is future work — see `docs/guide/groups.md`.
+
 **Weighted quantiles.** `e50`, `e90`, and the `reliability_summary` stats box compute their
 quantile step with `probcal._math.weighted_quantile` (Hazen interpolation positions) whenever
 `sample_weight` is given and not uniform; unweighted and equal-weight calls short-circuit to
@@ -393,8 +403,7 @@ via its `delta` parameter. Windows and bandwidths are computed against the full 
 changes *how many points get an exact fit*, not what the fit means; measured drift on
 `make_pd_portfolio(n=5000)` is `|Δici| ≈ 1.3e-6`, far below bootstrap CI width. `grid_size=None`
 recovers the exact per-point fit and its pre-0.1.3 cost. On this host, `ici` at n=50,000 fell
-from 192.2s to 1.2s, and `loess(grid_size=512)` fits n=1,000,000 points in under 30s
-(DECISIONS 58).
+from 192.2s to 1.2s, and `loess(grid_size=512)` fits n=1,000,000 points in under 30s.
 
 **`smooth_ece`** solves a bandwidth fixed point by bisection, and each step built a kernel
 matrix against every residual. `bins` (default 8192) pre-aggregates the weighted residual
@@ -405,11 +414,11 @@ binning (`bins <- ceil(range / (sigma/8))`) whenever the found bandwidth would b
 by the current bins, then falls back to the exact per-observation computation only if that
 refinement is infeasible (above 2^20 bins) or still under-resolved — so accuracy never degrades
 silently, and the binned path no longer reuses the exact
-path's 257-point grid (that reuse aliased against the bin lattice and was a cost-only defect,
-DECISIONS 66). The lattice path engages for every call with a non-degenerate
+path's 257-point grid (that reuse aliased against the bin lattice and was a cost-only defect).
+The lattice path engages for every call with a non-degenerate
 logit range (0.1.3 engaged it only for `n > bins`, leaving typical calibration-set sizes on
-the exact path — the "size cliff", removed in DECISIONS 68); `bins=None` or a
-degenerate range is bit-identical to the pre-0.1.3 exact computation (DECISIONS 59). For
+the exact path — the "size cliff", now removed); `bins=None` or a
+degenerate range is bit-identical to the pre-0.1.3 exact computation. For
 `n <= bins` the lattice value may differ from the exact grid at the ~1e-4 level on typical
 portfolios (measured ≤ 2.4e-4 on `make_pd_portfolio`); on wide clipped-logit-range data the
 gap can be much larger, because there the exact path's fixed 257-point grid under-resolves
@@ -421,13 +430,73 @@ scores, ECCE, and the regression framework are O(n); binned ECEs are O(n log n);
 family shares one LOESS fit at O(grid_size · frac · n); `smooth_ece` bins once in O(n) and then
 costs O(bins · taps) per bisection step, where taps is the truncated-Gaussian kernel width
 (at most ~161 taps), independent of n — measured at ~ms per call for n up to 10⁵. `metrics=`
-(DECISIONS 60) restricts the catalog to the names actually needed. Measured post-fix on this
-host, `ici` and `ece_sweep` are the largest remaining per-call contributors to the full-catalog
-cost (at n=5×10⁴: `ici` ≈ 1.1s, `ece_sweep` ≈ 0.5s per call — `ici` the larger of the two, not
-`ece_sweep` alone), rather than one metric dominating outright; `metrics=` is the lever for
-either. For n above roughly 10⁶, reduce `n_boot`,
-pass a `metrics=` subset, or both; `docs/scripts/benchmarks.py` measures wall time for `ici`,
-`smooth_ece`, and `evaluate` at several portfolio sizes on demand.
+restricts the catalog to the names actually needed.
+
+0.3.0 removes the large constant factors *inside* the loop, in three steps. First, each
+replicate is sorted by prediction once (`np.argsort(..., kind="stable")`) and that order is
+shared: the LOESS fit and ECCE skip their own sorts, `ece`/`ece_debiased`/`mce` — which all bin
+at 15 equal-mass bins — share a single binning pass instead of three. Second, `ece_sweep`'s
+~99-candidate monotonicity scan reads per-bin weighted sums off prefix-sum differences at
+`searchsorted` cut positions instead of rebuilding a length-n bin index per candidate. Third,
+the LOESS anchor evaluation is vectorized: the 512 anchors' tricube-weighted local fits are
+solved in cache-sized blocks of whole windows rather than one Python iteration each — every
+window holds exactly the same number of points, so the block is rectangular — which is the
+step that actually moves the total, since the anchor fit was 84% of a replicate after the
+first two.
+
+Reported **point estimates are untouched**: they are still computed on the unsorted, scalar
+path, bit-for-bit. Only the bootstrap replicates take the fast path, and it differs from the
+slow one in two harmless ways — the reordered weighted sums move percentile CI bounds in their
+last bits (measured ≤ 4×10⁻¹¹ relative on a n=10⁴/`n_boot`=1000 full-catalog run), and the
+vectorized tricube weight cubes by multiplication where the scalar loop writes `** 3`, a
+sub-ulp difference (≤ 2.3×10⁻¹⁶ relative) worth taking because numpy sends `** 3` to `libm`
+`pow` at ten times the cost of two multiplies. The window selection itself is exact: the
+vectorized search reproduces the scalar two-pointer rule's comparison verbatim and is tested to
+land on the same index, tied scores included.
+
+The sub-ulp bound holds **on well-conditioned windows only**. If a window is rank-deficient —
+every non-zero tricube weight sitting on one distinct `p`, which needs the far half of the
+window to lie at exactly the bandwidth — the local-linear determinant is pure cancellation
+(~10⁻²³ rather than 0), and the ulp-level weight difference can put the two paths on opposite
+sides of the `abs(det) < _FPMIN` guard, giving values that differ by O(1). On such a window the
+`swy / sw` branch (the weighted mean, what a rank-deficient local *linear* fit degenerates to)
+is the well-defined answer and either path may be the one that takes it; the other divides by
+cancellation noise and is already arbitrary in the scalar loop, independently of the
+vectorization. Since anchors are data quantiles, this has not been observed to reach a reported
+value: zero end-to-end differences across 1,738 two-distinct-score configurations whose anchor
+grid straddles the gap. The guard is deliberately left as it is — changing it would move the
+point-estimate path — and the corner is pinned by
+`tests/test_math.py::test_loess_vectorized_rank_deficient_window`.
+
+Measured on the dev host at n=10⁴, one full-catalog replicate costs 0.089s — ICI family 0.051s
+(58%), `ece_sweep`'s scan 0.024s (27%), `intercept`/`slope` 0.009s (10%), `smooth_ece` 0.003s,
+the whole binned ECE family 0.4ms. `evaluate(n=10⁴, n_boot=1000)` takes 87s, down from 304s in
+0.2.x (3.5x); the intermediate figure after the sort and sweep changes alone was 226s, and the
+vectorized anchor fit (0.186s → 0.046s per call) accounts for the rest. The ICI family is still
+the largest single share, so `metrics=` excluding it (`ici`/`e50`/`e90`/`emax`) remains the
+biggest lever. For n above roughly 10⁶, reduce `n_boot`, pass a `metrics=` subset, or both.
+
+`docs/scripts/benchmarks.py` measures these on demand; per-metric rows (`ece`, `ece_sweep`,
+`ecce`, `ici`, `smooth_ece`) are 0.3.0 additions. Measured on the dev host:
+
+| n | call | wall time (s) |
+| --- | --- | --- |
+| 10,000 | `ece(d.y, d.scores)` | 0.009 |
+| 10,000 | `ece_sweep(d.y, d.scores)` | 0.095 |
+| 10,000 | `ecce(d.y, d.scores)` | 0.001 |
+| 10,000 | `ici(d.y, d.scores)` | 0.186 |
+| 10,000 | `smooth_ece(d.y, d.scores)` | 0.003 |
+| 10,000 | `evaluate(d.y, d.scores, n_boot=100)` | 9.4 |
+| 100,000 | `ece(d.y, d.scores)` | 0.015 |
+| 100,000 | `ece_sweep(d.y, d.scores)` | 0.796 |
+| 100,000 | `ecce(d.y, d.scores)` | 0.011 |
+| 100,000 | `ici(d.y, d.scores)` | 1.863 |
+| 100,000 | `smooth_ece(d.y, d.scores)` | 0.005 |
+| 100,000 | `evaluate(d.y, d.scores, n_boot=100)` | 93.1 |
+
+The single-call `ece_sweep` and `ici` rows time the public functions, which keep the original
+scan and the scalar anchor loop; the vectorized versions are bootstrap-internal and cost 0.024s
+and 0.046s respectively at n=10⁴.
 
 ## References
 

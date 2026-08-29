@@ -36,7 +36,7 @@ def _model_scores(model: Any, X: np.ndarray) -> np.ndarray:
 
 
 def _clone(model: Any) -> Any:
-    """sklearn.base.clone when sklearn is installed, deepcopy otherwise (DECISIONS 48)."""
+    """sklearn.base.clone when sklearn is installed, deepcopy otherwise."""
     try:
         from sklearn.base import clone  # runtime-optional; never a module-level import
 
@@ -238,7 +238,7 @@ class CalibratedModel:
 
         Mode B (``target_mean``) anchors the portfolio mean of the current
         pipeline output — computed on ``X`` when given, else on the stored
-        calibration scores (DECISIONS 48). The offset is never folded into
+        calibration scores. The offset is never folded into
         the calibrator's parameters.
 
         Parameters

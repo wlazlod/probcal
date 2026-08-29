@@ -124,7 +124,7 @@ a logistic regression on the two features \( \ln s \) and \( -\ln(1-s) \). This 
 variant of `BetaCalibrator` — the full three-parameter family. The constrained variants tie or
 drop parameters: `"ab"` imposes \( a = b \), which collapses the two features into
 \( a \,\operatorname{logit}(s) + c \) — exactly Platt scaling on logits — and `"a"` retains a
-single free exponent (the exact tying is fixed, with a DECISIONS entry, when the calibrator is
+single free exponent (the exact tying is fixed when the calibrator is
 implemented). Temperature scaling is the further
 special case \( a = b = 1/T \), \( c = 0 \). The parametric families of this chapter thus form
 a nested hierarchy, which is what makes parsimony tie-breaking in the selector coherent.
@@ -145,8 +145,7 @@ sets, producing a map that *reverses* ranking somewhere — unacceptable when do
 decisions assume order preservation. probcal enforces the constraint by the refit strategy of
 the reference betacal implementation: if the unconstrained fit yields \( a < 0 \), the
 \( \ln s \) feature is dropped (fixing \( a = 0 \)) and the model refitted; symmetrically for
-\( b < 0 \). The fitted object records which constraint was active, `interpret()` reports it,
-and the behavior is logged as a DECISIONS entry.
+\( b < 0 \). The fitted object records which constraint was active, and `interpret()` reports it.
 
 **Interpretation.** The exponents control tail sensitivity independently — the asymmetry that
 Platt and temperature cannot express. Near \( s \to 0 \) the map behaves like

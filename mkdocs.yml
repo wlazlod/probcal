@@ -6,9 +6,6 @@ repo_name: wlazlod/probcal
 
 strict: true
 
-exclude_docs: |
-  superpowers/
-
 theme:
   name: material
   features:
@@ -81,6 +78,8 @@ nav:
       - treecf counterfactuals: guide/treecf.md
       - Monitoring: guide/monitoring.md
       - Serialization: guide/serialization.md
+      - Grouped evaluation: guide/groups.md
+      - Validation report: guide/report.md
   - Concepts:
       - Why calibration: concepts/why-calibration.md
       - Parametric methods: concepts/methods-parametric.md

@@ -59,7 +59,7 @@ raise `ValueError` naming what was found.
 ## The compatibility promise
 
 **Every 0.x release reads schema 1.** A schema bump ships only together
-with a converter for old files and a DECISIONS entry. The promise is
+with a converter for old files and a changelog entry. The promise is
 enforced, not aspirational: `tests/golden/` holds one committed JSON per
 registered class, written at the release that introduced serialization, and
 CI loads each one and reproduces its stored predictions (to 1e-12) on every

@@ -100,7 +100,7 @@ def test_smooth_ece_default_close_to_exact_small_n() -> None:
     # n <= 8192 now takes the lattice path too (0.1.3 ran exact here — the
     # "size cliff"); values may differ from bins=None at the ~1e-4 level
     # because the lattice integrator resolves the kernel at >= 8 samples per
-    # sigma vs the exact path's 257-point grid (DECISIONS 68).
+    # sigma vs the exact path's 257-point grid.
     d = make_pd_portfolio(n=2000)
     assert abs(smooth_ece(d.y, d.scores) - smooth_ece(d.y, d.scores, bins=None)) <= 1e-3
 
@@ -109,7 +109,7 @@ def test_smooth_ece_small_n_wide_range_uses_lattice() -> None:
     # The lattice path engages at every n (no small-n exact carve-out): on a
     # wide clipped-logit range the exact 257-point grid misses the isolated
     # small-sigma kernels entirely and spuriously early-exits at ~1e-13
-    # (the DECISIONS 66 aliasing mechanism); the lattice integrator reports
+    # (the same aliasing mechanism the binned-path fix addressed); the lattice integrator reports
     # the real total variation. bins=None remains the exact escape hatch.
     rng = np.random.default_rng(5)
     n = 50

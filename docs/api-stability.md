@@ -24,7 +24,7 @@ The public API is exactly the export lists below; anything prefixed with
   `calibration_belt`, threshold translation (`calibrated_interval_to_raw`,
   `calibrated_bands_to_raw`), attribution repair, `make_pd_portfolio`,
   `expit`/`logit`, and the `metrics`/`monitor` submodules.
-- **`probcal.metrics.__all__`** — the 46-symbol metric catalog (proper
+- **`probcal.metrics.__all__`** — the 47-symbol metric catalog (proper
   scores, binned and binning-free calibration errors, per-grade backtests,
   the mixture-LR grade e-test, Pluto-Tasche most-prudent PDs, Jeffreys
   upper masterscale bands, the recalibration-regression framework, SKCE,
@@ -37,6 +37,9 @@ The public API is exactly the export lists below; anything prefixed with
   `calibrate_scorecard`, `CalibratedScorecard`.
 - **`probcal.plots`** (extra `probcal[viz]`) — the plotting catalog,
   including `plot_e_process`.
+- **`probcal.report`** (extra `probcal[viz]`) — `validation_report`. Not
+  re-exported from top-level `probcal`, so `import probcal` and
+  `import probcal.report` both stay matplotlib-free at import time.
 
 ## Added in 0.3.0
 
@@ -64,6 +67,34 @@ rather than starting a new one for later 0.3.0 additions):
 - `SegmentedCalibrator` (`probcal`) — empirical-Bayes (DerSimonian-Laird)
   shrunken per-segment logit offsets on top of a shared base map; see
   *Segmented calibration*.
+- `metrics.evaluate(by=)` and `GroupedMetricReport` (metric catalog 46 → 47
+  symbols) — per-group metric reports plus a pooled report; `plots.
+  plot_reliability(by=)` — the matching faceted reliability grid; see the
+  new *Grouped evaluation* guide.
+- `metrics.ecce(presorted=)` — keyword-only throughput switch (default
+  `False`) declaring `p` already sorted ascending, so the internal sort is
+  skipped; `evaluate`'s bootstrap sorts each replicate once and shares that
+  order. Results are unchanged when the declaration holds; see *Metrics*'
+  "Computational cost".
+- `probcal.report.validation_report` — a self-contained HTML/markdown
+  validation report (reliability, the metric report, the CORP
+  decomposition, and, when given, the rating-grades, grouped-evaluation,
+  monitoring, and calibrator-appendix sections); see the new *Validation
+  report* guide.
+- `corp_reliability` (`probcal`, `curves`), `CorpResult` — the CORP
+  (consistent, optimally binned, reproducible) reliability diagram and its
+  exact `score == mcb - dsc + unc` decomposition; `reliability_smooth`
+  (`probcal`, `curves`), `KernelReliabilityCurve` — a fourth reliability
+  construction sharing `smooth_ece`'s fixed-point bandwidth exactly; see
+  the new *CORP and score decomposition* chapter.
+- `plots.plot_corp`, `plots.plot_mcb_dsc`, `plots.plot_attributes`,
+  `plots.plot_murphy` — four new plotting functions (CORP reliability, the
+  MCB-DSC plane, the Hsu & Murphy attributes diagram, and Murphy diagrams);
+  see *Visualization* and the new *CORP and score decomposition* chapter.
+- `metrics.murphy_curve`, `MurphyCurve` (metric catalog 38 → 40 symbols) —
+  the Ehm, Gneiting, Jordan & Krüger (2016) elementary-score decomposition
+  underlying `plots.plot_murphy`; see *Metrics and tests* and
+  *Visualization*.
 
 ## Conventions that will not silently change
 
@@ -80,8 +111,12 @@ rather than starting a new one for later 0.3.0 additions):
 Pre-1.0: a deprecated symbol warns (`DeprecationWarning`) for at least one
 minor release before removal, with the replacement named in the warning
 and the changelog. Behavioral changes that alter numbers ship with a
-DECISIONS-referenced changelog entry and, where feasible, a parameter that
+detailed changelog entry and, where feasible, a parameter that
 recovers the old values.
+
+0.3.0 deprecated nothing: every new symbol above is additive, and no
+existing symbol carries a `DeprecationWarning` — the policy stood unused
+this release.
 
 ## Support matrix
 

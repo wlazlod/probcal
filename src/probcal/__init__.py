@@ -30,7 +30,7 @@ from .thresholds import calibrated_bands_to_raw, calibrated_interval_to_raw
 from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
 from .wrapper import CalibratedModel
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__: list[str] = [
     "AdjustedAttribution",

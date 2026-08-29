@@ -127,7 +127,7 @@ def test_export() -> None:
 
 def test_complexity_rank_matches_old_parsimony_table() -> None:
     """Round-trip: each old _PARSIMONY entry equals the corresponding instance's
-    complexity_rank (DECISIONS 49: exact values are inert beyond ordering)."""
+    complexity_rank (exact values are inert beyond ordering)."""
     from probcal.bayesian import BBQCalibrator, ENIRCalibrator
     from probcal.binning import HistogramBinningCalibrator, ScalingBinningCalibrator
     from probcal.isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator

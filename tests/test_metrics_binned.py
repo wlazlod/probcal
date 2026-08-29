@@ -4,7 +4,17 @@ import numpy as np
 import pytest
 
 from probcal._math import expit
-from probcal.metrics.binned import adaptive_ece, ece, ece_debiased, ece_sweep, hosmer_lemeshow
+from probcal.datasets import make_pd_portfolio
+from probcal.metrics.binned import (
+    _bin_gaps,
+    _ece_sweep_best_b_sorted,
+    _ece_sweep_presorted,
+    adaptive_ece,
+    ece,
+    ece_debiased,
+    ece_sweep,
+    hosmer_lemeshow,
+)
 
 RNG = np.random.default_rng(59)
 
@@ -71,3 +81,72 @@ def test_hl_pvalue_vs_scipy_chi2() -> None:
     res = hosmer_lemeshow(y, p, g=10)
     expected = float(stats.chi2.sf(res.statistic, res.df))
     assert abs(res.p_value - expected) < 1e-9
+
+
+# --------------------------------------------------- vectorized ece_sweep scan (0.3.0)
+
+
+def _ece_sweep_best_b_reference(y: np.ndarray, p: np.ndarray, w: np.ndarray) -> int:
+    """The pre-0.3.0 ``ece_sweep`` scan loop, kept verbatim as the oracle.
+
+    ``_ece_sweep_best_b_sorted`` replaces this bin-index/bincount loop with a
+    presorted cut-position scan; only ``best_b`` may be decided differently,
+    and this reference pins that it is not.
+    """
+    best_b = 1
+    for b in range(2, min(len(p), 100) + 1):
+        _, _, rates, _ = _bin_gaps(y, p, w, b, "mass")
+        if np.all(np.diff(rates) >= 0.0):
+            best_b = b
+    return best_b
+
+
+def _ece_sweep_reference(y: np.ndarray, p: np.ndarray, w: np.ndarray, norm: str = "l1") -> float:
+    """The pre-0.3.0 ``ece_sweep`` body, verbatim, over prepped arrays."""
+    best_b = _ece_sweep_best_b_reference(y, p, w)
+    if best_b == 1:
+        return abs(float(np.average(p, weights=w)) - float(np.average(y, weights=w)))
+    return ece(y, p, n_bins=best_b, strategy="mass", norm=norm, sample_weight=w)
+
+
+def _sweep_fixtures() -> list[object]:
+    """(y, p, w) cases: two portfolio sizes, heavy score ties, non-uniform weights."""
+    out = []
+    for n in (500, 5000):
+        d = make_pd_portfolio(n=n, random_state=3)
+        out.append(pytest.param(d.y, d.scores, np.ones(n), id=f"portfolio-{n}"))
+    d = make_pd_portfolio(n=2000, random_state=4)
+    out.append(pytest.param(d.y, np.round(d.scores, 2), np.ones(2000), id="tied-scores"))
+    rng = np.random.default_rng(17)
+    out.append(pytest.param(d.y, d.scores, rng.uniform(0.5, 2.0, 2000), id="weighted"))
+    return out
+
+
+@pytest.mark.parametrize("y,p,w", _sweep_fixtures())
+def test_sorted_sweep_scan_picks_the_same_best_b(
+    y: np.ndarray, p: np.ndarray, w: np.ndarray
+) -> None:
+    order = np.argsort(p, kind="stable")
+    assert _ece_sweep_best_b_sorted(p[order], y[order], w[order]) == _ece_sweep_best_b_reference(
+        y, p, w
+    )
+
+
+@pytest.mark.parametrize("y,p,w", _sweep_fixtures())
+def test_ece_sweep_value_is_bit_identical_to_the_old_body(
+    y: np.ndarray, p: np.ndarray, w: np.ndarray
+) -> None:
+    assert ece_sweep(y, p, sample_weight=w) == _ece_sweep_reference(y, p, w)
+    assert ece_sweep(y, p, norm="max", sample_weight=w) == _ece_sweep_reference(y, p, w, "max")
+
+
+@pytest.mark.parametrize("y,p,w", _sweep_fixtures())
+def test_ece_sweep_presorted_matches_the_public_value(
+    y: np.ndarray, p: np.ndarray, w: np.ndarray
+) -> None:
+    # The presorted variant reaches the same ``best_b`` and the same unchanged
+    # final ``ece`` call; the remaining difference is bincount summation order
+    # over the reordered rows (~1e-16), which is why this is not ``==``.
+    order = np.argsort(p, kind="stable")
+    got = _ece_sweep_presorted(y[order], p[order], w[order])
+    assert got == pytest.approx(ece_sweep(y, p, sample_weight=w), rel=1e-12, abs=1e-15)

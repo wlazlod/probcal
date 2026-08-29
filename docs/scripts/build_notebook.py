@@ -434,6 +434,29 @@ print(f"fresh monitor alarm at: {fresh_rep.alarm_at} (quiet == correction explai
 """)
 
 
+md("""\
+## 11. Validation report
+
+Everything above is assembled into one self-contained document by
+`validation_report`: reliability, the metric report, and the CORP
+decomposition from `y_test`/`p_test` alone, plus the rating-grades section
+since `grades_after` is given and the calibrator appendix since `cal` is
+given. `path=None` returns the HTML string instead of writing a file; the
+`"http" not in html` check confirms the document makes no external
+requests. Theory: the *Validation report* guide.
+""")
+
+code("""\
+from probcal.report import validation_report
+
+html = validation_report(
+    y_test, p_test, calibrator=cal, grades=grades_after, path=None,
+)
+print(f"report length: {len(html):,} characters")
+print(f"no external requests: {'http' not in html}")
+""")
+
+
 def main() -> None:
     nb = {
         "cells": [

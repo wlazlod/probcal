@@ -122,7 +122,11 @@ accumulated evidence point to". `report()` runs it whenever an alarm has fired a
 exposes the result as `MonitorReport.onset_label`, appending "estimated drift onset at
 {label} (backward-CUSUM argmax of the plug-in log-LR increments — an estimate, not a
 test)" to `reasoning`. Steps loaded from a pre-0.3 payload carry `log_e_increment =
-0.0` (the field's trailing default) — onset is unavailable for those steps.
+None` — that payload records no increments, so a monitor holding any such step reports
+`onset_label = None`, replaces the onset sentence in `reasoning` with "drift onset
+unavailable: steps recorded before 0.3.0 carry no log-e increments (trailing window
+used)", and computes its diagnostics on the `"trailing"` window whatever
+`recommendation_window` says.
 
 By default (`recommendation_window="since_onset"`), `report()`'s trailing-window
 diagnostics — `delta_now`, the Cox slope bootstrap CI, the Cox-vs-offset residual LR —

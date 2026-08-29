@@ -1,5 +1,5 @@
-"""Wall-time benchmarks for the grid-anchored LOESS / binned smECE fast paths,
-plus IVAP, ENIR, and the default-menu selector.
+"""Wall-time benchmarks for the per-metric catalog cost and the grid-anchored
+LOESS / binned smECE fast paths, plus IVAP, ENIR, and the default-menu selector.
 
 Deterministic (seeded portfolio) and self-contained (probcal + stdlib + numpy):
 
@@ -25,7 +25,7 @@ from probcal import (
     VennAbersCalibrator,
     make_pd_portfolio,
 )
-from probcal.metrics import evaluate, ici, smooth_ece
+from probcal.metrics import ecce, ece, ece_sweep, evaluate, ici, smooth_ece
 
 DEFAULT_SIZES = (10_000, 100_000, 1_000_000)
 
@@ -68,6 +68,12 @@ def _rows(n: int) -> list[tuple[str, Callable[[], object], bool]]:
     """
     d = make_pd_portfolio(n=n, random_state=42)
     rows: list[tuple[str, Callable[[], object], bool]] = [
+        # Per-metric rows for the catalog members that drive ``evaluate``'s
+        # bootstrap cost: each is paid ``n_boot`` times, so a single-call row
+        # times a replicate's share of the loop.
+        ("ece(d.y, d.scores)", lambda d=d: ece(d.y, d.scores), False),
+        ("ece_sweep(d.y, d.scores)", lambda d=d: ece_sweep(d.y, d.scores), False),
+        ("ecce(d.y, d.scores)", lambda d=d: ecce(d.y, d.scores), False),
         ("ici(d.y, d.scores)", lambda d=d: ici(d.y, d.scores), False),
         ("smooth_ece(d.y, d.scores)", lambda d=d: smooth_ece(d.y, d.scores), False),
         (

@@ -7,7 +7,7 @@ import numpy as np
 
 SCHEMA_VERSION = 1
 """Serialization schema version. Every 0.x release reads schema 1; a bump
-requires a converter and a DECISIONS entry (the compatibility promise)."""
+requires a converter and a changelog entry (the compatibility promise)."""
 
 _FINGERPRINT_DROP = frozenset({"fitted_at_utc", "probcal_version", "timestamp_"})
 
@@ -80,7 +80,7 @@ def fingerprint_of_dict(d: dict) -> str:
 
     ``fitted_at_utc``, ``probcal_version``, and ``timestamp_`` are dropped
     recursively so two identical fits produce the same fingerprint (spec W5;
-    ``timestamp_`` covers the LogitOffset audit stamp — DECISIONS 73).
+    ``timestamp_`` covers the LogitOffset audit stamp).
     """
     return sha256_hex(canonical_json(_strip(d)))
 

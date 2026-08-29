@@ -78,7 +78,7 @@ networks. The honest caveat, stated wherever the mode is documented: it is *not*
 value of \( g \circ f \) in general — the calibrator's nonlinearity is distributed across
 features **proportionally to** \( \phi_i \), which is a modeling choice, not a theorem.
 Degenerate rows with \( s \approx s_0 \) replace the ill-conditioned secant with a central
-difference estimate of \( g'(s_0) \); the switching threshold is a DECISIONS entry.
+difference estimate of \( g'(s_0) \).
 
 ## Properties that survive adjustment
 

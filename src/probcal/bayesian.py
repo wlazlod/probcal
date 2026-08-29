@@ -38,7 +38,7 @@ class BBQCalibrator(BaseCalibrator):
     ----------
     min_bins, max_bins : int or None
         Range of candidate bin counts; defaults to ``[2, ceil(sqrt(n))]``
-        capped at 50 (DECISIONS entry).
+        capped at 50.
 
     Attributes
     ----------
@@ -217,7 +217,7 @@ class ENIRCalibrator(BaseCalibrator):
         s_u, start = np.unique(s_sorted, return_index=True)
         if s_u.size > _ENIR_UNIQUE_WARN:
             # Quadratic extrapolation anchored at the measured ~0.6 min
-            # (35.5s) fit at m = 50,000 on the benchmark host (DECISIONS 70).
+            # (35.5s) fit at m = 50,000 on the benchmark host.
             est_min = max(1.0, round((s_u.size / _ENIR_UNIQUE_WARN) ** 2 * 0.6))
             warnings.warn(
                 f"ENIRCalibrator.fit: {s_u.size:,} unique scores; the near-isotonic "
@@ -238,7 +238,7 @@ class ENIRCalibrator(BaseCalibrator):
     # TODO(ENIR): an O(m log m) event-driven engine (heap-scheduled breakpoint
     # trajectory) remains possible here if the equivalence gate is relaxed
     # from bit-exact to atol=1e-10 against the frozen v0.1.2 reference — the
-    # exact-tie separation subtlety that blocked it (DECISIONS 61) is a
+    # exact-tie separation subtlety that blocked it is a
     # tolerance artifact of the reference's 1e-15 threshold, not a
     # mathematical obstacle to a lazily-scheduled replay.
     def _path_fit(self, y: np.ndarray, w: np.ndarray) -> None:

@@ -139,7 +139,11 @@ in CI on the pinned minimum (1.4) and the latest release.
 duplication equivalence, which cannot hold through a CV split whose fold
 assignment depends on n (sklearn's own CV wrappers share this; declared via
 `expected_failed_checks`). `SklearnCalibrator`'s one-column contract is
-inapplicable to the generic multi-feature checks — those are declared
-expected failures with the reason stated, the same domain-restriction sklearn
-special-cases its own `IsotonicRegression` for; the remaining convention
-checks run live.
+inapplicable to the generic multi-feature checks — those are declared through
+sklearn's `expected_failed_checks`, each entry naming the data that check
+generates and the part of the score-level contract it violates, the same
+domain-restriction sklearn special-cases its own `IsotonicRegression` for; the
+remaining convention checks run live. The inapplicable checks that do have a
+score-level analogue are re-implemented on valid probability data in
+`tests/test_sklearn_mirror_checks.py` — see *API stability* for the full
+account.

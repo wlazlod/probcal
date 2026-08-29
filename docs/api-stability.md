@@ -125,6 +125,30 @@ recovers the old values.
 existing symbol carries a `DeprecationWarning` — the policy stood unused
 this release.
 
+## scikit-learn estimator checks
+
+`sklearn.utils.estimator_checks` generates multi-column feature matrices of
+arbitrary reals. Its data model contains no score-level estimator, so most of
+the corpus cannot be run against `SklearnCalibrator` at all — the same kind of
+domain restriction imbalanced-learn declares for its resamplers. Those checks
+are declared inapplicable through sklearn's own mechanism
+(`expected_failed_checks` on 1.6+, `_more_tags()["_xfail_checks"]` below it),
+each entry naming the data that check generates and which part of the
+score-level contract it violates. They are inapplicable, not known failures;
+the checks whose data the contract does admit run live and pass.
+
+Every inapplicable check with a score-level analogue is re-implemented on
+valid `(n,)` probability data in `tests/test_sklearn_mirror_checks.py`: fit
+idempotence, no mutation of the passed arrays, `__dict__` unchanged by the
+predict-side methods, pickle (adapter) and JSON (core) round trips,
+clone-then-fit, subset and sample-order invariance, and integer
+`sample_weight` equal to row duplication over every registered calibrator
+class — with the exceptions (CV- and quantile-based internals) named in a
+table together with their measured tolerance. Checks with no analogue at all
+(multiclass, pairwise, sparse) are listed in that module's docstring with one
+line each. The score-level contract itself is pinned by
+`tests/test_calibrator_protocol.py`.
+
 ## Support matrix
 
 | Dimension | Supported | Checked by |

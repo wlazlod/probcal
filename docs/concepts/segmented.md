@@ -88,6 +88,17 @@ A label present in `segments` at predict time but never seen at fit time is hand
 constructor's `unseen` policy: `"global"` (default) applies `delta=0`; `"raise"` raises
 `ValueError`, for deployments where an unrecognized segment must not silently fall back.
 
+Labels are compared as strings (`_coerce_segments` calls `.astype(str)`): fitting with
+integer labels `0`, `1` stores them as `"0"`, `"1"`, but predicting with float labels `0.0`,
+`1.0` looks up `"0.0"`, `"1.0"` — a silent mismatch, since every row then looks "unseen" and,
+under the default `unseen="global"`, falls back to the base map without raising. Pass
+`segments` with the *same* representation at fit and predict time (cast to `str` yourself if
+the label type is not guaranteed to match). As a backstop, `predict_proba` and the
+`segment=` inverse paths raise a `UserWarning` whenever *every* row of one call is unseen and
+`unseen="global"` — the exact failure mode this int/float mismatch produces — naming the
+fitted `segments_` so the mismatch is easy to spot; a partial overlap (some rows match,
+others are genuinely new segments) stays silent, since that is a legitimate use case.
+
 `probcal.chain.Chain` has no `segments=` slot — every stage's `predict_proba` is called with
 no extra arguments. `Chain([seg, ...])` therefore always predicts through `seg`'s global map
 (`segments=None`, `delta=0`); the per-segment shift is never applied inside a `Chain`. Use

@@ -9,6 +9,8 @@ DerSimonian & Laird (1986) — random-effects meta-analysis method-of-moments
 heterogeneity estimator, reused here across segments instead of studies.
 """
 
+import warnings
+
 import numpy as np
 
 from ._math import expit, logit
@@ -64,6 +66,18 @@ class SegmentedCalibrator(BaseCalibrator):
     ``seg``'s global map (``segments=None``, ``delta=0``) — the per-segment
     shift is not baked into a ``Chain``; use ``SegmentedCalibrator`` directly
     (with ``segments=``) when the per-segment offset must apply.
+
+    Segment labels are compared as strings (``_coerce_segments`` calls
+    ``.astype(str)``): fit-time labels ``0``, ``1`` (int) become ``"0"``,
+    ``"1"``, but predict-time labels ``0.0``, ``1.0`` (float) become
+    ``"0.0"``, ``"1.0"`` — a mismatch that never raises (every label
+    looks "unseen") and, under ``unseen="global"``, silently falls back
+    to the base map for every row. Pass ``segments`` with the *same*
+    representation (e.g. cast to ``str`` yourself) at fit and predict
+    time. When every row of a ``predict_proba``/inverse call is unseen
+    and ``unseen="global"``, a ``UserWarning`` is raised naming the
+    fitted ``segments_`` — a partial overlap (some rows match, some are
+    genuinely new segments) stays silent.
 
     Parameters
     ----------
@@ -230,15 +244,25 @@ class SegmentedCalibrator(BaseCalibrator):
         delta_map = dict(zip(self.segments_, self.delta_tilde_.tolist(), strict=True))
         out = np.zeros(len(labels), dtype=np.float64)
         unseen_found: set[str] = set()
+        n_seen = 0
         for i, g in enumerate(labels):
             if g in delta_map:
                 out[i] = delta_map[g]
+                n_seen += 1
             elif self.unseen == "raise":
                 unseen_found.add(str(g))
         if unseen_found:
             raise ValueError(
                 f"unseen segment(s) {sorted(unseen_found)!r} not in fitted segments_ "
                 f"{self.segments_}; unseen='raise'"
+            )
+        if self.unseen == "global" and len(labels) > 0 and n_seen == 0:
+            warnings.warn(
+                f"SegmentedCalibrator: none of the {len(labels)} segment labels passed to "
+                f"predict_proba were seen at fit time ({self.segments_}); the global map "
+                "(delta=0) is applied to every row — check the label representation",
+                UserWarning,
+                stacklevel=2,
             )
         return out
 

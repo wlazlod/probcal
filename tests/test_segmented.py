@@ -1,5 +1,7 @@
 """Tests for probcal.segmented.SegmentedCalibrator."""
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -83,7 +85,8 @@ def test_unseen_global_defaults_delta_to_zero() -> None:
     s, y = _pd_data(400, seed=0)
     segments = np.array(["a", "b", "c", "d"])[np.arange(400) % 4]
     cal = SegmentedCalibrator(unseen="global").fit(s, y, segments=segments)
-    p_unseen = cal.predict_proba(s[:5], segments=np.array(["z"] * 5))
+    with pytest.warns(UserWarning, match="none of the"):
+        p_unseen = cal.predict_proba(s[:5], segments=np.array(["z"] * 5))
     np.testing.assert_allclose(p_unseen, cal.base_.predict_proba(s[:5]))
 
 
@@ -93,6 +96,39 @@ def test_unseen_raise_raises_value_error() -> None:
     cal = SegmentedCalibrator(unseen="raise").fit(s, y, segments=segments)
     with pytest.raises(ValueError, match="unseen"):
         cal.predict_proba(s[:5], segments=np.array(["z"] * 5))
+
+
+def test_int_fit_float_predict_label_mismatch_warns_and_falls_back_to_base_map() -> None:
+    # Regression: int labels at fit ("0", "1" after str()) vs. float labels at
+    # predict ("0.0", "1.0") never match, so every row falls back to the
+    # global map under unseen="global" -- this must warn rather than fail
+    # silently.
+    s, y = _pd_data(600, seed=10)
+    int_segments = np.array([0, 1])[np.arange(600) % 2]
+    cal = SegmentedCalibrator().fit(s, y, segments=int_segments)
+    float_segments = np.array([0.0, 1.0])[np.arange(5) % 2]
+    with pytest.warns(UserWarning, match="none of the 5 segment labels"):
+        p_mismatch = cal.predict_proba(s[:5], segments=float_segments)
+    np.testing.assert_allclose(p_mismatch, cal.base_.predict_proba(s[:5]))
+
+
+def test_partial_overlap_with_unseen_labels_does_not_warn() -> None:
+    s, y = _pd_data(400, seed=0)
+    segments = np.array(["a", "b", "c", "d"])[np.arange(400) % 4]
+    cal = SegmentedCalibrator(unseen="global").fit(s, y, segments=segments)
+    mixed = np.array(["a", "z", "b", "z", "c"])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        cal.predict_proba(s[:5], segments=mixed)  # some rows match -> no warning
+
+
+def test_int_fit_float_predict_label_mismatch_still_raises_under_unseen_raise() -> None:
+    s, y = _pd_data(600, seed=10)
+    int_segments = np.array([0, 1])[np.arange(600) % 2]
+    cal = SegmentedCalibrator(unseen="raise").fit(s, y, segments=int_segments)
+    float_segments = np.array([0.0, 1.0])[np.arange(5) % 2]
+    with pytest.raises(ValueError, match="unseen"):
+        cal.predict_proba(s[:5], segments=float_segments)
 
 
 def test_invalid_unseen_raises_at_fit_time() -> None:

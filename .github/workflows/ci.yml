@@ -29,6 +29,10 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system -e ".[dev,viz]"
 
+      - name: Install docs dependencies
+        if: matrix.python-version == '3.12'
+        run: uv pip install --system -e ".[docs]"
+
       - name: Lint
         run: ruff check .
 
@@ -38,6 +42,10 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+      - name: Build docs
+        if: matrix.python-version == '3.12'
+        run: mkdocs build --strict
 
   sklearn-min:
     name: sklearn adapter on the pinned minimum (1.4)

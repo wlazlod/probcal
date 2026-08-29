@@ -8,6 +8,7 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
       - 'src/probcal/**'
+      - 'tests/test_sklearn_guide_snippets.py'
       - 'CHANGELOG.md'
   workflow_dispatch:
 

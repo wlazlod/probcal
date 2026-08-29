@@ -152,3 +152,17 @@ def test_plot_attributes_rejects_bad_method():
     y, p = _data()
     with pytest.raises(ValueError, match="method"):
         plot_attributes(y, p, method="bogus")
+
+
+def test_plot_murphy_mapping_without_diff_rejects_non_murphy_curve_values():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from probcal.plots import plot_murphy
+
+    y, p = _data()
+    with pytest.raises(ValueError, match="mapping values must be MurphyCurve"):
+        plot_murphy({"a": (y, p), "b": (y, p)})
+    plt.close("all")

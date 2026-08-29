@@ -304,6 +304,14 @@ def plot_attributes(
     ValueError
         If ``method`` is not ``"binned"`` or ``"corp"``.
 
+    Notes
+    -----
+    The identity, climatology, no-skill, and shading layers are evaluated on
+    a fixed 400-point grid over ``[0, 1]`` — a plotting-fidelity choice
+    (dense enough to render as smooth curves at the figure's default
+    ``figsize=(6.5, 6)``), not a statistical one; it does not depend on
+    ``n_bins`` or the data.
+
     Examples
     --------
     >>> import numpy as np
@@ -440,18 +448,23 @@ def plot_murphy(
                     "diff=True needs a mapping of exactly two {name: (y, p)} raw-data pairs"
                 )
             pairs = list(curves.items())
-            if len(pairs) != 2 or not all(isinstance(v, tuple) and len(v) == 2 for _, v in pairs):
+            if len(pairs) != 2:
                 raise ValueError(
                     "diff=True needs a mapping of exactly two {name: (y, p)} raw-data pairs"
                 )
             name_a, pair_a = pairs[0]
             name_b, pair_b = pairs[1]
-            y_a: Any
-            p_a: Any
-            y_b: Any
-            p_b: Any
-            y_a, p_a = pair_a  # type: ignore[misc]
-            y_b, p_b = pair_b  # type: ignore[misc]
+            if (
+                not isinstance(pair_a, tuple)
+                or not isinstance(pair_b, tuple)
+                or len(pair_a) != 2
+                or len(pair_b) != 2
+            ):
+                raise ValueError(
+                    "diff=True needs a mapping of exactly two {name: (y, p)} raw-data pairs"
+                )
+            y_a, p_a = pair_a
+            y_b, p_b = pair_b
             y_a, p_a, _w_a = _prep(y_a, p_a, None)
             y_b, p_b, _w_b = _prep(y_b, p_b, None)
             if len(y_a) != len(y_b):
@@ -480,8 +493,13 @@ def plot_murphy(
         elif isinstance(curves, MurphyCurve):
             ax.plot(curves.thresholds, curves.score, color=_BLUE, lw=2)
         else:
-            for name, curve in curves.items():  # type: ignore[union-attr]
-                ax.plot(curve.thresholds, curve.score, lw=2, label=name)  # type: ignore[union-attr]
+            for name, curve in curves.items():
+                if not isinstance(curve, MurphyCurve):
+                    raise ValueError(
+                        "plot_murphy: mapping values must be MurphyCurve objects; "
+                        "pass diff=True with (y, p) pairs for a difference plot"
+                    )
+                ax.plot(curve.thresholds, curve.score, lw=2, label=name)
             ax.legend(loc="best")
 
         ax.set_xlabel("threshold θ")

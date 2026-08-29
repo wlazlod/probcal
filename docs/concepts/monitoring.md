@@ -153,8 +153,47 @@ calibration validity: PSI asks "has the input mix moved", this monitor asks
 "are the probabilities still right, accounting for every look we have
 taken". Fixed-sample e-value tests such as the safe Hosmer–Lemeshow test
 (Henzi, Puke, Dimitriadis & Ziegel 2024) answer a third question — a
-one-shot audit with e-value semantics — and are a natural later addition to
-`probcal.metrics.grade`.
+one-shot audit with e-value semantics; `metrics.hl_e_test` (below) is a
+first step in that direction, built from the pieces already in this module.
+
+## Fixed-sample audit: the mixture-LR grade e-test
+
+`metrics.hl_e_test(y, p, grades, *, mixture_grid=(0.1, 0.25, 0.5, 1.0),
+sample_weight=None) -> HlEResult` is a **one-shot, fixed-sample** e-value
+audit per rating grade, for the case where there is no sequence of matured
+batches to monitor — just one dataset to check once. It reuses the same
+mixture construction `CalibrationMonitor`'s offset e-process uses
+(`monitor._processes.bern_log_lr`, `logsumexp`, the symmetrized
+`mixture_grid`), applied once per grade with **no predictable plug-in
+component** — a fixed sample has no strictly-earlier data to learn one
+from, so the honest e-value here is the mixture average alone:
+
+$$
+\log E_g = \operatorname{logsumexp}_{\delta \in \pm\,\text{mixture\_grid}}
+\left(\sum_{i \in g} \log \mathrm{LR}_i(\sigma(z_i + \delta) : p_i)\right)
+- \log(2 \cdot |\text{mixture\_grid}|), \qquad z_i = \operatorname{logit}(p_i).
+$$
+
+Grades partition the sample into disjoint observations, so the product
+across grades, `log E = sum_g log E_g`, `e_value = exp(log E)`, is itself a
+valid e-value for the joint null: each `E_g` is an average of e-values
+(expectation exactly 1 under H0 for every fixed `delta`), hence itself an
+e-value with expectation 1, and the product of e-values built from
+independent — here, disjoint-observation — factors is an e-value.
+`p_value = min(1, 1 / e_value)` follows from Markov's inequality.
+
+**Naming.** This is named the "mixture-LR grade e-test (safe
+Hosmer–Lemeshow analogue)", not "the safe Hosmer–Lemeshow test": Henzi,
+Puke, Dimitriadis & Ziegel (2024) is cited as the paper that motivated
+building a fixed-sample e-value analogue of Hosmer–Lemeshow, not as a
+description of what is implemented. Their construction is not reproduced
+here, and no claim is made that this test matches its power or optimality
+properties — it is the monitor's existing mixture machinery, repurposed for
+a one-shot audit rather than sequential monitoring.
+
+Sample weights, when given, enter as exponents on the Bernoulli factors
+(the same convention as `CalibrationMonitor`); non-integer weights carry
+the same caveat noted above.
 
 ## Simulation verification
 
@@ -186,6 +225,23 @@ simulator against the shipped `CalibrationMonitor` class.
 The recommendation gate (correct call in ≥ 90% of pure-offset and
 pure-slope runs) is enforced through the real `CalibrationMonitor` in the
 same CI suite.
+
+### `hl_e_test` (spec M1)
+
+Produced by `docs/scripts/hl_e_sim.py` (2000 seeded runs, n=2000, 5
+equal-mass grades; wall time ≈ 19s): under H0 (`y ~ Bernoulli(p)`, the
+assigned `p`), the e-value's Ville/Markov tail bounds and its expectation-1
+property hold; power is reported (not gated) for a level shift and a slope
+change at n=2000. Reduced-size versions of the type-I gates run in CI
+(`tests/test_hl_e_sim.py`).
+
+| experiment                       | result             | gate      |
+|-----------------------------------|--------------------|-----------|
+| type-I P(e >= 20) [alpha=0.05]    | 0.0025             | <= 0.0597 |
+| type-I P(e >= 100) [alpha=0.01]   | 0.0005             | <= 0.0144 |
+| type-I mean(e)                    | 0.4334 (se=0.1518) | <= 1.4555 |
+| power shift=0.4 (n=2000)          | detect 0.7455      | reported  |
+| power slope=0.8 (n=2000)          | detect 0.9765      | reported  |
 
 ## References
 

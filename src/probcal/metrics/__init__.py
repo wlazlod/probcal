@@ -21,9 +21,11 @@ from .binned import (
 )
 from .grade import (
     BinomialGradeResult,
+    HlEResult,
     JeffreysGradeResult,
     PlutoTascheResult,
     binomial_grade_test,
+    hl_e_test,
     jeffreys_grade_test,
     jeffreys_upper_bands,
     pluto_tasche,
@@ -70,6 +72,7 @@ __all__ = [
     "CalibrationTestResult",
     "EcceResult",
     "GuardrailReport",
+    "HlEResult",
     "HosmerLemeshowResult",
     "JeffreysGradeResult",
     "LogLossDecomposition",
@@ -95,6 +98,7 @@ __all__ = [
     "ece_sweep",
     "emax",
     "evaluate",
+    "hl_e_test",
     "hosmer_lemeshow",
     "ici",
     "jeffreys_grade_test",

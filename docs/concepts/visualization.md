@@ -79,6 +79,10 @@ cannot go negative; heights are scaled so whichever class peaks higher reaches t
 0.12), or `None` for no density layer at all. `rug=False` turns the layer off regardless of
 `risk_dist`, equivalently to `risk_dist=None`.
 
+`risk_dist="split"` in place of the default rug:
+
+![Annotated reliability diagram with the split risk distribution: a 30-equal-mass-bin spike histogram of predictions, events up and non-events down from a shared baseline](img/reliability_split.png)
+
 `stats` swaps in an alternative box in place of the `annotate` one above: `stats=True`
 reports `n, events, intercept, slope, ICI, smECE, Brier` (smECE and Brier are strictly
 proper / self-consistent scores that E90 and Spiegelhalter's test do not cover); passing a
@@ -93,6 +97,8 @@ where predictions are dense, `linewidths = 0.5 + 4.0 * density / density.max()`)
 miscalibration area shaded between the curve and the identity, its bootstrap ribbon, and an
 `smECE = ...` readout in the bottom-right corner — the same convention that fills the fourth
 reliability construction described above.
+
+![Reliability diagram with the kernel curve: the density-weighted smECE-consistent line (wide where predictions are dense), its bootstrap ribbon, and the smECE readout](img/reliability_smooth.png)
 
 ## The calibration belt
 
@@ -167,9 +173,10 @@ to the identity than to the no-resolution line. `method="binned"` overlays
 `reliability_binned` as markers scaled by bin count (`n_bins=10` by default, the same
 default as the curve itself); `method="corp"` overlays the CORP PAV step fit instead,
 trading the binning choice for the same discretization-free construction used by
-`plot_corp`. `scale="logit"` transforms every drawn quantity — identity, references,
-shading, and curve alike — through the same clipped logit as the rest of the package, so a
-low-PD portfolio stays readable.
+`plot_corp` — the reliability diagram, bands, and score decomposition covered in
+[CORP and score decomposition](corp.md). `scale="logit"` transforms every drawn quantity —
+identity, references, shading, and curve alike — through the same clipped logit as the rest
+of the package, so a low-PD portfolio stays readable.
 
 ![Attributes diagram on a 3% base-rate PD portfolio (logit scale): the shaded positive-skill region between climatology and the identity, the no-skill line, and the binned reliability curve](img/attributes.png)
 

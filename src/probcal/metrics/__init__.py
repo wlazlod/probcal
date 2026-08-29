@@ -22,8 +22,11 @@ from .binned import (
 from .grade import (
     BinomialGradeResult,
     JeffreysGradeResult,
+    PlutoTascheResult,
     binomial_grade_test,
     jeffreys_grade_test,
+    pluto_tasche,
+    pluto_tasche_from_arrays,
 )
 from .kernel import (
     SkceTestResult,
@@ -71,6 +74,7 @@ __all__ = [
     "LogLossDecomposition",
     "MurphyCurve",
     "MurphyDecomposition",
+    "PlutoTascheResult",
     "ReliabilitySummary",
     "SkceTestResult",
     "SpiegelhalterResult",
@@ -97,6 +101,8 @@ __all__ = [
     "logloss_calibration_refinement",
     "murphy_curve",
     "murphy_decomposition",
+    "pluto_tasche",
+    "pluto_tasche_from_arrays",
     "reliability_summary",
     "skce",
     "skce_test",

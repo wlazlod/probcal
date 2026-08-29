@@ -22,9 +22,10 @@ The public API is exactly the export lists below; anything prefixed with
   `calibration_belt`, threshold translation (`calibrated_interval_to_raw`,
   `calibrated_bands_to_raw`), attribution repair, `make_pd_portfolio`,
   `expit`/`logit`, and the `metrics`/`monitor` submodules.
-- **`probcal.metrics.__all__`** — the 40-symbol metric catalog (proper
+- **`probcal.metrics.__all__`** — the 43-symbol metric catalog (proper
   scores, binned and binning-free calibration errors, per-grade backtests,
-  the recalibration-regression framework, SKCE, `evaluate`).
+  Pluto-Tasche most-prudent PDs, the recalibration-regression framework,
+  SKCE, `evaluate`).
 - **`probcal.monitor.__all__`** — `CalibrationMonitor`, `MonitorStep`,
   `MonitorReport`.
 - **`probcal.sklearn`** (extra `probcal[sklearn]`) — `SklearnCalibrator`,

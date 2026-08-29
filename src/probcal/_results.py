@@ -231,3 +231,73 @@ class SmoothReliabilityCurve(_ResultBase):
 
     def __repr__(self) -> str:
         return f"SmoothReliabilityCurve (grid of {len(self.grid_p)} points)"
+
+
+@dataclass(frozen=True)
+class CorpResult(_ResultBase):
+    """CORP reliability fit: PAV recalibration with the MCB-DSC-UNC decomposition.
+
+    Attributes
+    ----------
+    block_lo, block_hi : numpy.ndarray
+        Left and right edge (min/max ``p``) of each PAV block.
+    block_level : numpy.ndarray
+        PAV fitted event rate per block.
+    block_weight : numpy.ndarray
+        Pooled weight per block.
+    pav : numpy.ndarray
+        PAV fit expanded to observations, in the original input order.
+    brier, brier_mcb, brier_dsc, brier_unc : float
+        Brier score and its miscalibration/discrimination/uncertainty terms
+        (``brier == brier_mcb - brier_dsc + brier_unc``).
+    log_loss, log_loss_mcb, log_loss_dsc, log_loss_unc : float
+        Log loss and its miscalibration/discrimination/uncertainty terms
+        (``log_loss == log_loss_mcb - log_loss_dsc + log_loss_unc``).
+    bands : {"consistency", "confidence", None}
+        Band type requested.
+    level : float
+        Nominal coverage level of the bands.
+    band_grid, band_low, band_high : numpy.ndarray
+        Band evaluation grid and bounds (empty when ``bands`` is ``None``).
+    n : int
+        Number of observations.
+    events : int
+        Number of events (``sum(y)``).
+    """
+
+    block_lo: np.ndarray
+    block_hi: np.ndarray
+    block_level: np.ndarray
+    block_weight: np.ndarray
+    pav: np.ndarray
+    brier: float
+    brier_mcb: float
+    brier_dsc: float
+    brier_unc: float
+    log_loss: float
+    log_loss_mcb: float
+    log_loss_dsc: float
+    log_loss_unc: float
+    bands: str | None
+    level: float
+    band_grid: np.ndarray
+    band_low: np.ndarray
+    band_high: np.ndarray
+    n: int
+    events: int
+
+    def __repr__(self) -> str:
+        rows = [
+            (lo, hi, lvl, wt)
+            for lo, hi, lvl, wt in zip(
+                self.block_lo, self.block_hi, self.block_level, self.block_weight, strict=True
+            )
+        ]
+        table = _aligned_table(("block_lo", "block_hi", "block_level", "block_weight"), rows)
+        return (
+            f"CorpResult (n={self.n}, events={self.events})\n{table}\n"
+            f"Brier: {self.brier:.6g} = MCB {self.brier_mcb:.6g} - DSC {self.brier_dsc:.6g} "
+            f"+ UNC {self.brier_unc:.6g}\n"
+            f"Log loss: {self.log_loss:.6g} = MCB {self.log_loss_mcb:.6g} - "
+            f"DSC {self.log_loss_dsc:.6g} + UNC {self.log_loss_unc:.6g}"
+        )

@@ -10,7 +10,13 @@ from .base import BaseCalibrator, UnattainableTargetError
 from .bayesian import BBQCalibrator, ENIRCalibrator
 from .binning import HistogramBinningCalibrator, ScalingBinningCalibrator
 from .chain import Chain
-from .curves import calibration_belt, reliability_binned, reliability_loess, reliability_spline
+from .curves import (
+    calibration_belt,
+    corp_reliability,
+    reliability_binned,
+    reliability_loess,
+    reliability_spline,
+)
 from .datasets import make_pd_portfolio
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
 from .offset import LogitOffset
@@ -47,6 +53,7 @@ __all__: list[str] = [
     "calibrated_bands_to_raw",
     "calibrated_interval_to_raw",
     "calibration_belt",
+    "corp_reliability",
     "expit",
     "metrics",
     "monitor",

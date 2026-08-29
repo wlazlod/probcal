@@ -15,8 +15,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ._corp import corp_bands, corp_fit, decompose
 from ._math import chi2_ppf, expit, gammainc_lower, irls_logistic, loess, logit
-from ._results import BeltResult, ReliabilityCurve, SmoothReliabilityCurve
+from ._results import BeltResult, CorpResult, ReliabilityCurve, SmoothReliabilityCurve
 from .metrics.binned import _bin_index
 from .metrics.scores import _prep
 
@@ -156,6 +157,101 @@ def reliability_spline(
     grid = _grid(p_arr, grid_size)
     return SmoothReliabilityCurve(
         grid_p=grid, grid_logit=logit(grid), event_rate=cal.predict_proba(grid)
+    )
+
+
+_BANDS = ("consistency", "confidence", None)
+
+
+def corp_reliability(
+    y: object,
+    p: object,
+    *,
+    sample_weight: object = None,
+    bands: str | None = "consistency",
+    level: float = 0.9,
+    n_resamples: int = 200,
+    random_state: int = 42,
+) -> CorpResult:
+    """CORP reliability diagram: PAV recalibration with the Brier/log-loss MCB-DSC-UNC decomposition
+
+    Fits the isotonic (PAV) recalibration map of ``y`` on ``p`` — the unique
+    "consistent, optimally binned, reproducible" reliability diagram of
+    Dimitriadis, Gneiting & Jordan (2021) — and decomposes both the Brier
+    score and log loss into miscalibration (MCB), discrimination (DSC), and
+    uncertainty (UNC) terms, with ``score == mcb - dsc + unc`` holding
+    exactly. Log loss clips PAV levels and predictions to
+    ``[1e-12, 1 - 1e-12]`` before taking logarithms, so degenerate blocks
+    (exact 0 or 1 event rate) stay finite.
+
+    Parameters
+    ----------
+    y, p : array_like
+        Outcomes and predicted probabilities.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+    bands : {"consistency", "confidence", None}, keyword-only
+        Band type to compute around the PAV fit. Only ``None`` is
+        implemented in this release; ``"consistency"`` and ``"confidence"``
+        raise ``NotImplementedError`` (Task V1b).
+    level : float, keyword-only
+        Nominal coverage level of the bands.
+    n_resamples : int, keyword-only
+        Number of resamples used to build the bands.
+    random_state : int, keyword-only
+        Seed for ``numpy.random.default_rng``, used by the band resampling.
+
+    Returns
+    -------
+    CorpResult
+        PAV block structure, the pointwise fit, the Brier/log-loss
+        decomposition, and the (possibly empty) bands.
+
+    Raises
+    ------
+    ValueError
+        If ``bands`` is not one of ``"consistency"``, ``"confidence"``, or
+        ``None``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal import corp_reliability
+    >>> rng = np.random.default_rng(0)
+    >>> p = rng.uniform(0.1, 0.9, 200)
+    >>> y = (rng.random(200) < p).astype(float)
+    >>> r = corp_reliability(y, p, bands=None)
+    >>> abs(r.brier - (r.brier_mcb - r.brier_dsc + r.brier_unc)) < 1e-12
+    True
+    """
+    if bands not in _BANDS:
+        raise ValueError('bands must be "consistency", "confidence", or None')
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    lo, hi, level_b, w_b, pav = corp_fit(y_arr, p_arr, w)
+    b = decompose(y_arr, p_arr, pav, w, "brier")
+    ll = decompose(y_arr, p_arr, pav, w, "log_loss")
+    grid, low, high = corp_bands(y_arr, p_arr, w, bands, level, n_resamples, random_state)
+    return CorpResult(
+        block_lo=lo,
+        block_hi=hi,
+        block_level=level_b,
+        block_weight=w_b,
+        pav=pav,
+        brier=b[0],
+        brier_mcb=b[1],
+        brier_dsc=b[2],
+        brier_unc=b[3],
+        log_loss=ll[0],
+        log_loss_mcb=ll[1],
+        log_loss_dsc=ll[2],
+        log_loss_unc=ll[3],
+        bands=bands,
+        level=level,
+        band_grid=grid,
+        band_low=low,
+        band_high=high,
+        n=int(len(y_arr)),
+        events=int(y_arr.sum()),
     )
 
 

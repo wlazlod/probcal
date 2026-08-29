@@ -257,6 +257,30 @@ def test_apply_recommendation_does_not_mutate_the_old_monitor() -> None:
     assert before == after
 
 
+def test_apply_recommendation_window_uses_onset_index_not_label_lookup() -> None:
+    # Regression: labels are documented as opaque and may repeat. Deriving
+    # the onset index by looking a batch up BY LABEL (the previous
+    # implementation) silently returns the FIRST match and can point at
+    # the wrong index; the window must come from estimate_onset's index
+    # directly (CalibrationMonitor._onset_index), exactly as report() does.
+    from probcal.monitor._onset import estimate_onset
+
+    mon = CalibrationMonitor(alpha=0.05)
+    for k in range(4):
+        y, p = _batch(n=2000, shift=0.0, seed=k)
+        mon.update(y, p, label="m")  # every batch shares the same label
+    for k in range(6):
+        y, p = _batch(n=2000, shift=0.8, seed=100 + k)
+        mon.update(y, p, label="m")
+    rep = mon.report()
+    assert rep.alarm_at == "m"
+
+    onset_idx = estimate_onset(np.array([s.log_e_increment for s in mon.steps_]))
+    action = mon.apply_recommendation()
+    assert len(action.window) == len(mon.steps_) - onset_idx
+    assert len(action.window) != len(mon.steps_)  # a label lookup would find index 0
+
+
 def test_apply_recommendation_audit_fingerprints_round_trip() -> None:
     mon = _drifted_monitor(shift=0.8, n_batches=6)
     action = mon.apply_recommendation()
@@ -265,6 +289,47 @@ def test_apply_recommendation_audit_fingerprints_round_trip() -> None:
     restored = AppliedAction.from_json(js)
     assert restored.audit == action.audit
     assert restored.fingerprint() == action.fingerprint()
+
+
+def test_applied_action_round_trip_with_chain_composed() -> None:
+    d = make_pd_portfolio(n=400, random_state=7)
+    cal = BetaCalibrator().fit(d.scores, d.y)
+    chain = Chain([cal])
+    mon = _drifted_monitor(shift=0.8, n_batches=6)
+
+    action = mon.apply_recommendation(target=chain)
+    restored = AppliedAction.from_json(action.to_json())
+    assert isinstance(restored.composed, Chain)
+    assert restored.fingerprint() == action.fingerprint()
+    assert restored.composed.fingerprint() == action.composed.fingerprint()
+
+
+def test_applied_action_round_trip_with_calibrated_model_composed() -> None:
+    d = make_pd_portfolio(n=400, random_state=7)
+    wrapped = CalibratedModel(_StubModel(), BetaCalibrator(), flow="prefit").fit(
+        d.scores.reshape(-1, 1), d.y
+    )
+    mon = _drifted_monitor(shift=0.8, n_batches=6)
+    action = mon.apply_recommendation(target=wrapped)
+    js = action.to_json()
+
+    # Lazy load: only a model *reference* was serialized (CalibratedModel.to_dict),
+    # never the model itself -- composed comes back with model_ unattached.
+    lazy = AppliedAction.from_json(js)
+    assert isinstance(lazy.composed, CalibratedModel)
+    assert lazy.composed.model_ is None
+
+    # model= reattaches the same model class: fingerprints agree exactly,
+    # and prediction is possible again.
+    restored = AppliedAction.from_json(js, model=_StubModel())
+    assert isinstance(restored.composed, CalibratedModel)
+    assert restored.composed.model_ is not None
+    assert restored.fingerprint() == action.fingerprint()
+    assert restored.composed.fingerprint() == action.composed.fingerprint()
+    np.testing.assert_array_equal(
+        restored.composed.predict_proba(d.scores.reshape(-1, 1)),
+        action.composed.predict_proba(d.scores.reshape(-1, 1)),
+    )
 
 
 def test_apply_recommendation_composes_chain_target() -> None:

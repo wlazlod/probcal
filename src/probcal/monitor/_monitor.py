@@ -304,6 +304,25 @@ class CalibrationMonitor:
             return start
         return 0 if self.plug_in_window is None else max(0, len(self._z) - self.plug_in_window)
 
+    def _onset_index(self) -> int:
+        """Backward-CUSUM argmax onset index (spec M3), by index -- not by label.
+
+        Shared by :meth:`report` and :meth:`apply_recommendation` so the
+        two never disagree about which batch onset points to. Batch labels
+        are documented as opaque and may repeat; looking a batch up BY
+        LABEL (``next(i for i, s in enumerate(steps_) if s.label ==
+        onset_label)``) would silently return the first match and can
+        point at the wrong index when labels are not unique -- this
+        recomputes :func:`~probcal.monitor._onset.estimate_onset` directly
+        instead, exactly as :meth:`report` does.
+
+        Meaningful only once at least one batch has been processed (both
+        call sites only reach this after an alarm has fired, which implies
+        ``steps_`` is non-empty).
+        """
+        increments = np.array([s.log_e_increment for s in self.steps_])
+        return estimate_onset(increments)
+
     # ------------------------------------------------------------------ updates
 
     def update(
@@ -491,11 +510,11 @@ class CalibrationMonitor:
                 alpha=self.alpha,
                 grade_table=grade_table,
             )
-        increments = np.array([s.log_e_increment for s in self.steps_])
-        onset_idx = estimate_onset(increments)
+        onset_idx = self._onset_index()
         onset_label = self.steps_[onset_idx].label
-        # Shared with apply_recommendation() (_recommendation_window_start),
-        # so the diagnostic window here and the action window there never disagree.
+        # Shared with apply_recommendation() (_onset_index,
+        # _recommendation_window_start), so the diagnostic window here and
+        # the action window there never disagree.
         start = self._recommendation_window_start(onset_idx)
         pz, py, pw = self._since(start)
         delta_now = plug_in_delta(pz, py, pw)
@@ -539,9 +558,12 @@ class CalibrationMonitor:
 
         ``"re-offset"``: estimates the log-odds shift by maximum likelihood
         (:func:`~probcal.offset.estimate_offset`) on the batches from the
-        recommendation window onward (:meth:`_recommendation_window_start`
-        -- the same window :meth:`report` uses for its trailing-window
-        diagnostics), composes the fitted offset onto ``target`` (see
+        recommendation window onward (:meth:`_onset_index` and
+        :meth:`_recommendation_window_start` -- the same window
+        :meth:`report` uses for its trailing-window diagnostics; the onset
+        index is recomputed directly rather than looked up by
+        ``rep.onset_label``, since batch labels are opaque and may repeat),
+        composes the fitted offset onto ``target`` (see
         below), and returns a **fresh** monitor with the same constructor
         parameters (:meth:`_ctor_params`) to watch the corrected pipeline.
         The monitor is fresh, not continued: its e-process is a martingale
@@ -646,7 +668,8 @@ class CalibrationMonitor:
                 kind=kind, offset=None, composed=None, monitor=None, window=(), audit=audit
             )
 
-        onset_idx = next(i for i, s in enumerate(self.steps_) if s.label == rep.onset_label)
+        # By index, not label: labels are opaque and may repeat (_onset_index).
+        onset_idx = self._onset_index()
         start = self._recommendation_window_start(onset_idx)
         labels = tuple(s.label for s in self.steps_[start:])
 

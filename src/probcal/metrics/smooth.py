@@ -222,7 +222,7 @@ def smooth_ece(
 
     Residuals are smoothed with a Gaussian kernel on the logit scale (the
     paper's reflected kernel is a boundary device for [0, 1]; on the
-    unbounded logit scale no reflection is needed — DECISIONS entry), and the
+    unbounded logit scale no reflection is needed), and the
     reported value is the fixed point ``smECE(sigma) = sigma`` found by
     bisection.
 
@@ -232,7 +232,7 @@ def smooth_ece(
     convolution, at a cost independent of n and of sigma. The lattice path
     engages for every call with a non-degenerate logit range
     (0.1.3 engaged it only for ``n > bins``, leaving typical calibration-set
-    sizes on the exact O(n)-per-step path — the "size cliff", DECISIONS 68).
+    sizes on the exact O(n)-per-step path — the "size cliff").
     With ``bins=None``, or a degenerate range
     (``t.max() == t.min()``), the exact 0.1.2 computation runs bit-for-bit.
     Otherwise, if the found ``sigma`` is smaller than 8 bin widths (the
@@ -340,7 +340,7 @@ def ici(
     """Integrated calibration index: weighted mean |LOESS(y|p) - p|
     (Austin & Steyerberg, 2019).
 
-    The LOESS stage itself is unweighted (DECISIONS entry).
+    The LOESS stage itself is unweighted.
     ``grid_size=None`` recovers 0.1.2 values exactly.
 
     Parameters
@@ -399,7 +399,7 @@ def e50(
     """Median of the |LOESS(y|p) - p| distances.
 
     ``grid_size=None`` recovers 0.1.2 values exactly. The LOESS distances are
-    always unweighted (DECISIONS entry); ``sample_weight``, when given and
+    always unweighted; ``sample_weight``, when given and
     not uniform, weights only the quantile step (see
     :func:`weighted_quantile`).
 
@@ -436,7 +436,7 @@ def e90(
     """90th percentile of the |LOESS(y|p) - p| distances.
 
     ``grid_size=None`` recovers 0.1.2 values exactly. The LOESS distances are
-    always unweighted (DECISIONS entry); ``sample_weight``, when given and
+    always unweighted; ``sample_weight``, when given and
     not uniform, weights only the quantile step (see
     :func:`weighted_quantile`).
 

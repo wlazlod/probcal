@@ -107,8 +107,7 @@ def ece_debiased(
     """Bias-corrected ECE, floored at zero.
 
     Per-bin squared gaps minus the within-bin variance of the event rate
-    (correction in the spirit of Bröcker 2009 / Ferro & Fricker 2012; exact
-    estimator in the DECISIONS log).
+    (correction in the spirit of Bröcker 2009 / Ferro & Fricker 2012).
 
     Parameters
     ----------
@@ -156,7 +155,7 @@ def ece_sweep(
     """Monotonic-sweep calibration error (Roelofs et al., 2022).
 
     Uses equal-mass bins with the largest ``B`` whose bin event rates remain
-    monotone non-decreasing (scan 2..min(n, 100); DECISIONS entry).
+    monotone non-decreasing (scan 2..min(n, 100)).
 
     Parameters
     ----------

@@ -124,7 +124,7 @@ class CalibratorSelector(BaseCalibrator):
         )
 
     def _params_for_dict(self) -> dict[str, object]:
-        """Encode candidate prototypes by registry name (DECISIONS 73).
+        """Encode candidate prototypes by registry name.
 
         Custom candidate classes outside the registry cannot be rebuilt on
         load and raise ``ValueError`` naming the class.
@@ -225,7 +225,7 @@ class CalibratorSelector(BaseCalibrator):
             sds[i] = fold_scores.std(ddof=1)
             guards[i] = calibration_guardrails(y_arr, oof, sample_weight=w_arr).all_ok
             # One corp_fit/decompose per candidate on its own OOF vector — cheap
-            # relative to the cv-fold refits above (DECISIONS/task-V2).
+            # relative to the cv-fold refits above (task-V2).
             _, _, _, _, pav = corp_fit(y_arr, oof, w_arr)
             _, mcbs[i], dscs[i], unc = decompose(y_arr, oof, pav, w_arr, corp_score)
 

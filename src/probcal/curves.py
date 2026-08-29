@@ -523,7 +523,7 @@ def calibration_belt(
     ``logit(p)``, selecting the degree by forward likelihood-ratio testing
     (p < 0.05 to add a term, capped at degree 4), then draws pointwise
     confidence bands from the information-matrix ellipsoid — a Wald
-    approximation of the LR-region inversion (DECISIONS entry). The
+    approximation of the LR-region inversion. The
     associated p-value tests the fitted polynomial against the identity.
     Where the band excludes the diagonal, the data reject calibration in
     that region.
@@ -559,7 +559,7 @@ def calibration_belt(
 
     # Forward LR selection of the polynomial degree. A separated fit's
     # coefficients come from the ridge fallback: usable as a terminal fit,
-    # never a basis for extension (IRLS_SPEC W3.3 / DECISIONS 57).
+    # never a basis for extension (IRLS_SPEC W3.3).
     degree = 1
     fit = irls_logistic(design(1, z), y_arr, w=w)
     ll = loglik(fit.beta, 1)

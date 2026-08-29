@@ -26,7 +26,7 @@ feature change that lands \( f(x) \) in a raw interval works unchanged after cal
 deployed — it just needs the translated interval. This is the designed hand-off to treecf:
 probcal computes `lo_z, hi_z = cal.interval_inverse(0.0, 0.02, space="logit")` and the
 engine consumes `Target.raw(range=(lo_z, hi_z))`. The division of responsibilities is
-deliberate and recorded as a DECISIONS entry — probcal owns the capability and publishes the
+deliberate — probcal owns the capability and publishes the
 duck-typed protocol (`interval_inverse` plus `is_monotone_`); target-construction ergonomics
 belong to the consumer.
 

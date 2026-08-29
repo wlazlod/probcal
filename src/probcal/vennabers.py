@@ -192,8 +192,8 @@ class CrossVennAbersCalibrator(BaseCalibrator):
     IVAP is fitted on the remaining folds. The scalar output merges the
     fold-wise pairs by the log-loss rule of Vovk & Petej:
     ``GM(p1) / (GM(1 - p0) + GM(p1))``. ``predict_interval`` returns the
-    conservative envelope ``[min_k p0_k, max_k p1_k]`` (DECISIONS entry —
-    the paper defines only the scalar merge).
+    conservative envelope ``[min_k p0_k, max_k p1_k]`` (a probcal design
+    choice — the paper defines only the scalar merge).
 
     Parameters
     ----------
@@ -263,8 +263,8 @@ class CrossVennAbersCalibrator(BaseCalibrator):
         -------
         numpy.ndarray of shape (n, 2)
             Columns ``p0`` (lower) and ``p1`` (upper): the envelope across
-            fold-wise IVAP intervals (DECISIONS entry — the paper defines
-            only the scalar merge, not an interval for CVAP).
+            fold-wise IVAP intervals (a probcal design choice — the paper
+            defines only the scalar merge, not an interval for CVAP).
         """
         self._check_fitted()
         from ._validation import validate_scores

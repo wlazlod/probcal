@@ -88,7 +88,7 @@ gaps with Kullback–Leibler terms: with \( c(p) = \Pr(Y=1 \mid \hat p = p) \) e
 recalibration curve, calibration is the mean divergence between \( \mathrm{Bernoulli}(c(p)) \)
 and \( \mathrm{Bernoulli}(p) \), refinement the mean entropy of \( \mathrm{Bernoulli}(c(p)) \).
 The split is only as good as the plug-in estimate of \( c \); the estimator choice is recorded
-as a DECISIONS entry when implemented.
+in the changelog when implemented.
 
 ## Binned estimators
 
@@ -138,7 +138,7 @@ the logit scale) and the calibration error is read from the smoothed curve, with
 chosen by the paper's self-consistency principle — the reported error is the fixed point where
 the measurement scale matches the error magnitude. The result is a continuous, reparametrization-
 robust quantity with none of ECE's edge artifacts; any implementation simplification is
-recorded as a DECISIONS entry.
+recorded in the changelog.
 
 **ECCE**, the empirical cumulative calibration error (Arrieta-Ibarra, Gujral, Tannen, Tygert
 and Xu, 2022), sorts observations by \( p \) and tracks the cumulative deviation
@@ -403,8 +403,7 @@ via its `delta` parameter. Windows and bandwidths are computed against the full 
 changes *how many points get an exact fit*, not what the fit means; measured drift on
 `make_pd_portfolio(n=5000)` is `|Δici| ≈ 1.3e-6`, far below bootstrap CI width. `grid_size=None`
 recovers the exact per-point fit and its pre-0.1.3 cost. On this host, `ici` at n=50,000 fell
-from 192.2s to 1.2s, and `loess(grid_size=512)` fits n=1,000,000 points in under 30s
-(DECISIONS 58).
+from 192.2s to 1.2s, and `loess(grid_size=512)` fits n=1,000,000 points in under 30s.
 
 **`smooth_ece`** solves a bandwidth fixed point by bisection, and each step built a kernel
 matrix against every residual. `bins` (default 8192) pre-aggregates the weighted residual
@@ -415,11 +414,11 @@ binning (`bins <- ceil(range / (sigma/8))`) whenever the found bandwidth would b
 by the current bins, then falls back to the exact per-observation computation only if that
 refinement is infeasible (above 2^20 bins) or still under-resolved — so accuracy never degrades
 silently, and the binned path no longer reuses the exact
-path's 257-point grid (that reuse aliased against the bin lattice and was a cost-only defect,
-DECISIONS 66). The lattice path engages for every call with a non-degenerate
+path's 257-point grid (that reuse aliased against the bin lattice and was a cost-only defect).
+The lattice path engages for every call with a non-degenerate
 logit range (0.1.3 engaged it only for `n > bins`, leaving typical calibration-set sizes on
-the exact path — the "size cliff", removed in DECISIONS 68); `bins=None` or a
-degenerate range is bit-identical to the pre-0.1.3 exact computation (DECISIONS 59). For
+the exact path — the "size cliff", now removed); `bins=None` or a
+degenerate range is bit-identical to the pre-0.1.3 exact computation. For
 `n <= bins` the lattice value may differ from the exact grid at the ~1e-4 level on typical
 portfolios (measured ≤ 2.4e-4 on `make_pd_portfolio`); on wide clipped-logit-range data the
 gap can be much larger, because there the exact path's fixed 257-point grid under-resolves
@@ -431,7 +430,7 @@ scores, ECCE, and the regression framework are O(n); binned ECEs are O(n log n);
 family shares one LOESS fit at O(grid_size · frac · n); `smooth_ece` bins once in O(n) and then
 costs O(bins · taps) per bisection step, where taps is the truncated-Gaussian kernel width
 (at most ~161 taps), independent of n — measured at ~ms per call for n up to 10⁵. `metrics=`
-(DECISIONS 60) restricts the catalog to the names actually needed.
+restricts the catalog to the names actually needed.
 
 0.3.0 removes the large constant factors *inside* the loop, in three steps. First, each
 replicate is sorted by prediction once (`np.argsort(..., kind="stable")`) and that order is

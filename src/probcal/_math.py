@@ -379,7 +379,7 @@ def norm_cdf(x: object) -> np.ndarray:
     """Standard normal CDF via the complementary error function.
 
     ``erfc`` is used instead of ``erf`` for relative accuracy in the tails
-    (DECISIONS entry: deviation from the literal spec wording).
+    (a deliberate deviation from the literal spec wording).
 
     Parameters
     ----------

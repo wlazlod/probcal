@@ -13,8 +13,8 @@ drives the choice of scale here. An earlier draft of this comment claimed
 ``ece_sweep`` -- its ~99-candidate bin-count scan, untouched by this fix --
 would dominate the timing at n=50,000, citing a ~537s figure; that figure was
 itself defect-contaminated (roughly 310s of it was ~50 bootstrap replicates
-each paying the pre-fix smECE aliasing defect's ~6.1s/call, not ``ece_sweep``;
-see DECISIONS 66) and is not reused. Measured on this dev host after the 0.3.0
+each paying the pre-fix smECE aliasing defect's ~6.1s/call, not ``ece_sweep``)
+and is not reused. Measured on this dev host after the 0.3.0
 bootstrap work (shared per-replicate sort, vectorized ``ece_sweep`` scan,
 vectorized LOESS anchor evaluation), a full-catalog replicate at n=10,000 costs
 0.089s -- ICI family 0.051s (58%), ``ece_sweep`` scan 0.024s (27%),
@@ -26,7 +26,7 @@ bootstrap loop and metric dispatch above both the smECE bin-lattice default
 pins the full-catalog acceptance scale.
 
 ENIR's ceiling uses n=20,000, not the spec's m=1e5: the vectorized engine (the
-production memory fix; see DECISIONS) is O(m*G) in time, and 1e5 is not
+production memory fix) is O(m*G) in time, and 1e5 is not
 reachable under any headroom multiple on this host (measured 35.5s at m=5e4).
 n=20,000 is the largest size that still leaves >=5x headroom to a practical
 ceiling; it also carries a tracemalloc peak assertion, which is where ENIR's

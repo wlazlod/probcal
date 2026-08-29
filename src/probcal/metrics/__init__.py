@@ -1,7 +1,7 @@
 """Calibration metrics and statistical tests (flat re-exports).
 
-`evaluate` lives here because it aggregates across every submodule
-(DECISIONS entry). Selection guidance — what may be optimized and what is
+`evaluate` lives here because it aggregates across every submodule.
+Selection guidance — what may be optimized and what is
 report-only — is the table in ``docs/concepts/metrics.md``.
 """
 

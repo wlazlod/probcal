@@ -551,7 +551,7 @@ class CalibrationMonitor:
         # trailing window materially better than the offset-only correction?
         # (The shape e-process itself also fires under pure level drift — its
         # alternative family contains the intercept — so it cannot separate
-        # the two failure modes on its own; DECISIONS 75.)
+        # the two failure modes on its own.)
         resid_lr = self._residual_shape_lr(pz, py, pw, delta_now)
         shape_needed = resid_lr > 3.841  # chi-square(1) at 5%
         reasoning = [

@@ -111,7 +111,7 @@ rather than starting a new one for later 0.3.0 additions):
 Pre-1.0: a deprecated symbol warns (`DeprecationWarning`) for at least one
 minor release before removal, with the replacement named in the warning
 and the changelog. Behavioral changes that alter numbers ship with a
-DECISIONS-referenced changelog entry and, where feasible, a parameter that
+detailed changelog entry and, where feasible, a parameter that
 recovers the old values.
 
 0.3.0 deprecated nothing: every new symbol above is additive, and no

@@ -6,6 +6,9 @@ repo_name: wlazlod/probcal
 
 strict: true
 
+exclude_docs: |
+  superpowers/
+
 theme:
   name: material
   features:
@@ -92,6 +95,7 @@ nav:
       - Monitoring: concepts/monitoring.md
       - Automatic selection: concepts/auto-selection.md
       - Visualization: concepts/visualization.md
+      - CORP and score decomposition: concepts/corp.md
   - Tutorials:
       - End-to-end on a rare-event portfolio: notebooks/pd_end_to_end.ipynb
       - PD calibration walkthrough: notebooks/pd_calibration_walkthrough.ipynb

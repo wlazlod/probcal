@@ -93,6 +93,128 @@ def _smece_fixed_point_lattice(m: np.ndarray, width: float) -> tuple[float, floa
     return sigma, sigma
 
 
+def _lattice(t: np.ndarray, bins: int) -> tuple[np.ndarray, float, float]:
+    """Equal-width logit lattice: per-sample bin index, bin width, and lower
+    edge over ``[t.min(), t.max()]``.
+
+    Shared by ``smooth_ece``'s binned solve (via ``_smece_solve``) and
+    ``curves.reliability_smooth`` so the two lattices cannot drift apart.
+    """
+    t_lo, t_hi = float(t.min()), float(t.max())
+    width = (t_hi - t_lo) / bins
+    idx = np.clip(((t - t_lo) / width).astype(np.int64), 0, bins - 1)
+    return idx, width, t_lo
+
+
+def _smece_solve(
+    t: np.ndarray, mass: np.ndarray, bins: int | None
+) -> tuple[float, float, np.ndarray | None, float, float, int | None]:
+    """Core smECE fixed-point solve behind ``smooth_ece``, exposing the
+    lattice state a caller needs to build a numerically consistent curve.
+
+    Literally the pre-refactor body of ``smooth_ece`` (path selection at
+    module docstring / historical lines ~152-172), factored out so
+    ``curves.reliability_smooth`` can share it without re-deriving
+    ``sigma_star`` — the two are therefore identical by construction, not by
+    agreement.
+
+    Returns
+    -------
+    value : float
+        The smECE value (``smooth_ece``'s return value).
+    sigma : float
+        The fixed-point bandwidth ``sigma_star``.
+    m : numpy.ndarray or None
+        The binned residual-mass vector actually solved on, when the
+        lattice path was used; ``None`` when the exact O(n) path ran
+        instead (``bins=None``, a degenerate logit range, or an
+        infeasible/under-resolved refinement) — a caller then has to fall
+        back to direct O(n * grid) kernel smoothing at ``sigma``.
+    width : float
+        Bin width of ``m``'s lattice (``0.0`` when ``m`` is ``None``).
+    t_lo : float
+        Lower edge of the logit lattice (``t.min()``), always meaningful.
+    b : int or None
+        Bin count of ``m``'s lattice (``None`` when ``m`` is ``None``).
+    """
+    t_lo, t_hi = float(t.min()), float(t.max())
+    if bins is None or t_hi == t_lo:
+        value, sigma = _smece_fixed_point(t, mass)
+        return value, sigma, None, 0.0, t_lo, None
+
+    def _binned_solve(b: int) -> tuple[float, float, np.ndarray, float]:
+        idx, width, _ = _lattice(t, b)
+        m = np.bincount(idx, weights=mass, minlength=b)
+        value, sigma = _smece_fixed_point_lattice(m, width)
+        return value, sigma, m, width
+
+    value, sigma, m, width = _binned_solve(bins)
+    if sigma >= 8.0 * width:
+        return value, sigma, m, width, t_lo, bins
+    # Under-resolved: one adaptive refinement sized so 8 bins span sigma.
+    b2 = math.ceil((t_hi - t_lo) / (sigma / 8.0))
+    if b2 > _SMECE_MAX_BINS:
+        value, sigma = _smece_fixed_point(t, mass)  # refinement infeasible: exact
+        return value, sigma, None, 0.0, t_lo, None
+    value, sigma, m, width = _binned_solve(b2)
+    if sigma >= 8.0 * width:
+        return value, sigma, m, width, t_lo, b2
+    value, sigma = _smece_fixed_point(t, mass)  # O(n) worst case, no warning
+    return value, sigma, None, 0.0, t_lo, None
+
+
+def _lattice_kernel_smooth(
+    m: np.ndarray, width: float, sigma: float, t_lo: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Truncated-Gaussian convolution of a lattice-binned mass vector,
+    returning the pointwise smoothed values (not just their integral).
+
+    Coarsening (mass-conserving factor ``max(1, int(sigma/(8*width)))``) and
+    kernel truncation (+-5 sigma) mirror ``_smece_at_sigma_lattice``'s
+    general branch exactly, so ``curves.reliability_smooth``'s kernel
+    matches the one that produced ``sigma_star``. Unlike
+    ``_smece_at_sigma_lattice``, this always convolves (no isolated-mass
+    total-variation shortcut): a curve needs the smoothed value at every
+    point, not only the integral of its absolute value.
+
+    Parameters
+    ----------
+    m : numpy.ndarray
+        Lattice-binned mass vector (e.g. ``bincount(w)`` or
+        ``bincount(w * y)``), on the same lattice ``sigma_star`` was solved
+        on.
+    width : float
+        That lattice's bin width.
+    sigma : float
+        Kernel bandwidth (``sigma_star``).
+    t_lo : float
+        Lower edge of the (uncoarsened) lattice.
+
+    Returns
+    -------
+    centers, smoothed : numpy.ndarray
+        Logit-scale centers of the (possibly coarsened) lattice cells, and
+        the kernel-smoothed value at each center, in ``m``'s own mass-per-
+        cell scale (a ratio of two such vectors, e.g. ``num / den``, cancels
+        the coarsening factor and is scale-free).
+    """
+    factor = max(1, int(sigma / (8.0 * width)))
+    if factor > 1:
+        pad = (-m.shape[0]) % factor
+        mp = np.concatenate([m, np.zeros(pad)]) if pad else m
+        mc = mp.reshape(-1, factor).sum(axis=1)
+        w2 = width * factor
+    else:
+        mc, w2 = m, width
+    n = mc.shape[0]
+    k = int(math.ceil(5.0 * sigma / w2))
+    offs = np.arange(-k, k + 1) * w2
+    taps = np.exp(-0.5 * (offs / sigma) ** 2) / (sigma * math.sqrt(2.0 * math.pi))
+    smoothed = np.convolve(mc, taps, mode="same")
+    centers = t_lo + (np.arange(n) + 0.5) * w2
+    return centers, smoothed
+
+
 def smooth_ece(
     y: object, p: object, *, sample_weight: object = None, bins: int | None = 8192
 ) -> float:
@@ -148,28 +270,7 @@ def smooth_ece(
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     t = logit(p_arr)
     mass = (w / w.sum()) * (y_arr - p_arr)
-    t_lo, t_hi = float(t.min()), float(t.max())
-    if bins is None or t_hi == t_lo:
-        return _smece_fixed_point(t, mass)[0]
-
-    def _binned_solve(b: int) -> tuple[float, float, float]:
-        width = (t_hi - t_lo) / b
-        idx = np.clip(((t - t_lo) / width).astype(np.int64), 0, b - 1)
-        m = np.bincount(idx, weights=mass, minlength=b)
-        value, sigma = _smece_fixed_point_lattice(m, width)
-        return value, sigma, width
-
-    value, sigma, width = _binned_solve(bins)
-    if sigma >= 8.0 * width:
-        return value
-    # Under-resolved: one adaptive refinement sized so 8 bins span sigma.
-    b2 = math.ceil((t_hi - t_lo) / (sigma / 8.0))
-    if b2 > _SMECE_MAX_BINS:
-        return _smece_fixed_point(t, mass)[0]  # refinement infeasible: exact
-    value, sigma, width = _binned_solve(b2)
-    if sigma >= 8.0 * width:
-        return value
-    return _smece_fixed_point(t, mass)[0]  # O(n) worst case, no warning
+    return _smece_solve(t, mass, bins)[0]
 
 
 @dataclass(frozen=True)

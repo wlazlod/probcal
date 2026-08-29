@@ -4,15 +4,18 @@ import numpy as np
 import pytest
 
 from probcal._math import expit, logit
-from probcal._results import BeltResult, ReliabilityCurve
+from probcal._results import BeltResult, KernelReliabilityCurve, ReliabilityCurve
 from probcal.curves import (
     EcceCurve,
     calibration_belt,
     ecce_curve,
     reliability_binned,
     reliability_loess,
+    reliability_smooth,
     reliability_spline,
 )
+from probcal.datasets import make_pd_portfolio
+from probcal.metrics import smooth_ece
 
 RNG = np.random.default_rng(83)
 
@@ -141,3 +144,78 @@ def test_ecce_curve_stat_max_matches_metric() -> None:
     assert abs(c_w.stat_max - ecce(y, p, sample_weight=w).stat_max) < 1e-15
     # Final cumdev equals the metric-consistent weighted mean residual.
     assert abs(c_w.cumdev[-1] - float(np.sum(w * (y - p)) / w.sum())) < 1e-12
+
+
+def test_reliability_smooth_matches_smooth_ece() -> None:
+    d = make_pd_portfolio(n=3000, random_state=11)
+    curve = reliability_smooth(d.y, d.scores, n_boot=0)
+    assert isinstance(curve, KernelReliabilityCurve)
+    assert abs(curve.smooth_ece - smooth_ece(d.y, d.scores)) < 1e-12
+
+
+def test_reliability_smooth_matches_smooth_ece_exact_path() -> None:
+    # bins=None forces the exact O(n) path on both the metric and the curve.
+    d = make_pd_portfolio(n=1500, random_state=12)
+    curve = reliability_smooth(d.y, d.scores, n_boot=0, bins=None)
+    assert abs(curve.smooth_ece - smooth_ece(d.y, d.scores, bins=None)) < 1e-12
+
+
+def test_reliability_smooth_near_diagonal_on_calibrated_data() -> None:
+    # sigma_star is tuned for the smECE aggregate, not for a low-variance
+    # curve, so the pointwise kernel estimate needs a large sample to settle
+    # within tolerance -- a dedicated RNG/n (not the smaller shared
+    # _calibrated fixture) keeps this from being flaky at moderate n.
+    rng = np.random.default_rng(0)
+    n = 500_000
+    p = expit(rng.normal(0.0, 1.0, n))
+    y = (rng.random(n) < p).astype(float)
+    curve = reliability_smooth(y, p, n_boot=0)
+    m = len(curve.grid_p)
+    core = slice(m // 20, m - m // 20)  # central 90% of the grid
+    assert np.max(np.abs(curve.event_rate[core] - curve.grid_p[core])) < 0.05
+
+
+def test_reliability_smooth_density_normalized_and_nonnegative() -> None:
+    y, p = _calibrated(4000)
+    curve = reliability_smooth(y, p, n_boot=0)
+    assert curve.density.shape == curve.grid_p.shape
+    assert np.all(curve.density >= 0.0)
+    assert abs(float(curve.density.sum()) - 1.0) < 1e-10
+
+
+def test_reliability_smooth_seeded_determinism() -> None:
+    y, p = _calibrated(2000)
+    c1 = reliability_smooth(y, p, n_boot=30, random_state=7)
+    c2 = reliability_smooth(y, p, n_boot=30, random_state=7)
+    np.testing.assert_array_equal(c1.event_rate, c2.event_rate)
+    np.testing.assert_array_equal(c1.ci_low, c2.ci_low)
+    np.testing.assert_array_equal(c1.ci_high, c2.ci_high)
+
+
+def test_reliability_smooth_ci_brackets_event_rate() -> None:
+    y, p = _calibrated(2000)
+    curve = reliability_smooth(y, p, n_boot=30, random_state=3)
+    assert np.all(curve.ci_low <= curve.event_rate + 1e-12)
+    assert np.all(curve.event_rate <= curve.ci_high + 1e-12)
+
+
+def test_reliability_smooth_no_bootstrap_collapses_band() -> None:
+    y, p = _calibrated(1000)
+    curve = reliability_smooth(y, p, n_boot=0)
+    np.testing.assert_array_equal(curve.ci_low, curve.event_rate)
+    np.testing.assert_array_equal(curve.ci_high, curve.event_rate)
+
+
+def test_reliability_smooth_rejects_bad_level() -> None:
+    y, p = _calibrated(500)
+    with pytest.raises(ValueError, match="level"):
+        reliability_smooth(y, p, level=0.0)
+    with pytest.raises(ValueError, match="level"):
+        reliability_smooth(y, p, level=1.0)
+
+
+def test_reliability_smooth_grid_scales_consistent() -> None:
+    y, p = _calibrated(1500)
+    curve = reliability_smooth(y, p, n_boot=0)
+    np.testing.assert_allclose(curve.grid_logit, logit(curve.grid_p), atol=1e-12)
+    assert len(curve.grid_p) == 200

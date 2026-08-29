@@ -9,7 +9,7 @@ report — and the rendering layer adds convention, not computation.
 ## Reliability constructions
 
 The reliability diagram plots estimated event rate against predicted probability; a
-calibrated model traces the diagonal. probcal builds it three ways, because the
+calibrated model traces the diagonal. probcal builds it four ways, because the
 construction *is* the estimator and inherits its trade-offs. `reliability_binned` groups
 predictions (equal-mass by default), plotting each bin's mean prediction against its event
 rate with a **Wilson confidence interval** — the binomial interval that behaves sensibly at
@@ -21,6 +21,18 @@ per-class rug along the axis edges (a count-bar margin remains available via
 binned points they distinguish real curvature from bin noise. Every curve object carries
 both probability-scale and logit-scale coordinate arrays, so the choice of scale is made at
 plot time, not at computation time.
+
+`reliability_smooth` (`KernelReliabilityCurve`) is the fourth construction, and the only
+one whose bandwidth is not a free choice: it reuses `metrics.smooth_ece`'s fixed-point
+bandwidth `sigma_star` — the same equal-width logit lattice and the same truncated
+Gaussian kernel — so `curve.smooth_ece` reproduces the metric exactly rather than merely
+tracking it, and the diagram and the number it is read against always agree. Because
+`sigma_star` is tuned for the smECE aggregate rather than for a low-variance curve, the
+pointwise estimate is noisier than `reliability_loess`'s wide, fraction-of-data bandwidth
+and needs a larger sample before it settles; its confidence ribbon (a seeded bootstrap of
+`(y, p, sample_weight)` triples, `n_boot=0` to disable) is computed at that one fixed
+`sigma_star`, so it reads as uncertainty in the rate given the bandwidth, not uncertainty
+in the bandwidth choice itself.
 
 ## Why the logit scale is the flagship
 
@@ -59,6 +71,34 @@ deterministically thinned to at most 1000 marks per class — sorted, evenly str
 anywhere in plotting — so two renders of the same data are always identical. All probcal
 plots style themselves through a per-call `rc_context`; your global matplotlib
 configuration is never touched.
+
+`risk_dist` picks the style of that density layer: `"rug"` (the default, described above),
+`"split"` (a 30-equal-mass-bin spike histogram of `p` — events upward, non-events downward,
+from a shared `y = 0.12` baseline in axis-fraction coordinates, since axis coordinates
+cannot go negative; heights are scaled so whichever class peaks higher reaches the full
+0.12), or `None` for no density layer at all. `rug=False` turns the layer off regardless of
+`risk_dist`, equivalently to `risk_dist=None`.
+
+`risk_dist="split"` in place of the default rug:
+
+![Annotated reliability diagram with the split risk distribution: a 30-equal-mass-bin spike histogram of predictions, events up and non-events down from a shared baseline](img/reliability_split.png)
+
+`stats` swaps in an alternative box in place of the `annotate` one above: `stats=True`
+reports `n, events, intercept, slope, ICI, smECE, Brier` (smECE and Brier are strictly
+proper / self-consistent scores that E90 and Spiegelhalter's test do not cover); passing a
+`MetricReport` (e.g. from `metrics.evaluate`) instead reports `name = value [ci_low, ci_high]`
+for whichever of `intercept`, `slope`, `ici`, `smooth_ece`, `brier` the report carries, plus
+`n`/`events` read off `y`. `annotate` is ignored whenever `stats` is truthy — the two boxes
+never stack.
+
+Passing a `KernelReliabilityCurve` (from `reliability_smooth`) as `smooth` renders it as a
+density-weighted curve rather than a plain line: a variable-width `LineCollection` (wide
+where predictions are dense, `linewidths = 0.5 + 4.0 * density / density.max()`), the
+miscalibration area shaded between the curve and the identity, its bootstrap ribbon, and an
+`smECE = ...` readout in the bottom-right corner — the same convention that fills the fourth
+reliability construction described above.
+
+![Reliability diagram with the kernel curve: the density-weighted smECE-consistent line (wide where predictions are dense), its bootstrap ribbon, and the smECE readout](img/reliability_smooth.png)
 
 ## The calibration belt
 
@@ -120,6 +160,42 @@ the tool.
 
 ![Logit offset audit chart: the offset map parallel to the identity, pre- and post-adjustment means joined by the shift arrow, and the audit numbers in the stats box](img/offset_audit.png)
 
+## The attributes diagram
+
+`plot_attributes` draws the classic Hsu and Murphy (1986) attributes diagram, which puts a
+reliability curve in the context of two references at once instead of just the identity.
+The horizontal and vertical lines at the weighted base rate \( \bar y \) mark climatology —
+the constant forecast \( p = \bar y \) that carries no resolution — and the no-skill line
+\( y = (x + \bar y) / 2 \), equidistant between climatology and the identity at every \( x
+\), is the boundary the Brier skill score is measured against. The light green shading
+marks where a point beats climatology pointwise, \( (y - x)^2 \le (x - \bar y)^2 \): closer
+to the identity than to the no-resolution line. `method="binned"` overlays
+`reliability_binned` as markers scaled by bin count (`n_bins=10` by default, the same
+default as the curve itself); `method="corp"` overlays the CORP PAV step fit instead,
+trading the binning choice for the same discretization-free construction used by
+`plot_corp` — the reliability diagram, bands, and score decomposition covered in
+[CORP and score decomposition](corp.md). `scale="logit"` transforms every drawn quantity —
+identity, references, shading, and curve alike — through the same clipped logit as the rest
+of the package, so a low-PD portfolio stays readable.
+
+![Attributes diagram on a 3% base-rate PD portfolio (logit scale): the shaded positive-skill region between climatology and the identity, the no-skill line, and the binned reliability curve](img/attributes.png)
+
+## The Murphy diagram
+
+`plot_murphy` renders `metrics.murphy_curve` — the elementary-score view of the Brier score
+described in [Metrics and tests](metrics.md) — as either a set of labelled lines
+(`{name: MurphyCurve}`, or a single curve with no legend) or, with `diff=True`, the pointwise
+difference between exactly two named forecasts. The diff form needs the raw `(y, p)` pairs
+rather than precomputed curves, because a `MurphyCurve` retains only its threshold grid and
+scores, not the data: it recomputes both curves on a shared threshold grid, differences them,
+and adds a seeded paired bootstrap band (resampling the same indices for both forecasts, since
+the comparison is on the same observations) at the 5th/95th percentile, plus a zero reference
+line. Because the Murphy diagram decomposes the Brier *difference* across the whole decision
+spectrum instead of collapsing it to one number, a diff that crosses zero shows exactly which
+threshold range favors which forecast — information a single Brier-score comparison discards.
+
+![Murphy diagram (difference form) comparing raw scores against their beta-calibrated recalibration: the pointwise elementary-score gap with a 90% bootstrap band and the zero reference line](img/murphy.png)
+
 ## The remaining plots
 
 Three further views complete `probcal.plots`. `plot_comparison(before, after)` puts
@@ -142,7 +218,7 @@ guard raises with the install instruction rather than a bare `ImportError`.
 
 ```python
 from probcal import calibration_belt, reliability_binned, reliability_loess
-from probcal.curves import ecce_curve
+from probcal.curves import ecce_curve, reliability_smooth
 from probcal.metrics import jeffreys_grade_test, reliability_summary
 from probcal.plots import (  # [viz] extra
     plot_belt, plot_comparison, plot_ecce, plot_grade_backtest,
@@ -156,6 +232,11 @@ print(belt.degree, belt.p_value)
 print(reliability_summary(y, p))                   # the stats-box numbers, standalone
 
 ax = plot_reliability(curve, smooth=smooth, scale="logit", y=y, p=p)   # the flagship view
+kernel = reliability_smooth(y, p)                  # the smECE-consistent construction
+ax = plot_reliability(
+    curve, smooth=kernel, scale="logit", y=y, p=p,
+    stats=True, risk_dist="split",                 # n/events/.../smECE/Brier box + spike histogram
+)
 ax = plot_belt(belt)
 fig = plot_comparison(reliability_binned(y, s_raw), reliability_binned(y, p))
 ax = plot_ecce([ecce_curve(y, s_raw), ecce_curve(y, p)], labels=["raw", "calibrated"])
@@ -167,5 +248,6 @@ ax = plot_offset_audit(fitted_offset)              # a fitted LogitOffset stage
 
 - Arrieta-Ibarra, I., Gujral, P., Tannen, J., Tygert, M., Xu, C. (2022). "Metrics of Calibration for Probabilistic Predictions." *Journal of Machine Learning Research* 23(351), 1–54.
 - Austin, P. C., Steyerberg, E. W. (2014). "Graphical assessment of internal and external calibration of logistic regression models by using loess smoothers." *Statistics in Medicine* 33(3), 517–535.
+- Hsu, W.-R., Murphy, A. H. (1986). "The attributes diagram: A geometrical framework for assessing the quality of probability forecasts." *International Journal of Forecasting* 2(3), 285–293.
 - Nattino, G., Finazzi, S., Bertolini, G. (2014). "A new calibration test and a reappraisal of the calibration belt for the assessment of prediction models based on dichotomous outcomes." *Statistics in Medicine* 33(14), 2390–2407.
 - Nattino, G., Lemeshow, S., Phillips, G., Finazzi, S., Bertolini, G. (2017). "Assessing the Calibration of Dichotomous Outcome Models with the Calibration Belt." *Stata Journal* 17(4), 1003–1014.

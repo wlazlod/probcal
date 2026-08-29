@@ -11,14 +11,23 @@ Lemeshow, Phillips, Finazzi & Bertolini (2017) — full records in the
 documentation. The belt is reimplemented from the papers; no GPL code is used.
 """
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
 
+from ._corp import corp_bands, corp_fit, decompose
 from ._math import chi2_ppf, expit, gammainc_lower, irls_logistic, loess, logit
-from ._results import BeltResult, ReliabilityCurve, SmoothReliabilityCurve
+from ._results import (
+    BeltResult,
+    CorpResult,
+    KernelReliabilityCurve,
+    ReliabilityCurve,
+    SmoothReliabilityCurve,
+)
 from .metrics.binned import _bin_index
 from .metrics.scores import _prep
+from .metrics.smooth import _lattice_kernel_smooth, _smece_solve
 
 _Z_95 = 1.959963984540054
 
@@ -156,6 +165,277 @@ def reliability_spline(
     grid = _grid(p_arr, grid_size)
     return SmoothReliabilityCurve(
         grid_p=grid, grid_logit=logit(grid), event_rate=cal.predict_proba(grid)
+    )
+
+
+def _kernel_rate_density(
+    t: np.ndarray,
+    y: np.ndarray,
+    w: np.ndarray,
+    sigma: float,
+    grid_logit: np.ndarray,
+    lattice: tuple[float, float, int] | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Evaluate the Nadaraya-Watson kernel rate/density at ``sigma`` on
+    ``grid_logit``, sharing the smECE lattice and kernel when available.
+
+    ``lattice`` is ``(width, t_lo, b)`` from the point-estimate's
+    ``_smece_solve`` (fixed across bootstrap resamples, per the module
+    docstring of ``reliability_smooth``); ``None`` selects the exact
+    O(n * grid) direct-smoothing path (mirrors ``smooth_ece``'s own
+    lattice/exact selection so the two stay consistent).
+    """
+    if lattice is not None:
+        width, t_lo, b = lattice
+        idx = np.clip(((t - t_lo) / width).astype(np.int64), 0, b - 1)
+        num = np.bincount(idx, weights=w * y, minlength=b)
+        den = np.bincount(idx, weights=w, minlength=b)
+        centers, num_s = _lattice_kernel_smooth(num, width, sigma, t_lo)
+        _, den_s = _lattice_kernel_smooth(den, width, sigma, t_lo)
+        den_safe = np.where(den_s > 0.0, den_s, np.nan)
+        rate = np.interp(grid_logit, centers, num_s / den_safe)
+        density = np.interp(grid_logit, centers, den_s)
+    else:
+        diff = (grid_logit[:, None] - t[None, :]) / sigma
+        taps = np.exp(-0.5 * diff**2) / (sigma * math.sqrt(2.0 * math.pi))
+        num = taps @ (w * y)
+        den = taps @ w
+        rate = num / den
+        density = den
+    density = np.clip(density, 0.0, None)
+    density = density / density.sum()
+    return rate, density
+
+
+def reliability_smooth(
+    y: object,
+    p: object,
+    *,
+    sample_weight: object = None,
+    grid_size: int = 200,
+    n_boot: int = 100,
+    level: float = 0.9,
+    random_state: int = 42,
+    bins: int | None = 8192,
+) -> KernelReliabilityCurve:
+    """smECE-consistent kernel reliability curve (Blasiok-Nakkiran).
+
+    Shares its bandwidth and lattice with ``metrics.smooth_ece``: both solve
+    the same fixed point ``sigma_star`` on the same equal-width logit
+    lattice (``metrics.smooth._lattice`` / ``_smece_solve``), so
+    ``curve.smooth_ece`` reproduces ``metrics.smooth_ece(y, p, bins=bins)``
+    exactly instead of merely agreeing with it. The event rate and
+    prediction density are then Nadaraya-Watson kernel estimates at that one
+    fixed ``sigma_star`` — ``rate = K*bincount(w*y) / K*bincount(w)`` on the
+    lattice, interpolated onto ``grid_logit`` — using the same truncated
+    Gaussian kernel ``smooth_ece`` used to reach ``sigma_star``
+    (``metrics.smooth._lattice_kernel_smooth``). When ``smooth_ece``'s path
+    selection falls back to its exact (non-lattice) computation — degenerate
+    logit range, ``bins=None``, or an infeasible/under-resolved refinement —
+    the curve falls back the same way, to direct O(n * grid_size) Gaussian
+    smoothing on ``logit(p)`` at ``sigma_star``.
+
+    The confidence ribbon bootstraps ``(y, p, sample_weight)`` triples
+    (``numpy.random.default_rng(random_state)``, resampling with
+    replacement) and recomputes the rate at the point estimate's *fixed*
+    ``sigma_star`` — the ribbon conditions on the bandwidth, it does not
+    reflect uncertainty in choosing it. ``n_boot=0`` disables the ribbon
+    (``ci_low`` and ``ci_high`` both equal ``event_rate``).
+
+    Parameters
+    ----------
+    y, p : array_like
+        Outcomes and predicted probabilities.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+    grid_size : int, keyword-only
+        Number of evaluation points, spanning the 0.5th to 99.5th percentile
+        of ``p`` (``curves._grid``).
+    n_boot : int, keyword-only
+        Number of bootstrap resamples for the confidence ribbon; ``0``
+        disables it.
+    level : float, keyword-only
+        Nominal coverage level of the ribbon; must satisfy ``0 < level < 1``.
+    random_state : int, keyword-only
+        Seed for ``numpy.random.default_rng``, used by the bootstrap.
+    bins : int or None, keyword-only
+        Lattice bin count passed through to the shared smECE solve; see
+        ``metrics.smooth_ece``. ``None`` forces the exact path.
+
+    Returns
+    -------
+    KernelReliabilityCurve
+        Grid coordinates, kernel-smoothed event rate and density, the
+        bootstrap ribbon, and the shared ``sigma_star`` / ``smooth_ece``.
+
+    Raises
+    ------
+    ValueError
+        If ``level`` is not in ``(0, 1)``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal import make_pd_portfolio
+    >>> from probcal.curves import reliability_smooth
+    >>> d = make_pd_portfolio(n=2000, random_state=0)
+    >>> curve = reliability_smooth(d.y, d.scores, n_boot=0)
+    >>> len(curve.grid_p) == 200
+    True
+    >>> abs(float(curve.density.sum()) - 1.0) < 1e-10
+    True
+    """
+    if not (0.0 < level < 1.0):
+        raise ValueError("level must satisfy 0 < level < 1")
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    grid_p = _grid(p_arr, grid_size)
+    grid_logit = logit(grid_p)
+    t = logit(p_arr)
+    mass = (w / w.sum()) * (y_arr - p_arr)
+    smooth_ece_value, sigma_star, m, width, t_lo, b = _smece_solve(t, mass, bins)
+    lattice = None if m is None or b is None else (width, t_lo, b)
+
+    event_rate, density = _kernel_rate_density(t, y_arr, w, sigma_star, grid_logit, lattice)
+
+    if n_boot > 0:
+        rng = np.random.default_rng(random_state)
+        n = len(y_arr)
+        boot_rate = np.empty((n_boot, grid_size))
+        for i in range(n_boot):
+            idx_b = rng.integers(0, n, n)
+            # `lattice` is the point estimate's fixed (width, t_lo, b) — never
+            # rederived here. The ribbon is meant to reflect uncertainty in the
+            # rate given sigma_star, not uncertainty in sigma_star or its
+            # lattice; re-solving the smECE fixed point per resample would also
+            # make each resample's rate estimate use a different bandwidth and
+            # bin grid, so resamples would stop being comparable pointwise.
+            boot_rate[i], _ = _kernel_rate_density(
+                t[idx_b], y_arr[idx_b], w[idx_b], sigma_star, grid_logit, lattice
+            )
+        a = (1.0 - level) / 2.0
+        ci_low = np.minimum(np.quantile(boot_rate, a, axis=0), event_rate)
+        ci_high = np.maximum(np.quantile(boot_rate, 1.0 - a, axis=0), event_rate)
+    else:
+        ci_low = event_rate.copy()
+        ci_high = event_rate.copy()
+
+    return KernelReliabilityCurve(
+        grid_p=grid_p,
+        grid_logit=grid_logit,
+        event_rate=event_rate,
+        density=density,
+        ci_low=ci_low,
+        ci_high=ci_high,
+        sigma_star=sigma_star,
+        smooth_ece=smooth_ece_value,
+    )
+
+
+_BANDS = ("consistency", "confidence", None)
+
+
+def corp_reliability(
+    y: object,
+    p: object,
+    *,
+    sample_weight: object = None,
+    bands: str | None = "consistency",
+    level: float = 0.9,
+    n_resamples: int = 200,
+    random_state: int = 42,
+) -> CorpResult:
+    """CORP reliability diagram: PAV recalibration with the Brier/log-loss MCB-DSC-UNC decomposition
+
+    Fits the isotonic (PAV) recalibration map of ``y`` on ``p`` — the unique
+    "consistent, optimally binned, reproducible" reliability diagram of
+    Dimitriadis, Gneiting & Jordan (2021) — and decomposes both the Brier
+    score and log loss into miscalibration (MCB), discrimination (DSC), and
+    uncertainty (UNC) terms, with ``score == mcb - dsc + unc`` holding
+    exactly. Log loss clips PAV levels and predictions to
+    ``[1e-12, 1 - 1e-12]`` before taking logarithms, so degenerate blocks
+    (exact 0 or 1 event rate) stay finite.
+
+    Parameters
+    ----------
+    y, p : array_like
+        Outcomes and predicted probabilities.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+    bands : {"consistency", "confidence", None}, keyword-only
+        Band type to compute around the PAV fit. ``"consistency"`` resamples
+        ``y ~ Bernoulli(p)`` under the null that ``p`` is calibrated;
+        ``"confidence"`` bootstraps ``(y, p, sample_weight)`` triples. Both
+        give pointwise, not simultaneous, bands (see Notes).
+    level : float, keyword-only
+        Nominal coverage level of the bands; must satisfy ``0 < level < 1``.
+    n_resamples : int, keyword-only
+        Number of resamples used to build the bands.
+    random_state : int, keyword-only
+        Seed for ``numpy.random.default_rng``, used by the band resampling.
+
+    Returns
+    -------
+    CorpResult
+        PAV block structure, the pointwise fit, the Brier/log-loss
+        decomposition, and the (possibly empty) bands.
+
+    Raises
+    ------
+    ValueError
+        If ``bands`` is not one of ``"consistency"``, ``"confidence"``, or
+        ``None``, or if ``level`` is not in ``(0, 1)``.
+
+    Notes
+    -----
+    Bands are pointwise: at each grid point, ``level`` of resamples fall
+    inside, not that the whole curve does so simultaneously (the
+    ``docs/scripts/corp_sim.py`` coverage simulation reports the gap between
+    pointwise and uniform coverage). ``corp_reliability`` with
+    ``n=10_000, n_resamples=200`` takes about 3.5 s (measured once on the
+    development machine) — the PAV step is a Python loop over unique scores
+    (``_math.pava``), and the bands refit PAV ``n_resamples`` times.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal import corp_reliability
+    >>> rng = np.random.default_rng(0)
+    >>> p = rng.uniform(0.1, 0.9, 200)
+    >>> y = (rng.random(200) < p).astype(float)
+    >>> r = corp_reliability(y, p, bands=None)
+    >>> abs(r.brier - (r.brier_mcb - r.brier_dsc + r.brier_unc)) < 1e-12
+    True
+    """
+    if bands not in _BANDS:
+        raise ValueError('bands must be "consistency", "confidence", or None')
+    if not (0.0 < level < 1.0):
+        raise ValueError("level must satisfy 0 < level < 1")
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    lo, hi, level_b, w_b, pav = corp_fit(y_arr, p_arr, w)
+    b = decompose(y_arr, p_arr, pav, w, "brier")
+    ll = decompose(y_arr, p_arr, pav, w, "log_loss")
+    grid, low, high = corp_bands(y_arr, p_arr, w, bands, level, n_resamples, random_state)
+    return CorpResult(
+        block_lo=lo,
+        block_hi=hi,
+        block_level=level_b,
+        block_weight=w_b,
+        pav=pav,
+        brier=b[0],
+        brier_mcb=b[1],
+        brier_dsc=b[2],
+        brier_unc=b[3],
+        log_loss=ll[0],
+        log_loss_mcb=ll[1],
+        log_loss_dsc=ll[2],
+        log_loss_unc=ll[3],
+        bands=bands,
+        level=level,
+        band_grid=grid,
+        band_low=low,
+        band_high=high,
+        n=int(len(y_arr)),
+        events=int(y_arr.sum()),
     )
 
 

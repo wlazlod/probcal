@@ -1,15 +1,20 @@
 """Tests for probcal.metrics.smooth."""
 
+import math
+
 import numpy as np
 import pytest
 
+import probcal.metrics.smooth as _smooth_mod
 from probcal._math import expit, logit
 from probcal.datasets import make_pd_portfolio
+from probcal.metrics.scores import _prep
 from probcal.metrics.smooth import (
     _ici_distances,
     _smece_at_sigma,
     _smece_at_sigma_lattice,
     _smece_fixed_point,
+    _smece_fixed_point_lattice,
     e50,
     e90,
     ecce,
@@ -212,3 +217,90 @@ def test_smece_lattice_evaluator_beats_257_grid_accuracy() -> None:
     lattice_value = _smece_at_sigma_lattice(m, width, sigma_star)
 
     assert abs(lattice_value - ref) <= abs(grid_value - ref)
+
+
+def _old_smooth_ece(
+    y: object, p: object, *, sample_weight: object = None, bins: int | None = 8192
+) -> float:
+    """Verbatim copy of ``smooth_ece``'s body before the Task V3a lattice
+    refactor (which factored ``_lattice``/``_smece_solve`` out of it), kept
+    here to pin bit-identical behavior across the refactor.
+    """
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    t = logit(p_arr)
+    mass = (w / w.sum()) * (y_arr - p_arr)
+    t_lo, t_hi = float(t.min()), float(t.max())
+    if bins is None or t_hi == t_lo:
+        return _smece_fixed_point(t, mass)[0]
+
+    def _binned_solve(b: int) -> tuple[float, float, float]:
+        width = (t_hi - t_lo) / b
+        idx = np.clip(((t - t_lo) / width).astype(np.int64), 0, b - 1)
+        m = np.bincount(idx, weights=mass, minlength=b)
+        value, sigma = _smece_fixed_point_lattice(m, width)
+        return value, sigma, width
+
+    value, sigma, width = _binned_solve(bins)
+    if sigma >= 8.0 * width:
+        return value
+    b2 = math.ceil((t_hi - t_lo) / (sigma / 8.0))
+    if b2 > _smooth_mod._SMECE_MAX_BINS:  # read live so monkeypatches apply here too
+        return _smece_fixed_point(t, mass)[0]
+    value, sigma, width = _binned_solve(b2)
+    if sigma >= 8.0 * width:
+        return value
+    return _smece_fixed_point(t, mass)[0]
+
+
+def test_smooth_ece_refactor_bit_identical_to_old_impl() -> None:
+    # Task V3a factored a shared _lattice/_smece_solve helper out of
+    # smooth_ece for reuse by curves.reliability_smooth. Every branch of the
+    # old inline implementation must still produce bit-identical output.
+    d = make_pd_portfolio(n=4000, random_state=21)
+    w = np.random.default_rng(21).uniform(0.5, 2.0, len(d.y))
+
+    assert smooth_ece(d.y, d.scores) == _old_smooth_ece(d.y, d.scores)
+    assert smooth_ece(d.y, d.scores, bins=None) == _old_smooth_ece(d.y, d.scores, bins=None)
+    assert smooth_ece(d.y, d.scores, bins=1024) == _old_smooth_ece(d.y, d.scores, bins=1024)
+    assert smooth_ece(d.y, d.scores, sample_weight=w) == _old_smooth_ece(
+        d.y, d.scores, sample_weight=w
+    )
+
+    # Degenerate logit range: t.max() == t.min().
+    y_deg = np.array([0.0, 1.0, 0.0, 1.0])
+    p_deg = np.full(4, 0.5)
+    assert smooth_ece(y_deg, p_deg) == _old_smooth_ece(y_deg, p_deg)
+
+    # Small-n wide clipped-logit range: engages the adaptive refinement.
+    rng = np.random.default_rng(5)
+    n = 50
+    p_wide = rng.uniform(0.4, 0.6, n)
+    p_wide[:3] = 1e-12
+    y_wide = (rng.uniform(size=n) < p_wide).astype(float)
+    assert smooth_ece(y_wide, p_wide) == _old_smooth_ece(y_wide, p_wide)
+
+
+def test_smooth_ece_refactor_bit_identical_on_infeasible_refinement_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import probcal.metrics.smooth as smooth_mod
+
+    monkeypatch.setattr(smooth_mod, "_SMECE_MAX_BINS", 1024)
+    rng = np.random.default_rng(3)
+    n = 4000
+    p = rng.uniform(0.45, 0.55, n)
+    p[:5] = 1e-12
+    y = (rng.uniform(size=n) < p).astype(float)
+    assert smooth_ece(y, p, bins=64) == _old_smooth_ece(y, p, bins=64)
+
+
+def test_smooth_ece_refactor_bit_identical_on_under_resolved_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import probcal.metrics.smooth as smooth_mod
+
+    monkeypatch.setattr(
+        smooth_mod, "_smece_fixed_point_lattice", lambda m, width: (4.0 * width, 4.0 * width)
+    )
+    d = make_pd_portfolio(n=2000, random_state=22)
+    assert smooth_ece(d.y, d.scores) == _old_smooth_ece(d.y, d.scores)

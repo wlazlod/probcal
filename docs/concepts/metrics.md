@@ -57,7 +57,33 @@ calibration–sharpness trade visible in two numbers. It inherits every bias of 
 the plug-in reliability term is biased upward and resolution downward, exactly the effect
 Bröcker (2009) formalized and Ferro and Fricker (2012) corrected. probcal implements the
 corrected variant alongside the naive one and documents the binning dependence rather than
-hiding it. The analogous **calibration–refinement split of the log loss** replaces squared
+hiding it.
+
+**The Murphy diagram.** `murphy_curve` computes a complementary, binning-free view of the
+same Brier score: the elementary score of the "act if \( p > \theta \)" decision rule,
+
+\[
+S_\theta(p, y) = \theta \cdot \mathbb{1}\{p > \theta,\, y = 0\} + (1 - \theta) \cdot
+\mathbb{1}\{p \le \theta,\, y = 1\},
+\]
+
+whose weighted mean over \( \theta \in [0, 1] \) traces the diagram; doubling its integral
+recovers the Brier score exactly (Ehm, Gneiting, Jordan and Krüger, 2016), since a single
+observation's continuous integral is \( p^2/2 \) (\( y = 0 \)) or \( (1-p)^2/2 \)
+(\( y = 1 \)) — exactly half the Brier contribution. Plotting \( S_\theta(A) - S_\theta(B) \)
+for two forecasts (`plots.plot_murphy(..., diff=True)`) shows *where* along the decision
+spectrum one beats the other, rather than collapsing the comparison to a single Brier
+difference that a cancellation across thresholds can mask. `murphy_curve` defaults
+`thresholds=513` (`numpy.linspace(0, 1, 513)`, the package's dense-grid convention), evaluated
+in \( O(n \log n + T \log n) \) by sorting \( p \) once; the discrete identity converges to the
+exact one at rate roughly \( 1/n \) — \( S_\theta \) is piecewise linear between consecutive
+unique \( p \) values but jumps exactly there, so a trapezoid over the default grid recovers
+Brier to about \( 10^{-3} \) on typical portfolios, tightening as \( n \) grows. Isotonic (PAV)
+recalibration never increases \( S_\theta \) at any threshold, so a raw forecast plotted
+against its own PAV fit diagnoses the value of recalibration pointwise across the whole
+decision range instead of in one scalar.
+
+The analogous **calibration–refinement split of the log loss** replaces squared
 gaps with Kullback–Leibler terms: with \( c(p) = \Pr(Y=1 \mid \hat p = p) \) estimated by a
 recalibration curve, calibration is the mean divergence between \( \mathrm{Bernoulli}(c(p)) \)
 and \( \mathrm{Bernoulli}(p) \), refinement the mean entropy of \( \mathrm{Bernoulli}(c(p)) \).
@@ -415,6 +441,7 @@ pass a `metrics=` subset, or both; `docs/scripts/benchmarks.py` measures wall ti
 - Bröcker, J. (2009). "Reliability, sufficiency, and the decomposition of proper scores." *Quarterly Journal of the Royal Meteorological Society* 135(643), 1512–1519.
 - Cox, D. R. (1958). "Two further applications of a model for binary regression." *Biometrika* 45, 562–565.
 - ECB (2019). *Instructions for reporting the validation results of internal models — IRB Pillar I models for credit risk.* European Central Bank Banking Supervision, February 2019.
+- Ehm, W., Gneiting, T., Jordan, A., Krüger, F. (2016). "Of quantiles and expectiles: consistent scoring functions, Choquet representations and forecast rankings." *Journal of the Royal Statistical Society: Series B* 78(3), 505–562.
 - Ferro, C. A. T., Fricker, T. E. (2012). "A bias-corrected decomposition of the Brier score." *Quarterly Journal of the Royal Meteorological Society* 138(668), 1954–1960.
 - Gretton, A., Borgwardt, K. M., Rasch, M. J., Schölkopf, B., Smola, A. (2012). "A Kernel Two-Sample Test." *Journal of Machine Learning Research* 13, 723–773.
 - Hosmer, D. W., Lemeshow, S. (1980). "Goodness of fit tests for the multiple logistic regression model." *Communications in Statistics — Theory and Methods* 9(10), 1043–1069.

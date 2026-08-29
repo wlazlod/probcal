@@ -14,70 +14,153 @@ from typing import Any
 import numpy as np
 
 from ._math import logit
-from ._results import BeltResult, ReliabilityCurve, SelectionReport, SmoothReliabilityCurve
+
+# _HAS_MPL, _RUG_MAX, _TICK_PROBS: unused directly here, re-exported so
+# `probcal.plots._STYLE`-style attribute access keeps working post-split.
+from ._plots_common import (
+    _AMBER,
+    _BLUE,
+    _BOX,
+    _GREEN,
+    _GREY,
+    _HAS_MPL,  # noqa: F401
+    _ORANGE,
+    _RED,
+    _RUG_MAX,  # noqa: F401
+    _STYLE,
+    _TICK_PROBS,  # noqa: F401
+    _logit_axis,
+    _plt,
+    _require_mpl,
+    _rug_subsample,
+)
+from ._results import (
+    BeltResult,
+    KernelReliabilityCurve,
+    MetricReport,
+    ReliabilityCurve,
+    SelectionReport,
+    SmoothReliabilityCurve,
+)
 from .curves import EcceCurve
-from .metrics import reliability_summary
+from .metrics import brier_score, reliability_summary, smooth_ece
 
-try:
-    import matplotlib.pyplot as _plt
-
-    _HAS_MPL = True
-except ImportError:  # pragma: no cover - exercised only without the extra
-    _plt = None  # type: ignore[assignment]
-    _HAS_MPL = False
-
-_TICK_PROBS = (0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 0.5, 0.7, 0.9, 0.97, 0.99)
-
-_STYLE: Any = {
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.grid": True,
-    "grid.alpha": 0.25,
-    "grid.linewidth": 0.6,
-    "font.size": 10.5,
-    "axes.titlesize": 12,
-    "axes.titleweight": "bold",
-    "figure.facecolor": "white",
-}
-_BLUE, _ORANGE = "#2f5f8a", "#d97b29"  # primary data; smooth overlays
-_GREEN, _RED = "#3a8a4d", "#b23a3a"  # pass/chosen/after; fail/events/before
-_AMBER, _GREY = "#d9a521", "#9a9a9a"  # warnings; identity/reference lines
-_BOX = {"boxstyle": "round", "fc": "#f7f7f5", "ec": "#cccccc"}
-_RUG_MAX = 1000
+# Names shown, in order, by `stats=<MetricReport>` when present in the report.
+_STATS_REPORT_NAMES = ("intercept", "slope", "ici", "smooth_ece", "brier")
 
 
-def _require_mpl() -> None:
-    if not _HAS_MPL:
-        raise ImportError(
-            "matplotlib is required for probcal.plots — install the viz extra: "
-            "pip install probcal[viz]"
+_SPLIT_BINS = 30
+_SPLIT_BASELINE = 0.12
+
+
+def _draw_kernel_curve(ax: Any, curve: KernelReliabilityCurve, scale: str) -> None:
+    """Render a ``KernelReliabilityCurve``: a density-weighted line
+    (``LineCollection``, wide where predictions are dense), the
+    miscalibration area between the curve and the identity, the bootstrap
+    ribbon, and the ``smECE`` readout.
+
+    Points whose event rate is exactly 0 or 1 have no finite logit and are
+    dropped on ``scale="logit"`` (mirrors the binned-point layer above).
+    """
+    from matplotlib.collections import LineCollection
+
+    if scale == "logit":
+        keep = (curve.event_rate > 0.0) & (curve.event_rate < 1.0)
+        grid = curve.grid_logit[keep]
+        rate = logit(curve.event_rate[keep])
+        ci_low = logit(curve.ci_low[keep])
+        ci_high = logit(curve.ci_high[keep])
+        density = curve.density[keep]
+    else:
+        grid = curve.grid_p
+        rate = curve.event_rate
+        ci_low = curve.ci_low
+        ci_high = curve.ci_high
+        density = curve.density
+
+    points = np.column_stack([grid, rate])
+    segments = np.stack([points[:-1], points[1:]], axis=1)
+    linewidths = 0.5 + 4.0 * density[:-1] / density.max()
+    lc = LineCollection(list(segments), linewidths=linewidths, colors=_ORANGE, label="smoothed")
+    ax.add_collection(lc)
+    ax.fill_between(grid, grid, rate, alpha=0.12, color=_ORANGE)
+    ax.fill_between(grid, ci_low, ci_high, alpha=0.15, color=_ORANGE)
+    ax.text(
+        0.97,
+        0.03,
+        f"smECE = {curve.smooth_ece:.4f}",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=9,
+    )
+
+
+def _draw_split_risk_dist(ax: Any, y_arr: np.ndarray, p_arr: np.ndarray, scale: str) -> None:
+    """Spike-histogram risk distribution, replacing the rug: 30 equal-mass
+    bins of ``p``, events up / non-events down from a ``y=0.12`` baseline in
+    axis-fraction coordinates (axis coords cannot go below 0), heights
+    scaled so whichever class peaks higher reaches the full 0.12.
+    """
+    edges = np.unique(np.quantile(p_arr, np.linspace(0.0, 1.0, _SPLIT_BINS + 1)))
+    if len(edges) < 2:
+        return
+    n_bins = len(edges) - 1
+    idx = np.clip(np.searchsorted(edges, p_arr, side="right") - 1, 0, n_bins - 1)
+    ev_counts = np.bincount(idx[y_arr == 1.0], minlength=n_bins).astype(np.float64)
+    ne_counts = np.bincount(idx[y_arr == 0.0], minlength=n_bins).astype(np.float64)
+    peak = max(float(ev_counts.max()), float(ne_counts.max()), 1.0)
+    ev_heights = ev_counts / peak * _SPLIT_BASELINE
+    ne_heights = ne_counts / peak * _SPLIT_BASELINE
+
+    x_edges = logit(edges) if scale == "logit" else edges
+    widths = np.diff(x_edges)
+    tf = ax.get_xaxis_transform()
+    ax.bar(
+        x_edges[:-1], ev_heights, width=widths, align="edge",
+        bottom=_SPLIT_BASELINE, transform=tf, color=_RED, alpha=0.35, linewidth=0,
+    )  # fmt: skip
+    ax.bar(
+        x_edges[:-1], -ne_heights, width=widths, align="edge",
+        bottom=_SPLIT_BASELINE, transform=tf, color=_GREY, alpha=0.35, linewidth=0,
+    )  # fmt: skip
+
+
+def _stats_box_text(stats: bool | MetricReport, y_arr: np.ndarray, p_arr: np.ndarray) -> str:
+    """Build the ``stats`` box text: fixed n/events/intercept/slope/ICI/smECE/Brier
+    for ``stats=True``, or ``name = value [ci_low, ci_high]`` for the
+    ``_STATS_REPORT_NAMES`` present in a given ``MetricReport`` (plus n/events
+    from ``y``).
+    """
+    if not isinstance(stats, MetricReport):
+        s = reliability_summary(y_arr, p_arr)
+        sece = smooth_ece(y_arr, p_arr)
+        brier = brier_score(y_arr, p_arr)
+        return (
+            f"n = {s.n:,}\n"
+            f"events = {s.events:,}\n"
+            f"intercept = {s.intercept:+.3f}\n"
+            f"slope = {s.slope:.3f}\n"
+            f"ICI = {s.ici:.3f}\n"
+            f"smECE = {sece:.3f}\n"
+            f"Brier = {brier:.3f}"
         )
-
-
-def _logit_axis(ax: Any, axis: str = "both") -> None:
-    """Label logit-positioned ticks in probabilities."""
-    ticks = logit(np.array(_TICK_PROBS))
-    labels = [f"{q:g}" for q in _TICK_PROBS]
-    if axis in ("x", "both"):
-        ax.set_xticks(ticks)
-        ax.set_xticklabels(labels)
-    if axis in ("y", "both"):
-        ax.set_yticks(ticks)
-        ax.set_yticklabels(labels)
-
-
-def _rug_subsample(values: np.ndarray) -> np.ndarray:
-    """Deterministic thinning: sort, then take an evenly strided subset (no RNG)."""
-    v = np.sort(values)
-    if len(v) > _RUG_MAX:
-        v = v[:: math.ceil(len(v) / _RUG_MAX)]
-    return v
+    lines = [f"n = {len(y_arr):,}", f"events = {int(y_arr.sum()):,}"]
+    present = set(stats.names)
+    for name in _STATS_REPORT_NAMES:
+        if name not in present:
+            continue
+        i = stats.names.index(name)
+        lines.append(
+            f"{name} = {stats.values[i]:.3f} [{stats.ci_low[i]:.3f}, {stats.ci_high[i]:.3f}]"
+        )
+    return "\n".join(lines)
 
 
 def plot_reliability(
     curve: ReliabilityCurve,
     *,
-    smooth: SmoothReliabilityCurve | None = None,
+    smooth: SmoothReliabilityCurve | KernelReliabilityCurve | None = None,
     scale: str = "probability",
     y: object = None,
     p: object = None,
@@ -85,54 +168,108 @@ def plot_reliability(
     rug: bool = True,
     counts: bool = False,
     ax: Any = None,
+    stats: bool | MetricReport = False,
+    risk_dist: str | None = "rug",
 ) -> Any:
     """Annotated reliability diagram.
 
     Binned points with Wilson CIs, optional smooth overlay, stats box, and
-    event/non-event rug.
+    event/non-event risk distribution.
 
     ``scale="logit"`` stretches the low-probability region — the recommended
     view for PD portfolios. Bins whose event rate is exactly 0 or 1 have no
     finite logit and are omitted from the logit-scale point layer; they remain
-    visible in the rug (or the ``counts=True`` margin).
+    visible in the risk distribution (or the ``counts=True`` margin).
 
-    Passing the raw ``y``/``p`` enables the stats box (``annotate=True``,
-    computed by :func:`probcal.metrics.reliability_summary`) and the rug
-    (``rug=True``, events along the top edge, non-events along the bottom,
-    deterministically thinned to at most 1000 marks per class). Both are
-    silently skipped when ``y``/``p`` are absent. ``counts=True`` restores the
-    twin-axis count-bar margin.
+    Passing a :class:`probcal.curves.KernelReliabilityCurve` (from
+    :func:`probcal.curves.reliability_smooth`) as ``smooth`` renders the
+    density-weighted variable-width curve instead of a plain line: a
+    ``LineCollection`` whose width tracks the local prediction density (one
+    width per segment, ``density[:-1]`` — the density at the *left* endpoint
+    of each ``[grid[i], grid[i+1]]`` segment, since a ``LineCollection`` of
+    ``len(grid) - 1`` segments needs exactly that many widths), the shaded
+    miscalibration area between the curve and the identity, the bootstrap
+    ribbon, and an ``smECE = ...`` readout in the bottom-right corner.
+
+    Passing the raw ``y``/``p`` enables the stats box and the risk
+    distribution; both are silently skipped when ``y``/``p`` are absent.
+    ``annotate=True`` (default) draws the classic stats box, computed by
+    :func:`probcal.metrics.reliability_summary`. ``stats=True`` replaces it
+    with a box reporting ``n, events, intercept, slope, ICI, smECE, Brier``
+    instead (``annotate`` is then ignored); ``stats=<MetricReport>`` instead
+    reports ``name = value [ci_low, ci_high]`` for whichever of
+    ``{"intercept", "slope", "ici", "smooth_ece", "brier"}`` the report
+    carries, plus ``n``/``events`` computed from ``y``.
+
+    ``risk_dist`` selects the density layer: ``"rug"`` (default) draws the
+    0.2.0 event/non-event tick marks along the top/bottom edges,
+    deterministically thinned to at most 1000 marks per class; ``"split"``
+    replaces it with a 30-equal-mass-bin spike histogram of ``p`` (events
+    up, non-events down, from a ``y=0.12`` baseline in axis-fraction
+    coordinates, heights scaled so the taller class reaches the full 0.12 —
+    axis coordinates cannot go below 0, so both classes share the one
+    baseline); ``None`` draws no density layer. ``rug=False`` disables the
+    density layer regardless of ``risk_dist`` (equivalent to
+    ``risk_dist=None``). ``counts=True`` restores the twin-axis count-bar
+    margin, independent of ``risk_dist``.
 
     Parameters
     ----------
     curve : ReliabilityCurve
         Binned curve, e.g. from :func:`probcal.curves.reliability_binned`.
-    smooth : SmoothReliabilityCurve or None, keyword-only
+    smooth : SmoothReliabilityCurve, KernelReliabilityCurve, or None, keyword-only
         Optional smooth overlay, e.g. from
-        :func:`probcal.curves.reliability_loess`.
+        :func:`probcal.curves.reliability_loess` or
+        :func:`probcal.curves.reliability_smooth`.
     scale : {"probability", "logit"}, keyword-only
         Axis scale; ``"logit"`` stretches the low-probability region.
     y, p : array_like or None, keyword-only
         Raw outcomes and predictions; must be given together (or not at all).
-        Enables the stats box and rug.
+        Enables the stats box and risk distribution.
     annotate : bool, keyword-only
-        If ``True`` (default) and ``y``/``p`` are given, draw the stats box.
+        If ``True`` (default) and ``y``/``p`` are given, draw the classic
+        stats box; ignored when ``stats`` is truthy.
     rug : bool, keyword-only
-        If ``True`` (default) and ``y``/``p`` are given, draw the event/
-        non-event rug.
+        If ``True`` (default) and ``y``/``p`` are given, draw the density
+        layer selected by ``risk_dist``.
     counts : bool, keyword-only
         If ``True``, add a twin-axis bar strip of per-bin counts.
     ax : matplotlib.axes.Axes or None, keyword-only
         Axes to draw on; a new figure and axes are created if ``None``.
+    stats : bool or MetricReport, keyword-only
+        If truthy and ``y``/``p`` are given, draw the ``n, events,
+        intercept, slope, ICI, smECE, Brier`` stats box (``True``) or a
+        ``MetricReport``-driven box, replacing ``annotate``'s box.
+    risk_dist : {"rug", "split"} or None, keyword-only
+        Density-layer style; see above. Anything else raises ``ValueError``.
 
     Returns
     -------
     matplotlib.axes.Axes
         The axes the diagram was drawn on.
+
+    Raises
+    ------
+    ValueError
+        If ``y``/``p`` are not given together, or ``risk_dist`` is not one
+        of ``"rug"``, ``"split"``, ``None``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal.curves import reliability_binned
+    >>> from probcal.plots import plot_reliability
+    >>> rng = np.random.default_rng(0)
+    >>> p = rng.uniform(0.05, 0.5, 300)
+    >>> y = (rng.random(300) < p).astype(float)
+    >>> curve = reliability_binned(y, p, n_bins=10)
+    >>> ax = plot_reliability(curve, scale="logit", y=y, p=p)  # doctest: +SKIP
     """
     _require_mpl()
     if (y is None) != (p is None):
         raise ValueError("y and p must be given together")
+    if risk_dist not in ("rug", "split", None):
+        raise ValueError('risk_dist must be one of "rug", "split", None')
     with _plt.rc_context(_STYLE):
         if ax is None:
             _, ax = _plt.subplots(figsize=(6.5, 6))
@@ -152,7 +289,9 @@ def plot_reliability(
                 color=_BLUE,
                 label="binned",
             )
-            if smooth is not None:
+            if isinstance(smooth, KernelReliabilityCurve):
+                _draw_kernel_curve(ax, smooth, "logit")
+            elif smooth is not None:
                 ax.plot(
                     smooth.grid_logit, logit(smooth.event_rate), lw=1.5, c=_ORANGE, label="smoothed"
                 )
@@ -171,7 +310,9 @@ def plot_reliability(
                 color=_BLUE,
                 label="binned",
             )
-            if smooth is not None:
+            if isinstance(smooth, KernelReliabilityCurve):
+                _draw_kernel_curve(ax, smooth, "probability")
+            elif smooth is not None:
                 ax.plot(smooth.grid_p, smooth.event_rate, lw=1.5, c=_ORANGE, label="smoothed")
             ax.set_xlabel("predicted probability")
             ax.set_ylabel("event rate")
@@ -180,7 +321,8 @@ def plot_reliability(
         if y is not None and p is not None:
             y_arr = np.asarray(y, dtype=np.float64)
             p_arr = np.asarray(p, dtype=np.float64)
-            if rug:
+            show_density = rug and risk_dist is not None
+            if show_density and risk_dist == "rug":
                 ev = _rug_subsample(p_arr[y_arr == 1.0])
                 ne = _rug_subsample(p_arr[y_arr == 0.0])
                 if scale == "logit":
@@ -194,7 +336,13 @@ def plot_reliability(
                     ne, np.full(len(ne), 0.01), transform=tf,
                     ls="none", marker="|", ms=7, c="#777777", alpha=0.18,
                 )  # fmt: skip
-            if annotate:
+            elif show_density and risk_dist == "split":
+                _draw_split_risk_dist(ax, y_arr, p_arr, scale)
+            if stats:
+                txt = _stats_box_text(stats, y_arr, p_arr)
+                ax.text(0.03, 0.97, txt, transform=ax.transAxes, va="top", fontsize=9, bbox=_BOX)
+                boxed = True
+            elif annotate:
                 s = reliability_summary(y_arr, p_arr)
                 txt = (
                     f"n = {s.n:,}\n"
@@ -635,3 +783,22 @@ def plot_e_process(report: Any, *, ax: Any = None) -> Any:
         ax.set_title("anytime-valid calibration monitoring")
         ax.legend(loc="upper left", fontsize=9)
         return ax
+
+
+from ._plots_diag import plot_attributes, plot_corp, plot_mcb_dsc, plot_murphy  # noqa: E402
+
+__all__ = [
+    "plot_reliability",
+    "plot_belt",
+    "plot_comparison",
+    "plot_interval",
+    "plot_selection",
+    "plot_ecce",
+    "plot_grade_backtest",
+    "plot_offset_audit",
+    "plot_e_process",
+    "plot_corp",
+    "plot_mcb_dsc",
+    "plot_attributes",
+    "plot_murphy",
+]

@@ -2,7 +2,7 @@
 
 probcal meets sklearn at three depths, from lightest to heaviest:
 
-1. **Bare duck.** On sklearn >= 1.6, a plain probcal calibrator satisfies
+1. **Bare duck.** On sklearn ≥ 1.6, a plain probcal calibrator satisfies
    sklearn's estimator protocol directly — no import from `probcal.sklearn`
    at all.
 2. **`SklearnCalibrator`.** You need the `(n, 2)`/`classes_` probability-matrix
@@ -10,7 +10,7 @@ probcal meets sklearn at three depths, from lightest to heaviest:
 3. **`CalibratedClassifier`.** You want the whole out-of-fold calibration
    protocol as one auditable object.
 
-`probcal.sklearn` (extra: `pip install "probcal[sklearn]"`, scikit-learn >= 1.4)
+`probcal.sklearn` (extra: `pip install "probcal[sklearn]"`, scikit-learn ≥ 1.4)
 holds tiers 2 and 3. Neither is imported by `import probcal` — the core
 stays numpy-only regardless of which tier you use.
 
@@ -25,11 +25,11 @@ calibrator's `predict_proba` returns `(n,)` because there is only one class's
 probability to report. `SklearnCalibrator` and `CalibratedClassifier` exist
 to translate that convention where something in the ecosystem — `Pipeline`,
 `VotingClassifier`, `GridSearchCV` scoring on `"neg_log_loss"` — actually
-requires it. Bare duckness targets **sklearn >= 1.6** (the versions that
+requires it. Bare duckness targets **sklearn ≥ 1.6** (the versions that
 define the `__sklearn_is_fitted__`/`__sklearn_tags__` protocol); on older
 sklearn, use the adapter.
 
-## Tier 1 — bare duck (sklearn >= 1.6)
+## Tier 1 — bare duck (sklearn ≥ 1.6)
 
 No `probcal.sklearn` import. A bare calibrator clones, reports its tags,
 passes `check_is_fitted`, and scores under `cross_val_score` with a scorer
@@ -38,6 +38,12 @@ that calls its native 1-D `predict_proba`:
 ```python
 --8<-- "tests/test_sklearn_guide_snippets.py:bare_duck"
 ```
+
+`s.reshape(-1, 1)` works because the core accepts a single-column `(n, 1)`
+score array everywhere it accepts `(n,)`, ravelling it before any check —
+sklearn's CV plumbing always hands an estimator a 2-D `X`, and this leniency
+is what lets a bare calibrator sit directly in `cross_val_score` with no
+reshaping on the calibrator's side.
 
 This is genuinely useful whenever the surrounding code only calls methods
 and never asks for a `(n, 2)` matrix or `classes_` — a custom CV loop, a
@@ -49,15 +55,18 @@ calibrator as "an object with `fit`/`predict_proba`" rather than
 
 `SklearnCalibrator` is *score-level*: its `X` is the score itself, one column
 (`(n,)` or `(n, 1)`; more columns raise). Use it wherever sklearn expects an
-estimator, or let `transform` end a `Pipeline`. A `FunctionTransformer` ahead
-of it selects the score column out of a wider feature table:
+estimator, or let `transform` end a `Pipeline` — `transform` returns the
+calibrated-probability column, `(n, 1)`, where `predict_proba` returns the
+full `(n, 2)` matrix. A `FunctionTransformer` ahead of it selects the score
+column out of a wider feature table:
 
 ```python
 --8<-- "tests/test_sklearn_guide_snippets.py:sklearn_calibrator_pipeline"
 ```
 
-`est.calibrator_` is the full probcal audit surface — `interpret()`,
-`interval_inverse`, `to_json()` — one attribute away from the sklearn object.
+`pipe.named_steps["cal"].calibrator_` is the full probcal audit surface —
+`interpret()`, `interval_inverse`, `to_json()` — one attribute away from the
+sklearn object.
 
 Score columns on the margin scale are declared, not guessed:
 `SklearnCalibrator(input="logit")` maps them through `expit` exactly first.
@@ -94,23 +103,18 @@ calibrator.
 ### Grid search over the calibration map
 
 The probcal calibrator is a nested estimator, so its parameters are
-grid-searchable:
+grid-searchable — `calibrator=BetaCalibrator()` (or any instance) must be
+given explicitly, since the default `calibrator=None` has no `variant` to
+set:
 
 ```python
-from sklearn.model_selection import GridSearchCV
-
-gs = GridSearchCV(
-    CalibratedClassifier(model, calibrator=BetaCalibrator()),
-    {"calibrator__variant": ["a", "ab", "abm"]},
-    scoring="neg_log_loss",
-    cv=5,
-).fit(X, y)
+--8<-- "tests/test_sklearn_guide_snippets.py:grid_search_calibrator"
 ```
 
 ## The prefit recipe: calibrating an already-fitted model
 
 Sometimes the model is already trained and you only have a held-out
-calibration set. On sklearn >= 1.6, `sklearn.frozen.FrozenEstimator` wraps a
+calibration set. On sklearn ≥ 1.6, `sklearn.frozen.FrozenEstimator` wraps a
 fitted estimator so `clone`-based tools (`CalibratedClassifierCV`, a CV
 search) leave it untouched instead of refitting it:
 
@@ -121,7 +125,7 @@ search) leave it untouched instead of refitting it:
 That is sklearn's own meta-estimator route, and it is a fine default. The
 primitives-first alternative composes `FrozenEstimator` with the bare
 `SklearnCalibrator` — the same idea with no meta-estimator in between, in
-four lines:
+three lines:
 
 ```python
 --8<-- "tests/test_sklearn_guide_snippets.py:prefit_frozen_sklearn_calibrator"
@@ -152,30 +156,15 @@ the full-data refit whenever the base estimator's `fit` takes a
 **Routing on.** Every consumer must ask for the metadata, ours included:
 
 ```python
-import sklearn
-from sklearn.pipeline import Pipeline
-from probcal.sklearn import SklearnCalibrator
-
-with sklearn.config_context(enable_metadata_routing=True):
-    pipe = Pipeline(
-        [("cal", SklearnCalibrator().set_fit_request(sample_weight=True))]
-    )
-    pipe.fit(scores.reshape(-1, 1), y, sample_weight=w)
+--8<-- "tests/test_sklearn_guide_snippets.py:routing_pipeline_sample_weight"
 ```
 
 Inside a search, the base estimator declares its own request and the wrapper
-declares one per method the search calls:
+declares one per method the search calls — again, `calibrator=BetaCalibrator()`
+is required since the grid searches `calibrator__variant`:
 
 ```python
-with sklearn.config_context(enable_metadata_routing=True):
-    clf = CalibratedClassifier(
-        LogisticRegression().set_fit_request(sample_weight=True), cv=3
-    )
-    GridSearchCV(
-        clf.set_fit_request(sample_weight=True).set_score_request(sample_weight=True),
-        {"calibrator__variant": ["ab", "abm"]},
-        cv=3,
-    ).fit(X, y, sample_weight=w)
+--8<-- "tests/test_sklearn_guide_snippets.py:routing_grid_search_sample_weight"
 ```
 
 An undeclared request raises sklearn's `UnsetMetadataPassedError`; the adapter
@@ -189,8 +178,11 @@ weights — the calibration map is weighted, the scores it calibrates are not.
 Under routing, a router base (a `Pipeline`, say) counts as weight-capable: it
 takes weights through `**params`, and sklearn's routing has the final word.
 
-This behaviour is pinned by `tests/test_sklearn_routing.py`, verified on
-scikit-learn 1.4.2, 1.6.1 and 1.9.0.
+This behaviour is pinned by `tests/test_sklearn_routing.py`, which CI runs
+at 1.4.2 (`sklearn-min`) and at whatever resolves as latest (currently
+1.9.0); a local run additionally confirmed it identical on 1.6.1, the
+first version with the dunder-protocol tags this guide's bare-duck tier
+depends on.
 
 ## Against `CalibratedClassifierCV`
 

@@ -77,10 +77,14 @@ def test_sklearn_calibrator_pipeline() -> None:
         ]
     ).fit(X, y)
     pipe.predict_proba(X)  # (n, 2)
+    pipe.transform(X)  # (n, 1) calibrated column
     # --8<-- [end:sklearn_calibrator_pipeline]
     proba = pipe.predict_proba(X)
     assert proba.shape == (300, 2)
     assert np.allclose(proba.sum(axis=1), 1.0)
+    column = pipe.transform(X)
+    assert column.shape == (300, 1)
+    np.testing.assert_allclose(column[:, 0], proba[:, 1])
 
 
 def test_sklearn_calibrator_voting() -> None:
@@ -128,12 +132,12 @@ def test_calibrated_classifier() -> None:
 
     # probcal calibrator protocol, delegated to calibrator_:
     clf.interpret()
-    clf.calibrator_.to_json()
+    clf.to_json()
     clf.interval_inverse(0.0, 0.02, space="logit")
     # --8<-- [end:calibrated_classifier]
     proba = clf.predict_proba(X_new)
     assert proba.shape == (len(X_new), 2)
-    assert isinstance(clf.calibrator_.to_json(), str)
+    assert isinstance(clf.to_json(), str)
 
 
 def test_prefit_calibrated_classifier_cv() -> None:
@@ -169,7 +173,74 @@ def test_prefit_frozen_sklearn_calibrator() -> None:
 
     frozen = FrozenEstimator(model)  # a fitted estimator that clone()/fit() cannot touch
     cal = SklearnCalibrator().fit(frozen.predict_proba(X_calib)[:, [1]], y_calib)
-    # --8<-- [end:prefit_frozen_sklearn_calibrator]
     cal.predict_proba(frozen.predict_proba(X_new)[:, [1]])
+    # --8<-- [end:prefit_frozen_sklearn_calibrator]
     proba = cal.predict_proba(frozen.predict_proba(X_new)[:, [1]])
     assert proba.shape == (len(X_new), 2)
+
+
+def test_grid_search_calibrator_variant() -> None:
+    X, y = make_classification(n_samples=600, n_features=8, weights=[0.85, 0.15], random_state=6)
+    # --8<-- [start:grid_search_calibrator]
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import GridSearchCV
+
+    from probcal import BetaCalibrator
+    from probcal.sklearn import CalibratedClassifier
+
+    gs = GridSearchCV(
+        CalibratedClassifier(LogisticRegression(max_iter=200), calibrator=BetaCalibrator()),
+        {"calibrator__variant": ["a", "ab", "abm"]},
+        scoring="neg_log_loss",
+        cv=5,
+    ).fit(X, y)
+    # --8<-- [end:grid_search_calibrator]
+    assert gs.best_params_["calibrator__variant"] in ("a", "ab", "abm")
+
+
+def test_routing_pipeline_sample_weight() -> None:
+    import numpy as np
+
+    rng = np.random.default_rng(7)
+    scores = rng.uniform(0.05, 0.95, 300)
+    y = rng.binomial(1, scores).astype(float)
+    w = np.where(y == 1.0, 3.0, 1.0)
+    # --8<-- [start:routing_pipeline_sample_weight]
+    import sklearn
+    from sklearn.pipeline import Pipeline
+
+    from probcal.sklearn import SklearnCalibrator
+
+    with sklearn.config_context(enable_metadata_routing=True):
+        pipe = Pipeline([("cal", SklearnCalibrator().set_fit_request(sample_weight=True))])
+        pipe.fit(scores.reshape(-1, 1), y, sample_weight=w)
+    # --8<-- [end:routing_pipeline_sample_weight]
+    assert pipe.named_steps["cal"].calibrator_.fitted_ is True
+
+
+def test_routing_grid_search_sample_weight() -> None:
+    X, y = make_classification(n_samples=600, n_features=8, weights=[0.85, 0.15], random_state=8)
+    import numpy as np
+
+    w = np.where(y == 1, 3.0, 1.0)
+    # --8<-- [start:routing_grid_search_sample_weight]
+    import sklearn
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import GridSearchCV
+
+    from probcal import BetaCalibrator
+    from probcal.sklearn import CalibratedClassifier
+
+    with sklearn.config_context(enable_metadata_routing=True):
+        clf = CalibratedClassifier(
+            LogisticRegression().set_fit_request(sample_weight=True),
+            calibrator=BetaCalibrator(),
+            cv=3,
+        )
+        gs = GridSearchCV(
+            clf.set_fit_request(sample_weight=True).set_score_request(sample_weight=True),
+            {"calibrator__variant": ["ab", "abm"]},
+            cv=3,
+        ).fit(X, y, sample_weight=w)
+    # --8<-- [end:routing_grid_search_sample_weight]
+    assert gs.best_params_["calibrator__variant"] in ("ab", "abm")

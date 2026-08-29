@@ -1,16 +1,17 @@
 """Calibration metrics and statistical tests (flat re-exports).
 
-`evaluate` lives here because it aggregates across every submodule
-(DECISIONS entry). Selection guidance — what may be optimized and what is
+`evaluate` lives here because it aggregates across every submodule.
+Selection guidance — what may be optimized and what is
 report-only — is the table in ``docs/concepts/metrics.md``.
 """
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import cast, overload
 
 import numpy as np
 
-from .._results import MetricReport
+from .._results import GroupedMetricReport, MetricReport
 from .binned import (
     HosmerLemeshowResult,
     adaptive_ece,
@@ -71,6 +72,7 @@ __all__ = [
     "BinomialGradeResult",
     "CalibrationTestResult",
     "EcceResult",
+    "GroupedMetricReport",
     "GuardrailReport",
     "HlEResult",
     "HosmerLemeshowResult",
@@ -139,29 +141,84 @@ _METRIC_CATALOG: tuple[str, ...] = (
 )
 
 
+def _binned_presorted(
+    y: np.ndarray, p: np.ndarray, w: np.ndarray | None, sel: set[str]
+) -> dict[str, float]:
+    """The binned family over ``p``-ascending arrays, sharing one binning pass.
+
+    ``ece``/``ece_debiased``/``mce`` all bin at ``n_bins=15, strategy="mass"``,
+    so one :func:`~probcal.metrics.binned._bin_gaps` result serves all three
+    instead of three identical quantile-and-bincount passes; ``ece_sweep``'s
+    ~99-candidate monotonicity scan runs on cut positions rather than a rebuilt
+    length-n bin index, and still takes its returned value from the unchanged
+    ``ece`` call at the chosen bin count.
+    """
+    from .binned import (
+        _bin_gaps,
+        _ece_debiased_from_gaps,
+        _ece_from_gaps,
+        _ece_sweep_presorted,
+    )
+
+    out: dict[str, float] = {}
+    if not sel & {"ece", "ece_debiased", "mce", "ece_sweep"}:
+        return out
+    w_arr = np.ones(len(p)) if w is None else w
+    if sel & {"ece", "ece_debiased", "mce"}:
+        shares, gaps, rates, counts = _bin_gaps(y, p, w_arr, 15, "mass")
+        if "ece" in sel:
+            out["ece"] = _ece_from_gaps(shares, gaps, "l1")
+        if "ece_debiased" in sel:
+            out["ece_debiased"] = _ece_debiased_from_gaps(shares, gaps, rates, counts)
+        if "mce" in sel:
+            out["mce"] = _ece_from_gaps(shares, gaps, "max")
+    if "ece_sweep" in sel:
+        out["ece_sweep"] = _ece_sweep_presorted(y, p, w_arr)
+    return out
+
+
 def _point_metrics(
     y: np.ndarray,
     p: np.ndarray,
     w: np.ndarray | None,
     names: tuple[str, ...] | None = None,
+    *,
+    presorted: bool = False,
 ) -> dict[str, float]:
+    """Point estimates for ``names``; ``presorted`` is the bootstrap fast path.
+
+    ``presorted=True`` declares that ``p`` is already sorted ascending, which
+    lets every consumer that would sort internally skip doing so and lets the
+    binned family share one binning pass. It is only ever passed by
+    :func:`evaluate`'s replicate loop, which sorts each replicate once; the
+    reported *point* estimates always come off the default path, so they stay
+    bit-for-bit what earlier releases produced (``tests/test_metrics_evaluate.py``
+    pins this against a verbatim copy of the pre-0.3.0 body). Bootstrap values
+    may differ in the last bits from the reordered summation, which moves the
+    percentile CI bounds at the ~1e-15 level.
+    """
     sel = set(_METRIC_CATALOG if names is None else names)
     dispatch: dict[str, Callable[[], float]] = {
         "log_loss": lambda: log_loss(y, p, sample_weight=w),
         "brier": lambda: brier_score(y, p, sample_weight=w),
         "brier_skill": lambda: brier_skill_score(y, p, sample_weight=w),
-        "ece": lambda: ece(y, p, sample_weight=w),
-        "ece_debiased": lambda: ece_debiased(y, p, sample_weight=w),
-        "mce": lambda: ece(y, p, norm="max", sample_weight=w),
-        "ece_sweep": lambda: ece_sweep(y, p, sample_weight=w),
         "smooth_ece": lambda: smooth_ece(y, p, sample_weight=w),
         "intercept": lambda: calibration_intercept(y, p, sample_weight=w),
         "slope": lambda: calibration_slope(y, p, sample_weight=w),
     }
+    if not presorted:
+        dispatch |= {
+            "ece": lambda: ece(y, p, sample_weight=w),
+            "ece_debiased": lambda: ece_debiased(y, p, sample_weight=w),
+            "mce": lambda: ece(y, p, norm="max", sample_weight=w),
+            "ece_sweep": lambda: ece_sweep(y, p, sample_weight=w),
+        }
     out: dict[str, float] = {k: fn() for k, fn in dispatch.items() if k in sel}
+    if presorted:
+        out |= _binned_presorted(y, p, w, sel)
 
     if sel & {"ecce_max", "ecce_mean"}:
-        ec = ecce(y, p, sample_weight=w)
+        ec = ecce(y, p, sample_weight=w, presorted=presorted)
         out["ecce_max"] = ec.stat_max
         out["ecce_mean"] = ec.stat_mean
 
@@ -172,7 +229,7 @@ def _point_metrics(
         # use the same distances; refitting four times would quadruple
         # bootstrap cost). Distances themselves stay unweighted; sample_weight,
         # when given and not uniform, weights only the e50/e90 quantile step.
-        d = np.abs(loess(p, y, frac=0.75, grid_size=512) - p)
+        d = np.abs(loess(p, y, frac=0.75, grid_size=512, presorted=presorted) - p)
         w_arr = np.ones(len(p)) if w is None else w
         uniform_w = w is None or bool(np.all(w == w[0]))
         if "ici" in sel:
@@ -198,6 +255,7 @@ def _point_metrics(
     return {k: out[k] for k in _METRIC_CATALOG if k in sel}
 
 
+@overload
 def evaluate(
     y: object,
     p: object,
@@ -207,7 +265,35 @@ def evaluate(
     seed: int = 42,
     metrics: Sequence[str] | None = None,
     stratify: bool = True,
-) -> MetricReport:
+    by: None = None,
+) -> MetricReport: ...
+
+
+@overload
+def evaluate(
+    y: object,
+    p: object,
+    *,
+    sample_weight: object = None,
+    n_boot: int = 1000,
+    seed: int = 42,
+    metrics: Sequence[str] | None = None,
+    stratify: bool = True,
+    by: object,
+) -> GroupedMetricReport: ...
+
+
+def evaluate(
+    y: object,
+    p: object,
+    *,
+    sample_weight: object = None,
+    n_boot: int = 1000,
+    seed: int = 42,
+    metrics: Sequence[str] | None = None,
+    stratify: bool = True,
+    by: object = None,
+) -> MetricReport | GroupedMetricReport:
     """Full metric report with seeded bootstrap percentile confidence intervals.
 
     Parameters
@@ -238,18 +324,36 @@ def evaluate(
         flag). If ``False``, replicates draw i.i.d. from all ``n`` rows; a
         degenerate (single-class) draw is redrawn up to 100 times before
         raising ``RuntimeError``.
+    by : array_like or None, keyword-only
+        Optional group labels, one per observation (same length as ``y``).
+        ``None`` (default) is the plain report above, unchanged. Otherwise
+        each label is stringified and a separate report is computed per
+        sorted label — group ``i`` (in sorted-label order) is evaluated
+        with ``seed + 1000 * i``, a fixed offset so results are
+        reproducible independent of the label values or how many groups
+        exist — plus a pooled report on the full data using ``seed``
+        unchanged. Returns a :class:`~probcal._results.GroupedMetricReport`
+        instead of a plain report. Group-conditional statistical *testing*
+        (formal multiplicity-adjusted comparisons across groups) is out of
+        scope here; see ``docs/guide/groups.md``.
 
     Returns
     -------
-    MetricReport
-        Point estimates and CI bounds for the requested catalog. Note the
-        caveat from the metrics chapter: a bootstrap CI around a *biased*
-        estimator (plain ECE) quantifies its variance, not its bias.
+    MetricReport or GroupedMetricReport
+        Point estimates and CI bounds for the requested catalog
+        (``by=None``, the default), or a pooled report plus one report per
+        group (``by`` given). Note the caveat from the metrics chapter: a
+        bootstrap CI around a *biased* estimator (plain ECE) quantifies its
+        variance, not its bias.
 
     Raises
     ------
     ValueError
-        If ``metrics`` contains names outside the metric catalog.
+        If ``metrics`` contains names outside the metric catalog; if
+        ``by`` is given with a length that does not match ``y``; or if a
+        group has only one outcome class (the underlying
+        ``"y must contain both classes"`` error, re-raised naming the
+        group).
     RuntimeError
         If ``stratify=False`` and 100 consecutive bootstrap draws are all
         single-class.
@@ -261,8 +365,59 @@ def evaluate(
     shares one LOESS fit at O(grid_size * frac * n); smECE is
     O(n + 257 * bins) per bisection step. All of the above are paid
     ``n_boot`` times — for n > 1e6, reduce ``n_boot`` or pass a ``metrics=``
-    subset.
+    subset. With ``by`` given, the whole cost model above is paid once per
+    group plus once for the pooled report.
+
+    Each replicate is sorted by prediction once and that order is shared:
+    the LOESS fit and ECCE skip their own sorts, ``ece``/``ece_debiased``/
+    ``mce`` share one 15-bin equal-mass binning pass, ``ece_sweep``'s
+    ~99-candidate scan reads per-bin sums off prefix-sum differences at
+    ``searchsorted`` cut positions, and the LOESS anchor fits are solved in
+    vectorized blocks rather than one Python iteration per anchor. The
+    reported *point* estimates are computed on the unsorted, scalar path and
+    are bit-for-bit what 0.2.x produced; only the replicates take the fast
+    path, whose reordered sums move percentile CI bounds in their last bits
+    (measured <= 4e-11 relative) and whose tricube weight cubes by
+    multiplication rather than ``** 3`` (<= 2.3e-16 relative on a
+    well-conditioned window; on a rank-deficient one the
+    ``abs(det) < _FPMIN`` guard in the local-linear solve can select a
+    different branch than the scalar loop, where the ``swy / sw`` branch is
+    the well-defined answer — see ``_math._loess_fit_sorted_vec``. Anchors
+    are data quantiles, so this has not been observed to reach a reported
+    value). On the dev
+    host at n=1e4 a full-catalog replicate costs 0.089s — 58% of it the ICI
+    family's LOESS fit, 27% the ``ece_sweep`` scan, 10% intercept/slope,
+    0.5% the whole binned ECE family — and the full run
+    (``n_boot=1000``) takes 87s against 304s in 0.2.x. Excluding the ICI
+    family via ``metrics=`` remains the single largest lever on cost. See
+    ``docs/concepts/metrics.md`` for the measured table.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal.metrics import evaluate
+    >>> rng = np.random.default_rng(0)
+    >>> p = rng.uniform(0.05, 0.5, 300)
+    >>> y = (rng.random(300) < p).astype(float)
+    >>> segment = np.where(p < 0.2, "low", "high")
+    >>> grouped = evaluate(y, p, n_boot=50, metrics=("brier",), by=segment)
+    >>> grouped.groups
+    ('high', 'low')
+    >>> len(grouped.reports) == len(grouped.groups)
+    True
     """
+    if by is not None:
+        return _evaluate_grouped(
+            y,
+            p,
+            by,
+            sample_weight=sample_weight,
+            n_boot=n_boot,
+            seed=seed,
+            metrics=metrics,
+            stratify=stratify,
+        )
+
     from .scores import _prep
 
     if metrics is not None:
@@ -305,12 +460,81 @@ def evaluate(
                     "100 consecutive degenerate (single-class) bootstrap draws; "
                     "pass stratify=True or supply more data"
                 )
+        # One stable sort per replicate, shared by every metric that would
+        # otherwise sort (or re-bin) on its own; see ``_point_metrics``.
+        idx = idx[np.argsort(p_arr[idx], kind="stable")]
         yb, pb, wb = y_arr[idx], p_arr[idx], w_arr[idx]
-        pm = _point_metrics(yb, pb, wb, names)
+        pm = _point_metrics(yb, pb, wb, names, presorted=True)
         boot[b] = [pm[k] for k in names]
     ci_low = np.percentile(boot, 2.5, axis=0)
     ci_high = np.percentile(boot, 97.5, axis=0)
     return MetricReport(names=names, values=values, ci_low=ci_low, ci_high=ci_high)
+
+
+def _evaluate_grouped(
+    y: object,
+    p: object,
+    by: object,
+    *,
+    sample_weight: object,
+    n_boot: int,
+    seed: int,
+    metrics: Sequence[str] | None,
+    stratify: bool,
+) -> GroupedMetricReport:
+    """``evaluate(..., by=...)``: a pooled report plus one report per sorted group."""
+    y_len = len(np.asarray(y))
+    by_arr = np.asarray(by)
+    if len(by_arr) != y_len:
+        raise ValueError(f"by must have the same length as y ({y_len}), got {len(by_arr)}")
+    labels = np.array([str(g) for g in by_arr])
+    groups = tuple(sorted(set(labels.tolist())))
+
+    pooled = cast(
+        MetricReport,
+        evaluate(
+            y,
+            p,
+            sample_weight=sample_weight,
+            n_boot=n_boot,
+            seed=seed,
+            metrics=metrics,
+            stratify=stratify,
+        ),
+    )
+
+    p_arr = np.asarray(p)
+    y_arr = np.asarray(y)
+    w_full = None if sample_weight is None else np.asarray(sample_weight)
+    reports = []
+    counts = []
+    for i, g in enumerate(groups):
+        mask = labels == g
+        counts.append(int(mask.sum()))
+        sw = None if w_full is None else w_full[mask]
+        try:
+            rep = cast(
+                MetricReport,
+                evaluate(
+                    y_arr[mask],
+                    p_arr[mask],
+                    sample_weight=sw,
+                    n_boot=n_boot,
+                    seed=seed + 1000 * i,
+                    metrics=metrics,
+                    stratify=stratify,
+                ),
+            )
+        except ValueError as exc:
+            raise ValueError(f"group {g!r}: {exc}") from exc
+        reports.append(rep)
+
+    return GroupedMetricReport(
+        pooled=pooled,
+        groups=groups,
+        reports=tuple(reports),
+        counts=np.array(counts),
+    )
 
 
 @dataclass(frozen=True)

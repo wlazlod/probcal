@@ -385,3 +385,56 @@ def test_plot_reliability_invalid_risk_dist_raises() -> None:
     curve = reliability_binned(y, p)
     with pytest.raises(ValueError, match="risk_dist"):
         plot_reliability(curve, risk_dist="bogus")
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_plot_reliability_by_returns_figure_with_one_axes_per_group_plus_pooled() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+
+    from probcal.curves import reliability_binned
+    from probcal.plots import plot_reliability
+
+    y, p = _calibrated(900)
+    by = np.where(p < 0.3, "low", np.where(p < 0.6, "mid", "high"))
+    curve = reliability_binned(y, p)
+    fig = plot_reliability(curve, y=y, p=p, by=by)
+    assert isinstance(fig, Figure)
+    assert len(fig.axes) == len(set(by)) + 1
+    titles = {ax.get_title() for ax in fig.axes}
+    assert titles == {"pooled", "low", "mid", "high"}
+    plt.close("all")
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_plot_reliability_by_without_y_p_raises() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+
+    from probcal.curves import reliability_binned
+    from probcal.plots import plot_reliability
+
+    y, p = _calibrated(200)
+    curve = reliability_binned(y, p)
+    by = np.where(p < 0.5, "low", "high")
+    with pytest.raises(ValueError, match="by requires y and p"):
+        plot_reliability(curve, by=by)
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_plot_reliability_by_length_mismatch_raises() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+
+    from probcal.curves import reliability_binned
+    from probcal.plots import plot_reliability
+
+    y, p = _calibrated(200)
+    curve = reliability_binned(y, p)
+    with pytest.raises(ValueError, match="by must have the same length as y"):
+        plot_reliability(curve, y=y, p=p, by=np.array(["low", "high"]))

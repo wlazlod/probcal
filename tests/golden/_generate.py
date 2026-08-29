@@ -7,7 +7,7 @@ One JSON per registered class: ``{"object": to_dict(), "query": [...],
 battery. These files are the enforcement of the compatibility promise: every
 0.x release must load them (schema 1) and reproduce ``expected`` on
 ``query`` to within 1e-12. Regenerate ONLY when the schema version bumps —
-that bump requires a converter and a DECISIONS entry.
+that bump requires a converter and a changelog entry.
 """
 
 import json

@@ -42,7 +42,7 @@ from ._results import (
     SelectionReport,
     SmoothReliabilityCurve,
 )
-from .curves import EcceCurve
+from .curves import EcceCurve, reliability_binned
 from .metrics import brier_score, reliability_summary, smooth_ece
 
 # Names shown, in order, by `stats=<MetricReport>` when present in the report.
@@ -170,6 +170,7 @@ def plot_reliability(
     ax: Any = None,
     stats: bool | MetricReport = False,
     risk_dist: str | None = "rug",
+    by: object = None,
 ) -> Any:
     """Annotated reliability diagram.
 
@@ -213,10 +214,27 @@ def plot_reliability(
     ``risk_dist=None``). ``counts=True`` restores the twin-axis count-bar
     margin, independent of ``risk_dist``.
 
+    Passing ``by`` switches to a faceted grid: one panel per sorted,
+    stringified group in ``by`` (matching :func:`probcal.metrics.evaluate`'s
+    ``by=`` convention) plus a leading "pooled" panel, each a fresh
+    :func:`probcal.curves.reliability_binned` panel built from that group's
+    slice of ``y``/``p`` — the given ``curve`` is ignored for the panels
+    (it would otherwise be ambiguous which group it represents). ``y`` and
+    ``p`` are required in this mode. Each panel is drawn by a recursive
+    call with ``rug=False, annotate=False`` (light default panels; pass
+    ``stats=True`` for a per-panel stats box), sharing x/y limits across
+    the grid; the function then returns the **Figure**, not an ``Axes``
+    (unlike the ``by=None`` default, matching :func:`plot_comparison`).
+    ``"pooled"`` is a reserved panel title: a group of your own by that name
+    is indistinguishable from the pooled panel. Group-conditional
+    statistical *testing* is out of scope here — see
+    ``docs/guide/groups.md``.
+
     Parameters
     ----------
     curve : ReliabilityCurve
         Binned curve, e.g. from :func:`probcal.curves.reliability_binned`.
+        Ignored when ``by`` is given.
     smooth : SmoothReliabilityCurve, KernelReliabilityCurve, or None, keyword-only
         Optional smooth overlay, e.g. from
         :func:`probcal.curves.reliability_loess` or
@@ -225,7 +243,8 @@ def plot_reliability(
         Axis scale; ``"logit"`` stretches the low-probability region.
     y, p : array_like or None, keyword-only
         Raw outcomes and predictions; must be given together (or not at all).
-        Enables the stats box and risk distribution.
+        Enables the stats box and risk distribution; required when ``by``
+        is given.
     annotate : bool, keyword-only
         If ``True`` (default) and ``y``/``p`` are given, draw the classic
         stats box; ignored when ``stats`` is truthy.
@@ -236,23 +255,31 @@ def plot_reliability(
         If ``True``, add a twin-axis bar strip of per-bin counts.
     ax : matplotlib.axes.Axes or None, keyword-only
         Axes to draw on; a new figure and axes are created if ``None``.
+        Ignored when ``by`` is given (a new figure of panels is always
+        created).
     stats : bool or MetricReport, keyword-only
         If truthy and ``y``/``p`` are given, draw the ``n, events,
         intercept, slope, ICI, smECE, Brier`` stats box (``True``) or a
         ``MetricReport``-driven box, replacing ``annotate``'s box.
     risk_dist : {"rug", "split"} or None, keyword-only
         Density-layer style; see above. Anything else raises ``ValueError``.
+    by : array_like or None, keyword-only
+        Optional group labels, one per observation (same length as ``y``);
+        see above. ``None`` (default) is the single-panel diagram above,
+        unchanged.
 
     Returns
     -------
-    matplotlib.axes.Axes
-        The axes the diagram was drawn on.
+    matplotlib.axes.Axes or matplotlib.figure.Figure
+        The axes the diagram was drawn on (``by=None``, the default), or
+        the figure of faceted panels (``by`` given).
 
     Raises
     ------
     ValueError
         If ``y``/``p`` are not given together, or ``risk_dist`` is not one
-        of ``"rug"``, ``"split"``, ``None``.
+        of ``"rug"``, ``"split"``, ``None``; or if ``by`` is given without
+        both ``y`` and ``p``, or with a length that does not match ``y``.
 
     Examples
     --------
@@ -264,12 +291,18 @@ def plot_reliability(
     >>> y = (rng.random(300) < p).astype(float)
     >>> curve = reliability_binned(y, p, n_bins=10)
     >>> ax = plot_reliability(curve, scale="logit", y=y, p=p)  # doctest: +SKIP
+    >>> segment = np.where(p < 0.2, "low", "high")
+    >>> fig = plot_reliability(curve, y=y, p=p, by=segment)  # doctest: +SKIP
     """
     _require_mpl()
     if (y is None) != (p is None):
         raise ValueError("y and p must be given together")
     if risk_dist not in ("rug", "split", None):
         raise ValueError('risk_dist must be one of "rug", "split", None')
+    if by is not None:
+        if y is None or p is None:
+            raise ValueError("by requires y and p")
+        return _plot_reliability_faceted(y, p, by, scale=scale)
     with _plt.rc_context(_STYLE):
         if ax is None:
             _, ax = _plt.subplots(figsize=(6.5, 6))
@@ -363,6 +396,44 @@ def plot_reliability(
             ax2.set_yticks([])
         ax.legend(loc="lower right" if boxed else "upper left")
         return ax
+
+
+def _plot_reliability_faceted(y: object, p: object, by: object, *, scale: str) -> Any:
+    """``plot_reliability(..., by=...)``: a pooled panel plus one panel per
+    sorted group, each built fresh from that group's slice of ``y``/``p``
+    (``curve`` is not used here — see the docstring above)."""
+    y_arr = np.asarray(y, dtype=np.float64)
+    p_arr = np.asarray(p, dtype=np.float64)
+    by_arr = np.asarray(by)
+    if len(by_arr) != len(y_arr):
+        raise ValueError("by must have the same length as y")
+    labels = np.array([str(g) for g in by_arr])
+    groups = tuple(sorted(set(labels.tolist())))
+    panels = [("pooled", y_arr, p_arr)]
+    panels += [(g, y_arr[labels == g], p_arr[labels == g]) for g in groups]
+
+    n_panels = len(panels)
+    ncols = min(3, n_panels)
+    nrows = math.ceil(n_panels / ncols)
+    with _plt.rc_context(_STYLE):
+        fig, axes = _plt.subplots(
+            nrows, ncols, figsize=(6.5 * ncols, 6 * nrows), sharex=True, sharey=True, squeeze=False
+        )
+        axes_flat = axes.ravel()
+        for ax, (label, yy, pp) in zip(axes_flat, panels, strict=False):
+            plot_reliability(
+                reliability_binned(yy, pp),
+                scale=scale,
+                y=yy,
+                p=pp,
+                ax=ax,
+                rug=False,
+                annotate=False,
+            )
+            ax.set_title(label)
+        for ax in axes_flat[n_panels:]:
+            fig.delaxes(ax)
+        return fig
 
 
 def plot_belt(belt: BeltResult, *, scale: str = "probability", ax: Any = None) -> Any:

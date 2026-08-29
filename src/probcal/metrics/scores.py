@@ -310,7 +310,7 @@ def murphy_curve(
 @dataclass(frozen=True)
 class LogLossDecomposition:
     """Calibration/refinement split of the log loss via a plug-in
-    recalibration curve (LOESS; DECISIONS entry).
+    recalibration curve (LOESS).
 
     Attributes
     ----------

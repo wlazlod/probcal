@@ -82,6 +82,11 @@ def ece(
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     shares, gaps, _, _ = _bin_gaps(y_arr, p_arr, w, n_bins, strategy)
+    return _ece_from_gaps(shares, gaps, norm)
+
+
+def _ece_from_gaps(shares: np.ndarray, gaps: np.ndarray, norm: str) -> float:
+    """Reduce per-bin (weight share, |gap|) under ``norm``."""
     if norm == "l1":
         return float(np.sum(shares * gaps))
     if norm == "l2":
@@ -102,8 +107,7 @@ def ece_debiased(
     """Bias-corrected ECE, floored at zero.
 
     Per-bin squared gaps minus the within-bin variance of the event rate
-    (correction in the spirit of Bröcker 2009 / Ferro & Fricker 2012; exact
-    estimator in the DECISIONS log).
+    (correction in the spirit of Bröcker 2009 / Ferro & Fricker 2012).
 
     Parameters
     ----------
@@ -124,7 +128,13 @@ def ece_debiased(
         Bias-corrected calibration error.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    shares, gaps, rates, counts = _bin_gaps(y_arr, p_arr, w, n_bins, strategy)
+    return _ece_debiased_from_gaps(*_bin_gaps(y_arr, p_arr, w, n_bins, strategy))
+
+
+def _ece_debiased_from_gaps(
+    shares: np.ndarray, gaps: np.ndarray, rates: np.ndarray, counts: np.ndarray
+) -> float:
+    """Within-bin variance correction applied to one ``_bin_gaps`` result."""
     corrected = np.empty_like(gaps)
     for i in range(len(gaps)):
         if counts[i] > 1:
@@ -145,7 +155,7 @@ def ece_sweep(
     """Monotonic-sweep calibration error (Roelofs et al., 2022).
 
     Uses equal-mass bins with the largest ``B`` whose bin event rates remain
-    monotone non-decreasing (scan 2..min(n, 100); DECISIONS entry).
+    monotone non-decreasing (scan 2..min(n, 100)).
 
     Parameters
     ----------
@@ -169,11 +179,58 @@ def ece_sweep(
         _, _, rates, _ = _bin_gaps(y_arr, p_arr, w, b, "mass")
         if np.all(np.diff(rates) >= 0.0):
             best_b = b
+    return _ece_at_best_b(y_arr, p_arr, w, best_b, norm)
+
+
+def _ece_at_best_b(
+    y_arr: np.ndarray, p_arr: np.ndarray, w: np.ndarray, best_b: int, norm: str
+) -> float:
+    """The sweep's value once the scan has chosen ``best_b``."""
     if best_b == 1:
         pb = float(np.average(p_arr, weights=w))
         yb = float(np.average(y_arr, weights=w))
         return abs(pb - yb)
     return ece(y_arr, p_arr, n_bins=best_b, strategy="mass", norm=norm, sample_weight=w)
+
+
+def _ece_sweep_best_b_sorted(ps: np.ndarray, ys: np.ndarray, ws: np.ndarray) -> int:
+    """Largest monotone equal-mass bin count, scanned on ``p``-ascending arrays.
+
+    Same scan as :func:`ece_sweep`, without rebuilding a length-n bin index per
+    candidate: on sorted ``ps`` each equal-mass bin is a contiguous slice, so
+    ``np.searchsorted(ps, edges, side="left")`` gives the cut positions (the
+    exact inverse of the ``np.searchsorted(edges, p, side="right")`` labelling)
+    and per-bin weighted sums are prefix-sum differences. The quantile edges and
+    their ``np.unique`` collapse, and the ``w_sum > 0`` non-empty filter, are
+    the originals.
+
+    Prefix-sum differences are not bitwise equal to the ``np.bincount`` partial
+    sums of the original scan; only the monotonicity of the per-bin event rates
+    is read off them, and ``tests/test_metrics_binned.py`` pins that the chosen
+    ``best_b`` is unchanged. The value itself never comes from here — see
+    :func:`_ece_sweep_presorted`.
+    """
+    n = ps.shape[0]
+    cum_w = np.concatenate(([0.0], np.cumsum(ws)))
+    cum_wy = np.concatenate(([0.0], np.cumsum(ws * ys)))
+    best_b = 1
+    for b in range(2, min(n, 100) + 1):
+        qs = np.linspace(0.0, 1.0, b + 1)[1:-1]
+        edges = np.unique(np.quantile(ps, qs))
+        cuts = np.concatenate(([0], np.searchsorted(ps, edges, side="left"), [n]))
+        w_sum = np.diff(cum_w[cuts])
+        keep = w_sum > 0
+        rates = np.diff(cum_wy[cuts])[keep] / w_sum[keep]
+        if np.all(np.diff(rates) >= 0.0):
+            best_b = b
+    return best_b
+
+
+def _ece_sweep_presorted(
+    y_arr: np.ndarray, p_arr: np.ndarray, w: np.ndarray, norm: str = "l1"
+) -> float:
+    """:func:`ece_sweep` over already-prepped, ``p``-ascending arrays."""
+    return _ece_at_best_b(y_arr, p_arr, w, _ece_sweep_best_b_sorted(p_arr, y_arr, w), norm)
 
 
 def adaptive_ece(

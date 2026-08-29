@@ -9,6 +9,9 @@ import pytest
 
 from probcal._math import (
     _FPMIN,
+    _loess_fit_sorted,
+    _loess_fit_sorted_vec,
+    _loess_window_starts,
     beta_ppf,
     betainc,
     bisect,
@@ -430,3 +433,143 @@ def test_weighted_quantile_integer_weights_matches_repeat_within_one_gap() -> No
     actual = weighted_quantile(x, q, w)
     tol = float(np.diff(np.sort(expanded)).max())
     np.testing.assert_allclose(actual, expected, atol=tol)
+
+
+# ------------------------------------------- vectorized presorted anchor fit (0.3.0)
+
+
+def _loess_anchor_case(
+    p: np.ndarray, y: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, int, np.ndarray]:
+    """Sorted arrays, the window size ``loess`` would use, and the 512-anchor grid."""
+    order = np.argsort(p, kind="stable")
+    xs, ys = p[order], y[order]
+    n = len(xs)
+    r = min(max(int(np.ceil(0.75 * n)), 2), n)
+    anchors = np.unique(np.quantile(xs, np.linspace(0.0, 1.0, 512)))
+    return xs, ys, r, anchors
+
+
+def _loess_fixtures() -> list[object]:
+    out = []
+    for n in (1000, 10_000):
+        d = make_pd_portfolio(n=n, random_state=3)
+        out.append(pytest.param(d.scores, d.y, id=f"portfolio-{n}"))
+    d = make_pd_portfolio(n=2000, random_state=4)
+    out.append(pytest.param(np.round(d.scores, 2), d.y, id="tied-scores"))
+    return out
+
+
+@pytest.mark.parametrize("p,y", _loess_fixtures())
+def test_loess_window_starts_match_the_two_pointer_loop(p: np.ndarray, y: np.ndarray) -> None:
+    """The vectorized window search must land on the loop's exact index.
+
+    Not an approximation: the loop's comparison is reproduced verbatim, so a
+    tied-score fixture (where the sum form and the difference form of the
+    comparison round differently) has to agree too.
+    """
+    xs, _, r, anchors = _loess_anchor_case(p, y)
+    n = len(xs)
+    expected, i = [], 0
+    for x0 in anchors:
+        while i + r < n and xs[i + r] - x0 < x0 - xs[i]:
+            i += 1
+        expected.append(i)
+    np.testing.assert_array_equal(_loess_window_starts(xs, anchors, r), np.array(expected))
+
+
+@pytest.mark.parametrize("p,y", _loess_fixtures())
+@pytest.mark.parametrize("degree", [0, 1])
+def test_loess_vectorized_anchors_match_the_loop(p: np.ndarray, y: np.ndarray, degree: int) -> None:
+    """Every anchor agrees with the scalar loop to within the tricube cube's ulp.
+
+    ``_loess_fit_sorted_vec`` cubes by multiplication where the loop calls
+    ``** 3``; that is the only intended difference, and it is a sub-ulp one.
+    """
+    xs, ys, r, anchors = _loess_anchor_case(p, y)
+    np.testing.assert_allclose(
+        _loess_fit_sorted_vec(xs, ys, anchors, r, degree),
+        _loess_fit_sorted(xs, ys, anchors, r, degree),
+        rtol=1e-9,
+        atol=1e-12,
+    )
+
+
+@pytest.mark.parametrize("p,y", _loess_fixtures())
+def test_loess_presorted_matches_the_default_path(p: np.ndarray, y: np.ndarray) -> None:
+    """End-to-end: ``presorted=True`` only changes throughput, not the fit."""
+    order = np.argsort(p, kind="stable")
+    xs, ys = p[order], y[order]
+    np.testing.assert_allclose(
+        loess(xs, ys, frac=0.75, grid_size=512, presorted=True),
+        loess(xs, ys, frac=0.75, grid_size=512),
+        rtol=1e-9,
+        atol=1e-12,
+    )
+
+
+def test_loess_presorted_without_grid_still_uses_the_scalar_loop() -> None:
+    """The per-observation path is O(n * r) to gather, so it must stay on the loop."""
+    d = make_pd_portfolio(n=400, random_state=3)
+    order = np.argsort(d.scores, kind="stable")
+    xs, ys = d.scores[order], d.y[order]
+    assert np.array_equal(loess(xs, ys, frac=0.75, presorted=True), loess(xs, ys, frac=0.75))
+
+
+def _two_score_fixture() -> tuple[np.ndarray, np.ndarray, int]:
+    """1025 rows carrying only two distinct scores, 837 low / 188 high."""
+    rng = np.random.default_rng(0)
+    n, n_low = 1025, 837
+    xs = np.concatenate([np.full(n_low, 0.1), np.full(n - n_low, 0.9)])
+    ys = (rng.random(n) < 0.3).astype(float)
+    return xs, ys, min(max(int(np.ceil(0.75 * n)), 2), n)
+
+
+def test_loess_vectorized_rank_deficient_window() -> None:
+    """The sub-ulp agreement bound does not cover rank-deficient windows.
+
+    With only two distinct scores, an eval point above their midpoint puts the
+    far group at exactly the bandwidth ``h``, so its tricube weight is exactly
+    zero and every surviving row shares one ``x``. The local *linear* system is
+    then singular and ``det = sw * swxx - swx * swx`` is pure cancellation,
+    computed as ~1e-23 rather than 0 — small enough that the ulp-level weight
+    difference between ``u ** 3`` and ``u * u * u`` can land the loop and the
+    vectorized routine on opposite sides of the ``abs(det) < _FPMIN`` guard.
+    Here the vectorized path takes the ``swy / sw`` branch, which for a
+    single-``x`` window is the plain mean of ``y`` over the surviving rows and
+    the only well-defined answer; the loop divides by the cancellation noise and
+    returns an arbitrary value. Which path lands where is a property of the
+    rounding, not of the algorithm — the loop's own value on such a window is
+    already arbitrary, so this is a characterization test of a known corner, not
+    a correctness bound. The guard is deliberately not changed: that would move
+    the point-estimate path.
+    """
+    xs, ys, r = _two_score_fixture()
+    x0 = 0.50148
+    start = _loess_window_starts(xs, np.array([x0]), r)[0]
+    xw, yw = xs[start : start + r], ys[start : start + r]
+    h = max(x0 - xs[start], xs[start + r - 1] - x0)
+    tri = np.clip(1.0 - (np.abs(xw - x0) / h) ** 3, 0.0, None) ** 3
+    surviving = tri > 0
+    assert len(np.unique(xw[surviving])) == 1  # rank-deficient by construction
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        vec = _loess_fit_sorted_vec(xs, ys, np.array([x0]), r, 1)[0]
+        scalar = _loess_fit_sorted(xs, ys, np.array([x0]), r, 1)[0]
+    assert vec == float(np.mean(yw[surviving]))  # the swy/sw branch
+    assert abs(scalar - vec) > 0.1  # the loop's cancellation-noise branch
+
+
+def test_loess_rank_deficient_windows_do_not_reach_reported_values() -> None:
+    """Anchors are data quantiles, so the corner above stays off the fit.
+
+    ``loess`` evaluates at ``np.unique(np.quantile(ev, ...))``, which for this
+    fixture is just the two data values — neither of which sits above the
+    midpoint with the far group excluded. The end-to-end presorted result is
+    therefore exactly the default one, which is the guarantee that matters.
+    """
+    xs, ys, _ = _two_score_fixture()
+    fast = loess(xs, ys, frac=0.75, grid_size=512, presorted=True)
+    slow = loess(xs, ys, frac=0.75, grid_size=512)
+    np.testing.assert_allclose(fast, slow, rtol=1e-9, atol=1e-12)
+    assert np.max(np.abs(fast - slow)) <= 1e-12

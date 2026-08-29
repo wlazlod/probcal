@@ -39,7 +39,7 @@ model documentation — and in regulated settings that virtue usually dominates.
 
 When data are too scarce to reserve a calibration set, `flow="cv"` recovers one
 synthetically. The wrapper clones the untrained model (via `sklearn.base.clone` when sklearn
-is installed, `copy.deepcopy` otherwise — a DECISIONS entry records the duck-typing), trains
+is installed, `copy.deepcopy` otherwise — a deliberate duck-typing choice), trains
 it on \( K - 1 \) folds, scores the held-out fold, and rotates, so that every observation
 receives a score from a model that did not train on it. Folds are stratified on the outcome
 and seeded.

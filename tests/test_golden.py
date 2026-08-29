@@ -3,9 +3,9 @@
 The JSONs in tests/golden/ were written by the release that introduced
 serialization and are committed; this suite proves the current build still
 loads them and reproduces their predictions. Tolerance is allclose at
-1e-12, not bit-equality: goldens must survive numpy/platform drift
-(DECISIONS 73). Regeneration (tests/golden/_generate.py) is legitimate only
-alongside a schema bump with a converter and a DECISIONS entry.
+1e-12, not bit-equality: goldens must survive numpy/platform drift.
+Regeneration (tests/golden/_generate.py) is legitimate only
+alongside a schema bump with a converter and a changelog entry.
 """
 
 import json
@@ -40,7 +40,7 @@ def test_every_registered_class_has_a_golden() -> None:
     names = {p.stem for p in _GOLDEN_FILES}
     assert names == set(SERIALIZABLE), (
         "golden coverage drifted from the registry; regenerate ONLY with a "
-        "schema bump + converter + DECISIONS entry"
+        "schema bump + converter + changelog entry"
     )
 
 

@@ -281,7 +281,7 @@ class BaseCalibrator(ABC):
         invert in closed form here, covering Platt scaling, temperature
         scaling, and the tied Beta variants (``"a"``, ``"ab"``);
         ``BetaCalibrator`` overrides this method with its own exact
-        construction for the full ``"abm"`` variant (DECISIONS 67). Others
+        construction for the full ``"abm"`` variant. Others
         raise ``NotImplementedError`` and should use :meth:`interval_inverse`
         instead.
 

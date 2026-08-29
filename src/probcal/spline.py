@@ -29,7 +29,7 @@ def _second_difference_penalty(k: int) -> np.ndarray:
 
 
 # Independent of _math.irls_logistic: the lam * penalty term already regularizes,
-# so the separation handling of IRLS_SPEC / DECISIONS 57 is not needed here.
+# so the separation handling of IRLS_SPEC is not needed here.
 def _penalized_irls(
     basis: np.ndarray,
     y: np.ndarray,
@@ -70,7 +70,7 @@ class SplineCalibrator(BaseCalibrator):
     ----------
     n_knots : int or None
         Number of knots (placed at equally spaced quantiles of the logit
-        scores); defaults to ``clip(ceil(n^(1/3)), 4, 12)`` (DECISIONS entry).
+        scores); defaults to ``clip(ceil(n^(1/3)), 4, 12)``.
     lambdas : array_like or None
         Candidate penalty weights; defaults to ``logspace(-4, 4, 17)``.
     cv : int

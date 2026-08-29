@@ -9,7 +9,7 @@ report — and the rendering layer adds convention, not computation.
 ## Reliability constructions
 
 The reliability diagram plots estimated event rate against predicted probability; a
-calibrated model traces the diagonal. probcal builds it three ways, because the
+calibrated model traces the diagonal. probcal builds it four ways, because the
 construction *is* the estimator and inherits its trade-offs. `reliability_binned` groups
 predictions (equal-mass by default), plotting each bin's mean prediction against its event
 rate with a **Wilson confidence interval** — the binomial interval that behaves sensibly at
@@ -21,6 +21,18 @@ per-class rug along the axis edges (a count-bar margin remains available via
 binned points they distinguish real curvature from bin noise. Every curve object carries
 both probability-scale and logit-scale coordinate arrays, so the choice of scale is made at
 plot time, not at computation time.
+
+`reliability_smooth` (`KernelReliabilityCurve`) is the fourth construction, and the only
+one whose bandwidth is not a free choice: it reuses `metrics.smooth_ece`'s fixed-point
+bandwidth `sigma_star` — the same equal-width logit lattice and the same truncated
+Gaussian kernel — so `curve.smooth_ece` reproduces the metric exactly rather than merely
+tracking it, and the diagram and the number it is read against always agree. Because
+`sigma_star` is tuned for the smECE aggregate rather than for a low-variance curve, the
+pointwise estimate is noisier than `reliability_loess`'s wide, fraction-of-data bandwidth
+and needs a larger sample before it settles; its confidence ribbon (a seeded bootstrap of
+`(y, p, sample_weight)` triples, `n_boot=0` to disable) is computed at that one fixed
+`sigma_star`, so it reads as uncertainty in the rate given the bandwidth, not uncertainty
+in the bandwidth choice itself.
 
 ## Why the logit scale is the flagship
 

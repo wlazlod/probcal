@@ -268,6 +268,47 @@ class SmoothReliabilityCurve(_ResultBase):
 
 
 @dataclass(frozen=True)
+class KernelReliabilityCurve(_ResultBase):
+    """smECE-consistent kernel reliability curve (``curves.reliability_smooth``).
+
+    Attributes
+    ----------
+    grid_p, grid_logit : numpy.ndarray
+        Evaluation grid on the probability and logit scales.
+    event_rate : numpy.ndarray
+        Kernel-smoothed ``E[y | logit p]`` at ``sigma_star``, evaluated at
+        each grid point.
+    density : numpy.ndarray
+        Kernel-smoothed prediction density at each grid point, normalized
+        to sum to 1 over the grid.
+    ci_low, ci_high : numpy.ndarray
+        Seeded bootstrap percentile band for ``event_rate`` at the fixed
+        ``sigma_star`` (empty band collapses to ``event_rate`` when
+        ``n_boot=0``).
+    sigma_star : float
+        The smECE fixed-point bandwidth the curve is smoothed at.
+    smooth_ece : float
+        ``metrics.smooth_ece(y, p, bins=bins)``, reproduced exactly (same
+        lattice and path selection) from the same ``sigma_star``.
+    """
+
+    grid_p: np.ndarray
+    grid_logit: np.ndarray
+    event_rate: np.ndarray
+    density: np.ndarray
+    ci_low: np.ndarray
+    ci_high: np.ndarray
+    sigma_star: float
+    smooth_ece: float
+
+    def __repr__(self) -> str:
+        return (
+            f"KernelReliabilityCurve (grid of {len(self.grid_p)} points, "
+            f"sigma_star={self.sigma_star:.4g}, smooth_ece={self.smooth_ece:.4g})"
+        )
+
+
+@dataclass(frozen=True)
 class CorpResult(_ResultBase):
     """CORP reliability fit: PAV recalibration with the MCB-DSC-UNC decomposition.
 

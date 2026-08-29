@@ -11,15 +11,23 @@ Lemeshow, Phillips, Finazzi & Bertolini (2017) — full records in the
 documentation. The belt is reimplemented from the papers; no GPL code is used.
 """
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
 
 from ._corp import corp_bands, corp_fit, decompose
 from ._math import chi2_ppf, expit, gammainc_lower, irls_logistic, loess, logit
-from ._results import BeltResult, CorpResult, ReliabilityCurve, SmoothReliabilityCurve
+from ._results import (
+    BeltResult,
+    CorpResult,
+    KernelReliabilityCurve,
+    ReliabilityCurve,
+    SmoothReliabilityCurve,
+)
 from .metrics.binned import _bin_index
 from .metrics.scores import _prep
+from .metrics.smooth import _lattice_kernel_smooth, _smece_solve
 
 _Z_95 = 1.959963984540054
 
@@ -157,6 +165,163 @@ def reliability_spline(
     grid = _grid(p_arr, grid_size)
     return SmoothReliabilityCurve(
         grid_p=grid, grid_logit=logit(grid), event_rate=cal.predict_proba(grid)
+    )
+
+
+def _kernel_rate_density(
+    t: np.ndarray,
+    y: np.ndarray,
+    w: np.ndarray,
+    sigma: float,
+    grid_logit: np.ndarray,
+    lattice: tuple[float, float, int] | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Evaluate the Nadaraya-Watson kernel rate/density at ``sigma`` on
+    ``grid_logit``, sharing the smECE lattice and kernel when available.
+
+    ``lattice`` is ``(width, t_lo, b)`` from the point-estimate's
+    ``_smece_solve`` (fixed across bootstrap resamples, per the module
+    docstring of ``reliability_smooth``); ``None`` selects the exact
+    O(n * grid) direct-smoothing path (mirrors ``smooth_ece``'s own
+    lattice/exact selection so the two stay consistent).
+    """
+    if lattice is not None:
+        width, t_lo, b = lattice
+        idx = np.clip(((t - t_lo) / width).astype(np.int64), 0, b - 1)
+        num = np.bincount(idx, weights=w * y, minlength=b)
+        den = np.bincount(idx, weights=w, minlength=b)
+        centers, num_s = _lattice_kernel_smooth(num, width, sigma, t_lo)
+        _, den_s = _lattice_kernel_smooth(den, width, sigma, t_lo)
+        den_safe = np.where(den_s > 0.0, den_s, np.nan)
+        rate = np.interp(grid_logit, centers, num_s / den_safe)
+        density = np.interp(grid_logit, centers, den_s)
+    else:
+        diff = (grid_logit[:, None] - t[None, :]) / sigma
+        taps = np.exp(-0.5 * diff**2) / (sigma * math.sqrt(2.0 * math.pi))
+        num = taps @ (w * y)
+        den = taps @ w
+        rate = num / den
+        density = den
+    density = np.clip(density, 0.0, None)
+    density = density / density.sum()
+    return rate, density
+
+
+def reliability_smooth(
+    y: object,
+    p: object,
+    *,
+    sample_weight: object = None,
+    grid_size: int = 200,
+    n_boot: int = 100,
+    level: float = 0.9,
+    random_state: int = 42,
+    bins: int | None = 8192,
+) -> KernelReliabilityCurve:
+    """smECE-consistent kernel reliability curve (Blasiok-Nakkiran).
+
+    Shares its bandwidth and lattice with ``metrics.smooth_ece``: both solve
+    the same fixed point ``sigma_star`` on the same equal-width logit
+    lattice (``metrics.smooth._lattice`` / ``_smece_solve``), so
+    ``curve.smooth_ece`` reproduces ``metrics.smooth_ece(y, p, bins=bins)``
+    exactly instead of merely agreeing with it. The event rate and
+    prediction density are then Nadaraya-Watson kernel estimates at that one
+    fixed ``sigma_star`` — ``rate = K*bincount(w*y) / K*bincount(w)`` on the
+    lattice, interpolated onto ``grid_logit`` — using the same truncated
+    Gaussian kernel ``smooth_ece`` used to reach ``sigma_star``
+    (``metrics.smooth._lattice_kernel_smooth``). When ``smooth_ece``'s path
+    selection falls back to its exact (non-lattice) computation — degenerate
+    logit range, ``bins=None``, or an infeasible/under-resolved refinement —
+    the curve falls back the same way, to direct O(n * grid_size) Gaussian
+    smoothing on ``logit(p)`` at ``sigma_star``.
+
+    The confidence ribbon bootstraps ``(y, p, sample_weight)`` triples
+    (``numpy.random.default_rng(random_state)``, resampling with
+    replacement) and recomputes the rate at the point estimate's *fixed*
+    ``sigma_star`` — the ribbon conditions on the bandwidth, it does not
+    reflect uncertainty in choosing it. ``n_boot=0`` disables the ribbon
+    (``ci_low`` and ``ci_high`` both equal ``event_rate``).
+
+    Parameters
+    ----------
+    y, p : array_like
+        Outcomes and predicted probabilities.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+    grid_size : int, keyword-only
+        Number of evaluation points, spanning the 0.5th to 99.5th percentile
+        of ``p`` (``curves._grid``).
+    n_boot : int, keyword-only
+        Number of bootstrap resamples for the confidence ribbon; ``0``
+        disables it.
+    level : float, keyword-only
+        Nominal coverage level of the ribbon; must satisfy ``0 < level < 1``.
+    random_state : int, keyword-only
+        Seed for ``numpy.random.default_rng``, used by the bootstrap.
+    bins : int or None, keyword-only
+        Lattice bin count passed through to the shared smECE solve; see
+        ``metrics.smooth_ece``. ``None`` forces the exact path.
+
+    Returns
+    -------
+    KernelReliabilityCurve
+        Grid coordinates, kernel-smoothed event rate and density, the
+        bootstrap ribbon, and the shared ``sigma_star`` / ``smooth_ece``.
+
+    Raises
+    ------
+    ValueError
+        If ``level`` is not in ``(0, 1)``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal import make_pd_portfolio
+    >>> from probcal.curves import reliability_smooth
+    >>> d = make_pd_portfolio(n=2000, random_state=0)
+    >>> curve = reliability_smooth(d.y, d.scores, n_boot=0)
+    >>> len(curve.grid_p) == 200
+    True
+    >>> abs(float(curve.density.sum()) - 1.0) < 1e-10
+    True
+    """
+    if not (0.0 < level < 1.0):
+        raise ValueError("level must satisfy 0 < level < 1")
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    grid_p = _grid(p_arr, grid_size)
+    grid_logit = logit(grid_p)
+    t = logit(p_arr)
+    mass = (w / w.sum()) * (y_arr - p_arr)
+    smooth_ece_value, sigma_star, m, width, t_lo, b = _smece_solve(t, mass, bins)
+    lattice = None if m is None or b is None else (width, t_lo, b)
+
+    event_rate, density = _kernel_rate_density(t, y_arr, w, sigma_star, grid_logit, lattice)
+
+    if n_boot > 0:
+        rng = np.random.default_rng(random_state)
+        n = len(y_arr)
+        boot_rate = np.empty((n_boot, grid_size))
+        for i in range(n_boot):
+            idx_b = rng.integers(0, n, n)
+            boot_rate[i], _ = _kernel_rate_density(
+                t[idx_b], y_arr[idx_b], w[idx_b], sigma_star, grid_logit, lattice
+            )
+        a = (1.0 - level) / 2.0
+        ci_low = np.minimum(np.quantile(boot_rate, a, axis=0), event_rate)
+        ci_high = np.maximum(np.quantile(boot_rate, 1.0 - a, axis=0), event_rate)
+    else:
+        ci_low = event_rate.copy()
+        ci_high = event_rate.copy()
+
+    return KernelReliabilityCurve(
+        grid_p=grid_p,
+        grid_logit=grid_logit,
+        event_rate=event_rate,
+        density=density,
+        ci_low=ci_low,
+        ci_high=ci_high,
+        sigma_star=sigma_star,
+        smooth_ece=smooth_ece_value,
     )
 
 

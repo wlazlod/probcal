@@ -15,6 +15,7 @@ from .curves import (
     corp_reliability,
     reliability_binned,
     reliability_loess,
+    reliability_smooth,
     reliability_spline,
 )
 from .datasets import make_pd_portfolio
@@ -59,6 +60,7 @@ __all__: list[str] = [
     "monitor",
     "reliability_binned",
     "reliability_loess",
+    "reliability_smooth",
     "reliability_spline",
     "logit",
     "make_pd_portfolio",

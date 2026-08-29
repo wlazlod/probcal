@@ -10,6 +10,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 - treecf guide: the cross-repo work list is now documented as implemented in treecf 0.2.4 (provenance, `score_calibrated` read-out, plateau suite, matrix, docs), and the `probcal[treecf]`/`all` optional-dependency floor is raised to `treecf>=0.2.4`; the joint smoke tests additionally pin the read-out and the certificate provenance loop
 
+### Added
+
+- `curves.reliability_smooth` (`KernelReliabilityCurve`): a fourth reliability construction whose bandwidth is not a free parameter — it shares `metrics.smooth_ece`'s fixed-point `sigma_star` and equal-width logit lattice (factored into `metrics.smooth._lattice`/`_smece_solve`, reused by both so the two cannot drift), so `curve.smooth_ece` reproduces the metric bit-for-bit rather than merely tracking it; `event_rate` and `density` are Nadaraya-Watson kernel estimates at that one `sigma_star` (falling back to direct O(n · grid) smoothing when `smooth_ece`'s own path selection takes its exact, non-lattice route), and the seeded bootstrap ribbon (`n_boot`, default 100; `n_boot=0` disables it) conditions on that fixed bandwidth rather than resampling it
+
 ## [0.2.0] - 2026-08-23
 
 ### Fixed

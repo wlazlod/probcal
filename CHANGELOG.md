@@ -8,7 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [0.3.0] - 2026-08-29
 
-No breaking changes — the second stability minor on the road to 1.0: every 0.2.0 call, default output, and serialized file behaves identically (0.2.0 goldens verified unchanged in CI).
+No breaking API changes — the second stability minor on the road to 1.0: every 0.2.0 call and serialized file keeps working, the 0.2.0 goldens are verified unchanged in CI, and the one default-behaviour change (`CalibrationMonitor.report()`'s post-alarm window, see *Changed*) has the `recommendation_window="trailing"` escape hatch.
 
 ### Added
 

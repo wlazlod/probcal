@@ -23,6 +23,7 @@ from probcal import (
     LogitOffset,
     PlattCalibrator,
     ScalingBinningCalibrator,
+    SegmentedCalibrator,
     SplineCalibrator,
     TemperatureCalibrator,
     UnattainableTargetError,
@@ -74,6 +75,8 @@ def _cases() -> dict[str, object]:
     ):
         cases[cls.__name__] = cls().fit(_D.scores, _D.y)
     cases["LogitOffset"] = LogitOffset(delta=0.3).fit(_D.scores)
+    seg_labels = np.array(["a", "b", "c"])[np.arange(len(_D.scores)) % 3]
+    cases["SegmentedCalibrator"] = SegmentedCalibrator().fit(_D.scores, _D.y, segments=seg_labels)
     beta = BetaCalibrator().fit(_D.scores, _D.y)
     off = LogitOffset(delta=0.2).fit(beta.predict_proba(_D.scores))
     cases["Chain"] = Chain([beta, off])

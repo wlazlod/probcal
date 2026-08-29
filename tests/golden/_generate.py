@@ -67,6 +67,9 @@ def _fitted(name: str):
         return Chain([cal, off])
     if name == "LogitOffset":
         return cls(delta=0.3).fit(_D.scores)
+    if name == "SegmentedCalibrator":
+        segments = np.array(["a", "b", "c"])[np.arange(400) % 3]
+        return cls().fit(_D.scores, _D.y, segments=segments)
     if name == "CalibratedModel":
         wrapped = cls(_StubModel(), BetaCalibrator(), flow="prefit").fit(
             _D.scores.reshape(-1, 1), _D.y
@@ -94,6 +97,9 @@ def _predict(obj, q):
         return np.asarray([s.e_global for s in obj.steps_])
     if type(obj).__name__ == "LogitOffset":
         return obj.transform(q)
+    if type(obj).__name__ == "SegmentedCalibrator":
+        segments = np.array(["a", "b", "c"])[np.arange(len(q)) % 3]
+        return obj.predict_proba(q, segments=segments)
     if type(obj).__name__ == "CalibratedModel":
         return obj.predict_proba(q.reshape(-1, 1))
     if type(obj).__name__ == "AppliedAction":

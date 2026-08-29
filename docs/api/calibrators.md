@@ -13,3 +13,5 @@
 ::: probcal.vennabers
 
 ::: probcal.spline
+
+::: probcal.segmented

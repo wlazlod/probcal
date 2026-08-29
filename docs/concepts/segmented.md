@@ -1,0 +1,146 @@
+# Segmented calibration: shrunken per-segment offsets
+
+A single calibration map is often right on average but wrong for a specific slice of the
+portfolio — a product line, a vintage, a geography — because that slice's true residual
+miscalibration differs from the pooled average the map was fit to correct. Fitting one offset
+*per segment* from scratch overfits: a 20-obligor segment's offset MLE has a huge standard
+error and mostly reflects sampling noise, not a real segment effect. Ignoring segments
+entirely (complete pooling) throws away real heterogeneity when it exists. `SegmentedCalibrator`
+sits between the two: one shared base map fit on all the data, plus a *shrunken* per-segment
+logit offset that interpolates between "trust this segment's own data" and "trust the pooled
+average", governed by how much genuine between-segment heterogeneity the data supports.
+
+## The model
+
+`SegmentedCalibrator` fits a shared `base` calibrator (default `BetaCalibrator()`) on the full
+dataset, exactly as if segments did not exist:
+
+\[
+p_0(s) = \text{base}(s).
+\]
+
+For each segment \( g \), it then fits the offset-only logistic MLE
+(`probcal.offset.estimate_offset`) of the segment's residual log-odds shift against \( p_0 \):
+
+\[
+\hat\delta_g, \; \widehat{\mathrm{se}}_g = \texttt{estimate\_offset}\bigl(y_g,\, p_0(s_g)\bigr).
+\]
+
+\( \hat\delta_g \) is the natural, unbiased read of "how far off is `base` for segment \( g \)
+specifically" — but for a small segment its standard error is large, and using it directly
+(no pooling) would put wide, noisy jumps into predictions for exactly the customers with the
+least data behind them.
+
+## Empirical-Bayes shrinkage (DerSimonian-Laird)
+
+Treat the segment-level MLEs \( \hat\delta_g \) as noisy measurements of true, unknown
+per-segment effects drawn from a common population with variance \( \tau^2 \) — the classic
+random-effects setup, here across segments instead of across independent studies
+(DerSimonian & Laird, 1986). \( \tau^2 \) is estimated by their method-of-moments estimator,
+restricted to the segments with a finite standard error (a single-class segment has no MLE —
+see below — and contributes nothing to \( \tau^2 \)):
+
+\[
+w_g = \frac{1}{\widehat{\mathrm{se}}_g^{\,2}}, \qquad
+\bar\delta_w = \frac{\sum_g w_g \hat\delta_g}{\sum_g w_g}, \qquad
+Q = \sum_g w_g \bigl(\hat\delta_g - \bar\delta_w\bigr)^2,
+\]
+
+\[
+\tau^2 = \max\!\left(0,\; \frac{Q - (G - 1)}{\sum_g w_g - \sum_g w_g^2 / \sum_g w_g}\right),
+\]
+
+with \( G \) the number of segments with a finite standard error; \( \tau^2 = 0 \) outright
+when \( G < 2 \) (nothing to estimate heterogeneity from). Each segment's shrunk offset is
+then the classic empirical-Bayes (precision-weighted) combination of its own estimate and the
+population value 0 (the base map is already the pooled central estimate, so the population
+mean of the *residual* offsets is 0 by construction):
+
+\[
+\text{shrink}_g = \frac{\tau^2}{\tau^2 + \widehat{\mathrm{se}}_g^{\,2}}, \qquad
+\tilde\delta_g = \hat\delta_g \cdot \text{shrink}_g \in [0, 1).
+\]
+
+A small, noisy segment (large \( \widehat{\mathrm{se}}_g \)) has \( \text{shrink}_g \) near 0
+and is pulled almost entirely back to the base map; a large, precise segment (small
+\( \widehat{\mathrm{se}}_g \)) keeps most of its own estimate. When \( \tau^2 = 0 \) (no
+detected heterogeneity beyond sampling noise), every segment shrinks fully to 0 — complete
+pooling, recovered exactly. Prediction applies the shrunk offset on the logit scale:
+
+\[
+p(s, g) = \sigma\bigl(\operatorname{logit}(p_0(s)) + \tilde\delta_g\bigr).
+\]
+
+A segment with only one outcome class has no offset MLE (`estimate_offset` raises
+`ValueError` — the score equation has no interior root); `SegmentedCalibrator` records it as
+\( \hat\delta_g = 0 \), \( \widehat{\mathrm{se}}_g = \infty \), which shrinks fully
+(\( \tau^2 / (\tau^2 + \infty) = 0 \)) — the honest reading, since an infinite-variance
+estimate carries zero weight in the pooling.
+
+## Unseen segments and the `Chain` limitation
+
+`fit` and `predict_proba` add a keyword-only `segments` argument on top of the base
+calibrator signature: `segments=None` at fit time collapses to one segment `"__all__"`
+(so the zero-argument protocol call `SegmentedCalibrator().fit(s, y)` still works), and
+`segments=None` at predict time returns the plain base map (`delta=0`, no segment-specific
+adjustment) rather than raising — there is no segment information to look anything up with.
+A label present in `segments` at predict time but never seen at fit time is handled by the
+constructor's `unseen` policy: `"global"` (default) applies `delta=0`; `"raise"` raises
+`ValueError`, for deployments where an unrecognized segment must not silently fall back.
+
+`probcal.chain.Chain` has no `segments=` slot — every stage's `predict_proba` is called with
+no extra arguments. `Chain([seg, ...])` therefore always predicts through `seg`'s global map
+(`segments=None`, `delta=0`); the per-segment shift is never applied inside a `Chain`. Use
+`SegmentedCalibrator` directly, passing `segments=`, whenever the per-segment offset must
+apply; `Chain([seg, offset])` remains useful for composing `seg`'s *global* map with a
+portfolio-wide offset (e.g. `monitor.moc_offset_from_counts`), same as any other calibrator.
+
+## Protocol notes
+
+`is_monotone_` is `base_.is_monotone_` — segmentation adds a level shift per segment, which
+does not change monotonicity in the raw score. `affine_logit_coeffs_` (the whole-calibrator
+property external tooling, e.g. attribution repair, reads) is `(a, b + delta_tilde)` only when
+exactly one segment was fitted and `base_` is itself affine on the logit scale; with more than
+one segment there is no single affine map for the whole object (each segment has its own
+intercept shift), so it is `None` — this does not affect `SegmentedCalibrator`'s own
+`interval_inverse`/`point_inverse`, which always invert through `base_` directly (composed
+with the requested segment's `delta_tilde` via `Chain([base_, LogitOffset(delta=delta_tilde_g)])`,
+or `base_` alone when `segment=None` or the shrunk offset is exactly 0), and so work for any
+number of segments as long as `base_` itself has an exact inverse.
+
+## Example
+
+```python
+import numpy as np
+from probcal import SegmentedCalibrator
+
+segments = np.array(["retail", "sme", "corporate"])[np.arange(len(scores)) % 3]
+cal = SegmentedCalibrator().fit(scores, y, segments=segments)
+print(cal.interpret())  # tau2, and one row per segment: n, events, delta_hat, se, delta_tilde, shrink
+
+p_global = cal.predict_proba(scores)                       # base map only (delta=0)
+p_segmented = cal.predict_proba(scores, segments=segments)  # per-segment shrunk offset applied
+```
+
+## Recovery simulation
+
+`docs/scripts/segmented_sim.py::recovery(runs, n_per_segment, true_deltas, seed)` draws six
+segments with true residual offsets spread `-0.6 .. +0.6` and sizes `30 .. 3000`, fits a
+`SegmentedCalibrator`, and compares the mean squared error (across segments and runs) of
+three estimators of the true per-segment offset against no pooling (`delta_hat_`), complete
+pooling (one offset MLE fit on the pooled data, ignoring segment identity), and the shipped
+empirical-Bayes shrinkage (`delta_tilde_`); a second, homogeneous scenario (every segment's
+true delta is 0, `n=3000`) checks that shrinkage degrades gracefully to complete pooling as
+the true spread shrinks to 0. `tests/test_segmented_sim.py` (`pytest.mark.slow`) enforces the
+same gates at a reduced run count in CI.
+
+| scenario                                 | runs | MSE no-pooling | MSE complete-pooling | MSE / stat EB                  |
+|------------------------------------------|------|----------------|-----------------------|---------------------------------|
+| heterogeneous (spread -0.6..+0.6)        | 2000 | 0.2354         | 0.1680                | 0.1242                          |
+| homogeneous (all true delta = 0, n=3000) | 2000 | -              | -                      | max\|mean delta_tilde\| = 0.0003 |
+
+Empirical Bayes beats both no pooling and complete pooling on the heterogeneous scenario (it
+never has to choose between "trust this tiny segment" and "ignore segments" — it blends the
+two per segment, weighted by how much of a segment's disagreement with its peers survives
+sampling noise), and collapses to complete pooling (shrunk offsets near 0) once there is no
+real heterogeneity left to detect.

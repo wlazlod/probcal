@@ -8,6 +8,7 @@ misuse. Protocol, criteria, and report reading:
 
 import numpy as np
 
+from ._corp import corp_fit, decompose
 from ._registry import SERIALIZABLE, register
 from ._results import Interpretation, SelectionReport
 from ._serialize import decode_value, encode_value
@@ -99,6 +100,9 @@ class CalibratorSelector(BaseCalibrator):
             "guardrails_ok": encode_value(r.guardrails_ok),
             "chosen": encode_value(r.chosen),
             "criterion": r.criterion,
+            "mcb": encode_value(r.mcb),
+            "dsc": encode_value(r.dsc),
+            "unc": encode_value(r.unc),
         }
         return base
 
@@ -113,6 +117,10 @@ class CalibratorSelector(BaseCalibrator):
             guardrails_ok=decode_value(rep["guardrails_ok"]),  # type: ignore[index, arg-type]
             chosen=decode_value(rep["chosen"]),  # type: ignore[index, arg-type]
             criterion=rep["criterion"],  # type: ignore[index]
+            # .get(..., None): the 0.2.0 golden predates these columns.
+            mcb=decode_value(rep.get("mcb")),  # type: ignore[attr-defined, arg-type]
+            dsc=decode_value(rep.get("dsc")),  # type: ignore[attr-defined, arg-type]
+            unc=decode_value(rep.get("unc")),  # type: ignore[attr-defined, arg-type]
         )
 
     def _params_for_dict(self) -> dict[str, object]:
@@ -183,6 +191,10 @@ class CalibratorSelector(BaseCalibrator):
             )
         scorer = _SCORERS[self.scoring]
         menu = self.candidates if self.candidates is not None else _default_candidates()
+        # CORP decomposition to attach to the report: Brier when the selection
+        # criterion itself is Brier, log loss otherwise (matches the scorer
+        # actually driving the ranking as closely as the two-way CORP split allows).
+        corp_score = "brier" if self.scoring == "brier" else "log_loss"
 
         rng = np.random.default_rng(self.random_state)
         folds = np.empty(len(y_arr), dtype=np.int64)
@@ -195,6 +207,9 @@ class CalibratorSelector(BaseCalibrator):
         means = np.empty(len(names))
         sds = np.empty(len(names))
         guards = np.empty(len(names), dtype=bool)
+        mcbs = np.empty(len(names))
+        dscs = np.empty(len(names))
+        unc = 0.0
         for i, name in enumerate(names):
             proto = menu[name]
             fold_scores = np.empty(self.cv)
@@ -209,6 +224,10 @@ class CalibratorSelector(BaseCalibrator):
             means[i] = fold_scores.mean()
             sds[i] = fold_scores.std(ddof=1)
             guards[i] = calibration_guardrails(y_arr, oof, sample_weight=w_arr).all_ok
+            # One corp_fit/decompose per candidate on its own OOF vector — cheap
+            # relative to the cv-fold refits above (DECISIONS/task-V2).
+            _, _, _, _, pav = corp_fit(y_arr, oof, w_arr)
+            _, mcbs[i], dscs[i], unc = decompose(y_arr, oof, pav, w_arr, corp_score)
 
         # Parsimony tie-break within one standard error of the best mean.
         best_idx = int(np.argmin(means))
@@ -229,6 +248,9 @@ class CalibratorSelector(BaseCalibrator):
             guardrails_ok=guards[order],
             chosen=chosen[order],
             criterion=self.scoring,
+            mcb=mcbs[order],
+            dsc=dscs[order],
+            unc=float(unc),
         )
         self.best_name_ = names[winner]
         proto = menu[self.best_name_]

@@ -156,6 +156,17 @@ class SelectionReport(_ResultBase):
         Boolean flag marking the selected candidate.
     criterion : str
         Name of the scoring criterion.
+    mcb, dsc : numpy.ndarray or None
+        Per-candidate CORP miscalibration/discrimination terms
+        (:func:`probcal._corp.decompose`) on the same out-of-fold
+        predictions as ``score_mean``, decomposing Brier when
+        ``criterion == "brier"`` and log loss otherwise. ``None`` for
+        reports produced before probcal 0.3 (e.g. loaded from an older
+        golden), since the columns did not exist to compute.
+    unc : float or None
+        CORP uncertainty term, identical across candidates (it depends
+        only on ``y`` and the sample weights, not on the predictions).
+        ``None`` exactly when ``mcb``/``dsc`` are ``None``.
     """
 
     methods: tuple[str, ...]
@@ -164,20 +175,43 @@ class SelectionReport(_ResultBase):
     guardrails_ok: np.ndarray
     chosen: np.ndarray
     criterion: str
+    mcb: np.ndarray | None = None
+    dsc: np.ndarray | None = None
+    unc: float | None = None
 
     def __repr__(self) -> str:
-        rows = [
-            (m, sm, sd, bool(g), "*" if c else "")
-            for m, sm, sd, g, c in zip(
-                self.methods,
-                self.score_mean,
-                self.score_sd,
-                self.guardrails_ok,
-                self.chosen,
-                strict=True,
-            )
-        ]
-        table = _aligned_table(("method", self.criterion, "sd", "guardrails", "chosen"), rows)
+        has_corp = self.mcb is not None and self.dsc is not None
+        headers: tuple[str, ...]
+        rows: list[tuple[object, ...]]
+        if has_corp:
+            headers = ("method", self.criterion, "sd", "guardrails", "chosen", "mcb", "dsc")
+            rows = [
+                (m, sm, sd, bool(g), "*" if c else "", mc, ds)
+                for m, sm, sd, g, c, mc, ds in zip(
+                    self.methods,
+                    self.score_mean,
+                    self.score_sd,
+                    self.guardrails_ok,
+                    self.chosen,
+                    self.mcb,  # type: ignore[arg-type]
+                    self.dsc,  # type: ignore[arg-type]
+                    strict=True,
+                )
+            ]
+        else:
+            headers = ("method", self.criterion, "sd", "guardrails", "chosen")
+            rows = [
+                (m, sm, sd, bool(g), "*" if c else "")
+                for m, sm, sd, g, c in zip(
+                    self.methods,
+                    self.score_mean,
+                    self.score_sd,
+                    self.guardrails_ok,
+                    self.chosen,
+                    strict=True,
+                )
+            ]
+        table = _aligned_table(headers, rows)
         return f"SelectionReport (criterion: {self.criterion})\n{table}"
 
 

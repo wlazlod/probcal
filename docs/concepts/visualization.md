@@ -72,6 +72,28 @@ anywhere in plotting — so two renders of the same data are always identical. A
 plots style themselves through a per-call `rc_context`; your global matplotlib
 configuration is never touched.
 
+`risk_dist` picks the style of that density layer: `"rug"` (the default, described above),
+`"split"` (a 30-equal-mass-bin spike histogram of `p` — events upward, non-events downward,
+from a shared `y = 0.12` baseline in axis-fraction coordinates, since axis coordinates
+cannot go negative; heights are scaled so whichever class peaks higher reaches the full
+0.12), or `None` for no density layer at all. `rug=False` turns the layer off regardless of
+`risk_dist`, equivalently to `risk_dist=None`.
+
+`stats` swaps in an alternative box in place of the `annotate` one above: `stats=True`
+reports `n, events, intercept, slope, ICI, smECE, Brier` (smECE and Brier are strictly
+proper / self-consistent scores that E90 and Spiegelhalter's test do not cover); passing a
+`MetricReport` (e.g. from `metrics.evaluate`) instead reports `name = value [ci_low, ci_high]`
+for whichever of `intercept`, `slope`, `ici`, `smooth_ece`, `brier` the report carries, plus
+`n`/`events` read off `y`. `annotate` is ignored whenever `stats` is truthy — the two boxes
+never stack.
+
+Passing a `KernelReliabilityCurve` (from `reliability_smooth`) as `smooth` renders it as a
+density-weighted curve rather than a plain line: a variable-width `LineCollection` (wide
+where predictions are dense, `linewidths = 0.5 + 4.0 * density / density.max()`), the
+miscalibration area shaded between the curve and the identity, its bootstrap ribbon, and an
+`smECE = ...` readout in the bottom-right corner — the same convention that fills the fourth
+reliability construction described above.
+
 ## The calibration belt
 
 A smoothed reliability curve without uncertainty invites overinterpretation. The **GiViTI
@@ -154,7 +176,7 @@ guard raises with the install instruction rather than a bare `ImportError`.
 
 ```python
 from probcal import calibration_belt, reliability_binned, reliability_loess
-from probcal.curves import ecce_curve
+from probcal.curves import ecce_curve, reliability_smooth
 from probcal.metrics import jeffreys_grade_test, reliability_summary
 from probcal.plots import (  # [viz] extra
     plot_belt, plot_comparison, plot_ecce, plot_grade_backtest,
@@ -168,6 +190,11 @@ print(belt.degree, belt.p_value)
 print(reliability_summary(y, p))                   # the stats-box numbers, standalone
 
 ax = plot_reliability(curve, smooth=smooth, scale="logit", y=y, p=p)   # the flagship view
+kernel = reliability_smooth(y, p)                  # the smECE-consistent construction
+ax = plot_reliability(
+    curve, smooth=kernel, scale="logit", y=y, p=p,
+    stats=True, risk_dist="split",                 # n/events/.../smECE/Brier box + spike histogram
+)
 ax = plot_belt(belt)
 fig = plot_comparison(reliability_binned(y, s_raw), reliability_binned(y, p))
 ax = plot_ecce([ecce_curve(y, s_raw), ecce_curve(y, p)], labels=["raw", "calibrated"])

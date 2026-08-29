@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import NamedTuple
 
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 
 _FPMIN = 1e-300
 _CF_EPS = 1e-16
@@ -747,6 +748,113 @@ def _loess_fit_sorted(
     return out
 
 
+# Elements per gathered window block in ``_loess_fit_sorted_vec``. Anchors are
+# processed in blocks of ``_LOESS_BLOCK // r`` so the (block x r) window matrix
+# and its temporaries stay cache-resident regardless of n: at n=1e4 (r=7500)
+# that is 4 anchors per block, at n=1e6 (r=750000) one. Measured at n=1e4,
+# 512 anchors: 0.045s here against 0.083s at 1 << 20 and 0.062s at 1 << 17 --
+# a locality effect, not an arithmetic one. Block size does not affect the
+# result: each anchor's row is reduced independently.
+_LOESS_BLOCK = 1 << 15
+
+
+def _loess_window_starts(xs: np.ndarray, evs: np.ndarray, r: int) -> np.ndarray:
+    """Window start index per eval point, matching ``_loess_fit_sorted``'s rule.
+
+    The loop advances its window while ``xs[i + r] - x0 < x0 - xs[i]``. Both
+    sides of that comparison are monotone in ``i`` (IEEE subtraction is), so the
+    windows that fail it are upward-closed and the loop's answer is the *first*
+    ``i`` that fails — found here without the two-pointer walk. ``xs[i] +
+    xs[i + r]`` is likewise non-decreasing, so one ``searchsorted`` against
+    ``2 * x0`` lands on that index or within a few of it; the two exact-
+    comparison sweeps then move to the loop's index, since the sum form and the
+    difference form round differently (``0.3 - 0.2 < 0.2 - 0.1`` while
+    ``0.1 + 0.3 == 2 * 0.2``). Both sweeps are monotone and bounded by
+    ``n - r``, and on tie-free data neither fires.
+    """
+    n = xs.shape[0]
+    limit = n - r
+    if limit <= 0:
+        return np.zeros(evs.shape[0], dtype=np.intp)
+    start = np.minimum(np.searchsorted(xs[:limit] + xs[r:], 2.0 * evs, side="left"), limit).astype(
+        np.intp
+    )
+    while True:
+        right = xs[np.minimum(start + r, n - 1)]
+        advance = (start < limit) & ((right - evs) < (evs - xs[start]))
+        if not advance.any():
+            break
+        start = start + advance
+    while True:
+        prev = np.maximum(start - 1, 0)
+        retreat = (start > 0) & ~((xs[prev + r] - evs) < (evs - xs[prev]))
+        if not retreat.any():
+            break
+        start = start - retreat
+    return start
+
+
+def _loess_fit_sorted_vec(
+    xs: np.ndarray, ys: np.ndarray, evs: np.ndarray, r: int, degree: int
+) -> np.ndarray:
+    """Vectorized twin of :func:`_loess_fit_sorted` for a bounded eval grid.
+
+    Same windows, same tricube weights, same closed-form solves — evaluated for
+    many eval points at once instead of one Python iteration each, which is what
+    makes the ICI family affordable inside ``evaluate``'s bootstrap. Every
+    window has exactly ``r`` points, so the block gather is rectangular.
+
+    Only for a *bounded* number of eval points: the gather is O(len(evs) * r), so
+    this is wired in behind ``loess(..., presorted=True)``'s ``grid_size`` anchor
+    branch (512 anchors) and never for the per-observation path. ``xs`` and
+    ``evs`` must already be sorted ascending.
+
+    The tricube weight cubes by multiplication (``u * u * u``) where the loop
+    writes ``u ** 3``. numpy sends ``** 3`` to ``libm`` ``pow`` — 10x the cost of
+    two multiplies, and the two tricube exponentiations are ~80% of this
+    routine's arithmetic — for a result that differs by at most one ulp
+    (measured <= 2.3e-16 relative). That is the only intended numeric difference
+    from the loop, and it is confined to the bootstrap path; the point-estimate
+    path still runs the loop unchanged.
+    """
+    m = evs.shape[0]
+    start = _loess_window_starts(xs, evs, r)
+    out = np.empty(m, dtype=np.float64)
+    windows_x = sliding_window_view(xs, r)
+    windows_y = sliding_window_view(ys, r)
+    block = max(1, _LOESS_BLOCK // max(r, 1))
+    for lo in range(0, m, block):
+        hi = min(lo + block, m)
+        s = start[lo:hi]
+        x0 = evs[lo:hi]
+        xw = windows_x[s]
+        yw = windows_y[s]
+        xc = xw - x0[:, None]
+        h = np.maximum(x0 - xs[s], xs[s + r - 1] - x0)
+        degenerate = h == 0.0
+        u = np.abs(xc) / np.where(degenerate, 1.0, h)[:, None]
+        cube = u * u * u
+        tri = np.clip(1.0 - cube, 0.0, None)
+        wts = tri * tri * tri
+        if degree == 0:
+            ww = np.maximum(wts, _FPMIN)
+            vals = (ww * yw).sum(axis=1) / ww.sum(axis=1)
+        else:
+            wxc = wts * xc
+            sw = wts.sum(axis=1)
+            swx = wxc.sum(axis=1)
+            swxx = (wxc * xc).sum(axis=1)
+            swy = (wts * yw).sum(axis=1)
+            swxy = (wxc * yw).sum(axis=1)
+            det = sw * swxx - swx * swx
+            singular = np.abs(det) < _FPMIN
+            vals = np.where(
+                singular, swy / sw, (swxx * swy - swx * swxy) / np.where(singular, 1.0, det)
+            )
+        out[lo:hi] = np.where(degenerate, yw.mean(axis=1), vals)
+    return out
+
+
 def loess(
     x: object,
     y: object,
@@ -800,7 +908,14 @@ def loess(
     xs, ys = (x_arr, y_arr) if order is None else (x_arr[order], y_arr[order])
     if grid_size is not None and ev.shape[0] > grid_size:
         anchors = np.unique(np.quantile(ev, np.linspace(0.0, 1.0, grid_size)))
-        return np.interp(ev, anchors, _loess_fit_sorted(xs, ys, anchors, r, degree))
+        # The anchor grid is bounded, so the presorted (bootstrap) path can
+        # afford the blocked vectorized fit; the default path keeps the loop.
+        fit_anchors = (
+            _loess_fit_sorted_vec(xs, ys, anchors, r, degree)
+            if presorted
+            else _loess_fit_sorted(xs, ys, anchors, r, degree)
+        )
+        return np.interp(ev, anchors, fit_anchors)
     if xeval is None:
         fit = _loess_fit_sorted(xs, ys, xs, r, degree)
         if order is None:

@@ -433,22 +433,35 @@ costs O(bins · taps) per bisection step, where taps is the truncated-Gaussian k
 (at most ~161 taps), independent of n — measured at ~ms per call for n up to 10⁵. `metrics=`
 (DECISIONS 60) restricts the catalog to the names actually needed.
 
-0.3.0 removes the two largest constant factors *inside* the loop. Each replicate is sorted by
-prediction once (`np.argsort(..., kind="stable")`) and that order is shared: the LOESS fit and
-ECCE skip their own sorts, `ece`/`ece_debiased`/`mce` — which all bin at 15 equal-mass bins —
-share a single binning pass instead of three, and `ece_sweep`'s ~99-candidate monotonicity scan
-reads per-bin weighted sums off prefix-sum differences at `searchsorted` cut positions instead
-of rebuilding a length-n bin index per candidate. Reported **point estimates are untouched**:
-they are still computed on the unsorted path, bit-for-bit. Only the bootstrap replicates take
-the shared-sort path, and reordering their weighted sums moves the percentile CI bounds in the
-last bits (measured ≤ 4×10⁻¹¹ relative on a n=10⁴/`n_boot`=1000 full-catalog run).
+0.3.0 removes the large constant factors *inside* the loop, in three steps. First, each
+replicate is sorted by prediction once (`np.argsort(..., kind="stable")`) and that order is
+shared: the LOESS fit and ECCE skip their own sorts, `ece`/`ece_debiased`/`mce` — which all bin
+at 15 equal-mass bins — share a single binning pass instead of three. Second, `ece_sweep`'s
+~99-candidate monotonicity scan reads per-bin weighted sums off prefix-sum differences at
+`searchsorted` cut positions instead of rebuilding a length-n bin index per candidate. Third,
+the LOESS anchor evaluation is vectorized: the 512 anchors' tricube-weighted local fits are
+solved in cache-sized blocks of whole windows rather than one Python iteration each — every
+window holds exactly the same number of points, so the block is rectangular — which is the
+step that actually moves the total, since the anchor fit was 84% of a replicate after the
+first two.
 
-Measured on the dev host at n=10⁴, one full-catalog replicate costs 0.225s, of which the ICI
-family's shared LOESS fit is 0.189s (84%) and `ece_sweep`'s scan 0.024s (11%); the whole binned
-ECE family is 0.4ms. `evaluate(n=10⁴, n_boot=1000)` takes 226s, down from 304s in 0.2.x. What
-remains is not binning but `_loess_fit_sorted`'s per-anchor local-regression loop, so `metrics=`
-excluding the ICI family (`ici`/`e50`/`e90`/`emax`) is the single largest lever on `evaluate`'s
-cost. For n above roughly 10⁶, reduce `n_boot`, pass a `metrics=` subset, or both.
+Reported **point estimates are untouched**: they are still computed on the unsorted, scalar
+path, bit-for-bit. Only the bootstrap replicates take the fast path, and it differs from the
+slow one in two harmless ways — the reordered weighted sums move percentile CI bounds in their
+last bits (measured ≤ 4×10⁻¹¹ relative on a n=10⁴/`n_boot`=1000 full-catalog run), and the
+vectorized tricube weight cubes by multiplication where the scalar loop writes `** 3`, a
+sub-ulp difference (≤ 2.3×10⁻¹⁶ relative) worth taking because numpy sends `** 3` to `libm`
+`pow` at ten times the cost of two multiplies. The window selection itself is exact: the
+vectorized search reproduces the scalar two-pointer rule's comparison verbatim and is tested to
+land on the same index, tied scores included.
+
+Measured on the dev host at n=10⁴, one full-catalog replicate costs 0.089s — ICI family 0.051s
+(58%), `ece_sweep`'s scan 0.024s (27%), `intercept`/`slope` 0.009s (10%), `smooth_ece` 0.003s,
+the whole binned ECE family 0.4ms. `evaluate(n=10⁴, n_boot=1000)` takes 87s, down from 304s in
+0.2.x (3.5x); the intermediate figure after the sort and sweep changes alone was 226s, and the
+vectorized anchor fit (0.186s → 0.046s per call) accounts for the rest. The ICI family is still
+the largest single share, so `metrics=` excluding it (`ici`/`e50`/`e90`/`emax`) remains the
+biggest lever. For n above roughly 10⁶, reduce `n_boot`, pass a `metrics=` subset, or both.
 
 `docs/scripts/benchmarks.py` measures these on demand; per-metric rows (`ece`, `ece_sweep`,
 `ecce`, `ici`, `smooth_ece`) are 0.3.0 additions. Measured on the dev host:
@@ -460,16 +473,17 @@ cost. For n above roughly 10⁶, reduce `n_boot`, pass a `metrics=` subset, or b
 | 10,000 | `ecce(d.y, d.scores)` | 0.001 |
 | 10,000 | `ici(d.y, d.scores)` | 0.186 |
 | 10,000 | `smooth_ece(d.y, d.scores)` | 0.003 |
-| 10,000 | `evaluate(d.y, d.scores, n_boot=100)` | 22.8 |
+| 10,000 | `evaluate(d.y, d.scores, n_boot=100)` | 9.4 |
 | 100,000 | `ece(d.y, d.scores)` | 0.015 |
 | 100,000 | `ece_sweep(d.y, d.scores)` | 0.796 |
 | 100,000 | `ecce(d.y, d.scores)` | 0.011 |
 | 100,000 | `ici(d.y, d.scores)` | 1.863 |
 | 100,000 | `smooth_ece(d.y, d.scores)` | 0.005 |
-| 100,000 | `evaluate(d.y, d.scores, n_boot=100)` | 219.6 |
+| 100,000 | `evaluate(d.y, d.scores, n_boot=100)` | 93.1 |
 
-The single-call `ece_sweep` rows time the public function, which keeps the original scan; the
-vectorized scan above is the bootstrap-internal path and costs 0.024s at n=10⁴.
+The single-call `ece_sweep` and `ici` rows time the public functions, which keep the original
+scan and the scalar anchor loop; the vectorized versions are bootstrap-internal and cost 0.024s
+and 0.046s respectively at n=10⁴.
 
 ## References
 

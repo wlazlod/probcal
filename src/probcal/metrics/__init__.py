@@ -342,17 +342,21 @@ def evaluate(
 
     Each replicate is sorted by prediction once and that order is shared:
     the LOESS fit and ECCE skip their own sorts, ``ece``/``ece_debiased``/
-    ``mce`` share one 15-bin equal-mass binning pass, and ``ece_sweep``'s
+    ``mce`` share one 15-bin equal-mass binning pass, ``ece_sweep``'s
     ~99-candidate scan reads per-bin sums off prefix-sum differences at
-    ``searchsorted`` cut positions. The reported *point* estimates are
-    computed on the unsorted path and are bit-for-bit what 0.2.x produced;
-    only the replicates change summation order, which moves the percentile
-    CI bounds in their last bits (measured <= 4e-11 relative). On the dev
-    host at n=1e4 a full-catalog replicate costs 0.225s — 84% of it the ICI
-    family's LOESS fit, 11% the ``ece_sweep`` scan, 0.2% the whole binned
-    ECE family — so excluding the ICI family via ``metrics=`` is the single
-    largest lever on cost. See ``docs/concepts/metrics.md`` for the measured
-    table.
+    ``searchsorted`` cut positions, and the LOESS anchor fits are solved in
+    vectorized blocks rather than one Python iteration per anchor. The
+    reported *point* estimates are computed on the unsorted, scalar path and
+    are bit-for-bit what 0.2.x produced; only the replicates take the fast
+    path, whose reordered sums move percentile CI bounds in their last bits
+    (measured <= 4e-11 relative) and whose tricube weight cubes by
+    multiplication rather than ``** 3`` (<= 2.3e-16 relative). On the dev
+    host at n=1e4 a full-catalog replicate costs 0.089s — 58% of it the ICI
+    family's LOESS fit, 27% the ``ece_sweep`` scan, 10% intercept/slope,
+    0.5% the whole binned ECE family — and the full run
+    (``n_boot=1000``) takes 87s against 304s in 0.2.x. Excluding the ICI
+    family via ``metrics=`` remains the single largest lever on cost. See
+    ``docs/concepts/metrics.md`` for the measured table.
 
     Examples
     --------

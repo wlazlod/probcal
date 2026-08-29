@@ -9,6 +9,9 @@ import pytest
 
 from probcal._math import (
     _FPMIN,
+    _loess_fit_sorted,
+    _loess_fit_sorted_vec,
+    _loess_window_starts,
     beta_ppf,
     betainc,
     bisect,
@@ -430,3 +433,84 @@ def test_weighted_quantile_integer_weights_matches_repeat_within_one_gap() -> No
     actual = weighted_quantile(x, q, w)
     tol = float(np.diff(np.sort(expanded)).max())
     np.testing.assert_allclose(actual, expected, atol=tol)
+
+
+# ------------------------------------------- vectorized presorted anchor fit (0.3.0)
+
+
+def _loess_anchor_case(
+    p: np.ndarray, y: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, int, np.ndarray]:
+    """Sorted arrays, the window size ``loess`` would use, and the 512-anchor grid."""
+    order = np.argsort(p, kind="stable")
+    xs, ys = p[order], y[order]
+    n = len(xs)
+    r = min(max(int(np.ceil(0.75 * n)), 2), n)
+    anchors = np.unique(np.quantile(xs, np.linspace(0.0, 1.0, 512)))
+    return xs, ys, r, anchors
+
+
+def _loess_fixtures() -> list[object]:
+    out = []
+    for n in (1000, 10_000):
+        d = make_pd_portfolio(n=n, random_state=3)
+        out.append(pytest.param(d.scores, d.y, id=f"portfolio-{n}"))
+    d = make_pd_portfolio(n=2000, random_state=4)
+    out.append(pytest.param(np.round(d.scores, 2), d.y, id="tied-scores"))
+    return out
+
+
+@pytest.mark.parametrize("p,y", _loess_fixtures())
+def test_loess_window_starts_match_the_two_pointer_loop(p: np.ndarray, y: np.ndarray) -> None:
+    """The vectorized window search must land on the loop's exact index.
+
+    Not an approximation: the loop's comparison is reproduced verbatim, so a
+    tied-score fixture (where the sum form and the difference form of the
+    comparison round differently) has to agree too.
+    """
+    xs, _, r, anchors = _loess_anchor_case(p, y)
+    n = len(xs)
+    expected, i = [], 0
+    for x0 in anchors:
+        while i + r < n and xs[i + r] - x0 < x0 - xs[i]:
+            i += 1
+        expected.append(i)
+    np.testing.assert_array_equal(_loess_window_starts(xs, anchors, r), np.array(expected))
+
+
+@pytest.mark.parametrize("p,y", _loess_fixtures())
+@pytest.mark.parametrize("degree", [0, 1])
+def test_loess_vectorized_anchors_match_the_loop(p: np.ndarray, y: np.ndarray, degree: int) -> None:
+    """Every anchor agrees with the scalar loop to within the tricube cube's ulp.
+
+    ``_loess_fit_sorted_vec`` cubes by multiplication where the loop calls
+    ``** 3``; that is the only intended difference, and it is a sub-ulp one.
+    """
+    xs, ys, r, anchors = _loess_anchor_case(p, y)
+    np.testing.assert_allclose(
+        _loess_fit_sorted_vec(xs, ys, anchors, r, degree),
+        _loess_fit_sorted(xs, ys, anchors, r, degree),
+        rtol=1e-9,
+        atol=1e-12,
+    )
+
+
+@pytest.mark.parametrize("p,y", _loess_fixtures())
+def test_loess_presorted_matches_the_default_path(p: np.ndarray, y: np.ndarray) -> None:
+    """End-to-end: ``presorted=True`` only changes throughput, not the fit."""
+    order = np.argsort(p, kind="stable")
+    xs, ys = p[order], y[order]
+    np.testing.assert_allclose(
+        loess(xs, ys, frac=0.75, grid_size=512, presorted=True),
+        loess(xs, ys, frac=0.75, grid_size=512),
+        rtol=1e-9,
+        atol=1e-12,
+    )
+
+
+def test_loess_presorted_without_grid_still_uses_the_scalar_loop() -> None:
+    """The per-observation path is O(n * r) to gather, so it must stay on the loop."""
+    d = make_pd_portfolio(n=400, random_state=3)
+    order = np.argsort(d.scores, kind="stable")
+    xs, ys = d.scores[order], d.y[order]
+    assert np.array_equal(loess(xs, ys, frac=0.75, presorted=True), loess(xs, ys, frac=0.75))

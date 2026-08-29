@@ -16,7 +16,8 @@ The public API is exactly the export lists below; anything prefixed with
   `TemperatureCalibrator`, `BetaCalibrator`, `IsotonicCalibrator`,
   `CenteredIsotonicCalibrator`, `HistogramBinningCalibrator`,
   `ScalingBinningCalibrator`, `BBQCalibrator`, `ENIRCalibrator`,
-  `VennAbersCalibrator`, `CrossVennAbersCalibrator`, `SplineCalibrator`),
+  `VennAbersCalibrator`, `CrossVennAbersCalibrator`, `SplineCalibrator`,
+  `SegmentedCalibrator`),
   `BaseCalibrator`, `UnattainableTargetError`, `CalibratorSelector`,
   `CalibratedModel`, `LogitOffset`, `OffsetEstimate`, `estimate_offset`,
   `offset_from_estimate`, `Chain`, the reliability curves and
@@ -60,6 +61,9 @@ rather than starting a new one for later 0.3.0 additions):
   `report()`'s trailing diagnostics; see *Monitoring*.
 - `CalibrationMonitor.apply_recommendation`, `monitor.AppliedAction` — closes
   the report-to-action loop for `kind="re-offset"`; see *Monitoring*.
+- `SegmentedCalibrator` (`probcal`) — empirical-Bayes (DerSimonian-Laird)
+  shrunken per-segment logit offsets on top of a shared base map; see
+  *Segmented calibration*.
 
 ## Conventions that will not silently change
 

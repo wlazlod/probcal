@@ -20,6 +20,10 @@ from ._conservative import (  # noqa: F401
     pluto_tasche,
     pluto_tasche_from_arrays,
 )
+
+# Re-exported so `probcal.metrics.grade.hl_e_test` sits alongside the other
+# per-grade tests; defined in `_safe.py` (spec M1).
+from ._safe import HlEResult, hl_e_test  # noqa: F401
 from .scores import _prep
 
 

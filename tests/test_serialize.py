@@ -103,10 +103,25 @@ def _monitor(seed0: int = 50):
     return mon
 
 
+def _applied_action(seed0: int = 50):
+    from probcal._math import expit, logit
+
+    mon = _monitor(seed0=seed0)
+    for k in range(3):
+        d = make_pd_portfolio(n=300, event_rate=0.1, random_state=seed0 + k)
+        p = d.scores
+        rng = np.random.default_rng(seed0 + 200 + k)
+        y = (rng.random(300) < expit(logit(p) + 0.8)).astype(float)
+        mon.update(y, p, label=f"drift{k}")
+    return mon.apply_recommendation(target=None)
+
+
 def _fitted(name: str):
     cls = SERIALIZABLE[name]
     if name == "CalibrationMonitor":
         return _monitor()
+    if name == "AppliedAction":
+        return _applied_action()
     if name == "Chain":
         from probcal import BetaCalibrator, Chain, LogitOffset
 
@@ -133,6 +148,8 @@ def _predict(obj, q):
         return obj.transform(q)
     if type(obj).__name__ == "CalibratedModel":
         return obj.predict_proba(q.reshape(-1, 1))
+    if type(obj).__name__ == "AppliedAction":
+        return np.asarray([obj.offset.delta_] if obj.offset is not None else [0.0])
     return obj.predict_proba(q)
 
 
@@ -176,6 +193,10 @@ def test_fingerprint_stable_and_data_sensitive(fitted) -> None:
     other = make_pd_portfolio(n=1200, random_state=99)
     if name == "CalibrationMonitor":
         alt = _monitor(seed0=77)
+        assert obj.fingerprint() != alt.fingerprint()
+        return
+    if name == "AppliedAction":
+        alt = _applied_action(seed0=77)
         assert obj.fingerprint() != alt.fingerprint()
         return
     if name == "Chain":

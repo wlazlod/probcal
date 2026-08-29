@@ -1,14 +1,18 @@
-"""Margin-of-conservatism (MoC) offsets derived from monitoring evidence.
+"""Margin-of-conservatism (MoC) offsets, and ``AppliedAction`` (spec M4).
 
-Also the intended home of M4's ``AppliedAction`` (not part of this task).
 Theory: ``docs/concepts/monitoring.md``.
 """
 
+import json
+import os
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import numpy as np
 
 from .._math import beta_ppf, expit
+from .._registry import load, register
+from .._serialize import SCHEMA_VERSION, check_schema, fingerprint_of_dict
 from ..metrics.scores import _prep
 from ..offset import LogitOffset
 from ._monitor import CalibrationMonitor, MonitorReport, MonitorStep
@@ -191,3 +195,156 @@ def moc_offset_from_counts(
     n = float(np.sum(w_arr))
     q = beta_ppf(level, k + 0.5, n - k + 0.5)
     return LogitOffset(target_mean=q).fit(p_arr, sample_weight=w_arr)
+
+
+@register
+@dataclass(frozen=True)
+class AppliedAction:
+    """The result of :meth:`CalibrationMonitor.apply_recommendation` (spec M4).
+
+    Attributes
+    ----------
+    kind : {"re-offset", "re-fit", "none"}
+        The recommendation :meth:`CalibrationMonitor.report` produced.
+    offset : LogitOffset or None
+        The fitted correction; only for ``kind="re-offset"``.
+    composed : object or None
+        ``offset`` applied to the caller's ``target`` (a
+        :class:`~probcal.chain.Chain` or a
+        :class:`~probcal.wrapper.CalibratedModel`) -- ``None`` when no
+        ``target`` was given or ``kind != "re-offset"``.
+    monitor : CalibrationMonitor or None
+        A fresh monitor with the same constructor parameters, ready to
+        watch the corrected pipeline; only for ``kind="re-offset"`` (see
+        the "why fresh" note on ``apply_recommendation``).
+    window : tuple[str, ...]
+        Batch labels the offset (or the suggested re-fit window) was
+        estimated from; empty when ``kind="none"``.
+    audit : dict
+        Provenance: ``alarm_at``, ``onset_label``, fingerprints of the old
+        and new monitor/offset/target (``None`` where not applicable), and
+        the estimated ``delta``/``se`` (``None`` unless ``kind="re-offset"``).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal._math import expit, logit
+    >>> from probcal.datasets import make_pd_portfolio
+    >>> from probcal.monitor import CalibrationMonitor
+    >>> mon = CalibrationMonitor(alpha=0.05)
+    >>> for k in range(6):
+    ...     d = make_pd_portfolio(n=1000, random_state=k)
+    ...     rng = np.random.default_rng(k + 1000)
+    ...     y = (rng.random(1000) < expit(logit(d.scores) + 0.8)).astype(float)
+    ...     _ = mon.update(y, d.scores, label=f"m{k}")
+    >>> action = mon.apply_recommendation()
+    >>> action.kind
+    're-offset'
+    >>> action.offset.delta_ > 0
+    True
+    """
+
+    kind: str
+    offset: "LogitOffset | None"
+    composed: "object | None"
+    monitor: "CalibrationMonitor | None"
+    window: tuple[str, ...]
+    audit: dict
+
+    # ------------------------------------------------------------- serialization
+
+    def to_dict(self) -> dict[str, object]:
+        """Versioned snapshot; ``offset``/``composed``/``monitor`` are nested envelopes.
+
+        Each nested field is stored via its own ``to_dict`` (``None`` stays
+        ``None``): a ``CalibratedModel`` composed target stores only a
+        model *reference*, reattached on load via
+        ``AppliedAction.from_dict(d, model=...)`` -- see
+        ``CalibratedModel.to_dict``.
+        """
+        from .. import __version__
+
+        return {
+            "probcal_schema": SCHEMA_VERSION,
+            "probcal_version": __version__,
+            "class": type(self).__name__,
+            "params": {},
+            "state": {
+                "kind": self.kind,
+                "offset": self.offset.to_dict() if self.offset is not None else None,
+                "composed": (
+                    self.composed.to_dict()  # type: ignore[attr-defined]
+                    if self.composed is not None
+                    else None
+                ),
+                "monitor": self.monitor.to_dict() if self.monitor is not None else None,
+                "window": list(self.window),
+                "audit": dict(self.audit),
+            },
+            "fit_meta": {},
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict, *, model: object = None) -> "AppliedAction":
+        """Rebuild from :meth:`to_dict` output.
+
+        Parameters
+        ----------
+        d : dict
+            Output of :meth:`to_dict`.
+        model : object or None, keyword-only
+            Passed through to ``CalibratedModel.from_dict`` when
+            ``composed`` was a ``CalibratedModel`` (only a reference to the
+            base model is serialized, never the model itself).
+
+        Raises
+        ------
+        ValueError
+            If the schema version is unknown or the payload class differs.
+        """
+        check_schema(d)
+        if d.get("class") != cls.__name__:
+            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
+        st = d["state"]
+        offset = LogitOffset.from_dict(st["offset"]) if st["offset"] is not None else None
+        composed: object | None = None
+        if st["composed"] is not None:
+            if st["composed"].get("class") == "CalibratedModel":
+                from ..wrapper import CalibratedModel
+
+                composed = CalibratedModel.from_dict(st["composed"], model=model)
+            else:
+                composed = load(st["composed"])
+        monitor = CalibrationMonitor.from_dict(st["monitor"]) if st["monitor"] is not None else None
+        return cls(
+            kind=st["kind"],
+            offset=offset,
+            composed=composed,
+            monitor=monitor,
+            window=tuple(st["window"]),
+            audit=dict(st["audit"]),
+        )
+
+    def to_json(
+        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
+    ) -> str | None:
+        """Serialize to JSON text, or to ``path`` when given (returns None then)."""
+        text = json.dumps(self.to_dict(), indent=indent)
+        if path is None:
+            return text
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return None
+
+    @classmethod
+    def from_json(cls, path_or_str: object, *, model: object = None) -> "AppliedAction":
+        """Load from a JSON string or a filesystem path (see :meth:`from_dict`)."""
+        text = str(path_or_str)
+        if not text.lstrip().startswith("{"):
+            with open(text, encoding="utf-8") as fh:
+                text = fh.read()
+        return cls.from_dict(json.loads(text), model=model)
+
+    def fingerprint(self) -> str:
+        """SHA-256 of the canonical serialized form (version/timestamp blind)."""
+        return fingerprint_of_dict(self.to_dict())

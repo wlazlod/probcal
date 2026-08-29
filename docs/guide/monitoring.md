@@ -27,6 +27,12 @@ from probcal.plots import plot_e_process   # probcal[viz]
 plot_e_process(rep)
 ```
 
+`plot_e_process(rep, grades_panel=True)` adds the per-grade confidence
+sequences below the wealth curves; the
+[monitoring chapter](../concepts/monitoring.md#components) shows the
+rendered figure on a twelve-cohort drift scenario and reads it line by
+line.
+
 Three operational rules: persist the state instead of recomputing from raw
 data (predictability is what makes the guarantee hold); a portfolio-wide
 macro shock *should* trip the alarm — that is the monitor working, not a

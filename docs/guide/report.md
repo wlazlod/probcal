@@ -5,6 +5,16 @@ APIs documented in their own chapters (*Metrics and tests*,
 *Visualization*, *CORP and score decomposition*, *Conservatism*,
 *Monitoring*) — this page covers only assembling them into one document.
 
+**[Open a full sample report](../assets/sample_validation_report.html)** —
+every section switched on, over the twelve-cohort drift scenario the
+[monitoring chapter](../concepts/monitoring.md#components) plots. It is a
+single self-contained HTML file, so the link is the whole artifact.
+
+[![First screen of the sample validation report: the document title, the generated-at line, the portfolio summary block of n, events, event rate and mean predicted probability, and below it the CORP reliability diagram with its consistency band and score-decomposition box](../assets/sample_validation_report.png)](../assets/sample_validation_report.html)
+
+Regenerate it deliberately, not on every build:
+`uv run python docs/scripts/generate_sample_report.py`.
+
 ```python
 # s_cal, y_cal: held-out calibration scores and outcomes
 from probcal import BetaCalibrator

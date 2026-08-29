@@ -78,6 +78,19 @@ portfolio-level mean is preserved.
 **Global alarm** on `E = mean(E_off, E_shape[, E_grades])` at level
 `alpha`; component e-values are always reported for diagnosis.
 
+![E-process trajectory over twelve monthly cohorts: the global wealth curve and its offset, shape and per-grade components climb on a log scale, cross the dashed 1/alpha threshold at the labelled alarm batch, and the lower panel plots each grade's time-uniform offset confidence sequence tightening away from zero](img/e_process.png)
+
+The figure is the whole rule in one view: twelve cohorts of a deployed
+beta calibration, the true PD shifted by +0.6 log-odds from month seven
+onward. Wealth hovers around 1 while the forecast is calibrated, the
+alarm fires at the first crossing of `1/alpha`, and the components say
+*what* moved — offset and shape both climb here, and the grade panel
+below shows every grade's confidence sequence leaving zero together,
+which is the signature of a portfolio-wide level shift rather than one
+grade drifting alone. Reproduce it with
+`docs/scripts/generate_figures.py`; the calling code is in
+[Monitor and act](../guide/monitoring.md).
+
 ## A confidence sequence for the current offset
 
 Inverting the offset process against a grid of shifted nulls `delta_0 in

@@ -23,6 +23,16 @@ report.to_frame()      # long-format rows: group, metric, value, ci_low, ci_high
 fig = plot_reliability(reliability_binned(y_cal, s_cal), y=y_cal, p=s_cal, by=segment)
 ```
 
+![Faceted reliability grid on the logit scale: a pooled panel sitting on the identity beside three synthetic segment panels — corporate above the identity, retail below it, sme on it — showing a level split the pooled view averages away](../concepts/img/reliability_faceted.png)
+
+That is the case for looking: the pooled panel is on the identity, and
+the three segments are not. Two offsetting level errors cancel in the
+pool, so a portfolio that passes every aggregate guardrail can still be
+systematically optimistic for one segment and pessimistic for another —
+which is what `by=` is for, and what
+[Segmented calibration](../concepts/segmented.md) repairs once you have
+seen it.
+
 Each group's report is the same call you would make by hand on that
 group's slice — `evaluate(y[mask], scores[mask], seed=42 + 1000 * i, ...)`,
 where `i` is the group's position in sorted-label order — so results are

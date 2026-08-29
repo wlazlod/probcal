@@ -5,30 +5,27 @@ arbitrary reals, which no score-level estimator can accept — those checks are
 declared inapplicable in `probcal.sklearn._compat`, each with its own reason.
 This module re-implements the ones that *do* have a score-level analogue, on
 valid `(n,)` probability data, against the adapter (`SklearnCalibrator`) and
-the bare core (`BetaCalibrator`): fit idempotence, no mutation of the passed
-arrays, `__dict__` unchanged by the predict-side methods, round-trip
-persistence, clone-then-fit equivalence, subset invariance, and integer
-`sample_weight` equal to row duplication (the last one over every registered
-calibrator class).
+the bare core (`BetaCalibrator`). `_MIRRORED_BY` maps every mirrored check to
+the test that stands in for it, `_NO_ANALOGUE` names the rest, and
+`test_every_declared_check_is_mirrored_or_explained` asserts the two together
+cover the declared tables exactly, so neither list can drift.
 
-Generic checks with no score-level analogue, and why:
+Checks with no score-level analogue, and why:
 
-* multiclass (`check_classifiers_classes`, the multi-class arm of
-  `check_classifiers_train`) — a calibration map is binary by construction.
-* pairwise / kernel inputs — `X` is a score, never a Gram matrix.
-* sparse containers — one dense score column has no sparse form.
-* `dtype=object`, pandas and `_NotAnArray` containers
-  (`check_dtype_object`, `check_sample_weights_pandas_series`,
-  `check_classifier_data_not_an_array`) — container handling is sklearn's
-  `validate_data`, exercised by the checks that do run.
-* readonly-memmap and F-contiguous layouts (`check_readonly_memmap_input`,
-  `check_f_contiguous_array_estimator`) — a single column has no layout
-  variants; the property they protect (fit must not write into its input) is
-  mirrored by `test_fit_does_not_mutate_inputs`.
-* `n_features_in_` bookkeeping (`check_n_features_in*`) — the adapter's is
-  always 1 and is pinned in `tests/test_sklearn.py`; the bare core has no
-  such attribute by design.
-* `check_fit2d_predict1d` and `check_fit1d` — both expect a raise on 1-D `X`,
+* `check_classifiers_classes`, `check_classifiers_train` — their multi-class
+  arms; a calibration map is binary by construction.
+* `check_classifier_data_not_an_array`, `check_dtype_object`,
+  `check_sample_weights_not_an_array`, `check_sample_weights_pandas_series`,
+  `check_transformer_data_not_an_array` — container and dtype-object
+  handling, which is sklearn's `validate_data`, exercised by the checks that
+  do run; the core takes numpy arrays only.
+* `check_readonly_memmap_input`, `check_f_contiguous_array_estimator` — a
+  single column has no layout variants; the property they protect (fit must
+  not write into its input) is mirrored by `test_fit_does_not_mutate_inputs`.
+* `check_n_features_in`, `check_n_features_in_after_fitting` — the adapter's
+  `n_features_in_` is always 1 and is pinned in `tests/test_sklearn.py`; the
+  bare core has no such attribute by design.
+* `check_fit1d`, `check_fit2d_predict1d` — both expect a raise on 1-D `X`,
   which is the core's primary input form (spec W6/K2).
 * `check_supervised_y_2d` — expects a `DataConversionWarning` and a silent
   ravel of column-vector `y`; `_validation.validate_binary_y` stays strictly
@@ -36,8 +33,14 @@ Generic checks with no score-level analogue, and why:
 * `check_positive_only_tag_during_fit` — the score domain is `[0, 1]`,
   stricter than the tag's "non-negative", so the tag cannot express it.
 
-The score-level contract itself (interpret, inverses, fingerprints,
-serialization) is pinned by `tests/test_calibrator_protocol.py`.
+Sparse and pairwise inputs never reach these tables: one dense score column
+has no sparse form, and `X` is a score, never a Gram matrix.
+
+The tolerances in `_WEIGHT_DUPLICATION_TOLERANCE` are measured values plus
+headroom, not error budgets: the large ones (`SplineCalibrator` 0.25,
+`HistogramBinningCalibrator` 0.15) only catch gross breakage of an already
+non-exact equivalence. The score-level contract itself (interpret, inverses,
+fingerprints, serialization) is pinned by `tests/test_calibrator_protocol.py`.
 """
 
 import copy
@@ -49,11 +52,18 @@ import pytest
 pytest.importorskip("sklearn")
 
 from sklearn.base import clone  # noqa: E402
+from sklearn.exceptions import NotFittedError  # noqa: E402
+from sklearn.pipeline import make_pipeline  # noqa: E402
+from sklearn.utils.validation import check_is_fitted  # noqa: E402
 
 from probcal import BetaCalibrator, make_pd_portfolio  # noqa: E402
 from probcal._registry import SERIALIZABLE  # noqa: E402
 from probcal.base import BaseCalibrator  # noqa: E402
 from probcal.sklearn import SklearnCalibrator  # noqa: E402
+from probcal.sklearn._compat import (  # noqa: E402
+    CALIBRATOR_XFAIL_CHECKS,
+    CLASSIFIER_XFAIL_CHECKS,
+)
 
 _D = make_pd_portfolio(n=600, random_state=21)
 _S, _Y = _D.scores, _D.y
@@ -65,6 +75,57 @@ CALIBRATOR_CLASSES = sorted(
     key=lambda c: c.__name__,
 )
 
+# Declared-inapplicable check -> the test in this module that stands in for it.
+_MIRRORED_BY: dict[str, str] = {
+    "check_classifiers_one_label_sample_weights": (
+        "test_one_class_after_zero_weight_trimming_raises"
+    ),
+    "check_dict_unchanged": "test_dict_unchanged_by_predict_side_methods",
+    "check_dont_overwrite_parameters": "test_fit_does_not_overwrite_init_parameters",
+    "check_estimators_dtypes": "test_float32_input_gives_float64_output",
+    "check_estimators_fit_returns_self": "test_fit_returns_self",
+    "check_estimators_nan_inf": "test_non_finite_scores_raise",
+    "check_estimators_overwrite_params": "test_fit_does_not_overwrite_init_parameters",
+    "check_estimators_pickle": "test_pickle_round_trip_predicts_identically",
+    "check_fit_check_is_fitted": "test_check_is_fitted_before_and_after_fit",
+    "check_fit_idempotent": "test_fit_idempotent",
+    "check_fit_score_takes_y": "test_fit_takes_y_and_score_scores",
+    "check_methods_sample_order_invariance": "test_methods_sample_order_invariance",
+    "check_methods_subset_invariance": "test_methods_subset_invariance",
+    "check_pipeline_consistency": "test_pipeline_consistency",
+    "check_sample_weight_equivalence_on_dense_data": (
+        "test_integer_sample_weight_equals_row_duplication"
+    ),
+    "check_sample_weights_invariance": "test_integer_sample_weight_equals_row_duplication",
+    "check_sample_weights_list": "test_sample_weight_as_list_matches_array",
+    "check_sample_weights_not_overwritten": "test_fit_does_not_mutate_inputs",
+    "check_sample_weights_shape": "test_wrong_shape_sample_weight_raises",
+    "check_transformer_general": "test_fit_transform_equals_fit_then_transform",
+    "check_transformer_preserve_dtypes": "test_fit_transform_equals_fit_then_transform",
+}
+
+# Declared-inapplicable checks with no score-level analogue at all; each is
+# spelled out in this module's docstring with the reason.
+_NO_ANALOGUE: frozenset[str] = frozenset(
+    {
+        "check_classifier_data_not_an_array",
+        "check_classifiers_classes",
+        "check_classifiers_train",
+        "check_dtype_object",
+        "check_f_contiguous_array_estimator",
+        "check_fit1d",
+        "check_fit2d_predict1d",
+        "check_n_features_in",
+        "check_n_features_in_after_fitting",
+        "check_positive_only_tag_during_fit",
+        "check_readonly_memmap_input",
+        "check_sample_weights_not_an_array",
+        "check_sample_weights_pandas_series",
+        "check_supervised_y_2d",
+        "check_transformer_data_not_an_array",
+    }
+)
+
 # Calibrators for which integer weighting is not exactly row duplication, with
 # the measured max absolute deviation on this module's fixture (n=600, weights
 # drawn from {1, 2, 3}) and the reason. Everything not listed here is asserted
@@ -72,9 +133,8 @@ CALIBRATOR_CLASSES = sorted(
 _WEIGHT_DUPLICATION_TOLERANCE: dict[str, tuple[float, str]] = {
     "BBQCalibrator": (
         5e-2,
-        "the equal-mass bin grid is built from the rows (n triples under "
-        "duplication) and the Beta-Binomial marginal likelihood that averages "
-        "the bin counts is not scale-free; measured 2.8e-2",
+        "the equal-mass bin grids are quantiles of the rows, which duplication "
+        "moves; measured 2.8e-2",
     ),
     "BetaCalibrator": (
         1e-12,
@@ -93,19 +153,18 @@ _WEIGHT_DUPLICATION_TOLERANCE: dict[str, tuple[float, str]] = {
     ),
     "HistogramBinningCalibrator": (
         1.5e-1,
-        "equal-mass edges are quantiles of the rows, which duplication moves, "
-        "and the Jeffreys (k + 1/2)/(n + 1) shrinkage is not scale-free in the "
-        "weighted counts; measured 1.1e-1",
+        "the default equal-mass edges are unweighted np.quantile values, which "
+        "duplication moves (strategy='width' is exact, with or without the "
+        "Jeffreys shrinkage); measured 1.1e-1",
     ),
     "PlattCalibrator": (
-        3e-2,
-        "Platt's target smoothing (N+ + 1)/(N+ + 2) and 1/(N- + 2) uses the "
-        "class totals, which duplication triples; measured 2.0e-2",
+        1e-12,
+        "weighted and duplicated IRLS differ in floating point only; measured " "2.5e-16",
     ),
     "ScalingBinningCalibrator": (
         1.2e-1,
-        "a Platt stage (target smoothing, see PlattCalibrator) followed by "
-        "equal-mass bins on its output; measured 8.5e-2",
+        "equal-mass bins on the Platt stage's output, whose edges duplication "
+        "moves (the Platt stage itself agrees to 2.5e-16); measured 8.5e-2",
     ),
     "SegmentedCalibrator": (
         1e-12,
@@ -167,6 +226,35 @@ def test_fit_idempotent(kind: str) -> None:
 
 
 @pytest.mark.parametrize("kind", ["adapter", "core"])
+def test_fit_returns_self(kind: str) -> None:
+    """check_estimators_fit_returns_self: fit returns the same object."""
+    est = _make(kind)
+    assert est.fit(_as_X(kind, _S), _Y) is est
+
+
+@pytest.mark.parametrize("kind", ["adapter", "core"])
+def test_fit_does_not_overwrite_init_parameters(kind: str) -> None:
+    """check_dont_overwrite_parameters / check_estimators_overwrite_params."""
+    est = _make(kind)
+    params_before = copy.deepcopy(est.get_params())
+    public_before = {k for k in vars(est) if not k.startswith("_")}
+    est.fit(_as_X(kind, _S), _Y, sample_weight=_W)
+    assert est.get_params() == params_before
+    added = {k for k in vars(est) if not k.startswith("_")} - public_before
+    assert all(k.endswith("_") for k in added), added
+
+
+@pytest.mark.parametrize("kind", ["adapter", "core"])
+def test_check_is_fitted_before_and_after_fit(kind: str) -> None:
+    """check_fit_check_is_fitted (the bare core's hook is also covered in test_sklearn_duck)."""
+    est = _make(kind)
+    with pytest.raises(NotFittedError):
+        check_is_fitted(est)
+    est.fit(_as_X(kind, _S), _Y)
+    check_is_fitted(est)
+
+
+@pytest.mark.parametrize("kind", ["adapter", "core"])
 def test_fit_does_not_mutate_inputs(kind: str) -> None:
     """check_sample_weights_not_overwritten / readonly input: fit writes nothing back."""
     X, y, w = _as_X(kind, _S).copy(), _Y.copy(), _W.copy()
@@ -194,6 +282,80 @@ def test_dict_unchanged_by_predict_side_methods(kind: str) -> None:
     assert _state_equal(before, vars(est))
 
 
+@pytest.mark.parametrize("kind", ["adapter", "core"])
+def test_non_finite_scores_raise(kind: str) -> None:
+    """check_estimators_nan_inf: NaN/inf scores are refused in fit and in predict."""
+    for bad_value in (np.nan, np.inf):
+        bad = _S.copy()
+        bad[0] = bad_value
+        with pytest.raises(ValueError):
+            _make(kind).fit(_as_X(kind, bad), _Y)
+        est = _make(kind).fit(_as_X(kind, _S), _Y)
+        with pytest.raises(ValueError):
+            est.predict_proba(_as_X(kind, bad))
+
+
+@pytest.mark.parametrize("kind", ["adapter", "core"])
+def test_float32_input_gives_float64_output(kind: str) -> None:
+    """check_estimators_dtypes: float32 scores are accepted; probabilities stay float64."""
+    est = _make(kind).fit(_as_X(kind, _S.astype(np.float32)), _Y)
+    out = est.predict_proba(_as_X(kind, _Q.astype(np.float32)))
+    assert out.dtype == np.float64
+
+
+@pytest.mark.parametrize("kind", ["adapter", "core"])
+def test_sample_weight_as_list_matches_array(kind: str) -> None:
+    """check_sample_weights_list: a Python list of weights is accepted."""
+    as_list = _make(kind).fit(_as_X(kind, _S), _Y, sample_weight=list(_W))
+    as_array = _make(kind).fit(_as_X(kind, _S), _Y, sample_weight=_W)
+    np.testing.assert_array_equal(_proba(kind, as_list, _Q), _proba(kind, as_array, _Q))
+
+
+@pytest.mark.parametrize("kind", ["adapter", "core"])
+def test_wrong_shape_sample_weight_raises(kind: str) -> None:
+    """check_sample_weights_shape: length and dimension mismatches are refused."""
+    for bad in (np.ones(_S.size // 2), np.ones((_S.size, 2))):
+        with pytest.raises(ValueError):
+            _make(kind).fit(_as_X(kind, _S), _Y, sample_weight=bad)
+
+
+@pytest.mark.parametrize("kind", ["adapter", "core"])
+def test_fit_takes_y_and_score_scores(kind: str) -> None:
+    """check_fit_score_takes_y: y is the second positional argument of fit."""
+    est = _make(kind)
+    est.fit(_as_X(kind, _S), _Y)  # positionally, as a pipeline would call it
+    if kind == "adapter":
+        assert 0.0 <= est.score(_as_X(kind, _S), _Y) <= 1.0
+
+
+def test_pipeline_consistency() -> None:
+    """check_pipeline_consistency: wrapping the adapter in a Pipeline changes nothing."""
+    X, Xq = _S.reshape(-1, 1), _Q.reshape(-1, 1)
+    pipe = make_pipeline(SklearnCalibrator()).fit(X, _Y)
+    est = SklearnCalibrator().fit(X, _Y)
+    np.testing.assert_array_equal(pipe.predict_proba(Xq), est.predict_proba(Xq))
+    assert pipe.score(X, _Y) == est.score(X, _Y)
+
+
+def test_fit_transform_equals_fit_then_transform() -> None:
+    """check_transformer_general / check_transformer_preserve_dtypes."""
+    X = _S.reshape(-1, 1)
+    combined = SklearnCalibrator().fit_transform(X, _Y)
+    stepwise = SklearnCalibrator().fit(X, _Y).transform(X)
+    np.testing.assert_array_equal(combined, stepwise)
+    assert combined.shape == (X.shape[0], 1)
+    assert combined.dtype == np.float64
+    assert SklearnCalibrator().fit_transform(X.astype(np.float32), _Y).dtype == np.float64
+
+
+def test_one_class_after_zero_weight_trimming_raises() -> None:
+    """check_classifiers_one_label_sample_weights: the refusal names the class problem."""
+    w = np.ones(_S.size)
+    w[_Y == 1.0] = 0.0
+    with pytest.raises(ValueError, match="class"):
+        SklearnCalibrator().fit(_S.reshape(-1, 1), _Y, sample_weight=w)
+
+
 def test_pickle_round_trip_predicts_identically() -> None:
     """check_estimators_pickle, adapter side: pickle is sklearn's persistence contract."""
     est = SklearnCalibrator().fit(_S.reshape(-1, 1), _Y)
@@ -215,7 +377,7 @@ def test_json_round_trip_predicts_identically(cls: type) -> None:
 
 @pytest.mark.parametrize("kind", ["adapter", "core"])
 def test_clone_then_fit_equals_fresh_fit(kind: str) -> None:
-    """check_estimators_overwrite_params: a clone is a fresh estimator, params intact."""
+    """A clone is a fresh estimator with the same parameters (sklearn's clone contract)."""
     prototype = _make(kind)
     fitted = clone(prototype).fit(_as_X(kind, _S), _Y)
     fresh = _make(kind).fit(_as_X(kind, _S), _Y)
@@ -285,8 +447,28 @@ def test_adapter_zero_weight_equals_dropping_the_row() -> None:
     )
 
 
+# ------------------------------------------------------------ table guards
+
+
 def test_every_tolerance_entry_names_a_registered_calibrator() -> None:
     """The exception table cannot rot: each entry must name a live class."""
     names = {c.__name__ for c in CALIBRATOR_CLASSES}
     assert set(_WEIGHT_DUPLICATION_TOLERANCE) <= names
     assert all(reason for _atol, reason in _WEIGHT_DUPLICATION_TOLERANCE.values())
+
+
+def test_every_declared_check_is_mirrored_or_explained() -> None:
+    """Every declared-inapplicable check is either mirrored here or explained above."""
+    declared = set(CALIBRATOR_XFAIL_CHECKS) | set(CLASSIFIER_XFAIL_CHECKS)
+    accounted = set(_MIRRORED_BY) | _NO_ANALOGUE
+    assert declared == accounted, {
+        "declared but unaccounted": sorted(declared - accounted),
+        "accounted but not declared": sorted(accounted - declared),
+    }
+    assert not set(_MIRRORED_BY) & _NO_ANALOGUE
+
+    module = globals()
+    for check, test_name in _MIRRORED_BY.items():
+        assert callable(module.get(test_name)), f"{check} -> missing test {test_name}"
+    for check in _NO_ANALOGUE:
+        assert check in (__doc__ or ""), f"{check} is not explained in the module docstring"

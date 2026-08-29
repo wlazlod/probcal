@@ -40,8 +40,8 @@ def validate_X(estimator, X, *, reset: bool = False, allow_1d: bool = False) -> 
 # The checks with a score-level analogue are re-implemented on valid `(n,)`
 # probability data in `tests/test_sklearn_mirror_checks.py`.
 
-# Cause 1: multi-column X whose values happen to lie in [0, 1]. The column
-# count alone puts the check outside the score-level contract.
+# Cause 1: multi-column X. The column count alone puts the check outside the
+# score-level contract, whatever its values are.
 _MULTI_COLUMN_DATA: dict[str, str] = {
     "check_classifier_data_not_an_array": "2 columns of small-integer coordinates",
     "check_classifiers_one_label_sample_weights": "10 columns of U(0, 1) noise",

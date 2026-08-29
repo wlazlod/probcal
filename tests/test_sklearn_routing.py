@@ -107,29 +107,24 @@ def test_grid_search_delivers_weights_to_base_and_calibrator(routing: bool) -> N
     X = _features()
     grid = {"calibrator__variant": ["ab", "abm"]}
     with sklearn.config_context(enable_metadata_routing=routing):
-        base = LogisticRegression(max_iter=200)
+        # The spy sits inside the search, so the assertion below is about the
+        # fits the search actually ran.
         spy = _SpyLogisticRegression(max_iter=200)
         if routing:
-            base = base.set_fit_request(sample_weight=True)
             spy = spy.set_fit_request(sample_weight=True)
-        clf = CalibratedClassifier(base, calibrator=BetaCalibrator(), cv=3, random_state=0)
+        clf = CalibratedClassifier(spy, calibrator=BetaCalibrator(), cv=3, random_state=0)
         if routing:
             # The wrapper is a consumer too: GridSearchCV only forwards what is asked
             # for, and it asks about `score` as well as `fit`.
             clf = clf.set_fit_request(sample_weight=True).set_score_request(sample_weight=True)
-        weighted = GridSearchCV(clf, grid, cv=3).fit(X, _Y, sample_weight=_W)
-        unweighted = GridSearchCV(
-            CalibratedClassifier(base, calibrator=BetaCalibrator(), cv=3, random_state=0),
-            grid,
-            cv=3,
-        ).fit(X, _Y)
-
+        unweighted = GridSearchCV(clf, grid, cv=3).fit(X, _Y)
         _SpyLogisticRegression.seen = []
-        CalibratedClassifier(spy, cv=3, random_state=0).fit(X, _Y, sample_weight=_W)
+        weighted = GridSearchCV(clf, grid, cv=3).fit(X, _Y, sample_weight=_W)
         seen = list(_SpyLogisticRegression.seen)
 
-    # Every inner fit (3 folds + the full-data refit) received the weights.
-    assert len(seen) == 4
+    # 2 grid points x 3 search folds x (3 calibration folds + refit), plus the
+    # search's own refit of the best estimator on all the data.
+    assert len(seen) == 2 * 3 * 4 + 4
     assert all(seen)
     # And the weights changed the calibrated output.
     assert not np.allclose(

@@ -154,3 +154,54 @@ def test_import_report_module_stays_matplotlib_free() -> None:
         [sys.executable, "-c", code], capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
+
+
+def _gfm_cells(line: str) -> list:
+    """Split one GFM table row on unescaped ``|`` (``\\|`` is a literal pipe)."""
+    parts = re.split(r"(?<!\\)\|", line)
+    return parts[1:-1]
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_html_escapes_malicious_grade_and_group_labels() -> None:
+    y, p, _ = _portfolio(n=400)
+    n = len(y)
+    evil = "<img src=x onerror=alert(1)>"
+    labels = np.where(np.arange(n) % 2 == 0, evil, "A&B")
+
+    html = validation_report(y, p, grades=labels, by=labels, n_boot=15, seed=3)
+
+    assert evil not in html
+    assert "&lt;img src=x onerror=alert(1)&gt;" in html
+    assert "A&amp;B" in html
+    assert "<script" not in html
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_html_title_with_dollar_and_tags_is_escaped() -> None:
+    y, p, _ = _portfolio(n=100)
+    html = validation_report(y, p, title="Cost $5 <b>bold</b>", n_boot=10)
+    assert "Cost $5 &lt;b&gt;bold&lt;/b&gt;" in html
+    assert "<b>bold</b>" not in html
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_markdown_table_survives_pipe_in_group_label(tmp_path) -> None:
+    y, p, _ = _portfolio(n=400)
+    n = len(y)
+    by = np.where(np.arange(n) % 2 == 0, "a|b", "c|d")
+    out = tmp_path / "report.md"
+
+    text = validation_report(y, p, by=by, path=out, format="markdown", n_boot=15, seed=2)
+
+    section = text.split("## Grouped evaluation", 1)[1]
+    lines = [ln for ln in section.splitlines() if ln.startswith("| ")]
+    assert lines, "grouped evaluation table not found"
+    header_cols = len(_gfm_cells(lines[0]))
+    assert header_cols == 5
+    body_lines = [ln for ln in lines[1:] if set(ln.replace("|", "").strip()) - {"-"}]
+    assert body_lines
+    for ln in body_lines:
+        assert len(_gfm_cells(ln)) == header_cols, ln
+    assert "a\\|b" in text
+    assert "c\\|d" in text

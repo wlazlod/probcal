@@ -142,21 +142,29 @@ def _escape_html(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _escape_md_cell(text: str) -> str:
+    return text.replace("|", "\\|")
+
+
 def _table(fmt: str, headers: "tuple[str, ...]", rows: "list[tuple[Any, ...]]") -> str:
     cells = [tuple(_format_cell(v) for v in row) for row in rows]
     if fmt == "html":
-        thead = "".join(f"<th>{h}</th>" for h in headers)
-        tbody = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in row) + "</tr>" for row in cells)
+        thead = "".join(f"<th>{_escape_html(h)}</th>" for h in headers)
+        tbody = "".join(
+            "<tr>" + "".join(f"<td>{_escape_html(c)}</td>" for c in row) + "</tr>" for row in cells
+        )
         return f"<table><thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody></table>"
-    header_line = "| " + " | ".join(headers) + " |"
+    header_line = "| " + " | ".join(_escape_md_cell(h) for h in headers) + " |"
     sep_line = "| " + " | ".join("---" for _ in headers) + " |"
-    body_lines = [("| " + " | ".join(row) + " |") for row in cells]
+    body_lines = [("| " + " | ".join(_escape_md_cell(c) for c in row) + " |") for row in cells]
     return "\n".join([header_line, sep_line, *body_lines]) + "\n"
 
 
 def _kv(fmt: str, pairs: "Sequence[tuple[str, object]]") -> str:
     if fmt == "html":
-        items = "".join(f"<li><b>{k}:</b> {v}</li>" for k, v in pairs)
+        items = "".join(
+            f"<li><b>{_escape_html(str(k))}:</b> {_escape_html(str(v))}</li>" for k, v in pairs
+        )
         return f"<ul>{items}</ul>"
     return "\n".join(f"- **{k}:** {v}" for k, v in pairs) + "\n"
 
@@ -289,8 +297,16 @@ def _section_grades(
     band_headers = ("grade", "lo", "hi")
     band_rows = [(g, lo, hi) for g, (lo, hi) in bands.items()]
 
-    order_note = f"Grades ordered best to worst by mean predicted probability: {', '.join(order)}."
-    order_note_block = f"<p>{order_note}</p>" if fmt == "html" else f"\n{order_note}\n"
+    order_label = ", ".join(order)
+    if fmt == "html":
+        order_note = (
+            f"Grades ordered best to worst by mean predicted probability: "
+            f"{_escape_html(order_label)}."
+        )
+        order_note_block = f"<p>{order_note}</p>"
+    else:
+        order_note = f"Grades ordered best to worst by mean predicted probability: {order_label}."
+        order_note_block = f"\n{order_note}\n"
 
     body = (
         order_note_block

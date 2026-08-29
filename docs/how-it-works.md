@@ -14,6 +14,11 @@ flowchart LR
     F --> G[backtest<br/>per-grade tests]
     F --> H[inverse maps<br/>cutoffs, masterscale]
     F --> I[attribution<br/>adjusted SHAP]
+    F --> J["monitor<br/>CalibrationMonitor.update"]
+    J -- alarm --> K[onset estimate]
+    K --> L["apply_recommendation<br/>new offset"]
+    L --> E
+    J -- no alarm --> J
 ```
 
 ## 1. Diagnose
@@ -72,6 +77,20 @@ on the calibrated scale — exactly for logit-affine stages, by the Aumann–Sha
 general — with signs and rankings preserved under monotone maps. See
 [SHAP and calibration](concepts/shap-calibration.md).
 
+## 6. Monitor and act
+
+Deployment does not end the pipeline; it closes the loop. As cohorts mature, each
+batch's outcomes feed `CalibrationMonitor.update`, which extends an anytime-valid
+e-process — a running statistic that keeps its type-I guarantee at every look, not
+just at one pre-planned horizon. If the e-process ever crosses its alarm threshold,
+`estimate_onset` localizes when the drift began, and `apply_recommendation` turns the
+diagnosis into a fitted `LogitOffset` plus a **fresh** monitor for the corrected
+pipeline — the re-offset composes onto the deployed calibrator, and re-anchoring
+starts again at stage 4, with the new offset consumed exactly as before at stage 5.
+No alarm, no action: the monitor keeps watching. Details: the
+[Monitoring concepts chapter](concepts/monitoring.md) for the statistics, the
+[Monitoring how-to](guide/monitoring.md) for the calling code.
+
 ## The two flows
 
 All of the above assumes scores the model has not memorized. `flow="prefit"` uses a
@@ -79,3 +98,8 @@ dedicated calibration set (the credit-risk canon); `flow="cv"` synthesizes out-o
 scores when data are too scarce to split, pooling them into a single auditable map by
 default. The trade-offs — and how large a calibration set has to be, counted in events
 per parameter — are the subject of [Data splitting](concepts/data-splitting.md).
+
+Neither flow runs once and stops: stage 6's `apply_recommendation` feeds a corrected
+offset back into stage 4, so the diagram above is a loop, not a line — fit once,
+consume repeatedly, re-anchor whenever the monitor says the evidence warrants it, and
+watch the corrected pipeline with a new monitor afterward.

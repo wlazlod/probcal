@@ -141,6 +141,59 @@ class MetricReport(_ResultBase):
 
 
 @dataclass(frozen=True)
+class GroupedMetricReport(_ResultBase):
+    """Per-group metric reports plus a pooled report, from ``metrics.evaluate(by=...)``.
+
+    Attributes
+    ----------
+    pooled : MetricReport
+        Report computed on the full, ungrouped data (the ``by=None`` report,
+        using ``seed`` unchanged).
+    groups : tuple of str
+        Sorted, stringified group labels.
+    reports : tuple of MetricReport
+        Per-group reports, aligned with ``groups``. Group ``i`` (in this
+        sorted order) is computed with ``seed + 1000 * i``, so results are
+        reproducible independent of the label values themselves.
+    counts : numpy.ndarray
+        Observation count per group, aligned with ``groups``.
+    """
+
+    pooled: MetricReport
+    groups: tuple[str, ...]
+    reports: tuple[MetricReport, ...]
+    counts: np.ndarray
+
+    def _rows(self) -> list[tuple[str, str, float, float, float]]:
+        panels = (("pooled", self.pooled), *zip(self.groups, self.reports, strict=True))
+        return [
+            (group, n, v, lo, hi)
+            for group, rep in panels
+            for n, v, lo, hi in zip(rep.names, rep.values, rep.ci_low, rep.ci_high, strict=True)
+        ]
+
+    def to_frame(self) -> object:
+        """Rows as a list of dicts, or a pandas DataFrame when pandas is importable.
+
+        Each row is ``{"group", "metric", "value", "ci_low", "ci_high"}``;
+        the pooled report is included under the group label ``"pooled"``.
+        """
+        rows = [
+            {"group": group, "metric": n, "value": v, "ci_low": lo, "ci_high": hi}
+            for group, n, v, lo, hi in self._rows()
+        ]
+        try:
+            import pandas as pd
+        except ImportError:
+            return rows
+        return pd.DataFrame(rows)
+
+    def __repr__(self) -> str:
+        table = _aligned_table(("group", "metric", "value", "ci_low", "ci_high"), self._rows())
+        return f"GroupedMetricReport ({len(self.groups)} groups)\n{table}"
+
+
+@dataclass(frozen=True)
 class SelectionReport(_ResultBase):
     """Ranked outcome of automatic calibrator selection.
 

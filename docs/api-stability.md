@@ -24,7 +24,7 @@ The public API is exactly the export lists below; anything prefixed with
   `calibration_belt`, threshold translation (`calibrated_interval_to_raw`,
   `calibrated_bands_to_raw`), attribution repair, `make_pd_portfolio`,
   `expit`/`logit`, and the `metrics`/`monitor` submodules.
-- **`probcal.metrics.__all__`** — the 46-symbol metric catalog (proper
+- **`probcal.metrics.__all__`** — the 47-symbol metric catalog (proper
   scores, binned and binning-free calibration errors, per-grade backtests,
   the mixture-LR grade e-test, Pluto-Tasche most-prudent PDs, Jeffreys
   upper masterscale bands, the recalibration-regression framework, SKCE,
@@ -64,6 +64,10 @@ rather than starting a new one for later 0.3.0 additions):
 - `SegmentedCalibrator` (`probcal`) — empirical-Bayes (DerSimonian-Laird)
   shrunken per-segment logit offsets on top of a shared base map; see
   *Segmented calibration*.
+- `metrics.evaluate(by=)` and `GroupedMetricReport` (metric catalog 46 → 47
+  symbols) — per-group metric reports plus a pooled report; `plots.
+  plot_reliability(by=)` — the matching faceted reliability grid; see the
+  new *Grouped evaluation* guide.
 
 ## Conventions that will not silently change
 

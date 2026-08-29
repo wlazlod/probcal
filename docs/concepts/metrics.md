@@ -303,6 +303,16 @@ perfectly calibrated model. The report pairs ECE with its debiased variant preci
 artifact is visible rather than misread. Bootstrap-heavy computations carry the `slow` pytest
 marker and a fixed default seed, per the package's reproducibility conventions.
 
+**Grouping (`by=`).** `evaluate(..., by=labels)` runs the exact same pooled call above on the
+full data plus one independent call per sorted group, returning a `GroupedMetricReport`
+instead of a plain `MetricReport`. Group `i` (in sorted-label order) uses `seed + 1000 * i`
+rather than reusing `seed` for every group — a fixed, label-independent offset, so
+reproducibility does not depend on how many groups exist or what they are named, and no two
+groups' bootstrap draws can coincide by construction. This is side-by-side reporting, not a
+test: no comparison across groups is computed, and no multiple-comparison correction is
+applied, because none is implied by returning several independent reports. Formal
+group-conditional calibration testing is future work — see `docs/guide/groups.md`.
+
 **Weighted quantiles.** `e50`, `e90`, and the `reliability_summary` stats box compute their
 quantile step with `probcal._math.weighted_quantile` (Hazen interpolation positions) whenever
 `sample_weight` is given and not uniform; unweighted and equal-weight calls short-circuit to

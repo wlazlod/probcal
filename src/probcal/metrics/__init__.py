@@ -7,10 +7,11 @@ report-only — is the table in ``docs/concepts/metrics.md``.
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
-from .._results import MetricReport
+from .._results import GroupedMetricReport, MetricReport
 from .binned import (
     HosmerLemeshowResult,
     adaptive_ece,
@@ -71,6 +72,7 @@ __all__ = [
     "BinomialGradeResult",
     "CalibrationTestResult",
     "EcceResult",
+    "GroupedMetricReport",
     "GuardrailReport",
     "HlEResult",
     "HosmerLemeshowResult",
@@ -207,7 +209,8 @@ def evaluate(
     seed: int = 42,
     metrics: Sequence[str] | None = None,
     stratify: bool = True,
-) -> MetricReport:
+    by: object = None,
+) -> MetricReport | GroupedMetricReport:
     """Full metric report with seeded bootstrap percentile confidence intervals.
 
     Parameters
@@ -238,18 +241,36 @@ def evaluate(
         flag). If ``False``, replicates draw i.i.d. from all ``n`` rows; a
         degenerate (single-class) draw is redrawn up to 100 times before
         raising ``RuntimeError``.
+    by : array_like or None, keyword-only
+        Optional group labels, one per observation (same length as ``y``).
+        ``None`` (default) is the plain report above, unchanged. Otherwise
+        each label is stringified and a separate report is computed per
+        sorted label — group ``i`` (in sorted-label order) is evaluated
+        with ``seed + 1000 * i``, a fixed offset so results are
+        reproducible independent of the label values or how many groups
+        exist — plus a pooled report on the full data using ``seed``
+        unchanged. Returns a :class:`~probcal._results.GroupedMetricReport`
+        instead of a plain report. Group-conditional statistical *testing*
+        (formal multiplicity-adjusted comparisons across groups) is out of
+        scope here; see ``docs/guide/groups.md``.
 
     Returns
     -------
-    MetricReport
-        Point estimates and CI bounds for the requested catalog. Note the
-        caveat from the metrics chapter: a bootstrap CI around a *biased*
-        estimator (plain ECE) quantifies its variance, not its bias.
+    MetricReport or GroupedMetricReport
+        Point estimates and CI bounds for the requested catalog
+        (``by=None``, the default), or a pooled report plus one report per
+        group (``by`` given). Note the caveat from the metrics chapter: a
+        bootstrap CI around a *biased* estimator (plain ECE) quantifies its
+        variance, not its bias.
 
     Raises
     ------
     ValueError
-        If ``metrics`` contains names outside the metric catalog.
+        If ``metrics`` contains names outside the metric catalog; if
+        ``by`` is given with a length that does not match ``y``; or if a
+        group has only one outcome class (the underlying
+        ``"y must contain both classes"`` error, re-raised naming the
+        group).
     RuntimeError
         If ``stratify=False`` and 100 consecutive bootstrap draws are all
         single-class.
@@ -261,8 +282,35 @@ def evaluate(
     shares one LOESS fit at O(grid_size * frac * n); smECE is
     O(n + 257 * bins) per bisection step. All of the above are paid
     ``n_boot`` times — for n > 1e6, reduce ``n_boot`` or pass a ``metrics=``
-    subset.
+    subset. With ``by`` given, the whole cost model above is paid once per
+    group plus once for the pooled report.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal.metrics import evaluate
+    >>> rng = np.random.default_rng(0)
+    >>> p = rng.uniform(0.05, 0.5, 300)
+    >>> y = (rng.random(300) < p).astype(float)
+    >>> segment = np.where(p < 0.2, "low", "high")
+    >>> grouped = evaluate(y, p, n_boot=50, metrics=("brier",), by=segment)
+    >>> grouped.groups
+    ('high', 'low')
+    >>> len(grouped.reports) == len(grouped.groups)
+    True
     """
+    if by is not None:
+        return _evaluate_grouped(
+            y,
+            p,
+            by,
+            sample_weight=sample_weight,
+            n_boot=n_boot,
+            seed=seed,
+            metrics=metrics,
+            stratify=stratify,
+        )
+
     from .scores import _prep
 
     if metrics is not None:
@@ -311,6 +359,72 @@ def evaluate(
     ci_low = np.percentile(boot, 2.5, axis=0)
     ci_high = np.percentile(boot, 97.5, axis=0)
     return MetricReport(names=names, values=values, ci_low=ci_low, ci_high=ci_high)
+
+
+def _evaluate_grouped(
+    y: object,
+    p: object,
+    by: object,
+    *,
+    sample_weight: object,
+    n_boot: int,
+    seed: int,
+    metrics: Sequence[str] | None,
+    stratify: bool,
+) -> GroupedMetricReport:
+    """``evaluate(..., by=...)``: a pooled report plus one report per sorted group."""
+    y_len = len(np.asarray(y))
+    by_arr = np.asarray(by)
+    if len(by_arr) != y_len:
+        raise ValueError(f"by must have the same length as y ({y_len}), got {len(by_arr)}")
+    labels = np.array([str(g) for g in by_arr])
+    groups = tuple(sorted(set(labels.tolist())))
+
+    pooled = cast(
+        MetricReport,
+        evaluate(
+            y,
+            p,
+            sample_weight=sample_weight,
+            n_boot=n_boot,
+            seed=seed,
+            metrics=metrics,
+            stratify=stratify,
+        ),
+    )
+
+    p_arr = np.asarray(p)
+    y_arr = np.asarray(y)
+    w_full = None if sample_weight is None else np.asarray(sample_weight)
+    reports = []
+    counts = []
+    for i, g in enumerate(groups):
+        mask = labels == g
+        counts.append(int(mask.sum()))
+        sw = None if w_full is None else w_full[mask]
+        try:
+            rep = cast(
+                MetricReport,
+                evaluate(
+                    y_arr[mask],
+                    p_arr[mask],
+                    sample_weight=sw,
+                    n_boot=n_boot,
+                    seed=seed + 1000 * i,
+                    metrics=metrics,
+                    stratify=stratify,
+                ),
+            )
+        except ValueError as exc:
+            raise ValueError(f"group {g!r}: {exc}") from exc
+        reports.append(rep)
+
+    return GroupedMetricReport(
+        pooled=pooled,
+        groups=groups,
+        reports=tuple(reports),
+        counts=np.array(counts),
+    )
 
 
 @dataclass(frozen=True)

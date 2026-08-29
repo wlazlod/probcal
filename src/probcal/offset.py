@@ -158,6 +158,10 @@ class LogitOffset:
 
     predict_proba = transform
 
+    def __sklearn_is_fitted__(self) -> bool:
+        """Fitted state for sklearn >= 1.6 (``delta_`` fixed or solved)."""
+        return bool(self.fitted_)
+
     @property
     def affine_logit_coeffs_(self) -> tuple[float, float]:
         """``(1, delta)``: the offset is affine on the logit scale."""

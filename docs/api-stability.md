@@ -95,6 +95,13 @@ rather than starting a new one for later 0.3.0 additions):
   the Ehm, Gneiting, Jordan & Krüger (2016) elementary-score decomposition
   underlying `plots.plot_murphy`; see *Metrics and tests* and
   *Visualization*.
+- `BaseCalibrator.__sklearn_is_fitted__` and
+  `BaseCalibrator.__sklearn_tags__` (also `__sklearn_is_fitted__` on `Chain`,
+  `LogitOffset` and `CalibratedModel`) — sklearn's duck-typing hooks, so a
+  bare calibrator works with `clone`, `get_tags`, `check_is_fitted` and CV
+  loops on sklearn >= 1.6 without the adapter; sklearn is imported inside
+  `__sklearn_tags__` only, so `import probcal` stays numpy-only. See the
+  *sklearn* guide.
 
 ## Conventions that will not silently change
 

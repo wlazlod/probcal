@@ -33,6 +33,13 @@ document is one call, deterministic given the same inputs and `seed`
 is fully self-contained, no external requests, no `<script>`. Emailing it
 or dropping it in a model-risk file share needs nothing else.
 
+Every caller-supplied label — group names, grade names, the monitor's
+`recommendation`/`alarm_at`/`onset_label` strings, the report `title` — is
+HTML-escaped before interpolation (GFM-cell-escaped for `"|"` in
+`format="markdown"` tables), so a label containing markup or a table
+delimiter renders as literal text, never as injected HTML or a corrupted
+table row.
+
 ```python
 validation_report(
     y, scores, grades=grades,

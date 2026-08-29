@@ -28,7 +28,7 @@ md(
     "**Role: the flagship, full-lifecycle tutorial.** One portfolio taken through "
     "every stage — calibrate, evaluate, invert, monitor, act, report — on the whole "
     "public surface. New to probcal? Start with the 20-minute "
-    "[PD calibration walkthrough](pd_calibration_walkthrough.ipynb) instead."
+    "[PD calibration walkthrough](../pd_calibration_walkthrough/) instead."
 )
 
 md("""\
@@ -337,6 +337,7 @@ print(f"alarm at: {rep.alarm_at}; recommendation: {rep.recommendation}")
 for line in rep.reasoning:
     print(" -", line)
 plot_e_process(rep)
+plt.show()
 """)
 
 md("""\

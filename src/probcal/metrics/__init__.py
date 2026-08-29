@@ -7,7 +7,7 @@ report-only — is the table in ``docs/concepts/metrics.md``.
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import cast, overload
 
 import numpy as np
 
@@ -253,6 +253,34 @@ def _point_metrics(
             out["spiegelhalter_p"] = sp.p_value
 
     return {k: out[k] for k in _METRIC_CATALOG if k in sel}
+
+
+@overload
+def evaluate(
+    y: object,
+    p: object,
+    *,
+    sample_weight: object = None,
+    n_boot: int = 1000,
+    seed: int = 42,
+    metrics: Sequence[str] | None = None,
+    stratify: bool = True,
+    by: None = None,
+) -> MetricReport: ...
+
+
+@overload
+def evaluate(
+    y: object,
+    p: object,
+    *,
+    sample_weight: object = None,
+    n_boot: int = 1000,
+    seed: int = 42,
+    metrics: Sequence[str] | None = None,
+    stratify: bool = True,
+    by: object,
+) -> GroupedMetricReport: ...
 
 
 def evaluate(

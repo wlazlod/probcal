@@ -38,7 +38,7 @@ from typing import Any
 import numpy as np
 
 from . import __version__
-from ._results import GroupedMetricReport, MetricReport, _format_cell
+from ._results import _format_cell
 from ._serialize import data_fingerprint
 from .curves import corp_reliability, reliability_binned, reliability_smooth
 from .metrics import (
@@ -238,7 +238,6 @@ def _section_evaluate(
     fmt: str, y_arr: np.ndarray, p_arr: np.ndarray, *, n_boot: int, seed: int
 ) -> str:
     report = evaluate(y_arr, p_arr, n_boot=n_boot, seed=seed)
-    assert isinstance(report, MetricReport)  # by=None (unset here) always returns MetricReport
     headers = ("metric", "value", "ci_low", "ci_high")
     rows = list(zip(report.names, report.values, report.ci_low, report.ci_high, strict=True))
     return _section(fmt, "Metric report", _table(fmt, headers, rows))
@@ -332,7 +331,6 @@ def _section_groups(
     sink: _FigureSink,
 ) -> str:
     grouped = evaluate(y_arr, p_arr, n_boot=n_boot, seed=seed, by=by)
-    assert isinstance(grouped, GroupedMetricReport)  # by is not None here
 
     def draw() -> Any:
         from .plots import plot_reliability

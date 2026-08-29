@@ -89,6 +89,7 @@ nav:
       - Metrics and tests: concepts/metrics.md
       - Data splitting: concepts/data-splitting.md
       - Offset: concepts/offset.md
+      - Segmented calibration: concepts/segmented.md
       - SHAP and calibration: concepts/shap-calibration.md
       - Inverse maps: concepts/inverse-maps.md
       - Serialization: concepts/serialization.md

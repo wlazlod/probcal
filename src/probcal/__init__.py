@@ -23,6 +23,7 @@ from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
 from .monitor import moc_offset, moc_offset_from_counts
 from .offset import LogitOffset, OffsetEstimate, estimate_offset, offset_from_estimate
 from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
+from .segmented import SegmentedCalibrator
 from .selection import CalibratorSelector
 from .spline import SplineCalibrator
 from .thresholds import calibrated_bands_to_raw, calibrated_interval_to_raw
@@ -48,6 +49,7 @@ __all__: list[str] = [
     "OffsetEstimate",
     "PlattCalibrator",
     "ScalingBinningCalibrator",
+    "SegmentedCalibrator",
     "SplineCalibrator",
     "TemperatureCalibrator",
     "UnattainableTargetError",

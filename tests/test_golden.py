@@ -59,6 +59,10 @@ def test_golden_loads_and_reproduces(path: pathlib.Path) -> None:
     elif path.stem == "AppliedAction":
         obj = load(d)
         result = np.asarray([obj.offset.delta_] if obj.offset is not None else [0.0])
+    elif path.stem == "SegmentedCalibrator":
+        obj = load(d)
+        segments = np.asarray(["a", "b", "c"])[np.arange(len(q)) % 3]
+        result = obj.predict_proba(q, segments=segments)
     else:
         obj = load(d)
         result = obj.transform(q) if path.stem == "LogitOffset" else obj.predict_proba(q)

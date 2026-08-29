@@ -78,13 +78,26 @@ class OffsetProcess:
 
     def update(
         self, z: np.ndarray, p: np.ndarray, y: np.ndarray, w: np.ndarray, delta_hat: float
-    ) -> None:
+    ) -> float:
+        """Advance the process one batch; returns the plug-in log-LR increment.
+
+        Returns
+        -------
+        float
+            ``bern_log_lr(y, p, sigma(z + delta_hat), w)``, or ``0.0`` when
+            ``delta_hat == 0`` (the plug-in is the identity null). Used by
+            :class:`~probcal.monitor.CalibrationMonitor` to accumulate
+            ``MonitorStep.log_e_increment`` for drift-onset localization.
+        """
         # delta_hat == 0 means the alternative IS the null: the factor is
         # exactly 1, no expit(logit(p)) round-trip noise.
+        inc = 0.0
         if delta_hat != 0.0:
-            self.log_plug += bern_log_lr(y, p, expit(z + delta_hat), w)
+            inc = bern_log_lr(y, p, expit(z + delta_hat), w)
+            self.log_plug += inc
         for j, d in enumerate(self.grid):
             self.log_mix[j] += bern_log_lr(y, p, expit(z + d), w)
+        return inc
 
     def log_e(self) -> float:
         """log of ``(E_plug + E_mix) / 2`` (averages of e-values are e-values)."""

@@ -73,6 +73,19 @@ def _fitted(name: str):
         )
         wrapped.offset_to(delta=0.15)
         return wrapped
+    if name == "AppliedAction":
+        from probcal._math import expit, logit
+
+        mon = SERIALIZABLE["CalibrationMonitor"](delta_ci_grid=(-2.0, 2.0, 41))
+        for k, (y, p) in enumerate(_monitor_batches()):
+            mon.update(y, p, label=f"g{k}")
+        for k in range(3):
+            d = make_pd_portfolio(n=300, event_rate=0.1, random_state=50 + k)
+            p = d.scores
+            rng = np.random.default_rng(160 + k)
+            y = (rng.random(300) < expit(logit(p) + 0.8)).astype(float)
+            mon.update(y, p, label=f"drift{k}")
+        return mon.apply_recommendation(target=None)
     return cls().fit(_D.scores, _D.y)
 
 
@@ -83,6 +96,8 @@ def _predict(obj, q):
         return obj.transform(q)
     if type(obj).__name__ == "CalibratedModel":
         return obj.predict_proba(q.reshape(-1, 1))
+    if type(obj).__name__ == "AppliedAction":
+        return np.asarray([obj.offset.delta_] if obj.offset is not None else [0.0])
     return obj.predict_proba(q)
 
 

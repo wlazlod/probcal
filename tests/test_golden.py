@@ -56,6 +56,9 @@ def test_golden_loads_and_reproduces(path: pathlib.Path) -> None:
     elif path.stem == "CalibratedModel":
         obj = CalibratedModel.from_dict(d, model=_StubModel())
         result = obj.predict_proba(q.reshape(-1, 1))
+    elif path.stem == "AppliedAction":
+        obj = load(d)
+        result = np.asarray([obj.offset.delta_] if obj.offset is not None else [0.0])
     else:
         obj = load(d)
         result = obj.transform(q) if path.stem == "LogitOffset" else obj.predict_proba(q)

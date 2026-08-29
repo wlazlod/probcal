@@ -23,12 +23,13 @@ The public API is exactly the export lists below; anything prefixed with
   `calibration_belt`, threshold translation (`calibrated_interval_to_raw`,
   `calibrated_bands_to_raw`), attribution repair, `make_pd_portfolio`,
   `expit`/`logit`, and the `metrics`/`monitor` submodules.
-- **`probcal.metrics.__all__`** — the 44-symbol metric catalog (proper
+- **`probcal.metrics.__all__`** — the 46-symbol metric catalog (proper
   scores, binned and binning-free calibration errors, per-grade backtests,
-  Pluto-Tasche most-prudent PDs, Jeffreys upper masterscale bands, the
-  recalibration-regression framework, SKCE, `evaluate`).
+  the mixture-LR grade e-test, Pluto-Tasche most-prudent PDs, Jeffreys
+  upper masterscale bands, the recalibration-regression framework, SKCE,
+  `evaluate`).
 - **`probcal.monitor.__all__`** — `CalibrationMonitor`, `MonitorStep`,
-  `MonitorReport`, `moc_offset`, `moc_offset_from_counts`.
+  `MonitorReport`, `AppliedAction`, `moc_offset`, `moc_offset_from_counts`.
 - **`probcal.sklearn`** (extra `probcal[sklearn]`) — `SklearnCalibrator`,
   `CalibratedClassifier`.
 - **`probcal.integrations.optbinning`** (extra `probcal[optbinning]`) —
@@ -50,6 +51,15 @@ rather than starting a new one for later 0.3.0 additions):
   *Conservatism*.
 - `monitor.moc_offset`, `monitor.moc_offset_from_counts` — margin-of-
   conservatism offsets; see *Conservatism* and *Monitoring*.
+- `metrics.hl_e_test`, `HlEResult` — fixed-sample mixture-LR grade e-test
+  (safe Hosmer–Lemeshow analogue); see *Monitoring*.
+- `MonitorStep.grade_delta_ci` — per-grade time-uniform confidence sequences;
+  `MonitorReport.onset_label` and the `CalibrationMonitor(recommendation_window=)`
+  keyword-only constructor parameter (`"since_onset"` default, `"trailing"`
+  escape hatch) — drift-onset localization and the window it feeds into
+  `report()`'s trailing diagnostics; see *Monitoring*.
+- `CalibrationMonitor.apply_recommendation`, `monitor.AppliedAction` — closes
+  the report-to-action loop for `kind="re-offset"`; see *Monitoring*.
 
 ## Conventions that will not silently change
 

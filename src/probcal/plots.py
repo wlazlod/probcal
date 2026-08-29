@@ -729,20 +729,26 @@ def plot_offset_audit(offset: Any, *, ax: Any = None) -> Any:
         return ax
 
 
-def plot_e_process(report: Any, *, ax: Any = None) -> Any:
+def plot_e_process(report: Any, *, grades_panel: bool = False, ax: Any = None) -> Any:
     """Monitoring wealth per component on a log scale, with the 1/alpha line.
 
     Parameters
     ----------
     report : MonitorReport
         Result of :meth:`probcal.monitor.CalibrationMonitor.report`.
+    grades_panel : bool, default False
+        Add a second, shorter axes below the main plot showing each grade's
+        offset confidence-sequence band (``MonitorStep.grade_delta_ci``)
+        across steps. Additive: the default (``False``) call is
+        pixel-identical to 0.2.0, pinned by ``tests/test_plots_regression.py``.
     ax : matplotlib.axes.Axes or None, keyword-only
         Axes to draw on; a new figure and axes are created if ``None``.
 
     Returns
     -------
     matplotlib.axes.Axes
-        The axes the e-processes were drawn on.
+        The main axes the e-processes were drawn on (unchanged even when
+        ``grades_panel=True`` adds a second axes to the same figure).
     """
     _require_mpl()
     with _plt.rc_context(_STYLE):
@@ -782,7 +788,33 @@ def plot_e_process(report: Any, *, ax: Any = None) -> Any:
         ax.set_ylabel("e-process wealth (log scale)")
         ax.set_title("anytime-valid calibration monitoring")
         ax.legend(loc="upper left", fontsize=9)
+        if grades_panel:
+            _draw_grades_panel(ax, steps, x)
         return ax
+
+
+def _draw_grades_panel(ax: Any, steps: Any, x: np.ndarray) -> None:
+    """Second axes: each grade's offset confidence-sequence band across steps."""
+    grade_names = sorted({g for s in steps for g in s.grade_delta_ci})
+    if not grade_names:
+        return
+    gax = ax.figure.add_axes([0.15, -0.35, 0.75, 0.25])
+    palette = (_BLUE, _ORANGE, _GREEN, _RED, _AMBER)
+    for i, g in enumerate(grade_names):
+        lo = np.array(
+            [s.grade_delta_ci[g][0] if s.grade_delta_ci.get(g) else np.nan for s in steps]
+        )
+        hi = np.array(
+            [s.grade_delta_ci[g][1] if s.grade_delta_ci.get(g) else np.nan for s in steps]
+        )
+        color = palette[i % len(palette)]
+        gax.fill_between(x, lo, hi, color=color, alpha=0.25, label=f"grade {g}")
+    gax.axhline(0.0, color=_GREY, linewidth=0.8)
+    gax.set_xticks(x)
+    gax.set_xticklabels([s.label for s in steps], rotation=45, ha="right", fontsize=8)
+    gax.set_ylabel("offset CS (log-odds)")
+    gax.set_title("per-grade confidence sequences")
+    gax.legend(loc="upper left", fontsize=8)
 
 
 from ._plots_diag import plot_attributes, plot_corp, plot_mcb_dsc, plot_murphy  # noqa: E402

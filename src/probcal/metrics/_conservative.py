@@ -231,8 +231,8 @@ def pluto_tasche(
     # per-grade default rates respect rating order. A noisy grade whose own
     # rate exceeds the worse-grade pool it joins can still produce a real
     # local dip; the most-prudent reading of such a dip is to raise the
-    # better grade's bound up to the worse grade's, never to lower the
-    # worse grade's bound to match -- so the touch-up is the cumulative
+    # worse grade's bound up to the better grade's, never to lower the
+    # better grade's bound to match -- so the touch-up is the cumulative
     # maximum best to worst (a prudent hull), which never reduces any
     # grade's bound.
     hull = np.maximum.accumulate(pd_upper)

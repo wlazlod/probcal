@@ -29,7 +29,7 @@ The public API is exactly the export lists below; anything prefixed with
   upper masterscale bands, the recalibration-regression framework, SKCE,
   `evaluate`).
 - **`probcal.monitor.__all__`** — `CalibrationMonitor`, `MonitorStep`,
-  `MonitorReport`, `moc_offset`, `moc_offset_from_counts`.
+  `MonitorReport`, `AppliedAction`, `moc_offset`, `moc_offset_from_counts`.
 - **`probcal.sklearn`** (extra `probcal[sklearn]`) — `SklearnCalibrator`,
   `CalibratedClassifier`.
 - **`probcal.integrations.optbinning`** (extra `probcal[optbinning]`) —
@@ -53,6 +53,8 @@ rather than starting a new one for later 0.3.0 additions):
   conservatism offsets; see *Conservatism* and *Monitoring*.
 - `metrics.hl_e_test`, `HlEResult` — fixed-sample mixture-LR grade e-test
   (safe Hosmer–Lemeshow analogue); see *Monitoring*.
+- `CalibrationMonitor.apply_recommendation`, `monitor.AppliedAction` — closes
+  the report-to-action loop for `kind="re-offset"`; see *Monitoring*.
 
 ## Conventions that will not silently change
 

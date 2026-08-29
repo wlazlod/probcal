@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from probcal import BetaCalibrator, Chain, LogitOffset, make_pd_portfolio
+from probcal import BetaCalibrator, CalibratedModel, Chain, LogitOffset, make_pd_portfolio
 from probcal._math import beta_ppf, expit, logit
-from probcal.monitor import CalibrationMonitor, moc_offset, moc_offset_from_counts
+from probcal.monitor import AppliedAction, CalibrationMonitor, moc_offset, moc_offset_from_counts
 
 
 def _batch(n=1000, shift=0.0, slope=1.0, seed=0, event_rate=0.05):
@@ -198,3 +198,128 @@ def test_chain_with_monitor_moc_offset_serializes_and_inverts() -> None:
     p_target = chain.predict_proba(d.scores[:20])
     s = chain.point_inverse(p_target)
     np.testing.assert_allclose(chain.predict_proba(s), p_target, atol=1e-8)
+
+
+# ---------------------------------------------------------------- apply_recommendation
+
+
+class _StubModel:
+    """Deterministic sklearn-free model over a single score column (mirrors
+    tests/test_golden.py's _StubModel)."""
+
+    def fit(self, X, y):  # noqa: ARG002
+        return self
+
+    def predict_proba(self, X):
+        s = np.asarray(X)[:, 0]
+        return np.column_stack([1.0 - s, s])
+
+    def get_params(self):
+        return {"stub": True}
+
+
+def test_apply_recommendation_none_when_no_alarm() -> None:
+    mon = CalibrationMonitor(alpha=0.05)
+    for k in range(5):
+        y, p = _batch(shift=0.0, seed=500 + k)
+        mon.update(y, p, label=f"m{k}")
+    action = mon.apply_recommendation()
+    assert isinstance(action, AppliedAction)
+    assert action.kind == "none"
+    assert action.offset is None
+    assert action.composed is None
+    assert action.monitor is None
+    assert action.window == ()
+
+
+def test_apply_recommendation_re_fit_carries_no_offset() -> None:
+    # Slope drift, like test_monitor_sim.py's _recommendation_run.
+    mon = CalibrationMonitor(alpha=0.05)
+    for k in range(12):
+        y, p = _batch(shift=0.0, slope=0.7, seed=100 + k)
+        mon.update(y, p, label=f"m{k}")
+    rep = mon.report()
+    assert rep.recommendation == "re-fit"
+
+    action = mon.apply_recommendation()
+    assert action.kind == "re-fit"
+    assert action.offset is None
+    assert action.composed is None
+    assert action.monitor is None
+    assert action.window  # non-empty: the suggested re-fit window
+
+
+def test_apply_recommendation_does_not_mutate_the_old_monitor() -> None:
+    mon = _drifted_monitor(shift=0.8, n_batches=6)
+    before = mon.to_dict()
+    mon.apply_recommendation()
+    after = mon.to_dict()
+    assert before == after
+
+
+def test_apply_recommendation_audit_fingerprints_round_trip() -> None:
+    mon = _drifted_monitor(shift=0.8, n_batches=6)
+    action = mon.apply_recommendation()
+
+    js = action.to_json()
+    restored = AppliedAction.from_json(js)
+    assert restored.audit == action.audit
+    assert restored.fingerprint() == action.fingerprint()
+
+
+def test_apply_recommendation_composes_chain_target() -> None:
+    d = make_pd_portfolio(n=400, random_state=7)
+    cal = BetaCalibrator().fit(d.scores, d.y)
+    chain = Chain([cal])
+    mon = _drifted_monitor(shift=0.8, n_batches=6)
+
+    action = mon.apply_recommendation(target=chain)
+    assert isinstance(action.composed, Chain)
+    assert action.composed.offsets_[-1].delta_ == pytest.approx(action.offset.delta_)
+    assert chain.offsets_ == ()  # the original target is untouched
+
+
+def test_apply_recommendation_composes_calibrated_model_target() -> None:
+    d = make_pd_portfolio(n=400, random_state=7)
+    wrapped = CalibratedModel(_StubModel(), BetaCalibrator(), flow="prefit").fit(
+        d.scores.reshape(-1, 1), d.y
+    )
+    mon = _drifted_monitor(shift=0.8, n_batches=6)
+
+    action = mon.apply_recommendation(target=wrapped)
+    assert isinstance(action.composed, CalibratedModel)
+    assert len(action.composed.offsets_) == 1
+    assert action.composed.offsets_[-1].delta_ == pytest.approx(action.offset.delta_)
+    assert wrapped.offsets_ == []  # the original target is untouched (deep-copied)
+
+
+def test_apply_recommendation_rejects_unknown_target_type() -> None:
+    mon = _drifted_monitor(shift=0.8, n_batches=6)
+    with pytest.raises(TypeError, match="Chain"):
+        mon.apply_recommendation(target=object())
+
+
+def test_apply_recommendation_closes_the_drift_loop() -> None:
+    """End-to-end: alarm -> apply_recommendation() -> feed the corrected
+    stream into the fresh monitor -> no further alarm (spec M4)."""
+    mon = CalibrationMonitor(alpha=0.05)
+    alarm_batch = None
+    batches = []
+    for k in range(20):
+        shift = 0.5 if k >= 10 else 0.0
+        y, p = _batch(n=2000, shift=shift, seed=k)
+        batches.append((y, p))
+        step = mon.update(y, p, label=f"m{k}")
+        if step.alarm and alarm_batch is None:
+            alarm_batch = k
+    assert alarm_batch is not None and alarm_batch >= 10
+
+    action = mon.apply_recommendation()
+    assert action.kind == "re-offset"
+
+    step = None
+    for k in range(alarm_batch + 1, 20):
+        y, p = batches[k]
+        p_corrected = action.offset.transform(p)
+        step = action.monitor.update(y, p_corrected, label=f"m{k}")
+        assert not step.alarm

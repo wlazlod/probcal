@@ -180,6 +180,51 @@ the two failure modes on its own. The rule is a *diagnostic summary with no
 error guarantee* — every component process is reported so the reader can
 disagree with it.
 
+## Closing the loop: `apply_recommendation` (spec M4)
+
+`mon.apply_recommendation(target=None)` turns `report()`'s recommendation into an
+action, returning an `AppliedAction(kind, offset, composed, monitor, window, audit)`:
+
+- **`kind="re-offset"`.** Estimates the log-odds shift by maximum likelihood
+  (`offset.estimate_offset`) on the batches from the same window `report()`'s
+  trailing diagnostics used (`CalibrationMonitor._recommendation_window_start`
+  — factored out so the two windows can never disagree), and fits a
+  `LogitOffset` on it. If `target` is given, the offset is composed onto it —
+  `Chain([target.calibrator_, *target.offsets_, offset])` for a `Chain`, or
+  `copy.deepcopy(target).offset_to(delta=est.delta)` for a `CalibratedModel`
+  (`target` itself is never mutated either way; `None` leaves `composed=None`).
+  A **fresh** `CalibrationMonitor` is returned too, built with the same
+  constructor parameters (`CalibrationMonitor(**mon._ctor_params())`) — fresh,
+  not continued, because the e-process is a martingale under the null "the
+  CURRENTLY DEPLOYED forecast is calibrated"; once the pipeline changes, the
+  old accumulated evidence describes a forecast that no longer exists, and
+  continuing to accumulate it would test a null nobody deploys any more (the
+  same reasoning behind "start a new monitor after any re-calibration" in
+  *Validity conditions* below). Feed the corrected stream
+  (`offset.transform(p)`) into the fresh monitor going forward.
+- **`kind="re-fit"` / `kind="none"`.** No offset, composed target, or fresh
+  monitor is produced (`window` names the suggested re-fit window, or is
+  empty when there is nothing to suggest). **Automatic refits are out of
+  scope by design**: a slope drift needs a human to choose and validate a
+  new calibrator on new data — a mechanical action here could silently ship
+  a worse model.
+
+`AppliedAction.audit` records `alarm_at`, `onset_label`, fingerprints of the
+old and new monitor/offset/target (`None` where not applicable), and the
+estimated `delta`/`se`. `AppliedAction` is itself serializable
+(`to_dict`/`from_dict`/`to_json`/`from_json`/`fingerprint`), nesting `offset`,
+`composed`, and `monitor` as their own envelopes; a `composed` `CalibratedModel`
+stores only a model reference, reattached via `AppliedAction.from_dict(d,
+model=...)` exactly as `CalibratedModel.from_dict` itself does. `mon` is never
+mutated by the call — `to_dict()` before and after are identical.
+
+```python
+action = mon.apply_recommendation()  # target=None: offset only
+if action.kind == "re-offset":
+    p_corrected = action.offset.transform(p_new)
+    step = action.monitor.update(y_new, p_corrected, label="next")
+```
+
 ## Validity conditions
 
 - **Predictability.** Parameters for batch `k` use only batches `< k`; the

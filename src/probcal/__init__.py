@@ -20,6 +20,7 @@ from .curves import (
 )
 from .datasets import make_pd_portfolio
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
+from .monitor import moc_offset, moc_offset_from_counts
 from .offset import LogitOffset, OffsetEstimate, estimate_offset, offset_from_estimate
 from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
 from .selection import CalibratorSelector
@@ -67,4 +68,6 @@ __all__: list[str] = [
     "reliability_spline",
     "logit",
     "make_pd_portfolio",
+    "moc_offset",
+    "moc_offset_from_counts",
 ]

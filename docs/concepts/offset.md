@@ -40,6 +40,42 @@ from 0 to 1 as \( \delta \) spans the real line, so **the root exists and is uni
 monotonicity that guarantees uniqueness also makes bisection unconditionally convergent — and
 the uniqueness claim is unit-tested, not just asserted.
 
+## Estimating delta with a standard error
+
+Mode B fits `delta` against a *chosen* target mean — a policy anchor, not an estimate with
+uncertainty attached. `probcal.offset.estimate_offset(y, p)` answers the companion question:
+given realized outcomes, what is `delta`'s maximum-likelihood value, and how precisely is it
+known? It fits the single-parameter model `y ~ Bernoulli(sigma(logit(p) + delta))` by maximum
+likelihood. The score equation `sum(w * (y - sigma(logit(p) + delta))) = 0` is exactly the
+mean-matching condition mode B solves with `target_mean = mean_w(y)`, so `estimate_offset`
+finds `delta` with the same bisection root-finder — the shared `_offset_mle` helper, not a
+reimplementation, so the two routes cannot drift apart. The Fisher information for this
+one-parameter model at the fitted `delta` is `sum(w * q * (1 - q))` with `q = sigma(logit(p) +
+delta)`, so its inverse square root is `delta`'s asymptotic standard error. `estimate_offset`
+returns an `OffsetEstimate(delta, se, n, events, weight_sum)`; `probcal.offset.
+offset_from_estimate(est, p)` turns it into the same fitted `LogitOffset` mode A would give
+for `delta=est.delta`, so the audited MLE plugs directly into every downstream use — `Chain`,
+serialization, `interval_inverse`.
+
+The same score equation is also what `probcal.monitor._processes.plug_in_delta` solves at
+every batch as the monitor's predictable offset plug-in (falling back to `0.0` only for a
+degenerate past — no data yet, or an outcome rate outside `(0, 1)`). It calls the identical
+`_offset_mle` function `estimate_offset` calls, so a monitor's running point estimate of
+`delta` and a one-shot `estimate_offset` call on the same data agree bit-for-bit; the standard
+error is the piece `estimate_offset` adds that a monitor's e-process does not need, since the
+monitor's own read on uncertainty is the confidence sequence (see
+[Monitoring](monitoring.md#a-confidence-sequence-for-the-current-offset)), not a Wald interval
+around a point estimate.
+
+```python
+import numpy as np
+from probcal.offset import estimate_offset, offset_from_estimate
+
+est = estimate_offset(y_cal, p_cal)
+print(est)                       # delta=+0.1234 +/- 0.0287, n=..., events=...
+off = offset_from_estimate(est, p_cal)  # same LogitOffset mode A would give
+```
+
 ## Three derivations of the same number
 
 The logit-additive correction appears independently in three literatures, and the

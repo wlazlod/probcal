@@ -53,6 +53,11 @@ rather than starting a new one for later 0.3.0 additions):
   conservatism offsets; see *Conservatism* and *Monitoring*.
 - `metrics.hl_e_test`, `HlEResult` — fixed-sample mixture-LR grade e-test
   (safe Hosmer–Lemeshow analogue); see *Monitoring*.
+- `MonitorStep.grade_delta_ci` — per-grade time-uniform confidence sequences;
+  `MonitorReport.onset_label` and the `CalibrationMonitor(recommendation_window=)`
+  keyword-only constructor parameter (`"since_onset"` default, `"trailing"`
+  escape hatch) — drift-onset localization and the window it feeds into
+  `report()`'s trailing diagnostics; see *Monitoring*.
 - `CalibrationMonitor.apply_recommendation`, `monitor.AppliedAction` — closes
   the report-to-action loop for `kind="re-offset"`; see *Monitoring*.
 

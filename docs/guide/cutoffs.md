@@ -131,6 +131,8 @@ refuses rather than approximating). Full workflow:
 [optbinning scorecards](optbinning.md).
 
 ```python
+# docs: no-run — needs the optbinning extra, which CI's [dev,viz] env omits
+# s_cal, y_cal: held-out calibration scores and outcomes
 import pandas as pd
 from optbinning import BinningProcess, Scorecard
 from sklearn.linear_model import LogisticRegression
@@ -165,6 +167,7 @@ the target resolves once, through `interval_inverse(..., space="logit")`,
 and the search then runs on the raw margin:
 
 ```python
+# docs: no-run — needs the treecf extra, which CI's [dev,viz] env omits
 from treecf import Target
 
 target = Target.calibrated(cal, op="<=", value=0.02)   # or buffer_logit=half_width

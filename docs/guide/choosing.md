@@ -42,7 +42,9 @@ it. Only `is_monotone_ = True` buys you `interval_inverse` — everything
 else raises `NotImplementedError`, which is the whole reason the column is
 in the table. `LogitOffset` is not a calibrator and so is not a row here,
 but it carries the same protocol (closed-form both inverses) and composes
-onto any of the above through `Chain`.
+onto any of the above through `Chain` — which is not a row either, having
+no fit of its own to choose: it inherits every column from the stages you
+put in it.
 
 Event counts are the honest unit — "hundreds of events" means events, not
 rows, and 500 observations at a 3% base rate is fifteen. The reasoning is

@@ -1,5 +1,7 @@
 # optbinning scorecards
 
+<!-- docs: requires optbinning -->
+
 `probcal.integrations.optbinning` (extra: `pip install "probcal[optbinning]"`,
 optbinning ≥ 0.21) calibrates a fitted `Scorecard` without touching the
 deployed points, and translates calibrated PD policies to the points scale

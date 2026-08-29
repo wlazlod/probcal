@@ -58,3 +58,20 @@ cases; for pseudo-code, mark it explicitly and say why:
 Use `# docs: no-run` sparingly — it opts a block out of the tested
 contract, so prefer making the block actually run against the vocabulary
 whenever that is feasible.
+
+## Pages that need an optional extra
+
+CI runs the harness in a `[dev,viz]` environment, so optbinning and treecf
+are absent there. A page whose blocks genuinely need one declares it once,
+anywhere in the file:
+
+```markdown
+<!-- docs: requires optbinning -->
+```
+
+The harness then `importorskip`s each named package and skips the whole
+page where it is missing. Declare it only when the *page* is about that
+integration (`guide/optbinning.md`); when one block on an otherwise
+core page reaches for an extra — the scorecard and treecf blocks in
+`guide/cutoffs.md` — mark that block `# docs: no-run` instead, so the rest
+of the page stays under test.

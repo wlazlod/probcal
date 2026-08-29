@@ -79,6 +79,8 @@ temporary directory and then verifies it the way a reviewer would — load,
 fingerprint-match, re-predict, re-invert one cutoff, replay the e-process:
 
 ```python
+# s_cal, y_cal, s_new, grades, mon: held-out calibration data, new scores,
+# rating labels, and the deployed monitor; cal is the fit from the block above.
 import pathlib
 import tempfile
 
@@ -108,6 +110,12 @@ np.testing.assert_allclose([s.e_global for s in replay.steps_],
 assert cal.fingerprint() in (pack / "validation.html").read_text()  # same object
 print("verified:", cal.fingerprint()[:12])
 ```
+
+One caveat on how that block reads: here the right-hand side of every
+assertion is a live object still in memory, because the page produces and
+verifies the pack in one process — in a real review the right-hand sides
+are numbers printed in the report the reviewer was handed, copied out of
+its fingerprint block, and the assertions are the same.
 
 Note what the reviewer never needed: the training data, the scoring model,
 the modeller's environment, or any code from the modelling team. Two of

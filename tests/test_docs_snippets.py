@@ -28,6 +28,7 @@ _DOCS_DIR = pathlib.Path(__file__).parent.parent / "docs"
 _EXCLUDED_PAGES = {"changelog.md"}
 _NO_RUN_MARKER = "# docs: no-run"
 _CODE_BLOCK_RE = re.compile(r"```python\n(.*?)```", re.S)
+_REQUIRES_RE = re.compile(r"<!--\s*docs:\s*requires\s+([^>]*?)\s*-->")
 
 
 class _StubModel:
@@ -78,6 +79,14 @@ def _discover_pages() -> list[pathlib.Path]:
     return sorted(p for p in _DOCS_DIR.rglob("*.md") if p.name not in _EXCLUDED_PAGES)
 
 
+def _required_packages(text: str) -> list[str]:
+    """Optional extras a page declares with `<!-- docs: requires ... -->`."""
+    names: list[str] = []
+    for match in _REQUIRES_RE.findall(text):
+        names.extend(name.strip() for name in match.split(",") if name.strip())
+    return names
+
+
 def _extract_blocks(page: pathlib.Path) -> list[str]:
     text = page.read_text()
     blocks = []
@@ -104,6 +113,8 @@ def test_docs_page_snippets_execute(page: pathlib.Path, tmp_path, monkeypatch) -
     blocks = _extract_blocks(page)
     if not blocks:
         pytest.skip("no runnable python blocks on this page")
+    for package in _required_packages(page.read_text()):
+        pytest.importorskip(package)
 
     # Fresh cwd per page, so to_json(path=...) writes land in an isolated dir.
     monkeypatch.chdir(tmp_path)

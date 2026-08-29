@@ -162,6 +162,7 @@ concepts chapter.
 | ENIR | `ENIRCalibrator` | quadratic in unique scores; intended for m ≲ 50,000 (`fit` warns above) |
 | Venn–Abers (IVAP) | `VennAbersCalibrator` | O(n log n) fit, O(log n) per prediction |
 | Spline calibration | `SplineCalibrator` | O(n · k) per IRLS iteration (k knots) |
+| Segmented calibration | `SegmentedCalibrator` | base cost, plus O(n) for the per-segment offsets |
 
 Performance note: the ICI family (`ici`/`e50`/`e90`/`emax`) shares one LOESS fit anchored
 to `grid_size=512` quantile points instead of refitting at every observation — the same

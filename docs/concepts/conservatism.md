@@ -105,6 +105,38 @@ res2 = pluto_tasche_from_arrays(grades, y, order=("A", "B", "C"), confidence=0.9
 Both entry points return the same `PlutoTascheResult` and are re-exported from
 `probcal.metrics.grade`, alongside the per-grade backtests they complement.
 
+## Jeffreys upper bands: a masterscale band table
+
+`jeffreys_upper_bands(y, p, grades, *, level=0.9, order=None)` packages the same per-grade
+Jeffreys posterior upper bound `jeffreys_grade_test` already reports as its own-grade display
+interval — `beta_ppf(level, k_i + 0.5, n_i - k_i + 0.5)` under a `Beta(k_i + 0.5, n_i - k_i +
+0.5)` posterior on grade *i*'s own default rate, no cross-grade pooling — into the
+`{grade: (lo, hi)}` masterscale table `thresholds.calibrated_bands_to_raw` consumes directly.
+`lo_i` is the previous grade's `hi` (`0.0` for the best grade), so the bands are contiguous by
+construction. Because each grade's bound uses only its own counts, a zero-default grade still
+gets a strictly positive `hi` from the Jeffreys prior alone — unlike `pluto_tasche`, which
+needs pooling with worse grades to say anything about a zero-default grade at all.
+
+The own-grade `hi` sequence need not come out non-decreasing on its own (a noisy grade can post
+a smaller posterior upper bound than a better grade), which would make adjacent bands overlap.
+`jeffreys_upper_bands` monotonizes it with `_math.pava` (weighted isotonic regression, weight =
+grade size) in the given `order` — the minimum-adjustment non-decreasing fit, not a running
+maximum — and warns (`UserWarning`) only when that adjustment changed something.
+
+```python
+import numpy as np
+from probcal.metrics import jeffreys_upper_bands
+from probcal.thresholds import calibrated_bands_to_raw
+
+grades = np.array(["A"] * 100 + ["B"] * 100)
+y = np.array([0.0] * 100 + [1.0] * 5 + [0.0] * 95)
+p = np.array([0.01] * 100 + [0.05] * 100)
+bands = jeffreys_upper_bands(y, p, grades, level=0.9)
+# {"A": (0.0, 0.0134...), "B": (0.0134..., 0.0846...)}
+
+raw_bands = calibrated_bands_to_raw(fitted_calibrator, bands)  # doctest: +SKIP
+```
+
 ## Simulation verification
 
 Produced by `docs/scripts/conservative_sim.py` (spec C1): a four-grade portfolio

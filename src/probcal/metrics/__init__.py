@@ -25,6 +25,7 @@ from .grade import (
     PlutoTascheResult,
     binomial_grade_test,
     jeffreys_grade_test,
+    jeffreys_upper_bands,
     pluto_tasche,
     pluto_tasche_from_arrays,
 )
@@ -97,6 +98,7 @@ __all__ = [
     "hosmer_lemeshow",
     "ici",
     "jeffreys_grade_test",
+    "jeffreys_upper_bands",
     "log_loss",
     "logloss_calibration_refinement",
     "murphy_curve",

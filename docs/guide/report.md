@@ -1,0 +1,54 @@
+# Validation report
+
+How-to; every number and figure in the validation document comes from the
+APIs documented in their own chapters (*Metrics and tests*,
+*Visualization*, *CORP and score decomposition*, *Conservatism*,
+*Monitoring*) — this page covers only assembling them into one document.
+
+```python
+from probcal.report import validation_report   # probcal[viz]
+
+html = validation_report(
+    y, scores,
+    calibrator=cal,      # optional: adds the appendix (to_json + interpret())
+    monitor=mon,          # optional: adds the e-process trajectory section
+    grades=grades,        # optional: adds the Jeffreys/Pluto-Tasche section
+    by=segment,           # optional: adds the grouped-evaluation section
+    n_boot=200, seed=42,  # one shared knob for every resampling site
+    path="validation.html",
+)
+```
+
+Sections are omitted, not left blank, when their input is absent:
+reliability, the metric report, and the CORP decomposition always appear
+(they need only `y`/`scores`); the rating-grades, grouped-evaluation,
+monitoring, and appendix sections appear only when `grades`, `by`,
+`monitor`, or `calibrator` (respectively) are given. `n_boot`/`seed` are
+shared by every resampling site in the document (`metrics.evaluate`,
+`curves.corp_reliability`, `curves.reliability_smooth`), so the whole
+document is one call, deterministic given the same inputs and `seed`
+(byte-identical apart from its single `Generated ... UTC` timestamp line).
+
+`format="html"` (default) embeds every figure as a base64 PNG — the file
+is fully self-contained, no external requests, no `<script>`. Emailing it
+or dropping it in a model-risk file share needs nothing else.
+
+```python
+validation_report(
+    y, scores, grades=grades,
+    format="markdown", path="validation.md",
+)
+```
+
+`format="markdown"` requires `path`: figures are written as PNG files to
+`<path stem>_figures/` next to it and referenced with relative GFM image
+links, and the tables are GFM tables — the natural format for a PR
+description, a wiki page, or a document handed to a generator that does
+not render embedded base64 images.
+
+Import cost: `import probcal.report` never pulls in matplotlib, even when
+the `[viz]` extra is installed — the module only imports it, lazily, the
+first time `validation_report` actually renders a figure. Calling
+`validation_report` itself still needs `[viz]`, since it renders at least
+one figure from `y`/`scores` alone; without it the call raises
+`ImportError` naming the extra.

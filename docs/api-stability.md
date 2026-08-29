@@ -37,6 +37,9 @@ The public API is exactly the export lists below; anything prefixed with
   `calibrate_scorecard`, `CalibratedScorecard`.
 - **`probcal.plots`** (extra `probcal[viz]`) — the plotting catalog,
   including `plot_e_process`.
+- **`probcal.report`** (extra `probcal[viz]`) — `validation_report`. Not
+  re-exported from top-level `probcal`, so `import probcal` and
+  `import probcal.report` both stay matplotlib-free at import time.
 
 ## Added in 0.3.0
 
@@ -68,6 +71,11 @@ rather than starting a new one for later 0.3.0 additions):
   symbols) — per-group metric reports plus a pooled report; `plots.
   plot_reliability(by=)` — the matching faceted reliability grid; see the
   new *Grouped evaluation* guide.
+- `probcal.report.validation_report` — a self-contained HTML/markdown
+  validation report (reliability, the metric report, the CORP
+  decomposition, and, when given, the rating-grades, grouped-evaluation,
+  monitoring, and calibrator-appendix sections); see the new *Validation
+  report* guide.
 
 ## Conventions that will not silently change
 

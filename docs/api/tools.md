@@ -10,6 +10,8 @@
 
 ::: probcal.plots
 
+::: probcal.report
+
 ::: probcal.attribution
 
 ::: probcal.thresholds

@@ -6,9 +6,6 @@ repo_name: wlazlod/probcal
 
 strict: true
 
-exclude_docs: |
-  superpowers/
-
 theme:
   name: material
   features:

@@ -18,21 +18,38 @@ The public API is exactly the export lists below; anything prefixed with
   `ScalingBinningCalibrator`, `BBQCalibrator`, `ENIRCalibrator`,
   `VennAbersCalibrator`, `CrossVennAbersCalibrator`, `SplineCalibrator`),
   `BaseCalibrator`, `UnattainableTargetError`, `CalibratorSelector`,
-  `CalibratedModel`, `LogitOffset`, `Chain`, the reliability curves and
+  `CalibratedModel`, `LogitOffset`, `OffsetEstimate`, `estimate_offset`,
+  `offset_from_estimate`, `Chain`, the reliability curves and
   `calibration_belt`, threshold translation (`calibrated_interval_to_raw`,
   `calibrated_bands_to_raw`), attribution repair, `make_pd_portfolio`,
   `expit`/`logit`, and the `metrics`/`monitor` submodules.
-- **`probcal.metrics.__all__`** — the 40-symbol metric catalog (proper
+- **`probcal.metrics.__all__`** — the 44-symbol metric catalog (proper
   scores, binned and binning-free calibration errors, per-grade backtests,
-  the recalibration-regression framework, SKCE, `evaluate`).
+  Pluto-Tasche most-prudent PDs, Jeffreys upper masterscale bands, the
+  recalibration-regression framework, SKCE, `evaluate`).
 - **`probcal.monitor.__all__`** — `CalibrationMonitor`, `MonitorStep`,
-  `MonitorReport`.
+  `MonitorReport`, `moc_offset`, `moc_offset_from_counts`.
 - **`probcal.sklearn`** (extra `probcal[sklearn]`) — `SklearnCalibrator`,
   `CalibratedClassifier`.
 - **`probcal.integrations.optbinning`** (extra `probcal[optbinning]`) —
   `calibrate_scorecard`, `CalibratedScorecard`.
 - **`probcal.plots`** (extra `probcal[viz]`) — the plotting catalog,
   including `plot_e_process`.
+
+## Added in 0.3.0
+
+New public symbols relative to 0.2.0, kept here as one running list for
+this release regardless of which chapter documents them (extend this list
+rather than starting a new one for later 0.3.0 additions):
+
+- `estimate_offset`, `offset_from_estimate`, `OffsetEstimate` (`probcal`) —
+  offset-only logistic MLE with a Fisher standard error; see *Offset*.
+- `metrics.pluto_tasche`, `metrics.pluto_tasche_from_arrays`,
+  `PlutoTascheResult` — one-period most-prudent PDs; see *Conservatism*.
+- `metrics.jeffreys_upper_bands` — Jeffreys upper masterscale bands; see
+  *Conservatism*.
+- `monitor.moc_offset`, `monitor.moc_offset_from_counts` — margin-of-
+  conservatism offsets; see *Conservatism* and *Monitoring*.
 
 ## Conventions that will not silently change
 

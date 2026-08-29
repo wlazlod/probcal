@@ -28,8 +28,10 @@ from probcal import (
     UnattainableTargetError,
     VennAbersCalibrator,
     make_pd_portfolio,
+    moc_offset_from_counts,
 )
-from probcal._math import expit
+from probcal._math import expit, logit
+from probcal.monitor import CalibrationMonitor, moc_offset
 
 _D = make_pd_portfolio(n=2500, event_rate=0.1, random_state=23)
 
@@ -38,6 +40,21 @@ class _StubModel:
     def predict_proba(self, X):
         s = np.asarray(X)[:, 0]
         return np.column_stack([1.0 - s, s])
+
+
+def _drifted_monitor() -> CalibrationMonitor:
+    # A small monitor with an injected offset drift, purely to exercise
+    # moc_offset() as the LogitOffset source for the "Chain+moc" case (the
+    # brief's named scenario) -- independent of the beta/_D data above.
+    mon = CalibrationMonitor(alpha=0.05)
+    for k in range(4):
+        d = make_pd_portfolio(n=800, random_state=k)
+        p = d.scores
+        true = expit(logit(p) + 0.6)
+        rng = np.random.default_rng(k + 1000)
+        y = (rng.random(len(p)) < true).astype(float)
+        mon.update(y, p, label=f"m{k}")
+    return mon
 
 
 def _cases() -> dict[str, object]:
@@ -60,6 +77,10 @@ def _cases() -> dict[str, object]:
     beta = BetaCalibrator().fit(_D.scores, _D.y)
     off = LogitOffset(delta=0.2).fit(beta.predict_proba(_D.scores))
     cases["Chain"] = Chain([beta, off])
+    cases["Chain+moc"] = Chain([beta, moc_offset(_drifted_monitor())])
+    cases["Chain+moc_counts"] = Chain(
+        [beta, moc_offset_from_counts(_D.y, beta.predict_proba(_D.scores))]
+    )
     wrapped = CalibratedModel(_StubModel(), BetaCalibrator(), flow="prefit").fit(
         _D.scores.reshape(-1, 1), _D.y
     )

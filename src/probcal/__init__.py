@@ -20,7 +20,8 @@ from .curves import (
 )
 from .datasets import make_pd_portfolio
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
-from .offset import LogitOffset
+from .monitor import moc_offset, moc_offset_from_counts
+from .offset import LogitOffset, OffsetEstimate, estimate_offset, offset_from_estimate
 from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
 from .selection import CalibratorSelector
 from .spline import SplineCalibrator
@@ -44,6 +45,7 @@ __all__: list[str] = [
     "HistogramBinningCalibrator",
     "IsotonicCalibrator",
     "LogitOffset",
+    "OffsetEstimate",
     "PlattCalibrator",
     "ScalingBinningCalibrator",
     "SplineCalibrator",
@@ -55,13 +57,17 @@ __all__: list[str] = [
     "calibrated_interval_to_raw",
     "calibration_belt",
     "corp_reliability",
+    "estimate_offset",
     "expit",
     "metrics",
     "monitor",
+    "offset_from_estimate",
     "reliability_binned",
     "reliability_loess",
     "reliability_smooth",
     "reliability_spline",
     "logit",
     "make_pd_portfolio",
+    "moc_offset",
+    "moc_offset_from_counts",
 ]

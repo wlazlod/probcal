@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import beta_ppf, pava
+from .._math import beta_ppf
 from .._results import Interpretation, _ResultBase
 from .._validation import validate_weights
 
@@ -61,16 +61,18 @@ class PlutoTascheResult(_ResultBase):
     confidence : float
         Confidence level used for every grade's bound.
     monotonized : bool
-        ``True`` only if ``pd_upper`` needed a PAVA (isotonic) touch-up to
-        stay non-decreasing best to worst. Pooled sets are nested (grade
-        ``i``'s pooled set contains grade ``i + 1``'s), so for a portfolio
-        whose observed per-grade default rates already respect rating
-        order, ``pd_upper`` comes out non-decreasing on its own and this
-        flag is ``False``; a noisy grade whose own rate exceeds the
-        worse-grade pool it joins can still produce a real (not merely
-        floating-point) local dip, which the unconditional PAVA pass
-        corrects. ``pd_upper`` itself is always non-decreasing on return
-        either way.
+        ``True`` only if ``pd_upper`` needed the running-maximum touch-up
+        (see below) to stay non-decreasing best to worst. Pooled sets are
+        nested (grade ``i``'s pooled set contains grade ``i + 1``'s), so
+        for a portfolio whose observed per-grade default rates already
+        respect rating order, ``pd_upper`` comes out non-decreasing on its
+        own and this flag is ``False``; a noisy grade whose own rate
+        exceeds the worse-grade pool it joins can still produce a real
+        (not merely floating-point) local dip. ``pd_upper`` is always
+        non-decreasing on return either way: the raw bound is replaced by
+        its cumulative maximum best to worst (a prudent hull), which never
+        *lowers* any grade's bound -- only raises a grade whose raw bound
+        fell below a better grade's, never the reverse.
     """
 
     grades: tuple[str, ...]
@@ -216,16 +218,24 @@ def pluto_tasche(
     pd_upper = np.empty(k, dtype=np.float64)
     for i in range(k):
         ns, ds = n_pooled[i], d_pooled[i]
+        # n_pooled - d_pooled cannot go negative here: d <= n was validated
+        # per grade above, and both are cumulative sums over the same
+        # (worse-grades-first) order, so the inequality is preserved term
+        # by term -- beta_ppf's second shape parameter stays > 0 (b == 0
+        # only in the d* == n* case handled explicitly).
         pd_upper[i] = 1.0 if ds == ns else beta_ppf(confidence, ds + 1.0, ns - ds)
 
     # Pooled sets are nested (grade i's pooled set contains grade i + 1's),
     # so pd_upper comes out non-decreasing already whenever the observed
-    # per-grade default rates respect rating order -- the PAVA pass below
-    # is then a no-op. It stays unconditional as a safety net: a noisy
-    # grade whose own rate exceeds the worse-grade pool it joins can still
-    # produce a real local dip, not just a floating-point tie.
-    pava_result = pava(pd_upper, np.ones(k, dtype=np.float64))
-    monotonized = not np.array_equal(pava_result.fitted, pd_upper)
+    # per-grade default rates respect rating order. A noisy grade whose own
+    # rate exceeds the worse-grade pool it joins can still produce a real
+    # local dip; the most-prudent reading of such a dip is to raise the
+    # better grade's bound up to the worse grade's, never to lower the
+    # worse grade's bound to match -- so the touch-up is the cumulative
+    # maximum best to worst (a prudent hull), which never reduces any
+    # grade's bound.
+    hull = np.maximum.accumulate(pd_upper)
+    monotonized = bool(np.any(hull != pd_upper))
 
     return PlutoTascheResult(
         grades=grade_labels,
@@ -233,7 +243,7 @@ def pluto_tasche(
         d=d,
         n_pooled=n_pooled,
         d_pooled=d_pooled,
-        pd_upper=pava_result.fitted,
+        pd_upper=hull,
         confidence=confidence,
         monotonized=monotonized,
     )

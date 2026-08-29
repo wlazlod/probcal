@@ -173,6 +173,22 @@ low-PD portfolio stays readable.
 
 ![Attributes diagram on a 3% base-rate PD portfolio (logit scale): the shaded positive-skill region between climatology and the identity, the no-skill line, and the binned reliability curve](img/attributes.png)
 
+## The Murphy diagram
+
+`plot_murphy` renders `metrics.murphy_curve` — the elementary-score view of the Brier score
+described in [Metrics and tests](metrics.md) — as either a set of labelled lines
+(`{name: MurphyCurve}`, or a single curve with no legend) or, with `diff=True`, the pointwise
+difference between exactly two named forecasts. The diff form needs the raw `(y, p)` pairs
+rather than precomputed curves, because a `MurphyCurve` retains only its threshold grid and
+scores, not the data: it recomputes both curves on a shared threshold grid, differences them,
+and adds a seeded paired bootstrap band (resampling the same indices for both forecasts, since
+the comparison is on the same observations) at the 5th/95th percentile, plus a zero reference
+line. Because the Murphy diagram decomposes the Brier *difference* across the whole decision
+spectrum instead of collapsing it to one number, a diff that crosses zero shows exactly which
+threshold range favors which forecast — information a single Brier-score comparison discards.
+
+![Murphy diagram (difference form) comparing raw scores against their beta-calibrated recalibration: the pointwise elementary-score gap with a 90% bootstrap band and the zero reference line](img/murphy.png)
+
 ## The remaining plots
 
 Three further views complete `probcal.plots`. `plot_comparison(before, after)` puts

@@ -16,7 +16,7 @@ from ._math import logit
 from ._plots_common import _BLUE, _BOX, _GREEN, _GREY, _STYLE, _logit_axis, _plt, _require_mpl
 from ._results import CorpResult, SelectionReport
 from .curves import corp_reliability, reliability_binned
-from .metrics.scores import _prep
+from .metrics.scores import MurphyCurve, _prep, murphy_curve
 
 
 def plot_corp(
@@ -371,4 +371,120 @@ def plot_attributes(
 
         ax.set_title("attributes diagram")
         ax.legend(loc="lower right")
+        return ax
+
+
+def plot_murphy(
+    curves: "MurphyCurve | Mapping[str, MurphyCurve] | Mapping[str, tuple[Any, Any]]",
+    *,
+    diff: bool = False,
+    n_boot: int = 200,
+    random_state: int = 42,
+    ax: Any = None,
+) -> Any:
+    """Murphy diagram: mean elementary score across a threshold grid, or a paired difference.
+
+    ``diff=False`` (default) draws one line per curve: a single
+    :class:`probcal.metrics.MurphyCurve`, or a ``{name: MurphyCurve}``
+    mapping with a legend. ``diff=True`` instead requires a mapping of
+    exactly two ``{name: (y, p)}`` raw-data entries — a ``MurphyCurve``
+    does not retain ``y``/``p``, so the pointwise difference and its
+    bootstrap band are recomputed from the paired data — and draws
+    ``S_theta(A) - S_theta(B)`` (on ``A``'s default 513-point threshold
+    grid) with a seeded pointwise bootstrap band (paired-index resampling,
+    5th/95th percentile) and a zero reference line.
+
+    Parameters
+    ----------
+    curves : MurphyCurve, mapping of str to MurphyCurve, or mapping of str to (y, p)
+        See above; the last form only when ``diff=True``.
+    diff : bool, keyword-only
+        If ``True``, draw the paired difference of the two named curves'
+        elementary scores instead of the curves themselves.
+    n_boot : int, keyword-only
+        Bootstrap resamples for the difference band (``diff=True`` only).
+    random_state : int, keyword-only
+        Seed for ``numpy.random.default_rng``, used by the bootstrap band.
+    ax : matplotlib.axes.Axes or None, keyword-only
+        Axes to draw on; a new figure and axes are created if ``None``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes the diagram was drawn on.
+
+    Raises
+    ------
+    ValueError
+        If ``diff=True`` and ``curves`` is not a mapping of exactly two
+        raw ``(y, p)`` pairs of equal length.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal.metrics import murphy_curve
+    >>> from probcal.plots import plot_murphy
+    >>> rng = np.random.default_rng(0)
+    >>> p = rng.uniform(0.05, 0.5, 300)
+    >>> y = (rng.random(300) < p).astype(float)
+    >>> ax = plot_murphy({"model": murphy_curve(y, p)})  # doctest: +SKIP
+    """
+    _require_mpl()
+    with _plt.rc_context(_STYLE):
+        if ax is None:
+            _, ax = _plt.subplots(figsize=(6.5, 6))
+
+        if diff:
+            if not isinstance(curves, Mapping):
+                raise ValueError(
+                    "diff=True needs a mapping of exactly two {name: (y, p)} raw-data pairs"
+                )
+            pairs = list(curves.items())
+            if len(pairs) != 2 or not all(isinstance(v, tuple) and len(v) == 2 for _, v in pairs):
+                raise ValueError(
+                    "diff=True needs a mapping of exactly two {name: (y, p)} raw-data pairs"
+                )
+            name_a, pair_a = pairs[0]
+            name_b, pair_b = pairs[1]
+            y_a: Any
+            p_a: Any
+            y_b: Any
+            p_b: Any
+            y_a, p_a = pair_a  # type: ignore[misc]
+            y_b, p_b = pair_b  # type: ignore[misc]
+            y_a, p_a, _w_a = _prep(y_a, p_a, None)
+            y_b, p_b, _w_b = _prep(y_b, p_b, None)
+            if len(y_a) != len(y_b):
+                raise ValueError("diff=True needs paired (y, p) of equal length")
+
+            theta = murphy_curve(y_a, p_a).thresholds
+            score_a = murphy_curve(y_a, p_a, thresholds=theta).score
+            score_b = murphy_curve(y_b, p_b, thresholds=theta).score
+            delta = score_a - score_b
+
+            rng = np.random.default_rng(random_state)
+            n = len(y_a)
+            boot = np.empty((n_boot, len(theta)))
+            for b in range(n_boot):
+                idx = rng.integers(0, n, n)
+                ca = murphy_curve(y_a[idx], p_a[idx], thresholds=theta)
+                cb = murphy_curve(y_b[idx], p_b[idx], thresholds=theta)
+                boot[b] = ca.score - cb.score
+            lo = np.percentile(boot, 5, axis=0)
+            hi = np.percentile(boot, 95, axis=0)
+
+            ax.fill_between(theta, lo, hi, color=_BLUE, alpha=0.15, label="90% bootstrap band")
+            ax.plot(theta, delta, color=_BLUE, lw=2, label=f"{name_a} - {name_b}")
+            ax.axhline(0.0, color=_GREY, lw=1, ls="--", label="zero")
+            ax.legend(loc="best")
+        elif isinstance(curves, MurphyCurve):
+            ax.plot(curves.thresholds, curves.score, color=_BLUE, lw=2)
+        else:
+            for name, curve in curves.items():  # type: ignore[union-attr]
+                ax.plot(curve.thresholds, curve.score, lw=2, label=name)  # type: ignore[union-attr]
+            ax.legend(loc="best")
+
+        ax.set_xlabel("threshold θ")
+        ax.set_ylabel("mean elementary score")
+        ax.set_title("Murphy diagram")
         return ax

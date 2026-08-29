@@ -34,6 +34,7 @@ from probcal.plots import (  # noqa: E402
     plot_ecce,
     plot_grade_backtest,
     plot_interval,
+    plot_murphy,
     plot_offset_audit,
     plot_reliability,
     plot_selection,
@@ -101,6 +102,11 @@ def main() -> None:
     save(plot_offset_audit(offset), "offset_audit.png")
 
     save(plot_attributes(y, scores, scale="logit"), "attributes.png")
+
+    save(
+        plot_murphy({"raw scores": (y, scores), "beta-calibrated": (y, p_cal)}, diff=True),
+        "murphy.png",
+    )
 
 
 if __name__ == "__main__":

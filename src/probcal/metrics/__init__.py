@@ -40,11 +40,13 @@ from .regression import (
 )
 from .scores import (
     LogLossDecomposition,
+    MurphyCurve,
     MurphyDecomposition,
     brier_score,
     brier_skill_score,
     log_loss,
     logloss_calibration_refinement,
+    murphy_curve,
     murphy_decomposition,
 )
 from .smooth import (
@@ -67,6 +69,7 @@ __all__ = [
     "HosmerLemeshowResult",
     "JeffreysGradeResult",
     "LogLossDecomposition",
+    "MurphyCurve",
     "MurphyDecomposition",
     "ReliabilitySummary",
     "SkceTestResult",
@@ -92,6 +95,7 @@ __all__ = [
     "jeffreys_grade_test",
     "log_loss",
     "logloss_calibration_refinement",
+    "murphy_curve",
     "murphy_decomposition",
     "reliability_summary",
     "skce",

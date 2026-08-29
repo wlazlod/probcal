@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .._math import loess
+from .._results import _ResultBase
 from .._validation import validate_binary_y, validate_scores, validate_weights
 
 
@@ -176,6 +177,127 @@ def murphy_decomposition(
         res += (wb / w_tot) * res_term
     unc = y_bar * (1.0 - y_bar)
     return MurphyDecomposition(reliability=rel, resolution=res, uncertainty=unc)
+
+
+@dataclass(frozen=True)
+class MurphyCurve(_ResultBase):
+    """Murphy diagram: mean elementary score of the binary mean functional across thresholds.
+
+    Attributes
+    ----------
+    thresholds : numpy.ndarray
+        Threshold grid :math:`\\theta \\in [0, 1]`.
+    score : numpy.ndarray
+        Weighted mean elementary score :math:`S_\\theta` at each threshold.
+    n : int
+        Number of observations.
+    """
+
+    thresholds: np.ndarray
+    score: np.ndarray
+    n: int
+
+    def __repr__(self) -> str:
+        return f"MurphyCurve (n={self.n}, {len(self.thresholds)} thresholds)"
+
+
+def murphy_curve(
+    y: object,
+    p: object,
+    *,
+    thresholds: object = 513,
+    sample_weight: object = None,
+) -> MurphyCurve:
+    """Murphy diagram data: mean elementary score of the mean functional across a threshold grid.
+
+    Uses the Ehm, Gneiting, Jordan & Krüger (2016) elementary score for the
+    mean functional of a binary outcome,
+
+    ``S_theta(p, y) = theta * 1{p > theta, y = 0} + (1 - theta) * 1{p <= theta, y = 1}``,
+
+    whose weighted mean at each ``theta`` is this curve's ``score``.
+    ``2 * integral(S_theta, theta in [0, 1])`` equals the Brier score
+    exactly (a per-observation calculation: integrating a single
+    observation's elementary score over ``theta in [0, 1]`` gives
+    ``p**2 / 2`` when ``y=0`` and ``(1 - p)**2 / 2`` when ``y=1``, whose
+    doubled weighted mean is exactly ``E[(1-y)*p**2 + y*(1-p)**2] ==
+    E[(p - y)**2]``, the Brier score). ``S_theta`` is piecewise linear in
+    ``theta`` between consecutive unique ``p`` values but jumps exactly at
+    each one (the observation crossing sides), so a threshold grid built
+    from those breakpoints reproduces the Brier identity to a numerical
+    error that shrinks with the sample size — exactly at the continuum
+    limit, and already far inside the default grid's 1e-3 budget at
+    realistic ``n`` — rather than to machine precision at any finite
+    ``thresholds`` array (the discretized trapezoid necessarily samples one
+    side of each jump). Isotonic (PAV) recalibration of ``p`` never
+    increases the score at any threshold (Ehm et al., 2016), so the two
+    curves' relative position diagnoses the value of recalibration without
+    collapsing to one scalar. Computed by sorting ``p`` once and
+    accumulating weighted class-conditional sums via ``searchsorted`` —
+    ``O(n log n + T log n)`` for ``T`` thresholds, never the naive
+    ``O(n * T)`` mask.
+
+    Parameters
+    ----------
+    y, p : array_like
+        Outcomes and predicted probabilities.
+    thresholds : int or array_like, keyword-only
+        Either the number of equally spaced points in ``[0, 1]``
+        (``numpy.linspace(0, 1, thresholds)``; default 513, the same
+        default resolution used elsewhere in the package for dense grids)
+        or an explicit 1-D array of thresholds in ``[0, 1]`` (sorted
+        internally).
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    MurphyCurve
+        Threshold grid, weighted mean elementary score, and observation
+        count.
+
+    Raises
+    ------
+    ValueError
+        If ``thresholds`` is not 1-D, or contains values outside ``[0, 1]``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal.metrics import murphy_curve
+    >>> rng = np.random.default_rng(0)
+    >>> p = rng.uniform(0.05, 0.5, 300)
+    >>> y = (rng.random(300) < p).astype(float)
+    >>> curve = murphy_curve(y, p, thresholds=101)
+    >>> curve.score.shape
+    (101,)
+    """
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    if isinstance(thresholds, (int, np.integer)):
+        theta = np.linspace(0.0, 1.0, int(thresholds))
+    else:
+        theta = np.sort(np.asarray(thresholds, dtype=np.float64))
+        if theta.ndim != 1:
+            raise ValueError(f"thresholds must be a 1-D array, got shape {theta.shape}")
+        if np.any(theta < 0.0) or np.any(theta > 1.0):
+            raise ValueError("thresholds must lie in [0, 1]")
+
+    # Sort p once; cumulative weighted sums over the y==0/y==1 subsets let
+    # searchsorted read off, for every threshold at once, how much weight
+    # lies on each side — avoids an O(n * T) mask per threshold.
+    order = np.argsort(p_arr, kind="stable")
+    p_sorted = p_arr[order]
+    is_event = y_arr[order] == 1.0
+    w_sorted = w[order]
+    cum_w0 = np.concatenate(([0.0], np.cumsum(np.where(is_event, 0.0, w_sorted))))
+    cum_w1 = np.concatenate(([0.0], np.cumsum(np.where(is_event, w_sorted, 0.0))))
+
+    idx = np.searchsorted(p_sorted, theta, side="right")
+    w0_above = cum_w0[-1] - cum_w0[idx]  # y=0, p > theta
+    w1_at_or_below = cum_w1[idx]  # y=1, p <= theta
+
+    score = (theta * w0_above + (1.0 - theta) * w1_at_or_below) / w.sum()
+    return MurphyCurve(thresholds=theta, score=score, n=len(y_arr))
 
 
 @dataclass(frozen=True)

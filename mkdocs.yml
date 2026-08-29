@@ -87,6 +87,7 @@ nav:
       - Nonparametric methods: concepts/methods-nonparametric.md
       - Distribution-free methods: concepts/methods-distribution-free.md
       - Metrics and tests: concepts/metrics.md
+      - Conservative most-prudent PDs: concepts/conservatism.md
       - Data splitting: concepts/data-splitting.md
       - Offset: concepts/offset.md
       - SHAP and calibration: concepts/shap-calibration.md

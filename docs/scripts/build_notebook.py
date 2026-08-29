@@ -400,6 +400,40 @@ print(moc.interpret())
 """)
 
 
+md("""\
+## 10. Monitoring closed loop: alarm to a fresh, quiet monitor
+
+Section 7's monitor alarmed on a sustained +0.5 log-odds drift and recommended
+an action. `apply_recommendation()` turns that recommendation into a fitted
+`LogitOffset` (for `kind="re-offset"`) plus a **fresh** `CalibrationMonitor` —
+fresh because the old e-process is a martingale under "the *currently
+deployed* forecast is calibrated", a null that no longer holds once the
+pipeline changes. Feeding the fresh monitor the corrected forecasts for a
+further stretch of drifted months should keep it quiet: the correction, not
+a fluke, is what explains the drift. Theory: the *Monitoring* chapter,
+"Closing the loop".
+""")
+
+code("""\
+action = mon.apply_recommendation()
+print(f"recommendation: {action.kind}")
+print(f"audit: {action.audit}")
+
+fresh = action.monitor
+offset = action.offset
+for month in range(24, 36):
+    take = rng_m.choice(pool, size=2000, replace=True)
+    p_month = p_test[take]
+    true_pd = expit(logit(p_month) + 0.5)  # the same drift persists, uncorrected
+    y_month = (rng_m.random(2000) < true_pd).astype(float)
+    p_corrected = offset.transform(p_month)
+    fresh.update(y_month, p_corrected, label=f"m{month + 1:02d}")
+
+fresh_rep = fresh.report()
+print(f"fresh monitor alarm at: {fresh_rep.alarm_at} (quiet == correction explained the drift)")
+""")
+
+
 def main() -> None:
     nb = {
         "cells": [

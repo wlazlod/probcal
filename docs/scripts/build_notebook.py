@@ -24,6 +24,13 @@ def code(text: str) -> None:
     CELLS.append((CODE, text))
 
 
+md(
+    "**Role: the flagship, full-lifecycle tutorial.** One portfolio taken through "
+    "every stage — calibrate, evaluate, invert, monitor, act, report — on the whole "
+    "public surface. New to probcal? Start with the 20-minute "
+    "[PD calibration walkthrough](pd_calibration_walkthrough.ipynb) instead."
+)
+
 md("""\
 # PD calibration end to end: rare events, audit, recourse, monitoring
 

@@ -11,13 +11,15 @@ when bounding a given grade's PD. Theory and the coverage simulation:
 ``docs/concepts/conservatism.md``.
 """
 
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import beta_ppf
+from .._math import beta_ppf, pava
 from .._results import Interpretation, _ResultBase
 from .._validation import validate_weights
+from .scores import _prep
 
 
 def _validate_binary_y(y: object) -> np.ndarray:
@@ -324,3 +326,121 @@ def pluto_tasche_from_arrays(
         d[i] = float(np.sum(w_arr[mask] * y_arr[mask]))
 
     return pluto_tasche(n, d, confidence=confidence, grades=order_t)
+
+
+def jeffreys_upper_bands(
+    y: object,
+    p: object,
+    grades: object,
+    *,
+    level: float = 0.9,
+    order: object = None,
+) -> dict[str, tuple[float, float]]:
+    """Jeffreys per-grade upper bounds as a contiguous masterscale band table.
+
+    For grade ``i`` (best to worst, in ``order``): ``hi_i`` is the same
+    one-sided Jeffreys posterior upper bound ``jeffreys_grade_test`` reports
+    as its own-grade display interval, ``beta_ppf(level, k_i + 0.5,
+    n_i - k_i + 0.5)`` under a ``Beta(k_i + 0.5, n_i - k_i + 0.5)`` posterior
+    on grade ``i``'s own default rate; ``lo_i`` is the previous grade's
+    ``hi`` (``0.0`` for the best grade), so the bands are contiguous by
+    construction: ``(lo_0, hi_0), (hi_0, hi_1), (hi_1, hi_2), ...``. Unlike
+    :func:`pluto_tasche`, each grade's bound uses only its own counts (no
+    pooling across grades), so a zero-default grade still gets a strictly
+    positive ``hi`` from the Jeffreys prior alone.
+
+    The raw ``hi`` sequence need not come out non-decreasing (a noisy grade
+    can have a smaller posterior upper bound than a better grade), which
+    would make the bands overlap or invert. It is monotonized by
+    :func:`probcal._math.pava` (weighted isotonic regression, weights = grade
+    size ``n``) in the given ``order`` — the minimum-adjustment non-decreasing
+    fit, not a running maximum — with a ``UserWarning`` emitted only when
+    that adjustment actually changed a value.
+
+    The resulting ``{grade: (lo, hi)}`` table is exactly the shape
+    :func:`probcal.thresholds.calibrated_bands_to_raw` consumes to translate
+    a masterscale defined on calibrated PD into raw-score intervals.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``.
+    p : array_like
+        Predicted probabilities in ``[0, 1]`` (only used, alongside
+        ``grades``, to determine the default best-to-worst ``order`` when
+        ``order`` is not given).
+    grades : array_like
+        Rating grade label per observation.
+    level : float, keyword-only
+        Confidence level in ``(0, 1)`` for every grade's Jeffreys upper
+        bound.
+    order : sequence of str or None, keyword-only
+        Explicit best-to-worst grade order; must match the unique labels in
+        ``grades`` exactly. ``None`` (default) orders grades by their mean
+        ``p``, ascending (lowest predicted PD first).
+
+    Returns
+    -------
+    dict[str, tuple[float, float]]
+        Mapping of grade label to ``(lo, hi)`` calibrated-probability bounds,
+        contiguous and non-decreasing best to worst.
+
+    Raises
+    ------
+    ValueError
+        If ``y``/``p``/``grades`` are not equal-length 1-D arrays, ``level``
+        is not in ``(0, 1)``, or ``order`` does not match the unique grade
+        labels.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal.metrics import jeffreys_upper_bands
+    >>> grades = np.array(["A"] * 100 + ["B"] * 100)
+    >>> y = np.array([0.0] * 100 + [1.0] * 5 + [0.0] * 95)
+    >>> p = np.array([0.01] * 100 + [0.05] * 100)
+    >>> bands = jeffreys_upper_bands(y, p, grades, level=0.9)
+    >>> bands["A"][0]
+    0.0
+    >>> bands["A"][1] < bands["B"][1]
+    True
+    """
+    y_arr, p_arr, _ = _prep(y, p, None)
+    g_arr = np.asarray(grades)
+    if g_arr.ndim != 1 or len(g_arr) != len(y_arr):
+        raise ValueError("grades must be a 1-D array matching y and p in length")
+    if not 0.0 < level < 1.0:
+        raise ValueError("level must lie in (0, 1)")
+
+    g_str = np.array([str(g) for g in g_arr])
+    unique_labels = tuple(sorted(np.unique(g_str)))
+
+    if order is None:
+        mean_p = {lab: float(np.mean(p_arr[g_str == lab])) for lab in unique_labels}
+        order_t = tuple(sorted(unique_labels, key=lambda lab: mean_p[lab]))
+    else:
+        order_t = tuple(str(g) for g in np.asarray(order).reshape(-1))
+        if tuple(sorted(order_t)) != unique_labels:
+            raise ValueError(
+                f"order {order_t} does not match the unique grade labels {unique_labels}"
+            )
+
+    n = np.empty(len(order_t), dtype=np.float64)
+    k = np.empty(len(order_t), dtype=np.float64)
+    for i, label in enumerate(order_t):
+        mask = g_str == label
+        n[i] = float(np.sum(mask))
+        k[i] = float(np.sum(y_arr[mask]))
+
+    hi_raw = np.array([beta_ppf(level, k[i] + 0.5, n[i] - k[i] + 0.5) for i in range(len(order_t))])
+    hi = pava(hi_raw, n).fitted
+    if np.any(hi != hi_raw):
+        warnings.warn(
+            "jeffreys_upper_bands: PAVA adjusted the upper-band sequence to keep "
+            "it non-decreasing best to worst",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    lo = np.concatenate(([0.0], hi[:-1]))
+    return {label: (float(lo[i]), float(hi[i])) for i, label in enumerate(order_t)}

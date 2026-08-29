@@ -16,6 +16,7 @@ from .._math import beta_ppf, betainc, norm_cdf
 # per-grade backtests it complements; defined in `_conservative.py` (spec C1).
 from ._conservative import (  # noqa: F401
     PlutoTascheResult,
+    jeffreys_upper_bands,
     pluto_tasche,
     pluto_tasche_from_arrays,
 )

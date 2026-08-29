@@ -6,6 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
+### Added
+
+- `metrics.jeffreys_upper_bands(y, p, grades, *, level=0.9, order=None) -> dict[str, tuple[float, float]]` (metric catalog 43 → 44 symbols, count updated in `docs/api-stability.md`): the per-grade Jeffreys posterior upper bound `jeffreys_grade_test` already reports as its own-grade display interval (`beta_ppf(level, k_i + 0.5, n_i - k_i + 0.5)`, no cross-grade pooling), packaged as the `{grade: (lo, hi)}` masterscale band table `thresholds.calibrated_bands_to_raw` consumes directly — `lo_i` is the previous grade's `hi` (`0.0` for the best grade), so the bands are contiguous by construction, and a zero-default grade still gets a strictly positive `hi` from the Jeffreys prior alone. The raw `hi` sequence is monotonized with `_math.pava` (weighted isotonic regression, weight = grade size) in the given `order` (default: grades sorted by mean `p`, best first), with a `UserWarning` fired only when PAVA actually changed something. Re-exported from `probcal.metrics.grade`; new section in `concepts/conservatism.md`
+
 ### Changed
 
 - treecf guide: the cross-repo work list is now documented as implemented in treecf 0.2.4 (provenance, `score_calibrated` read-out, plateau suite, matrix, docs), and the `probcal[treecf]`/`all` optional-dependency floor is raised to `treecf>=0.2.4`; the joint smoke tests additionally pin the read-out and the certificate provenance loop

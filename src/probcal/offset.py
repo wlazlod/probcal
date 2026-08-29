@@ -450,7 +450,10 @@ def estimate_offset(y: object, p: object, *, sample_weight: object = None) -> Of
     ``probcal.monitor._processes.plug_in_delta``). The Fisher information for
     this one-parameter model is ``sum(w * q * (1 - q))`` at
     ``q = sigma(logit(p) + delta)``, so the standard error is its inverse
-    square root.
+    square root. That reading of the weights is the frequency one — ``w``
+    counts observations — so the SE is only valid for frequency weights;
+    importance (or otherwise non-count) weights inflate the information and
+    understate the SE.
 
     Parameters
     ----------

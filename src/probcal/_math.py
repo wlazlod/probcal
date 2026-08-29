@@ -873,7 +873,9 @@ def _loess_fit_sorted_vec(
             det = sw * swxx - swx * swx
             singular = np.abs(det) < _FPMIN
             vals = np.where(
-                singular, swy / sw, (swxx * swy - swx * swxy) / np.where(singular, 1.0, det)
+                singular,
+                swy / np.maximum(sw, _FPMIN),
+                (swxx * swy - swx * swxy) / np.where(singular, 1.0, det),
             )
         # ``yw.mean(axis=1)`` is another full pass over the block; only pay it
         # when some window actually collapsed to a single distinct x.

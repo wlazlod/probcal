@@ -176,7 +176,9 @@ class GroupedMetricReport(_ResultBase):
         """Rows as a list of dicts, or a pandas DataFrame when pandas is importable.
 
         Each row is ``{"group", "metric", "value", "ci_low", "ci_high"}``;
-        the pooled report is included under the group label ``"pooled"``.
+        the pooled report is included under the group label ``"pooled"``,
+        which is therefore reserved — a group of your own named "pooled"
+        is indistinguishable from it in this frame.
         """
         rows = [
             {"group": group, "metric": n, "value": v, "ci_low": lo, "ci_high": hi}

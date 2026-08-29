@@ -192,7 +192,10 @@ def _kernel_rate_density(
         den = np.bincount(idx, weights=w, minlength=b)
         centers, num_s = _lattice_kernel_smooth(num, width, sigma, t_lo)
         _, den_s = _lattice_kernel_smooth(den, width, sigma, t_lo)
-        den_safe = np.where(den_s > 0.0, den_s, np.nan)
+        # An empty lattice cell has no data to average: its smoothed
+        # numerator is 0 too, so dividing by 1 reports a rate of 0 there
+        # rather than a NaN that np.interp would spread to its neighbours.
+        den_safe = np.where(den_s > 0.0, den_s, 1.0)
         rate = np.interp(grid_logit, centers, num_s / den_safe)
         density = np.interp(grid_logit, centers, den_s)
     else:
@@ -239,8 +242,11 @@ def reliability_smooth(
     (``numpy.random.default_rng(random_state)``, resampling with
     replacement) and recomputes the rate at the point estimate's *fixed*
     ``sigma_star`` — the ribbon conditions on the bandwidth, it does not
-    reflect uncertainty in choosing it. ``n_boot=0`` disables the ribbon
-    (``ci_low`` and ``ci_high`` both equal ``event_rate``).
+    reflect uncertainty in choosing it. The ribbon is clamped to contain the
+    point estimate (``ci_low <= event_rate <= ci_high``), so a bootstrap
+    quantile falling on the wrong side of it is pulled back to it.
+    ``n_boot=0`` disables the ribbon (``ci_low`` and ``ci_high`` both equal
+    ``event_rate``).
 
     Parameters
     ----------
@@ -344,7 +350,7 @@ def corp_reliability(
     n_resamples: int = 200,
     random_state: int = 42,
 ) -> CorpResult:
-    """CORP reliability diagram: PAV recalibration with the Brier/log-loss MCB-DSC-UNC decomposition
+    """CORP reliability diagram with the Brier/log-loss MCB-DSC-UNC decomposition.
 
     Fits the isotonic (PAV) recalibration map of ``y`` on ``p`` — the unique
     "consistent, optimally binned, reproducible" reliability diagram of

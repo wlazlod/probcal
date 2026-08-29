@@ -225,7 +225,9 @@ def plot_reliability(
     ``stats=True`` for a per-panel stats box), sharing x/y limits across
     the grid; the function then returns the **Figure**, not an ``Axes``
     (unlike the ``by=None`` default, matching :func:`plot_comparison`).
-    Group-conditional statistical *testing* is out of scope here — see
+    ``"pooled"`` is a reserved panel title: a group of your own by that name
+    is indistinguishable from the pooled panel. Group-conditional
+    statistical *testing* is out of scope here — see
     ``docs/guide/groups.md``.
 
     Parameters

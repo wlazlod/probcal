@@ -1,6 +1,8 @@
 """Perf smoke tests: generous ceilings (>=5x locally measured on this host) that
 catch a regression to the pre-fast-path O(n^2)/O(n log n) behavior without being
-flaky on slower CI hardware.
+flaky on slower CI hardware. The one documented exception is
+``test_evaluate_n10k_boot1000_under_400s``, whose ~1.8x ceiling is explained at
+the test.
 
 ``evaluate`` is measured at n=20,000/n_boot=20 (raised from n=5,000 now that the
 binned smECE fast path this fix corrects no longer dominates timing at that
@@ -12,13 +14,18 @@ drives the choice of scale here. An earlier draft of this comment claimed
 would dominate the timing at n=50,000, citing a ~537s figure; that figure was
 itself defect-contaminated (roughly 310s of it was ~50 bootstrap replicates
 each paying the pre-fix smECE aliasing defect's ~6.1s/call, not ``ece_sweep``;
-see DECISIONS 66) and is not reused. Measured post-fix on this host,
-``evaluate(n_boot=50)`` at n=50,000 takes ~88.0s, driven mainly by ``ici``
-(~1.09s/call) and ``ece_sweep`` (~0.49s/call) -- ``ici`` the larger single
-contributor of the two, neither dominating outright. n=20,000/n_boot=20 stays
-the smoke scale here (a faster check than the honest ~88s figure at
-n=50,000/n_boot=50) and exercises the bootstrap loop and metric dispatch above
-both the smECE bin-lattice default (8,192) and the LOESS anchor grid (512).
+see DECISIONS 66) and is not reused. Measured on this dev host after the 0.3.0
+bootstrap work (shared per-replicate sort, vectorized ``ece_sweep`` scan), a
+full-catalog replicate at n=10,000 costs 0.225s, of which the ICI family's
+shared LOESS fit is 0.189s (84%) and ``ece_sweep``'s scan 0.024s (11%); the
+whole binned ECE family now costs 0.4ms. ``evaluate(n=10,000, n_boot=1000)``
+therefore takes 226.1s here, down from 304.2s before that work -- short of the
+120s target, because the remaining cost is almost entirely
+``_loess_fit_sorted``'s per-anchor Python loop, which neither change touches.
+n=20,000/n_boot=20 stays the fast smoke scale and exercises the bootstrap loop
+and metric dispatch above both the smECE bin-lattice default (8,192) and the
+LOESS anchor grid (512); the n=10,000/n_boot=1000 case below pins the
+full-catalog acceptance scale.
 
 ENIR's ceiling uses n=20,000, not the spec's m=1e5: the vectorized engine (the
 production memory fix; see DECISIONS) is O(m*G) in time, and 1e5 is not
@@ -100,6 +107,23 @@ def test_evaluate_n20k_boot20_under_130s() -> None:
     evaluate(d.y, d.scores, n_boot=20)
     elapsed = time.perf_counter() - t0
     assert elapsed < 130.0
+
+
+def test_evaluate_n10k_boot1000_under_400s() -> None:
+    # The full-catalog acceptance scale: measured 226.1s on this dev host
+    # (304.2s before the 0.3.0 shared-sort / vectorized-sweep work). 400s is a
+    # ~1.8x ceiling -- deliberately modest, because a 5x ceiling would put a
+    # 19-minute test in CI. It is above the pre-0.3.0 cost, so it does not
+    # detect a plain revert of that work: the behavioral guards for it are
+    # ``test_metrics_binned.py``'s scan-equivalence tests and
+    # ``test_metrics_evaluate.py::test_point_metrics_presorted_matches_the_default_path``.
+    # What this pins is that the acceptance-scale run stays within its measured
+    # constant factor rather than regressing an order of magnitude.
+    d = make_pd_portfolio(n=10_000, random_state=3)
+    t0 = time.perf_counter()
+    evaluate(d.y, d.scores, n_boot=1000)
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 400.0
 
 
 def test_loess_grid512_n1m_under_150s() -> None:

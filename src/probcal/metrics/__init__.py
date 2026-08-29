@@ -141,29 +141,84 @@ _METRIC_CATALOG: tuple[str, ...] = (
 )
 
 
+def _binned_presorted(
+    y: np.ndarray, p: np.ndarray, w: np.ndarray | None, sel: set[str]
+) -> dict[str, float]:
+    """The binned family over ``p``-ascending arrays, sharing one binning pass.
+
+    ``ece``/``ece_debiased``/``mce`` all bin at ``n_bins=15, strategy="mass"``,
+    so one :func:`~probcal.metrics.binned._bin_gaps` result serves all three
+    instead of three identical quantile-and-bincount passes; ``ece_sweep``'s
+    ~99-candidate monotonicity scan runs on cut positions rather than a rebuilt
+    length-n bin index, and still takes its returned value from the unchanged
+    ``ece`` call at the chosen bin count.
+    """
+    from .binned import (
+        _bin_gaps,
+        _ece_debiased_from_gaps,
+        _ece_from_gaps,
+        _ece_sweep_presorted,
+    )
+
+    out: dict[str, float] = {}
+    if not sel & {"ece", "ece_debiased", "mce", "ece_sweep"}:
+        return out
+    w_arr = np.ones(len(p)) if w is None else w
+    if sel & {"ece", "ece_debiased", "mce"}:
+        shares, gaps, rates, counts = _bin_gaps(y, p, w_arr, 15, "mass")
+        if "ece" in sel:
+            out["ece"] = _ece_from_gaps(shares, gaps, "l1")
+        if "ece_debiased" in sel:
+            out["ece_debiased"] = _ece_debiased_from_gaps(shares, gaps, rates, counts)
+        if "mce" in sel:
+            out["mce"] = _ece_from_gaps(shares, gaps, "max")
+    if "ece_sweep" in sel:
+        out["ece_sweep"] = _ece_sweep_presorted(y, p, w_arr)
+    return out
+
+
 def _point_metrics(
     y: np.ndarray,
     p: np.ndarray,
     w: np.ndarray | None,
     names: tuple[str, ...] | None = None,
+    *,
+    presorted: bool = False,
 ) -> dict[str, float]:
+    """Point estimates for ``names``; ``presorted`` is the bootstrap fast path.
+
+    ``presorted=True`` declares that ``p`` is already sorted ascending, which
+    lets every consumer that would sort internally skip doing so and lets the
+    binned family share one binning pass. It is only ever passed by
+    :func:`evaluate`'s replicate loop, which sorts each replicate once; the
+    reported *point* estimates always come off the default path, so they stay
+    bit-for-bit what earlier releases produced (``tests/test_metrics_evaluate.py``
+    pins this against a verbatim copy of the pre-0.3.0 body). Bootstrap values
+    may differ in the last bits from the reordered summation, which moves the
+    percentile CI bounds at the ~1e-15 level.
+    """
     sel = set(_METRIC_CATALOG if names is None else names)
     dispatch: dict[str, Callable[[], float]] = {
         "log_loss": lambda: log_loss(y, p, sample_weight=w),
         "brier": lambda: brier_score(y, p, sample_weight=w),
         "brier_skill": lambda: brier_skill_score(y, p, sample_weight=w),
-        "ece": lambda: ece(y, p, sample_weight=w),
-        "ece_debiased": lambda: ece_debiased(y, p, sample_weight=w),
-        "mce": lambda: ece(y, p, norm="max", sample_weight=w),
-        "ece_sweep": lambda: ece_sweep(y, p, sample_weight=w),
         "smooth_ece": lambda: smooth_ece(y, p, sample_weight=w),
         "intercept": lambda: calibration_intercept(y, p, sample_weight=w),
         "slope": lambda: calibration_slope(y, p, sample_weight=w),
     }
+    if not presorted:
+        dispatch |= {
+            "ece": lambda: ece(y, p, sample_weight=w),
+            "ece_debiased": lambda: ece_debiased(y, p, sample_weight=w),
+            "mce": lambda: ece(y, p, norm="max", sample_weight=w),
+            "ece_sweep": lambda: ece_sweep(y, p, sample_weight=w),
+        }
     out: dict[str, float] = {k: fn() for k, fn in dispatch.items() if k in sel}
+    if presorted:
+        out |= _binned_presorted(y, p, w, sel)
 
     if sel & {"ecce_max", "ecce_mean"}:
-        ec = ecce(y, p, sample_weight=w)
+        ec = ecce(y, p, sample_weight=w, presorted=presorted)
         out["ecce_max"] = ec.stat_max
         out["ecce_mean"] = ec.stat_mean
 
@@ -174,7 +229,7 @@ def _point_metrics(
         # use the same distances; refitting four times would quadruple
         # bootstrap cost). Distances themselves stay unweighted; sample_weight,
         # when given and not uniform, weights only the e50/e90 quantile step.
-        d = np.abs(loess(p, y, frac=0.75, grid_size=512) - p)
+        d = np.abs(loess(p, y, frac=0.75, grid_size=512, presorted=presorted) - p)
         w_arr = np.ones(len(p)) if w is None else w
         uniform_w = w is None or bool(np.all(w == w[0]))
         if "ici" in sel:
@@ -285,6 +340,20 @@ def evaluate(
     subset. With ``by`` given, the whole cost model above is paid once per
     group plus once for the pooled report.
 
+    Each replicate is sorted by prediction once and that order is shared:
+    the LOESS fit and ECCE skip their own sorts, ``ece``/``ece_debiased``/
+    ``mce`` share one 15-bin equal-mass binning pass, and ``ece_sweep``'s
+    ~99-candidate scan reads per-bin sums off prefix-sum differences at
+    ``searchsorted`` cut positions. The reported *point* estimates are
+    computed on the unsorted path and are bit-for-bit what 0.2.x produced;
+    only the replicates change summation order, which moves the percentile
+    CI bounds in their last bits (measured <= 4e-11 relative). On the dev
+    host at n=1e4 a full-catalog replicate costs 0.225s — 84% of it the ICI
+    family's LOESS fit, 11% the ``ece_sweep`` scan, 0.2% the whole binned
+    ECE family — so excluding the ICI family via ``metrics=`` is the single
+    largest lever on cost. See ``docs/concepts/metrics.md`` for the measured
+    table.
+
     Examples
     --------
     >>> import numpy as np
@@ -353,8 +422,11 @@ def evaluate(
                     "100 consecutive degenerate (single-class) bootstrap draws; "
                     "pass stratify=True or supply more data"
                 )
+        # One stable sort per replicate, shared by every metric that would
+        # otherwise sort (or re-bin) on its own; see ``_point_metrics``.
+        idx = idx[np.argsort(p_arr[idx], kind="stable")]
         yb, pb, wb = y_arr[idx], p_arr[idx], w_arr[idx]
-        pm = _point_metrics(yb, pb, wb, names)
+        pm = _point_metrics(yb, pb, wb, names, presorted=True)
         boot[b] = [pm[k] for k in names]
     ci_low = np.percentile(boot, 2.5, axis=0)
     ci_high = np.percentile(boot, 97.5, axis=0)

@@ -290,7 +290,9 @@ class EcceResult:
     stat_mean: float
 
 
-def ecce(y: object, p: object, *, sample_weight: object = None) -> EcceResult:
+def ecce(
+    y: object, p: object, *, sample_weight: object = None, presorted: bool = False
+) -> EcceResult:
     """Cumulative-deviation calibration error (Arrieta-Ibarra et al., 2022).
 
     Sort by prediction and walk the cumulative sum of weighted residuals;
@@ -305,6 +307,13 @@ def ecce(y: object, p: object, *, sample_weight: object = None) -> EcceResult:
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
         Optional non-negative weights, same length as ``y``.
+    presorted : bool, keyword-only
+        Declare that ``p`` is already sorted ascending, so the internal
+        ``argsort`` can be skipped. Purely a throughput switch for callers that
+        already hold a sorted copy (``evaluate``'s bootstrap sorts each
+        replicate once and shares that order across metrics); the result is
+        unchanged when the declaration holds and meaningless when it does not,
+        and nothing checks it.
 
     Returns
     -------
@@ -312,8 +321,11 @@ def ecce(y: object, p: object, *, sample_weight: object = None) -> EcceResult:
         Max and mean absolute cumulative deviation.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    order = np.argsort(p_arr, kind="stable")
-    c = np.cumsum(w[order] * (y_arr[order] - p_arr[order])) / w.sum()
+    if presorted:
+        c = np.cumsum(w * (y_arr - p_arr)) / w.sum()
+    else:
+        order = np.argsort(p_arr, kind="stable")
+        c = np.cumsum(w[order] * (y_arr[order] - p_arr[order])) / w.sum()
     return EcceResult(stat_max=float(np.max(np.abs(c))), stat_mean=float(np.mean(np.abs(c))))
 
 

@@ -20,16 +20,24 @@ def _calibrated(n: int = 800) -> tuple[np.ndarray, np.ndarray]:
 def test_evaluate_by_none_is_byte_identical_to_0_2_0_fixture() -> None:
     """Fixture values computed on the pre-``by`` code path (make_pd_portfolio(n=800,
     random_state=5), evaluate(..., n_boot=50, metrics=("brier", "ici"))), hard-coded
-    here so a future refactor of the ``by=None`` path cannot silently change it."""
+    here so a future refactor of the ``by=None`` path cannot silently change it.
+
+    Point estimates stay pinned at ``atol=1e-12``: they are computed on the
+    unsorted path and are bit-identical across 0.2.0-0.3.0. The CI bounds are
+    pinned at ``rtol=1e-9`` instead: 0.3.0 sorts each bootstrap replicate once
+    to share that order across metrics, which reorders every weighted sum
+    inside a replicate and can move a percentile bound in its last bits (drift
+    measured at 3.9e-11 relative on a n=10,000/n_boot=1,000 catalog run; this
+    800-row fixture happens to move less than 1e-12, but the guarantee is the
+    looser one).
+    """
     d = make_pd_portfolio(n=800, random_state=5)
     rep = evaluate(d.y, d.scores, n_boot=50, metrics=("brier", "ici"))
     assert isinstance(rep, MetricReport)
     assert rep.names == ("brier", "ici")
     np.testing.assert_allclose(rep.values, [0.02347598740117542, 0.04125927233150646], atol=1e-12)
-    np.testing.assert_allclose(rep.ci_low, [0.022073442779619666, 0.037005032463440724], atol=1e-12)
-    np.testing.assert_allclose(
-        rep.ci_high, [0.025280355485568177, 0.045428648333590414], atol=1e-12
-    )
+    np.testing.assert_allclose(rep.ci_low, [0.022073442779619666, 0.037005032463440724], rtol=1e-9)
+    np.testing.assert_allclose(rep.ci_high, [0.025280355485568177, 0.045428648333590414], rtol=1e-9)
 
 
 def test_evaluate_by_none_matches_omitting_the_argument() -> None:

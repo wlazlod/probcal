@@ -755,6 +755,7 @@ def loess(
     xeval: object = None,
     *,
     grid_size: int | None = None,
+    presorted: bool = False,
 ) -> np.ndarray:
     """Tricube-weighted local polynomial regression (LOESS).
 
@@ -777,6 +778,13 @@ def loess(
         mirrors R ``stats::lowess``, whose ``delta`` parameter (default
         ``0.01 * diff(range(x))``) likewise fits at spaced points and
         interpolates. ``None`` (default) evaluates exactly at every point.
+    presorted : bool, keyword-only
+        Declare that ``x`` is already sorted ascending, so the internal
+        ``argsort`` (and the inverse permutation of the fitted values) can be
+        skipped. Purely a throughput switch for callers that already hold a
+        sorted copy — ``evaluate``'s bootstrap sorts each replicate once and
+        shares that order across metrics. Output is unchanged when the
+        declaration holds and meaningless when it does not; nothing checks it.
 
     Returns
     -------
@@ -788,13 +796,15 @@ def loess(
     ev = x_arr if xeval is None else np.asarray(xeval, dtype=np.float64)
     n = x_arr.shape[0]
     r = min(max(int(math.ceil(frac * n)), degree + 1), n)
-    order = np.argsort(x_arr, kind="stable")
-    xs, ys = x_arr[order], y_arr[order]
+    order = None if presorted else np.argsort(x_arr, kind="stable")
+    xs, ys = (x_arr, y_arr) if order is None else (x_arr[order], y_arr[order])
     if grid_size is not None and ev.shape[0] > grid_size:
         anchors = np.unique(np.quantile(ev, np.linspace(0.0, 1.0, grid_size)))
         return np.interp(ev, anchors, _loess_fit_sorted(xs, ys, anchors, r, degree))
     if xeval is None:
         fit = _loess_fit_sorted(xs, ys, xs, r, degree)
+        if order is None:
+            return fit
         out = np.empty_like(fit)
         out[order] = fit
     else:

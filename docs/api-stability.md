@@ -71,6 +71,11 @@ rather than starting a new one for later 0.3.0 additions):
   symbols) — per-group metric reports plus a pooled report; `plots.
   plot_reliability(by=)` — the matching faceted reliability grid; see the
   new *Grouped evaluation* guide.
+- `metrics.ecce(presorted=)` — keyword-only throughput switch (default
+  `False`) declaring `p` already sorted ascending, so the internal sort is
+  skipped; `evaluate`'s bootstrap sorts each replicate once and shares that
+  order. Results are unchanged when the declaration holds; see *Metrics*'
+  "Computational cost".
 - `probcal.report.validation_report` — a self-contained HTML/markdown
   validation report (reliability, the metric report, the CORP
   decomposition, and, when given, the rating-grades, grouped-evaluation,

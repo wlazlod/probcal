@@ -91,6 +91,20 @@ running intersection. This half-width is also the natural value for a
 recourse engine's `buffer_logit` (see the treecf guide): a re-offset within
 the sequence cannot invalidate a buffered counterfactual.
 
+## Per-grade confidence sequences
+
+When a `grade` array is passed, each grade also gets its own time-uniform
+confidence sequence for its own offset — the same construction as the
+portfolio-level one above (same `delta_ci_grid`, same predictable-plug-in
+alternative), restricted to that grade's slice of the batch and using the
+grade's own plug-in `d_g` in place of the portfolio-level `delta_hat`. This
+answers a question the portfolio-level CS cannot: a single grade drifting
+while the portfolio average stays put is invisible to `delta_ci`, but shows
+up in that grade's own `MonitorStep.grade_delta_ci[g]`. `plot_e_process(...,
+grades_panel=True)` adds a second axes plotting every grade's CS band
+(lo/hi) across steps, below the main e-process plot; `grades_panel=False`
+(the default) renders pixel-identically to 0.2.0.
+
 ## Margin-of-conservatism offsets
 
 `monitor.moc_offset(mon, *, level=None)` turns that same confidence sequence into an

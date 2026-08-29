@@ -61,6 +61,10 @@ class MonitorStep:
     delta_hat, slope_hat : float
         The predictable plug-ins used for this batch (from past batches
         only) — recorded for auditability.
+    grade_delta_ci : dict[str, tuple[float, float] | None]
+        Per-grade time-uniform confidence sequence for that grade's own
+        offset, same construction and grid as ``delta_ci`` (empty when no
+        grades were given; absent for steps loaded from a pre-0.3 payload).
     """
 
     label: str
@@ -75,6 +79,7 @@ class MonitorStep:
     delta_ci: tuple[float, float] | None
     delta_hat: float
     slope_hat: float
+    grade_delta_ci: dict[str, tuple[float, float] | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -200,6 +205,8 @@ class CalibrationMonitor:
         self._cs_grid = np.linspace(float(lo), float(hi), int(count))
         self._cs_log = np.zeros(len(self._cs_grid))
         self._cs_max = np.zeros(len(self._cs_grid))
+        self._grade_cs_log: dict[str, np.ndarray] = {}
+        self._grade_cs_max: dict[str, np.ndarray] = {}
         self._max_log_global = -np.inf
         self._alarmed = False
         self._warned_weights = False
@@ -292,13 +299,30 @@ class CalibrationMonitor:
             for g in np.unique(g_arr):
                 if g not in self._grade_procs:
                     self._grade_procs[g] = OffsetProcess(self._sym_grid())
+                if g not in self._grade_cs_log:
+                    self._grade_cs_log[g] = np.zeros(len(self._cs_grid))
+                    self._grade_cs_max[g] = np.zeros(len(self._cs_grid))
                 mask = g_arr == g
                 if history_ready:
                     gz, gy, gw = self._past(grade=g)
                     d_g = plug_in_delta(gz, gy, gw)
                 else:
                     d_g = 0.0
-                self._grade_procs[g].update(z[mask], p_arr[mask], y_arr[mask], w_arr[mask], d_g)
+                zg, pg, yg, wg = z[mask], p_arr[mask], y_arr[mask], w_arr[mask]
+                self._grade_procs[g].update(zg, pg, yg, wg, d_g)
+
+                # Per-grade confidence sequence: same construction as the
+                # global one, restricted to this grade's own batch slice and
+                # using its own plug-in as the alternative.
+                gq_alt = np.clip(pg if d_g == 0.0 else expit(zg + d_g), 1e-12, 1.0 - 1e-12)
+                glog_q = np.log(gq_alt)
+                glog_1mq = np.log1p(-gq_alt)
+                gp0 = np.clip(expit(zg[None, :] + self._cs_grid[:, None]), 1e-12, 1.0 - 1e-12)
+                gterms = yg * (glog_q[None, :] - np.log(gp0)) + (1.0 - yg) * (
+                    glog_1mq[None, :] - np.log1p(-gp0)
+                )
+                self._grade_cs_log[g] = self._grade_cs_log[g] + (wg[None, :] * gterms).sum(axis=1)
+                self._grade_cs_max[g] = np.maximum(self._grade_cs_max[g], self._grade_cs_log[g])
 
         # Confidence sequence: e-process per shifted null, plug-in alternative.
         q_alt = np.clip(p_arr if delta_hat == 0.0 else expit(z + delta_hat), 1e-12, 1.0 - 1e-12)
@@ -349,6 +373,12 @@ class CalibrationMonitor:
             self._alarmed = True
         surviving = self._cs_grid[self._cs_max < threshold]
         delta_ci = (float(surviving.min()), float(surviving.max())) if surviving.size else None
+        grade_delta_ci: dict[str, tuple[float, float] | None] = {}
+        for g, cs_max_g in self._grade_cs_max.items():
+            surviving_g = self._cs_grid[cs_max_g < threshold]
+            grade_delta_ci[g] = (
+                (float(surviving_g.min()), float(surviving_g.max())) if surviving_g.size else None
+            )
         return MonitorStep(
             label=label if label is not None else f"batch-{len(self.steps_)}",
             n=int(len(y_arr)),
@@ -362,6 +392,7 @@ class CalibrationMonitor:
             delta_ci=delta_ci,
             delta_hat=float(delta_hat),
             slope_hat=float(a_hat),
+            grade_delta_ci=grade_delta_ci,
         )
 
     # ------------------------------------------------------------------ report
@@ -474,6 +505,8 @@ class CalibrationMonitor:
                 "grade_procs": {g: p.state() for g, p in self._grade_procs.items()},
                 "cs_log": self._cs_log.tolist(),
                 "cs_max": self._cs_max.tolist(),
+                "grade_cs_log": {g: a.tolist() for g, a in self._grade_cs_log.items()},
+                "grade_cs_max": {g: a.tolist() for g, a in self._grade_cs_max.items()},
                 "max_log_global": float(self._max_log_global),
                 "alarmed": self._alarmed,
                 "warned_weights": self._warned_weights,
@@ -489,6 +522,9 @@ class CalibrationMonitor:
     def _step_to_dict(s: MonitorStep) -> dict[str, object]:
         d = asdict(s)
         d["delta_ci"] = list(s.delta_ci) if s.delta_ci is not None else None
+        d["grade_delta_ci"] = {
+            g: (list(v) if v is not None else None) for g, v in s.grade_delta_ci.items()
+        }
         return d
 
     @classmethod
@@ -523,6 +559,12 @@ class CalibrationMonitor:
             mon._grade_procs[g] = proc
         mon._cs_log = np.asarray(st["cs_log"], dtype=np.float64)
         mon._cs_max = np.asarray(st["cs_max"], dtype=np.float64)
+        mon._grade_cs_log = {
+            g: np.asarray(a, dtype=np.float64) for g, a in st.get("grade_cs_log", {}).items()
+        }
+        mon._grade_cs_max = {
+            g: np.asarray(a, dtype=np.float64) for g, a in st.get("grade_cs_max", {}).items()
+        }
         mon._max_log_global = float(st["max_log_global"])
         mon._alarmed = bool(st["alarmed"])
         mon._warned_weights = bool(st["warned_weights"])
@@ -531,6 +573,10 @@ class CalibrationMonitor:
             sd = dict(sd)
             sd["delta_ci"] = tuple(sd["delta_ci"]) if sd["delta_ci"] is not None else None
             sd["e_grades"] = dict(sd["e_grades"])
+            sd["grade_delta_ci"] = {
+                g: (tuple(v) if v is not None else None)
+                for g, v in sd.get("grade_delta_ci", {}).items()
+            }
             mon.steps_.append(MonitorStep(**sd))
         return mon
 

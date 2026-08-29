@@ -105,25 +105,6 @@ grades_panel=True)` adds a second axes plotting every grade's CS band
 (lo/hi) across steps, below the main e-process plot; `grades_panel=False`
 (the default) renders pixel-identically to 0.2.0.
 
-## Margin-of-conservatism offsets
-
-`monitor.moc_offset(mon, *, level=None)` turns that same confidence sequence into an
-actionable, conservative correction: it reads the CS's upper end (`steps[-1].delta_ci[1]` by
-default, or a level recomputed directly from the monitor's running `_cs_grid`/`_cs_max`
-state) and returns a fitted `LogitOffset(delta=hi)`. Shifting by the CS's *upper* end rather
-than the point-estimate plug-in (`delta_hat`) is the conservative choice: the CS covers the
-true offset with `1 - alpha` confidence at every stopping time, so `hi` corrects for at least
-as much drift as the evidence plausibly supports — a margin of conservatism, not a best
-guess. `level` requires a live `CalibrationMonitor` (it reads running arrays a frozen
-`MonitorReport` does not retain); a report input still works with `level=None`, fit on a
-placeholder batch since a report keeps no per-batch data.
-
-`monitor.moc_offset_from_counts(y, p, *, level=0.9, sample_weight=None)` is the count-only
-sibling with no monitor involved: it re-anchors `p`'s mean at the one-sided Jeffreys
-posterior upper quantile of the observed event rate (the same quantile
-`metrics.jeffreys_grade_test`/`metrics.jeffreys_upper_bands` use), via `LogitOffset`'s
-existing mode B (`target_mean`).
-
 ## Drift-onset estimate and the since-onset window
 
 Each step also carries `MonitorStep.log_e_increment`: the batch's additive plug-in
@@ -224,6 +205,33 @@ if action.kind == "re-offset":
     p_corrected = action.offset.transform(p_new)
     step = action.monitor.update(y_new, p_corrected, label="next")
 ```
+
+## Margin-of-conservatism offsets
+
+`monitor.moc_offset(mon, *, level=None)` turns that same confidence sequence into an
+actionable, conservative correction: it reads the CS's upper end (`steps[-1].delta_ci[1]` by
+default, or a level recomputed directly from the monitor's running `_cs_grid`/`_cs_max`
+state) and returns a fitted `LogitOffset(delta=hi)`. Shifting by the CS's *upper* end rather
+than the point-estimate plug-in (`delta_hat`) is the conservative choice: the CS covers the
+true offset with `1 - alpha` confidence at every stopping time, so `hi` corrects for at least
+as much drift as the evidence plausibly supports — a margin of conservatism, not a best
+guess. `level` requires a live `CalibrationMonitor` (it reads running arrays a frozen
+`MonitorReport` does not retain); a report input still works with `level=None`, fit on a
+placeholder batch since a report keeps no per-batch data.
+
+`monitor.moc_offset_from_counts(y, p, *, level=0.9, sample_weight=None)` is the count-only
+sibling with no monitor involved: it re-anchors `p`'s mean at the one-sided Jeffreys
+posterior upper quantile of the observed event rate (the same quantile
+`metrics.jeffreys_grade_test`/`metrics.jeffreys_upper_bands` use), via `LogitOffset`'s
+existing mode B (`target_mean`).
+
+This is a different move than `apply_recommendation`'s re-offset: `apply_recommendation` acts
+on an *alarm* — a level shift the evidence says is really there — while `moc_offset*` can be
+called at any time, alarmed or not, to make an already-calibrated portfolio's reported PDs
+more conservative on purpose. See [Conservatism: most-prudent PDs and margins of
+conservatism](conservatism.md#margin-of-conservatism-composing-with-calibration-not-replacing-it)
+for the `Chain([calibrator, moc_offset(mon)])` composition pattern and the one-period-estimator
+caveat that applies to every bound on that page, this one included.
 
 ## Validity conditions
 
@@ -328,6 +336,22 @@ pure-slope runs) is enforced through the real `CalibrationMonitor` in the
 same CI suite, under the default `recommendation_window="since_onset"`:
 18/20 pure-offset runs correctly called `re-offset`, 20/20 pure-slope runs
 correctly called `re-fit`.
+
+### Per-grade CS coverage and drift-onset localization (spec M2/M3)
+
+Produced by `docs/scripts/monitor_grade_onset_sim.py` (100 seeded runs): a full-size rerun of
+the two constructions that already gate in CI at reduced run counts —
+`tests/test_monitor_grades.py::test_two_grade_drift_confidence_sequence_coverage` (per-grade
+CS coverage, 20 runs) and `tests/test_monitor_onset.py::test_onset_localizes_injected_drift`
+(onset localization, 40 runs) — read at the documented, larger size. The `shift=0.4` onset row
+is a weaker drift than the CI gate's `shift=0.6` and is reported, not gated.
+
+| experiment                                              | result | gate |
+|----------------------------------------------------------|--------|------|
+| per-grade CS coverage, drifted grade (shift=0.6, n=100)  | 1.0000 | >= 0.9 |
+| per-grade CS coverage, stable grade (shift=0.0, n=100)   | 1.0000 | >= 0.9 |
+| onset \|onset-12\| (shift=0.6, n=100)                    | median 1.0, IQR [1.0, 2.0] | <= 2 (median) |
+| onset \|onset-12\| (shift=0.4, n=100)                    | median 1.0, IQR [1.0, 2.0] | reported |
 
 ### `hl_e_test` (spec M1)
 

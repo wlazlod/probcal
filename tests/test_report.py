@@ -95,7 +95,11 @@ def test_same_seed_is_byte_identical_after_stripping_timestamp() -> None:
     first = validation_report(**kwargs)
     second = validation_report(**kwargs)
 
-    assert first != second  # the timestamp line differs
+    # Two builds can straddle a second boundary or not — don't assume the
+    # timestamp line differs, just that each report has exactly one (the
+    # "Generated ... UTC" text is embedded inline, not anchored to column 0).
+    assert len(re.findall(r"Generated [^\n]*UTC", first)) == 1
+    assert len(re.findall(r"Generated [^\n]*UTC", second)) == 1
     assert _strip_timestamp(first) == _strip_timestamp(second)
 
 

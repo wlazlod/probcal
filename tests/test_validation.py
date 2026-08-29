@@ -64,3 +64,31 @@ def test_validate_weights_rejects_negative() -> None:
 def test_validate_weights_rejects_wrong_length() -> None:
     with pytest.raises(ValueError, match="length"):
         validate_weights([1.0], 2)
+
+
+def test_validate_scores_accepts_single_column() -> None:
+    col = np.linspace(0.1, 0.9, 5).reshape(-1, 1)
+    out = validate_scores(col)
+    assert out.ndim == 1
+    assert np.array_equal(out, validate_scores(col.ravel()))
+
+
+def test_validate_scores_rejects_two_columns_with_new_message() -> None:
+    with pytest.raises(ValueError, match=r"expected 1-D scores \(or a single column\); got shape"):
+        validate_scores(np.zeros((3, 2)))
+
+
+def test_validate_binary_y_still_rejects_single_column() -> None:
+    with pytest.raises(ValueError, match="1-D"):
+        validate_binary_y(np.array([[0.0], [1.0]]))
+
+
+def test_column_vector_fit_predict_matches_ravelled() -> None:
+    from probcal import BetaCalibrator
+
+    rng = np.random.default_rng(0)
+    s = rng.uniform(0.05, 0.95, 200)
+    y = (rng.random(200) < s).astype(float)
+    flat = BetaCalibrator().fit(s, y)
+    col = BetaCalibrator().fit(s.reshape(-1, 1), y)
+    assert np.array_equal(flat.predict_proba(s), col.predict_proba(s.reshape(-1, 1)))

@@ -9,11 +9,18 @@ EPS = 1e-12
 def validate_scores(s: object, *, name: str = "s") -> np.ndarray:
     """Coerce scores/probabilities to a clipped 1-D float64 array.
 
+    A single-column 2-D input of shape ``(n, 1)`` — what an sklearn
+    cross-validation loop hands an estimator — is ravelled before the
+    checks below. This holds wherever the function is used: calibrator
+    ``fit``/``predict_proba`` and the metrics alike. Every other 2-D
+    shape is still rejected, and :func:`validate_binary_y` stays strict.
+
     Parameters
     ----------
     s : array_like
-        Scores in ``[0, 1]``. Values at the boundaries are clipped to
-        ``[EPS, 1 - EPS]`` so that logits stay finite.
+        Scores in ``[0, 1]``, shape ``(n,)`` or ``(n, 1)``. Values at the
+        boundaries are clipped to ``[EPS, 1 - EPS]`` so that logits stay
+        finite.
     name : str
         Argument name used in error messages.
 
@@ -25,12 +32,14 @@ def validate_scores(s: object, *, name: str = "s") -> np.ndarray:
     Raises
     ------
     ValueError
-        If the input is not 1-D, contains non-finite values, or lies
-        outside ``[0, 1]``.
+        If the input is neither 1-D nor a single column, contains
+        non-finite values, or lies outside ``[0, 1]``.
     """
     arr = np.asarray(s, dtype=np.float64)
+    if arr.ndim == 2 and arr.shape[1] == 1:
+        arr = arr.ravel()
     if arr.ndim != 1:
-        raise ValueError(f"{name} must be a 1-D array, got shape {arr.shape}")
+        raise ValueError(f"{name}: expected 1-D scores (or a single column); got shape {arr.shape}")
     if not np.all(np.isfinite(arr)):
         raise ValueError(f"{name} must contain only finite values")
     if np.any(arr < 0.0) or np.any(arr > 1.0):

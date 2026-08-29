@@ -202,6 +202,15 @@ def test_calibrated_classifier_exposes_calibrator_protocol() -> None:
     assert "a =" in repr(clf.interpret())
 
 
+def test_calibrated_classifier_to_json_delegates_to_calibrator() -> None:
+    from probcal.sklearn import CalibratedClassifier
+
+    X, y = _feature_data()
+    clf = CalibratedClassifier(random_state=1).fit(X, y)
+    assert clf.to_json() == clf.calibrator_.to_json()
+    assert clf.to_dict() == clf.calibrator_.to_dict()
+
+
 def test_calibrated_classifier_gridsearch_over_calibrator_variant() -> None:
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import GridSearchCV

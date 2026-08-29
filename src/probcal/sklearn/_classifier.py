@@ -1,5 +1,6 @@
 """CalibratedClassifier: CalibratedClassifierCV(ensemble=False) on probcal calibrators."""
 
+import os
 import warnings
 
 import numpy as np
@@ -263,6 +264,13 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
         """
         check_is_fitted(self, "calibrator_")
         return self.calibrator_.to_dict()
+
+    def to_json(
+        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
+    ) -> "str | None":
+        """The fitted calibrator's JSON serialization (delegated), never pickle."""
+        check_is_fitted(self, "calibrator_")
+        return self.calibrator_.to_json(path, indent=indent)
 
     def interpret(self):  # noqa: ANN201 - probcal Interpretation
         """The fitted calibrator's plain-language reading (delegated)."""

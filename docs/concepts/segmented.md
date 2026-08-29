@@ -10,6 +10,24 @@ sits between the two: one shared base map fit on all the data, plus a *shrunken*
 logit offset that interpolates between "trust this segment's own data" and "trust the pooled
 average", governed by how much genuine between-segment heterogeneity the data supports.
 
+## Design rationale
+
+Shrinking a per-segment *offset* toward the shared base map — rather than shrinking a full
+per-segment refit toward a shared model — keeps four properties for free. The result stays
+**monotone**: a level shift on the logit scale cannot un-sort scores that `base_` already
+sorted. It stays **invertible**: inverting a scalar shift through `base_`'s own exact inverse
+is closed-form for any `base_` (see *Protocol notes* below), whereas inverting a shrunk
+nonlinear per-segment map has no general closed form. It stays **serializable**: the
+per-segment state is six numbers (`delta_hat`, `se`, `delta_tilde`, `n`, `events`, `shrink`)
+next to the one shared `base_`, not a second full calibrator's worth of parameters per
+segment. And it stays **auditable per segment**: `interpret()` reads off, for any segment,
+exactly how much of its own signal survived shrinkage versus how much fell back to the shared
+map. A full per-segment refit (an independent `BetaCalibrator`, say, fit per segment, with
+*its* parameters shrunk toward the pooled fit) does not shrink naturally to a well-defined
+"no effect" point in parameter space, does not preserve monotonicity or exact invertibility
+under shrinkage, and loses the one-number-per-segment audit trail — that design is out of
+scope here.
+
 ## The model
 
 `SegmentedCalibrator` fits a shared `base` calibrator (default `BetaCalibrator()`) on the full
@@ -121,17 +139,56 @@ number of segments as long as `base_` itself has an exact inverse.
 
 ## Example
 
+Three segments of very different size and true miscalibration — `micro` (n=30), `mid`
+(n=300), `large` (n=3000) — with `base_` fit on the pooled data:
+
 ```python
 import numpy as np
 from probcal import SegmentedCalibrator
+from probcal._math import expit, logit
 
-segments = np.array(["retail", "sme", "corporate"])[np.arange(len(scores)) % 3]
+rng = np.random.default_rng(42)
+sizes = {"micro": 30, "mid": 300, "large": 3000}
+true_deltas = {"micro": -0.6, "mid": 0.12, "large": 0.5}
+
+s_parts, y_parts, seg_parts = [], [], []
+for name, n in sizes.items():
+    s_g = expit(rng.normal(-1.0, 1.0, n))
+    p_true = expit(logit(s_g) + true_deltas[name])
+    y_g = (rng.random(n) < p_true).astype(float)
+    s_parts.append(s_g)
+    y_parts.append(y_g)
+    seg_parts.append(np.full(n, name))
+
+scores = np.concatenate(s_parts)
+y = np.concatenate(y_parts)
+segments = np.concatenate(seg_parts)
+
 cal = SegmentedCalibrator().fit(scores, y, segments=segments)
-print(cal.interpret())  # tau2, and one row per segment: n, events, delta_hat, se, delta_tilde, shrink
+print(cal.interpret())
 
 p_global = cal.predict_proba(scores)                       # base map only (delta=0)
 p_segmented = cal.predict_proba(scores, segments=segments)  # per-segment shrunk offset applied
 ```
+
+```text
+Interpretation[SegmentedCalibrator]
+parameter    value
+-----------  ---------
+tau2         0.195006
+delta.large  0.0598435
+delta.micro  -0.51923
+delta.mid    -0.484786
+- tau2 = 0.1950: between-segment heterogeneity variance (DerSimonian-Laird method of moments on the per-segment offset MLEs); tau2 = 0 means complete pooling (every delta_tilde = 0)
+- segment 'large': n=3000, events=1259.0, delta_hat=+0.0603, se=0.0402, delta_tilde=+0.0598, shrink=0.992
+- segment 'micro': n=30, events=6.0, delta_hat=-1.1095, se=0.4708, delta_tilde=-0.5192, shrink=0.468
+- segment 'mid': n=300, events=90.0, delta_hat=-0.5307, se=0.1359, delta_tilde=-0.4848, shrink=0.913
+- unseen segments at predict/inverse time use delta=0 (unseen='global')
+```
+
+`large` is precise (`se=0.04`) and keeps 99.2% of its own offset MLE. `micro` is noisy
+(`se=0.47`, only 30 observations) and is pulled halfway back toward the population — its raw
+MLE overshoots the true `-0.6` at `-1.11`, but `delta_tilde=-0.52` is much closer.
 
 ## Recovery simulation
 

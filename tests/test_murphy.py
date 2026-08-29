@@ -35,26 +35,59 @@ def test_murphy_curve_default_thresholds_is_513():
     assert curve.thresholds.shape == (513,)
 
 
-def test_murphy_curve_identity_at_data_breakpoints_is_near_exact():
-    """2 * trapz(score, thresholds) == brier_score at the curve's own breakpoints.
+def test_murphy_curve_exact_midpoint_identity():
+    """2 * sum(w * S_theta(mid)) == brier_score(y, p) to 1e-10, via the midpoint rule.
 
-    ``S_theta`` is exactly piecewise linear between consecutive unique ``p``
-    values, but it *jumps* exactly at each one (the observation with that
-    ``p`` switches sides), so the trapezoid rule over those breakpoints
-    samples one side of every jump and converges to the true (continuum)
-    identity at rate ~1/n rather than reproducing it to machine precision
-    at any finite `n` — verified over several seeds at n=5000 to stay well
-    inside a safe, non-flaky bound.
+    ``S_theta`` is piecewise linear in ``theta`` on each OPEN interval
+    between consecutive breakpoints ``u = sorted(unique(p) | {0, 1})``
+    (it only jumps exactly at the breakpoints themselves), and
+    ``integral_0^1 S_theta dtheta == (y - p)**2 / 2`` exactly per
+    observation. The midpoint rule is exact for a linear function on an
+    interval (the value at the midpoint equals the interval's average), so
+    evaluating at ``mid = (u[1:] + u[:-1]) / 2`` — interior points, never a
+    breakpoint itself — sidesteps the jump-discontinuity ambiguity of
+    sampling exactly at a breakpoint entirely, unlike the raw-breakpoint
+    trapezoid rule checked below.
     """
     from probcal.metrics import brier_score, murphy_curve
 
     for seed in range(5):
-        y, p = _data(n=5000, seed=seed)
-        thresholds = np.union1d(np.array([0.0, 1.0]), np.unique(p))
-        curve = murphy_curve(y, p, thresholds=thresholds)
-        lhs = 2.0 * np.trapezoid(curve.score, curve.thresholds)
+        y, p = _data(n=250, seed=seed)
+        u = np.union1d(np.array([0.0, 1.0]), np.unique(p))
+        mid = (u[1:] + u[:-1]) / 2.0
+        w = np.diff(u)
+        curve = murphy_curve(y, p, thresholds=mid)
+        lhs = 2.0 * np.sum(w * curve.score)
         rhs = brier_score(y, p)
-        assert abs(lhs - rhs) < 1e-4
+        assert abs(lhs - rhs) < 1e-10
+
+
+def test_murphy_curve_exact_midpoint_identity_weighted():
+    from probcal.metrics import brier_score, murphy_curve
+
+    rng = np.random.default_rng(7)
+    y, p = _data(n=250, seed=2)
+    sample_weight = rng.uniform(0.5, 2.0, len(y))
+    u = np.union1d(np.array([0.0, 1.0]), np.unique(p))
+    mid = (u[1:] + u[:-1]) / 2.0
+    w = np.diff(u)
+    curve = murphy_curve(y, p, thresholds=mid, sample_weight=sample_weight)
+    lhs = 2.0 * np.sum(w * curve.score)
+    rhs = brier_score(y, p, sample_weight=sample_weight)
+    assert abs(lhs - rhs) < 1e-10
+
+
+def test_murphy_curve_accepts_arbitrary_nonuniform_thresholds():
+    """Midpoints between order statistics are not on a uniform grid; must still work."""
+    from probcal.metrics import murphy_curve
+
+    y, p = _data(n=250, seed=3)
+    u = np.union1d(np.array([0.0, 1.0]), np.unique(p))
+    mid = (u[1:] + u[:-1]) / 2.0
+    assert not np.allclose(np.diff(mid), np.diff(mid)[0])  # genuinely non-uniform
+    curve = murphy_curve(y, p, thresholds=mid)
+    assert curve.thresholds.shape == mid.shape
+    assert np.array_equal(curve.thresholds, np.sort(mid))
 
 
 def test_murphy_curve_default_513_close_to_brier():

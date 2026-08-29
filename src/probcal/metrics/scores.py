@@ -222,19 +222,26 @@ def murphy_curve(
     ``p**2 / 2`` when ``y=0`` and ``(1 - p)**2 / 2`` when ``y=1``, whose
     doubled weighted mean is exactly ``E[(1-y)*p**2 + y*(1-p)**2] ==
     E[(p - y)**2]``, the Brier score). ``S_theta`` is piecewise linear in
-    ``theta`` between consecutive unique ``p`` values but jumps exactly at
-    each one (the observation crossing sides), so a threshold grid built
-    from those breakpoints reproduces the Brier identity to a numerical
-    error that shrinks with the sample size — exactly at the continuum
-    limit, and already far inside the default grid's 1e-3 budget at
-    realistic ``n`` — rather than to machine precision at any finite
-    ``thresholds`` array (the discretized trapezoid necessarily samples one
-    side of each jump). Isotonic (PAV) recalibration of ``p`` never
-    increases the score at any threshold (Ehm et al., 2016), so the two
-    curves' relative position diagnoses the value of recalibration without
-    collapsing to one scalar. Computed by sorting ``p`` once and
-    accumulating weighted class-conditional sums via ``searchsorted`` —
-    ``O(n log n + T log n)`` for ``T`` thresholds, never the naive
+    ``theta`` on each *open* interval between consecutive breakpoints
+    ``u = sorted(unique(p) | {0, 1})`` and jumps only exactly at those
+    breakpoints (the observation at that ``p`` crosses sides), so:
+    evaluated at the *midpoint* of each interval — an interior point,
+    never a breakpoint, so the jump ambiguity never arises — the midpoint
+    rule is exact for a linear function on an interval, and
+    ``2 * sum(np.diff(u) * murphy_curve(y, p, thresholds=mid).score)``
+    (``mid = (u[1:] + u[:-1]) / 2``) reproduces the Brier score to machine
+    precision; evaluated directly *at* the breakpoints instead (e.g. via
+    plain ``np.trapezoid`` over ``u`` itself), each sampled value is a
+    one-sided limit of the jump there, so that discretization converges to
+    the Brier identity only at a rate that shrinks with the sample size —
+    already far inside the default grid's 1e-3 budget at realistic ``n``,
+    but not exact at any finite ``n``. Isotonic (PAV) recalibration of
+    ``p`` never increases the score at any threshold (Ehm et al., 2016),
+    so the two curves' relative position diagnoses the value of
+    recalibration without collapsing to one scalar. Computed by sorting
+    ``p`` once and accumulating weighted class-conditional sums via
+    ``searchsorted`` — ``O(n log n + T log n)`` for ``T`` (arbitrary,
+    not necessarily uniformly spaced) thresholds, never the naive
     ``O(n * T)`` mask.
 
     Parameters

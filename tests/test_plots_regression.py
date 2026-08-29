@@ -124,20 +124,24 @@ def test_plot_grade_backtest_default_is_stable():
     _assert_pinned(h1, "plot_grade_backtest")
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "plot_offset_audit embeds LogitOffset.timestamp_ (wall-clock fit time) in the "
-        "annotation text, so the rendered hash is not stable across separate fit() calls "
-        "and can flip mid-test across a second boundary"
-    ),
-)
-def test_plot_offset_audit_default_is_stable():
+def test_plot_offset_audit_default_is_stable(monkeypatch):
     import matplotlib
 
     matplotlib.use("Agg")
+    from datetime import UTC, datetime
+
+    import probcal.offset as _offset_module
     from probcal.offset import LogitOffset
     from probcal.plots import plot_offset_audit
+
+    # plot_offset_audit prints offset.timestamp_ (wall-clock fit time) on the chart;
+    # freeze probcal.offset's clock so the rendered hash is reproducible.
+    class _FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 1, 1, tzinfo=UTC)
+
+    monkeypatch.setattr(_offset_module, "datetime", _FrozenDatetime)
 
     y, p = _data()
 
@@ -211,7 +215,7 @@ EXPECTED = {
     "plot_selection": "cd7deda1e739a0511b26ce8b510a2bcb0f620a2a9680f6e5995bb3c34e794493",
     "plot_ecce": "f399114a8499dc7fbbc0b8af70d4069e04feeb0f338e20c5cb9146cd6f5ed0d1",
     "plot_grade_backtest": "3f32278c362688bc5c47288cb5d7e75c0f3d64dd785109f6d1456d588d45d26b",
-    "plot_offset_audit": "fd5f3e2db455ceb0f357f8587189e04ff162746d409b3694c3a205476a685e60",
+    "plot_offset_audit": "866a7f28f5211a578c6f7dc999a60f5cde5de92557292b298567510e83faff78",
     "plot_e_process": "8e0d67cfe0fef1aba1a914da8e64aa60f28ca4b0f56857c578e9743b047502ce",
     "plot_comparison": "e149955a561acac0d46adc34b1648063633642b3368b102337fdffeac62193bf",
     "plot_interval": "4086410f26af83c2a49b1d4a5dc01fea1bfaa83685ce8ddbc489f2b48b5068ce",

@@ -19,10 +19,11 @@ import numpy as np
 
 from ._math import _LOGIT_CLIP, bisect, expit, logit
 from ._registry import register
-from ._results import Interpretation
+from ._results import Interpretation, OffsetEstimate
 from ._serialize import SCHEMA_VERSION, check_schema, data_fingerprint, fingerprint_of_dict
 from ._validation import validate_scores, validate_weights
 from .metrics.regression import GuardrailReport, calibration_guardrails
+from .metrics.scores import _prep
 
 _DELTA_BRACKET = 40.0
 
@@ -401,3 +402,137 @@ class LogitOffset:
         """SHA-256 of the canonical serialized form, blind to versions and
         to the audit ``timestamp_`` — identical fits fingerprint identically."""
         return fingerprint_of_dict(self.to_dict())
+
+
+def _offset_mle(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
+    """Offset-only logistic MLE: root of the score equation on already-valid inputs.
+
+    Solves ``mean_w(sigma(z + delta)) = mean_w(y)`` by bisection in
+    ``[-40, 40]`` — the mean-matching root of ``LogitOffset(target_mean=...)``
+    and, equivalently, the unique root of the offset-only logistic score
+    equation ``sum(w * (y - sigma(z + delta))) = 0``. Callers are
+    responsible for degenerate cases (empty input, a target outside
+    ``(0, 1)``); this function assumes a valid bracket and is shared,
+    unchanged, by :func:`estimate_offset` and
+    ``probcal.monitor._processes.plug_in_delta`` so the two stay
+    bit-identical.
+
+    Parameters
+    ----------
+    z : numpy.ndarray
+        Logits, ``logit(p)``.
+    y : numpy.ndarray
+        Binary outcomes in ``{0, 1}``.
+    w : numpy.ndarray
+        Positive weights.
+
+    Returns
+    -------
+    float
+        The fitted log-odds shift ``delta``.
+    """
+    target = float(np.average(y, weights=w))
+
+    def gap(d: float) -> float:
+        return float(np.average(expit(z + d), weights=w)) - target
+
+    return bisect(gap, -_DELTA_BRACKET, _DELTA_BRACKET, tol=1e-14)
+
+
+def estimate_offset(y: object, p: object, *, sample_weight: object = None) -> OffsetEstimate:
+    """Offset-only logistic MLE of ``delta`` given ``p``, with a Fisher standard error.
+
+    Fits the single-parameter model ``y ~ Bernoulli(sigma(logit(p) + delta))``
+    by maximum likelihood. The score equation
+    ``sum(w * (y - sigma(logit(p) + delta))) = 0`` is exactly the mean-matching
+    condition solved by ``LogitOffset(target_mean=mean_w(y))``, so ``delta`` is
+    found by the same bisection root-finder (:func:`_offset_mle`, shared with
+    ``probcal.monitor._processes.plug_in_delta``). The Fisher information for
+    this one-parameter model is ``sum(w * q * (1 - q))`` at
+    ``q = sigma(logit(p) + delta)``, so the standard error is its inverse
+    square root.
+
+    Parameters
+    ----------
+    y : array_like
+        Binary outcomes in ``{0, 1}``. Both classes must be present.
+    p : array_like
+        Predicted probabilities in ``[0, 1]``.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+
+    Returns
+    -------
+    OffsetEstimate
+        The fitted ``delta``, its standard error, and the fit's ``n``,
+        ``events``, and ``weight_sum``.
+
+    Raises
+    ------
+    ValueError
+        If ``y`` or ``p`` fail validation (shape, range, finiteness) or if
+        ``y`` contains only one class — the offset MLE does not exist then
+        (``metrics.scores._prep`` performs this check).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal.offset import estimate_offset
+    >>> from probcal._math import expit
+    >>> rng = np.random.default_rng(0)
+    >>> z = rng.normal(0.0, 1.0, 2000)
+    >>> p = expit(z)
+    >>> y = (rng.random(2000) < expit(z + 0.5)).astype(float)
+    >>> est = estimate_offset(y, p)
+    >>> est.n
+    2000
+    >>> abs(est.delta - 0.5) < 3 * est.se
+    True
+    """
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    z = logit(p_arr)
+    delta = _offset_mle(z, y_arr, w)
+    q = expit(z + delta)
+    se = 1.0 / np.sqrt(float(np.sum(w * q * (1.0 - q))))
+    return OffsetEstimate(
+        delta=delta,
+        se=se,
+        n=int(len(y_arr)),
+        events=float(np.sum(w * y_arr)),
+        weight_sum=float(w.sum()),
+    )
+
+
+def offset_from_estimate(est: OffsetEstimate, p: object) -> LogitOffset:
+    """Build a fitted :class:`LogitOffset` (mode A) from an :class:`OffsetEstimate`.
+
+    Equivalent to ``LogitOffset(delta=est.delta).fit(p)`` — a convenience for
+    turning the audited MLE into the same offset object used elsewhere in
+    the package (``transform``, ``interpret``, ``to_dict``, ...).
+
+    Parameters
+    ----------
+    est : OffsetEstimate
+        Result of :func:`estimate_offset`.
+    p : array_like
+        Probabilities to fit the offset's audit trail (``pre_mean_``,
+        ``post_mean_``) against.
+
+    Returns
+    -------
+    LogitOffset
+        Fitted with ``delta = est.delta``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal.offset import estimate_offset, offset_from_estimate
+    >>> rng = np.random.default_rng(0)
+    >>> p = rng.uniform(0.01, 0.5, 500)
+    >>> y = (rng.random(500) < p).astype(float)
+    >>> est = estimate_offset(y, p)
+    >>> off = offset_from_estimate(est, p)
+    >>> off.delta_ == est.delta
+    True
+    """
+    return LogitOffset(delta=est.delta).fit(p)

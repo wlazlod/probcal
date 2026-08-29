@@ -9,10 +9,10 @@ Accumulation is in log space throughout; mixtures combine with logsumexp.
 
 import numpy as np
 
-from .._math import bisect, expit, irls_logistic, logit
+from .._math import expit, irls_logistic, logit
+from ..offset import _offset_mle
 
 _CLIP = 1e-12
-_DELTA_BRACKET = 40.0
 
 
 def bern_log_lr(y: np.ndarray, p_null: np.ndarray, q_alt: np.ndarray, w: np.ndarray) -> float:
@@ -42,11 +42,7 @@ def plug_in_delta(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
     target = float(np.average(y, weights=w))
     if not 0.0 < target < 1.0:
         return 0.0
-
-    def gap(d: float) -> float:
-        return float(np.average(expit(z + d), weights=w)) - target
-
-    return bisect(gap, -_DELTA_BRACKET, _DELTA_BRACKET, tol=1e-14)
+    return _offset_mle(z, y, w)
 
 
 def plug_in_shape(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> tuple[float, float]:

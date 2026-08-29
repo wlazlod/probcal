@@ -1,10 +1,11 @@
-"""Tests for probcal.offset.LogitOffset."""
+"""Tests for probcal.offset.LogitOffset and probcal.offset.estimate_offset."""
 
 import numpy as np
 import pytest
 
 from probcal._math import expit, logit
-from probcal.offset import LogitOffset
+from probcal.monitor._processes import plug_in_delta
+from probcal.offset import LogitOffset, _offset_mle, estimate_offset, offset_from_estimate
 
 RNG = np.random.default_rng(97)
 
@@ -87,3 +88,68 @@ def test_export() -> None:
     import probcal
 
     assert "LogitOffset" in probcal.__all__
+    assert "estimate_offset" in probcal.__all__
+    assert "offset_from_estimate" in probcal.__all__
+    assert "OffsetEstimate" in probcal.__all__
+
+
+def test_estimate_offset_recovers_delta_within_se() -> None:
+    rng = np.random.default_rng(1234)
+    n = 20000
+    z = rng.normal(0.0, 1.0, n)
+    p = expit(z)
+    true_delta = 0.5
+    y = (rng.random(n) < expit(z + true_delta)).astype(float)
+
+    est = estimate_offset(y, p)
+
+    assert abs(est.delta - true_delta) < 3.0 * est.se
+    q = expit(logit(p) + est.delta)
+    expected_se = 1.0 / np.sqrt(np.sum(q * (1.0 - q)))
+    assert est.se == pytest.approx(expected_se, abs=1e-12)
+    assert est.n == n
+    assert est.events == pytest.approx(float(y.sum()))
+    assert est.weight_sum == pytest.approx(float(n))
+
+
+def test_estimate_offset_single_class_raises() -> None:
+    p = np.linspace(0.1, 0.9, 20)
+    y = np.zeros(20)
+    with pytest.raises(ValueError, match="both classes"):
+        estimate_offset(y, p)
+
+
+def test_estimate_offset_weights_equal_duplication() -> None:
+    rng = np.random.default_rng(5)
+    n = 200
+    p = expit(rng.normal(0.0, 1.0, n))
+    y = (rng.random(n) < expit(logit(p) + 0.3)).astype(float)
+    weights = rng.integers(1, 4, n).astype(float)
+
+    est_weighted = estimate_offset(y, p, sample_weight=weights)
+
+    y_dup = np.repeat(y, weights.astype(int))
+    p_dup = np.repeat(p, weights.astype(int))
+    est_dup = estimate_offset(y_dup, p_dup)
+
+    assert est_weighted.delta == pytest.approx(est_dup.delta, abs=1e-10)
+    assert est_weighted.se == pytest.approx(est_dup.se, abs=1e-10)
+
+
+def test_offset_from_estimate_matches_delta() -> None:
+    p = np.linspace(0.05, 0.6, 500)
+    y = (RNG.random(500) < p).astype(float)
+    est = estimate_offset(y, p)
+    off = offset_from_estimate(est, p)
+    assert off.delta_ == est.delta
+    np.testing.assert_allclose(off.transform(p), expit(logit(p) + est.delta), atol=1e-14)
+
+
+def test_plug_in_delta_matches_offset_mle() -> None:
+    rng = np.random.default_rng(77)
+    n = 500
+    z = rng.normal(0.0, 1.0, n)
+    y = (rng.random(n) < expit(z + 0.2)).astype(float)
+    w = rng.uniform(0.5, 2.0, n)
+
+    assert plug_in_delta(z, y, w) == _offset_mle(z, y, w)

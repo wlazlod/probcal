@@ -91,6 +91,25 @@ running intersection. This half-width is also the natural value for a
 recourse engine's `buffer_logit` (see the treecf guide): a re-offset within
 the sequence cannot invalidate a buffered counterfactual.
 
+## Margin-of-conservatism offsets
+
+`monitor.moc_offset(mon, *, level=None)` turns that same confidence sequence into an
+actionable, conservative correction: it reads the CS's upper end (`steps[-1].delta_ci[1]` by
+default, or a level recomputed directly from the monitor's running `_cs_grid`/`_cs_max`
+state) and returns a fitted `LogitOffset(delta=hi)`. Shifting by the CS's *upper* end rather
+than the point-estimate plug-in (`delta_hat`) is the conservative choice: the CS covers the
+true offset with `1 - alpha` confidence at every stopping time, so `hi` corrects for at least
+as much drift as the evidence plausibly supports — a margin of conservatism, not a best
+guess. `level` requires a live `CalibrationMonitor` (it reads running arrays a frozen
+`MonitorReport` does not retain); a report input still works with `level=None`, fit on a
+placeholder batch since a report keeps no per-batch data.
+
+`monitor.moc_offset_from_counts(y, p, *, level=0.9, sample_weight=None)` is the count-only
+sibling with no monitor involved: it re-anchors `p`'s mean at the one-sided Jeffreys
+posterior upper quantile of the observed event rate (the same quantile
+`metrics.jeffreys_grade_test`/`metrics.jeffreys_upper_bands` use), via `LogitOffset`'s
+existing mode B (`target_mean`).
+
 ## The recommendation rule — a diagnostic, not a test
 
 After an alarm the monitor reports one of `re-offset` / `re-fit`, from two

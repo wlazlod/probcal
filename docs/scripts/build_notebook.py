@@ -368,6 +368,38 @@ print(f"\\nregistry loaded a {type(obj).__name__} — schema 1, readable by ever
 """)
 
 
+md("""\
+## 9. Conservative margins: most-prudent PDs and margin-of-conservatism
+
+Two more decision-relevant readings sit alongside calibration. Pluto & Tasche's most-prudent
+PD gives a defensible upper bound for a grade even when it saw few or no defaults, by pooling
+it with every worse grade under the rating-monotonicity assumption. Margin-of-conservatism
+(MoC) offsets do a different job: they *compose* with an existing calibrator — never replace
+it — re-anchoring an already-calibrated portfolio's mean at a conservative reading of realized
+outcomes. Theory: the *Conservatism* chapter.
+""")
+
+code("""\
+from probcal.metrics import pluto_tasche_from_arrays
+
+pt = pluto_tasche_from_arrays(
+    grades_after, y_test, order=("A", "B", "C", "D", "E", "F"), confidence=0.9,
+)
+print(pt.interpret())
+""")
+
+code("""\
+from probcal.monitor import moc_offset_from_counts
+
+moc = moc_offset_from_counts(y_test, p_test, level=0.9)
+chain_moc = Chain([cal, moc])  # calibration first, MoC offset second
+
+print(f"calibrated mean PD:   {p_test.mean():.4%}")
+print(f"MoC-adjusted mean PD: {chain_moc.predict_proba(s_test).mean():.4%}")
+print(moc.interpret())
+""")
+
+
 def main() -> None:
     nb = {
         "cells": [

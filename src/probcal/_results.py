@@ -376,3 +376,37 @@ class CorpResult(_ResultBase):
             f"Log loss: {self.log_loss:.6g} = MCB {self.log_loss_mcb:.6g} - "
             f"DSC {self.log_loss_dsc:.6g} + UNC {self.log_loss_unc:.6g}"
         )
+
+
+@dataclass(frozen=True)
+class OffsetEstimate(_ResultBase):
+    """Offset-only logistic MLE of ``delta`` given ``p``, with its Fisher standard error.
+
+    Attributes
+    ----------
+    delta : float
+        MLE of the logit-offset shift: the mean-matching root of
+        ``sum(w * (y - sigma(logit(p) + delta))) = 0`` (the offset-only
+        logistic score equation), found by bisection.
+    se : float
+        Asymptotic (Fisher-information) standard error of ``delta``,
+        ``1 / sqrt(sum(w * q * (1 - q)))`` at ``q = sigma(logit(p) + delta)``.
+    n : int
+        Number of observations.
+    events : float
+        Weighted event count, ``sum(w * y)``.
+    weight_sum : float
+        Sum of weights (equals ``n`` for unit weights).
+    """
+
+    delta: float
+    se: float
+    n: int
+    events: float
+    weight_sum: float
+
+    def __repr__(self) -> str:
+        return (
+            f"OffsetEstimate(delta={self.delta:+.4f} +/- {self.se:.4f}, "
+            f"n={self.n}, events={self.events:.1f})"
+        )

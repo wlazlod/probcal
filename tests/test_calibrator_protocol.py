@@ -28,6 +28,7 @@ from probcal import (
     UnattainableTargetError,
     VennAbersCalibrator,
     make_pd_portfolio,
+    moc_offset_from_counts,
 )
 from probcal._math import expit
 
@@ -60,6 +61,7 @@ def _cases() -> dict[str, object]:
     beta = BetaCalibrator().fit(_D.scores, _D.y)
     off = LogitOffset(delta=0.2).fit(beta.predict_proba(_D.scores))
     cases["Chain"] = Chain([beta, off])
+    cases["Chain+moc"] = Chain([beta, moc_offset_from_counts(_D.y, beta.predict_proba(_D.scores))])
     wrapped = CalibratedModel(_StubModel(), BetaCalibrator(), flow="prefit").fit(
         _D.scores.reshape(-1, 1), _D.y
     )

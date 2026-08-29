@@ -27,7 +27,7 @@ The public API is exactly the export lists below; anything prefixed with
   Pluto-Tasche most-prudent PDs, Jeffreys upper masterscale bands, the
   recalibration-regression framework, SKCE, `evaluate`).
 - **`probcal.monitor.__all__`** — `CalibrationMonitor`, `MonitorStep`,
-  `MonitorReport`.
+  `MonitorReport`, `moc_offset`, `moc_offset_from_counts`.
 - **`probcal.sklearn`** (extra `probcal[sklearn]`) — `SklearnCalibrator`,
   `CalibratedClassifier`.
 - **`probcal.integrations.optbinning`** (extra `probcal[optbinning]`) —

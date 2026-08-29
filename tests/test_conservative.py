@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+from probcal._math import beta_ppf
 from probcal.metrics import PlutoTascheResult, pluto_tasche, pluto_tasche_from_arrays
 from probcal.metrics.grade import pluto_tasche as pluto_tasche_via_grade
 
@@ -55,22 +56,42 @@ def test_nonzero_default_vs_scipy() -> None:
     np.testing.assert_allclose(res.pd_upper, expected, atol=1e-8)
 
 
+def _raw_pd_upper(n: np.ndarray, d: np.ndarray, confidence: float) -> np.ndarray:
+    # Reference re-implementation of pluto_tasche's pre-hull bound, so the
+    # monotonization test can compare the hull against the un-touched-up
+    # values independently of the function under test.
+    n_pooled = np.cumsum(n[::-1])[::-1]
+    d_pooled = np.cumsum(d[::-1])[::-1]
+    out = np.empty(len(n), dtype=np.float64)
+    for i in range(len(n)):
+        ns, ds = n_pooled[i], d_pooled[i]
+        out[i] = 1.0 if ds == ns else beta_ppf(confidence, ds + 1.0, ns - ds)
+    return out
+
+
 def test_pd_upper_always_non_decreasing() -> None:
     # pd_upper is always non-decreasing best -> worst on return: pooling is
     # nested, so a real violation can only come from noisy per-grade default
-    # rates, and the PAVA touch-up (applied unconditionally) resolves it.
+    # rates, and the running-maximum touch-up (applied unconditionally)
+    # resolves it -- as the cumulative maximum of the raw bounds, exactly,
+    # and never below the raw bound at any grade (a most-prudent estimator
+    # may only raise a bound, never lower one).
     for trial in range(20):
         r = np.random.default_rng(trial)
         n = r.integers(50, 1000, size=6).astype(np.float64)
         d = np.floor(n * r.uniform(0.0, 0.05, size=6))
         res = pluto_tasche(n, d, confidence=0.9)
+        raw = _raw_pd_upper(n, d, 0.9)
         assert np.all(np.diff(res.pd_upper) >= -1e-12)
+        assert np.all(res.pd_upper >= raw - 1e-12)
+        np.testing.assert_allclose(res.pd_upper, np.maximum.accumulate(raw))
 
 
 def test_no_touchup_for_realistic_monotone_grade_structure() -> None:
     # With a genuinely monotone true PD by grade and enough obligors that
-    # sampling noise cannot flip the pooled-rate ordering, the PAVA
-    # touch-up is a no-op (monotonized is False) -- the expected case.
+    # sampling noise cannot flip the pooled-rate ordering, the
+    # running-maximum touch-up is a no-op (monotonized is False) -- the
+    # expected case.
     rng = np.random.default_rng(3)
     n = np.array([5000.0, 4000.0, 3000.0, 2000.0])
     pd_true = np.array([0.002, 0.01, 0.03, 0.08])
@@ -147,6 +168,26 @@ def test_array_convenience_weighted() -> None:
     res = pluto_tasche_from_arrays(grades, y, order=("A", "B"), confidence=0.9, sample_weight=w)
     np.testing.assert_allclose(res.n, [5.0, 4.0])
     np.testing.assert_allclose(res.d, [0.0, 2.5])
+
+
+def test_array_convenience_integer_weight_matches_row_duplication() -> None:
+    # Integer sample_weight on a small dataset must equal the unweighted
+    # call on the row-duplicated expansion: same n, d, pd_upper to 1e-12.
+    grades = np.array(["A", "B", "B"])
+    y = np.array([1.0, 0.0, 1.0])
+    w = np.array([3, 1, 2])
+
+    weighted = pluto_tasche_from_arrays(
+        grades, y, order=("A", "B"), confidence=0.9, sample_weight=w
+    )
+
+    grades_dup = np.repeat(grades, w)
+    y_dup = np.repeat(y, w)
+    unweighted = pluto_tasche_from_arrays(grades_dup, y_dup, order=("A", "B"), confidence=0.9)
+
+    np.testing.assert_allclose(weighted.n, unweighted.n, atol=1e-12)
+    np.testing.assert_allclose(weighted.d, unweighted.d, atol=1e-12)
+    np.testing.assert_allclose(weighted.pd_upper, unweighted.pd_upper, atol=1e-12)
 
 
 def test_order_mismatch_raises() -> None:

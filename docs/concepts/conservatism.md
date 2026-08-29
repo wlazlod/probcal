@@ -69,13 +69,16 @@ entire pooled set. For a portfolio whose observed per-grade default rates alread
 rating order, this makes `pd_upper` come out non-decreasing best to worst on its own. It is
 not a guarantee for arbitrary input, though: a single noisy grade whose own rate happens to
 exceed the worse-grade pool it joins can pull that grade's pooled rate — and so its bound —
-above the next grade's. `pluto_tasche` runs the result through `probcal._math.pava`
-(weighted isotonic regression, the same routine behind `curves.corp_reliability`)
-unconditionally to guarantee a non-decreasing `pd_upper` on return; `PlutoTascheResult.monotonized`
-reports whether that pass actually changed anything. On realistic, already-monotone data it
-is a no-op (`monotonized = False`); the coverage simulation below never triggers it either,
-since its true PD is deliberately monotone with enough obligors per grade that sampling
-noise essentially cannot invert the pooled-rate ordering.
+above the next grade's. `pluto_tasche` corrects any such dip by taking the cumulative
+maximum of `pd_upper` best to worst (a prudent hull: `hull[i] = max(pd_upper[0..i])`), so a
+worse grade's bound is never below a better grade's. This is the only correction direction
+consistent with a *most-prudent* estimator — it can only raise a grade's bound up to a
+better grade's, never lower a grade's bound to match a worse one — and it never reduces any
+individual grade's bound. `PlutoTascheResult.monotonized` reports whether the hull actually
+changed anything. On realistic, already-monotone data it is a no-op (`monotonized = False`);
+the coverage simulation below never triggers it either, since its true PD is deliberately
+monotone with enough obligors per grade that sampling noise essentially cannot invert the
+pooled-rate ordering.
 
 ## In probcal
 

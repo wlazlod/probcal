@@ -314,3 +314,14 @@ def test_point_metrics_presorted_matches_the_default_path() -> None:
     fast = _point_metrics(y, p, w, _METRIC_CATALOG, presorted=True)
     for name in _METRIC_CATALOG:
         assert fast[name] == pytest.approx(slow[name], rel=1e-12, abs=1e-15), name
+
+
+def test_evaluate_accepts_single_column_p() -> None:
+    y, p = _calibrated(300)
+    names = ["log_loss", "brier", "ece", "intercept"]
+    flat = evaluate(y, p, metrics=names, n_boot=25, seed=7)
+    col = evaluate(y, p.reshape(-1, 1), metrics=names, n_boot=25, seed=7)
+    assert col.names == flat.names
+    assert np.array_equal(col.values, flat.values)
+    assert np.array_equal(col.ci_low, flat.ci_low)
+    assert np.array_equal(col.ci_high, flat.ci_high)

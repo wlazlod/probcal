@@ -1,15 +1,37 @@
 """CalibratedClassifier: CalibratedClassifierCV(ensemble=False) on probcal calibrators."""
 
+import os
+import warnings
+
 import numpy as np
+from sklearn import get_config
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.utils.metadata_routing import MetadataRouter, get_routing_for_object
 from sklearn.utils.multiclass import check_classification_targets
-from sklearn.utils.validation import _check_sample_weight, check_is_fitted
+from sklearn.utils.validation import _check_sample_weight, check_is_fitted, has_fit_parameter
 
 from .._math import expit
 from ..base import BaseCalibrator
 from ..parametric import BetaCalibrator
 from ._compat import CLASSIFIER_XFAIL_CHECKS, validate_X, validate_X_y
+
+
+def _accepts_sample_weight(estimator: object) -> bool:
+    """Whether ``estimator``'s ``fit`` can consume ``sample_weight`` at all.
+
+    The signature check is sklearn's own precedent — ``CalibratedClassifierCV``
+    does exactly this and warns when it fails. Under metadata routing a router
+    (``Pipeline``, ``GridSearchCV``, …) takes weights through ``**params``
+    rather than a named argument, so routers count as capable there and
+    sklearn's routing machinery has the final word: an undeclared request
+    raises ``UnsetMetadataPassedError`` instead of dropping the weights.
+    """
+    if has_fit_parameter(estimator, "sample_weight"):
+        return True
+    if get_config().get("enable_metadata_routing", False):
+        return isinstance(get_routing_for_object(estimator), MetadataRouter)
+    return False
 
 
 class CalibratedClassifier(ClassifierMixin, BaseEstimator):
@@ -105,8 +127,10 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
         y : array_like of shape (n,)
             Binary target; any two label values.
         sample_weight : array_like or None
-            Positive observation weights (used by the calibrator stage;
-            forwarded to the estimator refit when it supports them).
+            Positive observation weights. Always used for the calibrator
+            stage; also handed to the cross-validated fits and the refit
+            when the estimator can take them. When it cannot, a
+            ``UserWarning`` names it and those fits run unweighted.
 
         Returns
         -------
@@ -117,6 +141,12 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
         ------
         ValueError
             If ``method`` is unknown or ``y`` has more than two classes.
+
+        Warns
+        -----
+        UserWarning
+            If ``sample_weight`` is given and the estimator's ``fit`` cannot
+            consume it — see ``guide/sklearn.md``.
         """
         if self.method not in ("predict_proba", "decision_function"):
             raise ValueError(
@@ -145,16 +175,27 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
                 )
             else:
                 splitter = n_splits
-            fit_params = {} if sw is None else {"params": {"sample_weight": sw}}
+            inner_sw = sw
+            if sw is not None and not _accepts_sample_weight(base):
+                inner_sw = None
+                warnings.warn(
+                    f"{type(base).__name__}.fit does not accept sample_weight: the "
+                    "cross-validated fits and the full-data refit are unweighted, "
+                    "while the calibrator is fitted with the weights. The calibration "
+                    "map is still weighted, but the scores it calibrates are not.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            fit_params = {} if inner_sw is None else {"params": {"sample_weight": inner_sw}}
             raw = cross_val_predict(
                 clone(base), X_arr, y_arr, cv=splitter, method=self.method, **fit_params
             )
             oof = self._to_scores(np.asarray(raw))
             refit = clone(base)
-            try:
-                refit.fit(X_arr, y_arr, sample_weight=sw)
-            except TypeError:
+            if inner_sw is None:
                 refit.fit(X_arr, y_arr)
+            else:
+                refit.fit(X_arr, y_arr, sample_weight=inner_sw)
             self.estimator_ = refit
 
         if sw is not None:
@@ -223,6 +264,13 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
         """
         check_is_fitted(self, "calibrator_")
         return self.calibrator_.to_dict()
+
+    def to_json(
+        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
+    ) -> "str | None":
+        """The fitted calibrator's JSON serialization (delegated), never pickle."""
+        check_is_fitted(self, "calibrator_")
+        return self.calibrator_.to_json(path, indent=indent)
 
     def interpret(self):  # noqa: ANN201 - probcal Interpretation
         """The fitted calibrator's plain-language reading (delegated)."""

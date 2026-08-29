@@ -88,6 +88,10 @@ class Chain:
             p = off.transform(p)
         return p
 
+    def __sklearn_is_fitted__(self) -> bool:
+        """Fitted state for sklearn >= 1.6; a chain is built from fitted stages."""
+        return bool(self.fitted_)
+
     # ------------------------------------------------------------------ protocol
 
     @property

@@ -34,56 +34,84 @@ def validate_X(estimator, X, *, reset: bool = False, allow_1d: bool = False) -> 
 # own mechanisms: `expected_failed_checks` (>= 1.6) reads this table from the
 # test suite; `_more_tags()["_xfail_checks"]` (< 1.6) reads it from the
 # estimators. One source of truth for both.
-SCORE_LEVEL_REASON = (
-    "score-level estimator takes exactly one column by contract (spec W6); "
-    "this check fits on generic multi-feature data"
-)
-CALIBRATOR_XFAIL_CHECKS: dict[str, str] = dict.fromkeys(
-    [
-        "check_classifier_data_not_an_array",
-        "check_classifiers_classes",
-        "check_classifiers_one_label_sample_weights",
-        "check_classifiers_train",
-        "check_dict_unchanged",
-        "check_dont_overwrite_parameters",
-        "check_dtype_object",
-        "check_estimators_dtypes",
-        "check_estimators_fit_returns_self",
-        "check_estimators_nan_inf",
-        "check_estimators_overwrite_params",
-        "check_estimators_pickle",
-        "check_f_contiguous_array_estimator",
-        "check_fit_check_is_fitted",
-        "check_fit_idempotent",
-        "check_fit_score_takes_y",
-        "check_fit2d_predict1d",
-        "check_methods_sample_order_invariance",
-        "check_methods_subset_invariance",
-        "check_n_features_in",
-        "check_n_features_in_after_fitting",
-        "check_pipeline_consistency",
-        "check_positive_only_tag_during_fit",
-        "check_readonly_memmap_input",
-        "check_sample_weight_equivalence_on_dense_data",
-        "check_sample_weights_invariance",  # the < 1.6 name for the same check
-        "check_sample_weights_list",
-        "check_sample_weights_not_an_array",
-        "check_sample_weights_not_overwritten",
-        "check_sample_weights_pandas_series",
-        "check_sample_weights_shape",
-        "check_supervised_y_2d",
-        "check_transformer_data_not_an_array",
-        "check_transformer_general",
-        "check_transformer_preserve_dtypes",
-    ],
-    SCORE_LEVEL_REASON,
+#
+# Every entry states why the data the check generates cannot represent a
+# score-level estimator — these are inapplicable checks, not known failures.
+# The checks with a score-level analogue are re-implemented on valid `(n,)`
+# probability data in `tests/test_sklearn_mirror_checks.py`.
+
+# Cause 1: multi-column X. The column count alone puts the check outside the
+# score-level contract, whatever its values are.
+_MULTI_COLUMN_DATA: dict[str, str] = {
+    "check_classifier_data_not_an_array": "2 columns of small-integer coordinates",
+    "check_classifiers_one_label_sample_weights": "10 columns of U(0, 1) noise",
+    "check_dtype_object": "10 columns of U(0, 1) noise as dtype=object",
+    "check_estimators_nan_inf": "3 columns of U(0, 1) noise",
+    "check_fit_score_takes_y": "3 columns of U(0, 1) noise",
+    "check_sample_weight_equivalence_on_dense_data": "30 columns of U(0, 1) noise",
+    "check_sample_weights_invariance": "30 columns of U(0, 1) noise",  # < 1.6 name
+    "check_sample_weights_list": "3 columns of U(0, 1) noise",
+    "check_sample_weights_not_an_array": "2 columns of small-integer coordinates",
+    "check_sample_weights_not_overwritten": "2 columns of small-integer coordinates",
+    "check_sample_weights_pandas_series": "2 columns of small-integer coordinates",
+    "check_sample_weights_shape": "2 columns of small-integer coordinates",
+    "check_supervised_y_2d": "3 columns of U(0, 1) noise",
+}
+
+# Cause 2: multi-column X of arbitrary reals. Neither the shape nor the value
+# range is a score — even one column of it would leave the [0, 1] domain.
+_ARBITRARY_REAL_DATA: dict[str, str] = {
+    "check_classifiers_classes": "2 standardized blob columns",
+    "check_classifiers_train": "2 standardized blob columns",
+    "check_dict_unchanged": "3 columns of 3 * U(0, 1)",
+    "check_dont_overwrite_parameters": "3 columns of 3 * U(0, 1)",
+    "check_estimators_dtypes": "5 columns of 3 * U(0, 1)",
+    "check_estimators_fit_returns_self": "2 blob columns",
+    "check_estimators_overwrite_params": "2 blob columns",
+    "check_estimators_pickle": "3 blob columns",
+    "check_f_contiguous_array_estimator": "3 columns of 3 * U(0, 1)",
+    "check_fit_check_is_fitted": "2 columns of N(100, 1)",
+    "check_fit_idempotent": "2 columns of N(100, 1)",
+    "check_fit2d_predict1d": "3 columns of 3 * U(0, 1)",
+    "check_methods_sample_order_invariance": "3 columns of 3 * U(0, 1)",
+    "check_methods_subset_invariance": "3 columns of 3 * U(0, 1)",
+    "check_n_features_in": "2 columns of N(100, 1)",
+    "check_n_features_in_after_fitting": "4 columns of N(0, 1)",
+    "check_pipeline_consistency": "3 blob columns",
+    "check_positive_only_tag_during_fit": "the 4 mean-centred iris columns",
+    "check_readonly_memmap_input": "2 blob columns",
+    "check_transformer_data_not_an_array": "3 standardized blob columns",
+    "check_transformer_general": "3 standardized blob columns",
+    "check_transformer_preserve_dtypes": "3 standardized blob columns",
+}
+
+CALIBRATOR_XFAIL_CHECKS: dict[str, str] = {
+    name: (
+        f"inapplicable: the check generates {data}, and a score-level estimator "
+        "takes exactly one score column by contract (spec W6)"
+    )
+    for name, data in _MULTI_COLUMN_DATA.items()
+}
+CALIBRATOR_XFAIL_CHECKS.update(
+    {
+        name: (
+            f"inapplicable: the check generates {data} — arbitrary reals outside "
+            "[0, 1], where a score-level estimator takes one column of "
+            "probabilities (spec W6)"
+        )
+        for name, data in _ARBITRARY_REAL_DATA.items()
+    }
 )
 CALIBRATOR_XFAIL_CHECKS["check_fit1d"] = (
-    "accepts 1-D score arrays by design (spec W6); the check expects a raise"
+    "inapplicable: the check expects a raise on 1-D X, which a score-level "
+    "estimator accepts by design (spec W6)"
 )
+
+# Cause 3: an internal CV split. Its fold assignment depends on n, so weighting
+# a row cannot equal repeating it — sklearn's own CV wrappers share this.
 _CV_WEIGHT_REASON = (
-    "weighting cannot equal duplication through a CV split whose fold "
-    "assignment depends on n (sklearn's own CV wrappers share this)"
+    "inapplicable: weighting cannot equal duplication through a CV split whose "
+    "fold assignment depends on n (sklearn's own CV wrappers share this)"
 )
 CLASSIFIER_XFAIL_CHECKS: dict[str, str] = {
     "check_sample_weight_equivalence_on_dense_data": _CV_WEIGHT_REASON,

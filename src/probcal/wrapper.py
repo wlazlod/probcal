@@ -195,6 +195,10 @@ class CalibratedModel:
         if not getattr(self, "fitted_", False):
             raise RuntimeError("CalibratedModel is not fitted; call fit() first")
 
+    def __sklearn_is_fitted__(self) -> bool:
+        """Fitted state for sklearn >= 1.6 (model and calibrator both fitted)."""
+        return bool(getattr(self, "fitted_", False))
+
     def _base_predict(self, X: np.ndarray) -> np.ndarray:
         if self.ensemble_:
             preds = [cal.predict_proba(_model_scores(model, X)) for model, cal in self.ensemble_]

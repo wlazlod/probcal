@@ -95,6 +95,13 @@ rather than starting a new one for later 0.3.0 additions):
   the Ehm, Gneiting, Jordan & Krüger (2016) elementary-score decomposition
   underlying `plots.plot_murphy`; see *Metrics and tests* and
   *Visualization*.
+- `BaseCalibrator.__sklearn_is_fitted__` and
+  `BaseCalibrator.__sklearn_tags__` (also `__sklearn_is_fitted__` on `Chain`,
+  `LogitOffset` and `CalibratedModel`) — sklearn's duck-typing hooks, so a
+  bare calibrator works with `clone`, `get_tags`, `check_is_fitted` and CV
+  loops on sklearn >= 1.6 without the adapter; sklearn is imported inside
+  `__sklearn_tags__` only, so `import probcal` stays numpy-only. See the
+  *sklearn* guide.
 
 ## Conventions that will not silently change
 
@@ -118,6 +125,30 @@ recovers the old values.
 existing symbol carries a `DeprecationWarning` — the policy stood unused
 this release.
 
+## scikit-learn estimator checks
+
+`sklearn.utils.estimator_checks` generates multi-column feature matrices of
+arbitrary reals. Its data model contains no score-level estimator, so most of
+the corpus cannot be run against `SklearnCalibrator` at all — the same kind of
+domain restriction imbalanced-learn declares for its resamplers. Those checks
+are declared inapplicable through sklearn's own mechanism
+(`expected_failed_checks` on 1.6+, `_more_tags()["_xfail_checks"]` below it),
+each entry naming the data that check generates and which part of the
+score-level contract it violates. They are inapplicable, not known failures;
+the checks whose data the contract does admit run live and pass.
+
+Every inapplicable check with a score-level analogue is re-implemented on
+valid `(n,)` probability data in `tests/test_sklearn_mirror_checks.py`: fit
+idempotence, no mutation of the passed arrays, `__dict__` unchanged by the
+predict-side methods, pickle (adapter) and JSON (core) round trips,
+clone-then-fit, subset and sample-order invariance, and integer
+`sample_weight` equal to row duplication over every registered calibrator
+class — with the exceptions (CV- and quantile-based internals) named in a
+table together with their measured tolerance. Checks with no analogue at all
+(multiclass, pairwise, sparse) are listed in that module's docstring with one
+line each. The score-level contract itself is pinned by
+`tests/test_calibrator_protocol.py`.
+
 ## Support matrix
 
 | Dimension | Supported | Checked by |
@@ -125,5 +156,6 @@ this release.
 | Python | 3.11, 3.12, 3.13 | CI matrix |
 | numpy | ≥ 1.26, including 2.x | CI (lockfile tracks latest) |
 | scikit-learn (adapter extra) | ≥ 1.4 | CI jobs at 1.4.2 and latest |
+| scikit-learn (bare-core duck typing, no adapter) | ≥ 1.6 only | `tests/test_sklearn_duck.py` (`importorskip(minversion="1.6")`); runs in the main CI matrix (latest sklearn), skipped on the 1.4.2 `sklearn-min` job |
 | optbinning (integration extra) | ≥ 0.21 | CI job at 0.21.0 |
 | treecf (integration extra) | ≥ 0.2.1 | joint smoke test when installed |

@@ -146,6 +146,26 @@ def test_sample_weight_changes_fit() -> None:
     assert cal_unw.a_ != cal_w.a_
 
 
+def test_platt_unit_weights_equal_no_weights() -> None:
+    """The smoothing prior reads weighted class mass, which is the row count at w = 1."""
+    s, y = _sample(0.7, -0.3, n=3000)
+    plain = PlattCalibrator().fit(s, y)
+    ones = PlattCalibrator().fit(s, y, sample_weight=np.ones(s.size))
+    assert (plain.a_, plain.b_) == (ones.a_, ones.b_)
+    np.testing.assert_array_equal(plain.predict_proba(GRID), ones.predict_proba(GRID))
+
+
+def test_platt_integer_weights_equal_row_duplication() -> None:
+    """Weighted class totals in the smoothing prior make weighting = duplication."""
+    s, y = _sample(0.7, -0.3, n=1500)
+    repeats = RNG.integers(1, 4, size=s.size)
+    weighted = PlattCalibrator().fit(s, y, sample_weight=repeats.astype(float))
+    duplicated = PlattCalibrator().fit(np.repeat(s, repeats), np.repeat(y, repeats))
+    np.testing.assert_allclose(
+        weighted.predict_proba(GRID), duplicated.predict_proba(GRID), atol=1e-12, rtol=0.0
+    )
+
+
 # ---------------------------------------------------------------- interpret / affine
 
 

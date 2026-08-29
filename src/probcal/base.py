@@ -5,7 +5,7 @@ import json
 import os
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 import numpy as np
 
@@ -20,6 +20,9 @@ from ._serialize import (
     fingerprint_of_dict,
 )
 from ._validation import EPS, validate_binary_y, validate_scores, validate_weights
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
+    from sklearn.utils import Tags
 
 
 class UnattainableTargetError(ValueError):
@@ -170,6 +173,47 @@ class BaseCalibrator(ABC):
     def _check_fitted(self) -> None:
         if not self.fitted_:
             raise RuntimeError(f"{type(self).__name__} is not fitted; call fit() first")
+
+    # ------------------------------------------------------------- sklearn duck hooks
+
+    def __sklearn_is_fitted__(self) -> bool:
+        """Fitted state for sklearn's ``check_is_fitted`` (sklearn >= 1.6).
+
+        Returns
+        -------
+        bool
+            ``True`` once :meth:`fit` has run.
+        """
+        return bool(self.fitted_)
+
+    def __sklearn_tags__(self) -> "Tags":
+        """Estimator tags for sklearn >= 1.6, built from the public constructors.
+
+        sklearn is imported inside the body, never at module or class level:
+        ``import probcal`` stays numpy-only and this hook costs nothing until
+        sklearn itself calls it. Only the fields that are actually true of a
+        calibrator are set — it takes 1-D scores, not a 2-D feature matrix,
+        it is neither a classifier nor a regressor, and it must be fitted.
+
+        Returns
+        -------
+        sklearn.utils.Tags
+            The tag object sklearn's ``get_tags`` expects.
+
+        Raises
+        ------
+        ImportError
+            If sklearn is not installed (only reachable by calling the hook
+            by hand).
+        """
+        from sklearn.utils import InputTags, Tags, TargetTags
+
+        return Tags(
+            estimator_type=None,
+            target_tags=TargetTags(required=True),
+            requires_fit=True,
+            input_tags=InputTags(two_d_array=False),
+        )
 
     # ------------------------------------------------------------- introspection
 

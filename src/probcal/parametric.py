@@ -128,7 +128,9 @@ class PlattCalibrator(BaseCalibrator):
 
     Fits ``logit g(s) = a * logit(s) + b`` by IRLS with Lin–Lin–Weng smoothed
     targets ``(N+ + 1)/(N+ + 2)`` and ``1/(N- + 2)`` for stability on small
-    samples. The identity map is ``(a, b) = (1, 0)``.
+    samples, where ``N+``/``N-`` are the weighted class masses (row counts
+    under unit weights), so that integer weights match row duplication. The
+    identity map is ``(a, b) = (1, 0)``.
 
     Attributes
     ----------
@@ -152,8 +154,8 @@ class PlattCalibrator(BaseCalibrator):
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         z = logit(s)
-        n_pos = float(np.sum(y == 1.0))
-        n_neg = float(np.sum(y == 0.0))
+        n_pos = float(np.sum(w * (y == 1.0)))
+        n_neg = float(np.sum(w * (y == 0.0)))
         targets = np.where(y == 1.0, (n_pos + 1.0) / (n_pos + 2.0), 1.0 / (n_neg + 2.0))
         X = np.column_stack([np.ones_like(z), z])
         res = irls_logistic(X, targets, w=w)

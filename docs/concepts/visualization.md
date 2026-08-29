@@ -154,6 +154,25 @@ the tool.
 
 ![Logit offset audit chart: the offset map parallel to the identity, pre- and post-adjustment means joined by the shift arrow, and the audit numbers in the stats box](img/offset_audit.png)
 
+## The attributes diagram
+
+`plot_attributes` draws the classic Hsu and Murphy (1986) attributes diagram, which puts a
+reliability curve in the context of two references at once instead of just the identity.
+The horizontal and vertical lines at the weighted base rate \( \bar y \) mark climatology —
+the constant forecast \( p = \bar y \) that carries no resolution — and the no-skill line
+\( y = (x + \bar y) / 2 \), equidistant between climatology and the identity at every \( x
+\), is the boundary the Brier skill score is measured against. The light green shading
+marks where a point beats climatology pointwise, \( (y - x)^2 \le (x - \bar y)^2 \): closer
+to the identity than to the no-resolution line. `method="binned"` overlays
+`reliability_binned` as markers scaled by bin count (`n_bins=10` by default, the same
+default as the curve itself); `method="corp"` overlays the CORP PAV step fit instead,
+trading the binning choice for the same discretization-free construction used by
+`plot_corp`. `scale="logit"` transforms every drawn quantity — identity, references,
+shading, and curve alike — through the same clipped logit as the rest of the package, so a
+low-PD portfolio stays readable.
+
+![Attributes diagram on a 3% base-rate PD portfolio (logit scale): the shaded positive-skill region between climatology and the identity, the no-skill line, and the binned reliability curve](img/attributes.png)
+
 ## The remaining plots
 
 Three further views complete `probcal.plots`. `plot_comparison(before, after)` puts
@@ -206,5 +225,6 @@ ax = plot_offset_audit(fitted_offset)              # a fitted LogitOffset stage
 
 - Arrieta-Ibarra, I., Gujral, P., Tannen, J., Tygert, M., Xu, C. (2022). "Metrics of Calibration for Probabilistic Predictions." *Journal of Machine Learning Research* 23(351), 1–54.
 - Austin, P. C., Steyerberg, E. W. (2014). "Graphical assessment of internal and external calibration of logistic regression models by using loess smoothers." *Statistics in Medicine* 33(3), 517–535.
+- Hsu, W.-R., Murphy, A. H. (1986). "The attributes diagram: A geometrical framework for assessing the quality of probability forecasts." *International Journal of Forecasting* 2(3), 285–293.
 - Nattino, G., Finazzi, S., Bertolini, G. (2014). "A new calibration test and a reappraisal of the calibration belt for the assessment of prediction models based on dichotomous outcomes." *Statistics in Medicine* 33(14), 2390–2407.
 - Nattino, G., Lemeshow, S., Phillips, G., Finazzi, S., Bertolini, G. (2017). "Assessing the Calibration of Dichotomous Outcome Models with the Calibration Belt." *Stata Journal* 17(4), 1003–1014.

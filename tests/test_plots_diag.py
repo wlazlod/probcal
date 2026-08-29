@@ -95,3 +95,60 @@ def test_plot_mcb_dsc_rejects_mismatched_weighted_mean_y():
     with pytest.raises(ValueError, match="same weighted mean"):
         plot_mcb_dsc({"a": (y_a, p_a), "b": (y_b, p_b)})
     plt.close("all")
+
+
+def test_plot_attributes_draws_reference_lines_and_shading():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from probcal.plots import plot_attributes
+
+    y, p = _data()
+    ax = plot_attributes(y, p)
+    labels = {ln.get_label() for ln in ax.lines}
+    assert {"identity", "climatology / no resolution", "climatology", "no skill"} <= labels
+    assert len(ax.collections) >= 1  # positive-BSS shading (+ binned scatter)
+    plt.close("all")
+
+
+def test_plot_attributes_both_methods_render():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from probcal.plots import plot_attributes
+
+    y, p = _data()
+    ax_binned = plot_attributes(y, p, method="binned")
+    offsets = [coll.get_offsets() for coll in ax_binned.collections if hasattr(coll, "get_offsets")]
+    assert any(o.shape[0] > 0 for o in offsets)
+    plt.close("all")
+
+    ax_corp = plot_attributes(y, p, method="corp")
+    assert any(ln.get_drawstyle() == "steps-post" for ln in ax_corp.lines)
+    plt.close("all")
+
+
+def test_plot_attributes_logit_scale_renders():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from probcal.plots import plot_attributes
+
+    y, p = _data()
+    ax = plot_attributes(y, p, scale="logit")
+    assert ax.get_xlabel() == "predicted probability (logit scale)"
+    plt.close("all")
+
+
+def test_plot_attributes_rejects_bad_method():
+    from probcal.plots import plot_attributes
+
+    y, p = _data()
+    with pytest.raises(ValueError, match="method"):
+        plot_attributes(y, p, method="bogus")

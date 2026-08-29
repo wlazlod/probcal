@@ -28,6 +28,7 @@ from probcal import (  # noqa: E402
 from probcal.curves import ecce_curve  # noqa: E402
 from probcal.metrics import jeffreys_grade_test  # noqa: E402
 from probcal.plots import (  # noqa: E402
+    plot_attributes,
     plot_belt,
     plot_comparison,
     plot_ecce,
@@ -98,6 +99,8 @@ def main() -> None:
 
     offset = LogitOffset(target_mean=float(y.mean())).fit(scores)
     save(plot_offset_audit(offset), "offset_audit.png")
+
+    save(plot_attributes(y, scores, scale="logit"), "attributes.png")
 
 
 if __name__ == "__main__":

@@ -13,9 +13,9 @@ from typing import Any
 import numpy as np
 
 from ._math import logit
-from ._plots_common import _BLUE, _BOX, _GREY, _STYLE, _logit_axis, _plt, _require_mpl
+from ._plots_common import _BLUE, _BOX, _GREEN, _GREY, _STYLE, _logit_axis, _plt, _require_mpl
 from ._results import CorpResult, SelectionReport
-from .curves import corp_reliability
+from .curves import corp_reliability, reliability_binned
 from .metrics.scores import _prep
 
 
@@ -246,4 +246,129 @@ def plot_mcb_dsc(
         ax.set_xlabel("DSC (discrimination)")
         ax.set_ylabel("MCB (miscalibration)")
         ax.set_title("MCB-DSC plane")
+        return ax
+
+
+def plot_attributes(
+    y: object,
+    p: object,
+    *,
+    method: str = "binned",
+    n_bins: int = 10,
+    scale: str = "probability",
+    sample_weight: object = None,
+    ax: Any = None,
+) -> Any:
+    """Attributes diagram: reliability curve against climatology and no-skill references.
+
+    Draws the classic Hsu & Murphy (1986) attributes diagram: the identity
+    (perfect calibration), the horizontal and vertical climatology
+    references at the weighted base rate :math:`\\bar y`, the no-skill line
+    :math:`y = (x + \\bar y) / 2` (equidistant between the climatology
+    level and the identity), and a light shading of the region where a
+    point beats climatology, :math:`(y - x)^2 \\le (x - \\bar y)^2` — i.e.
+    where the point sits closer to the identity than the horizontal
+    no-resolution line, the geometric criterion for positive Brier skill.
+    The reliability curve is drawn on top: ``method="binned"`` overlays
+    :func:`probcal.curves.reliability_binned` as markers sized by bin
+    count; ``method="corp"`` overlays the PAV step fit from
+    :func:`probcal.curves.corp_reliability` (``bands=None``), the same
+    convention as :func:`probcal.plots.plot_corp`. ``scale="logit"``
+    transforms every drawn quantity (clipped to ``[1e-12, 1 - 1e-12]``)
+    through :func:`probcal._math.logit` and relabels the axes in
+    probabilities.
+
+    Parameters
+    ----------
+    y, p : array_like
+        Outcomes and predicted probabilities.
+    method : {"binned", "corp"}, keyword-only
+        Reliability construction to overlay.
+    n_bins : int, keyword-only
+        Bin count passed to :func:`probcal.curves.reliability_binned`
+        (``method="binned"`` only).
+    scale : {"probability", "logit"}, keyword-only
+        Axis scale; ``"logit"`` stretches the low-probability region.
+    sample_weight : array_like or None, keyword-only
+        Optional non-negative weights, same length as ``y``.
+    ax : matplotlib.axes.Axes or None, keyword-only
+        Axes to draw on; a new figure and axes are created if ``None``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes the diagram was drawn on.
+
+    Raises
+    ------
+    ValueError
+        If ``method`` is not ``"binned"`` or ``"corp"``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal.plots import plot_attributes
+    >>> rng = np.random.default_rng(0)
+    >>> p = rng.uniform(0.05, 0.5, 300)
+    >>> y = (rng.random(300) < p).astype(float)
+    >>> ax = plot_attributes(y, p, method="corp")  # doctest: +SKIP
+    """
+    _require_mpl()
+    if method not in ("binned", "corp"):
+        raise ValueError('method must be "binned" or "corp"')
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    ybar = float(np.average(y_arr, weights=w))
+
+    def _tr(x: np.ndarray) -> np.ndarray:
+        if scale == "logit":
+            return logit(np.clip(x, 1e-12, 1.0 - 1e-12))
+        return np.asarray(x, dtype=np.float64)
+
+    with _plt.rc_context(_STYLE):
+        if ax is None:
+            _, ax = _plt.subplots(figsize=(6.5, 6))
+
+        grid = np.linspace(0.0, 1.0, 400)
+        ybar_t = float(_tr(np.array([ybar]))[0])
+        ax.plot(_tr(grid), _tr(grid), ls="--", color=_GREY, lw=1, label="identity")
+        ax.axhline(ybar_t, color=_GREY, ls=":", lw=1, label="climatology / no resolution")
+        ax.axvline(ybar_t, color=_GREY, ls=":", lw=1, label="climatology")
+        no_skill = (grid + ybar) / 2.0
+        ax.plot(_tr(grid), _tr(no_skill), color=_GREY, ls="-.", lw=1, label="no skill")
+
+        half_width = np.abs(grid - ybar)
+        y_upper = np.clip(grid + half_width, 0.0, 1.0)
+        y_lower = np.clip(grid - half_width, 0.0, 1.0)
+        ax.fill_between(_tr(grid), _tr(y_lower), _tr(y_upper), color=_GREEN, alpha=0.08)
+
+        if method == "binned":
+            curve = reliability_binned(y_arr, p_arr, n_bins=n_bins, sample_weight=w)
+            sizes = 15.0 + 200.0 * curve.count / curve.count.max()
+            ax.scatter(
+                _tr(curve.pred_mean),
+                _tr(curve.event_rate),
+                s=sizes,
+                color=_BLUE,
+                zorder=5,
+                label="binned",
+            )
+        else:
+            result = corp_reliability(y_arr, p_arr, sample_weight=w, bands=None)
+            lo, hi, level = result.block_lo, result.block_hi, result.block_level
+            x_edges = np.empty(2 * len(lo))
+            x_edges[0::2] = lo
+            x_edges[1::2] = hi
+            y_levels = np.repeat(level, 2)
+            ax.step(_tr(x_edges), _tr(y_levels), where="post", color=_BLUE, lw=2, label="PAV fit")
+
+        if scale == "logit":
+            _logit_axis(ax)
+            ax.set_xlabel("predicted probability (logit scale)")
+            ax.set_ylabel("observed event rate (logit scale)")
+        else:
+            ax.set_xlabel("predicted probability")
+            ax.set_ylabel("observed event rate")
+
+        ax.set_title("attributes diagram")
+        ax.legend(loc="lower right")
         return ax

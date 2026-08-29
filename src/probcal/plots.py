@@ -772,7 +772,7 @@ def plot_e_process(report: Any, *, ax: Any = None) -> Any:
         return ax
 
 
-from ._plots_diag import plot_corp, plot_mcb_dsc  # noqa: E402
+from ._plots_diag import plot_attributes, plot_corp, plot_mcb_dsc  # noqa: E402
 
 __all__ = [
     "plot_reliability",
@@ -786,4 +786,5 @@ __all__ = [
     "plot_e_process",
     "plot_corp",
     "plot_mcb_dsc",
+    "plot_attributes",
 ]

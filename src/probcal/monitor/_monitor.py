@@ -70,15 +70,17 @@ class MonitorStep:
         Per-grade time-uniform confidence sequence for that grade's own
         offset, same construction and grid as ``delta_ci`` (empty when no
         grades were given; absent for steps loaded from a pre-0.3 payload).
-    log_e_increment : float
+    log_e_increment : float or None
         This batch's additive plug-in log-LR increment: the offset
         plug-in's ``bern_log_lr`` contribution (0.0 when ``delta_hat ==
         0``) plus the shape plug-in's (0.0 when its plug-in is the
         identity). Unlike ``e_global`` — a logsumexp mixture, not additive
         across batches — this is the purely additive series
         :func:`~probcal.monitor._onset.estimate_onset` localizes drift
-        onset from. Steps loaded from a pre-0.3 payload default to 0.0:
-        onset is unavailable for those steps.
+        onset from. Steps written by :meth:`CalibrationMonitor.update` always
+        carry a float; steps loaded from a pre-0.3 payload carry ``None``
+        (that payload records no increments), and a monitor holding any
+        such step reports no onset at all.
     """
 
     label: str
@@ -94,7 +96,7 @@ class MonitorStep:
     delta_hat: float
     slope_hat: float
     grade_delta_ci: dict[str, tuple[float, float] | None] = field(default_factory=dict)
-    log_e_increment: float = 0.0
+    log_e_increment: float | None = None
 
 
 @dataclass(frozen=True)
@@ -121,7 +123,8 @@ class MonitorReport:
         Label of the batch :func:`~probcal.monitor._onset.estimate_onset`
         points to as the drift onset (backward-CUSUM argmax of
         ``MonitorStep.log_e_increment``); ``None`` unless ``alarm_at`` is
-        also set. An estimate, not a test.
+        also set, and ``None`` as well when any step carries no increment
+        (a pre-0.3 payload). An estimate, not a test.
     """
 
     steps: tuple[MonitorStep, ...]
@@ -190,7 +193,9 @@ class CalibrationMonitor:
         estimate and uses ``plug_in_window`` (or all past batches) instead,
         unconditionally. ``onset_label`` and the onset sentence in
         ``reasoning`` are populated under both modes — only the
-        diagnostic window differs.
+        diagnostic window differs. When onset is unavailable (any step
+        loaded from a pre-0.3 payload carries no increment), both modes
+        fall back to ``"trailing"`` and ``onset_label`` is ``None``.
 
     Attributes
     ----------
@@ -283,7 +288,7 @@ class CalibrationMonitor:
             return np.empty(0), np.empty(0), np.empty(0)
         return np.concatenate(zs), np.concatenate(ys), np.concatenate(ws)
 
-    def _recommendation_window_start(self, onset_idx: int) -> int:
+    def _recommendation_window_start(self, onset_idx: int | None) -> int:
         """Start index of the post-alarm diagnostic/action window.
 
         Shared by :meth:`report` (the trailing-window diagnostics) and
@@ -295,16 +300,32 @@ class CalibrationMonitor:
         ``plug_in_window`` still bounds how far back the since-onset window
         can reach. ``"trailing"``: the ``plug_in_window`` trailing start (or
         0, i.e. all history, when ``plug_in_window`` is ``None``) --
-        ``onset_idx`` is ignored, matching 0.2.0 behaviour exactly.
+        ``onset_idx`` is ignored, matching 0.2.0 behaviour exactly. An
+        ``onset_idx`` of ``None`` (onset unavailable, see
+        :meth:`_onset_available`) takes the ``"trailing"`` branch whatever
+        ``recommendation_window`` says.
         """
-        if self.recommendation_window == "since_onset":
+        if self.recommendation_window == "since_onset" and onset_idx is not None:
             start = onset_idx
             if self.plug_in_window is not None:
                 start = max(onset_idx, len(self._z) - self.plug_in_window)
             return start
         return 0 if self.plug_in_window is None else max(0, len(self._z) - self.plug_in_window)
 
-    def _onset_index(self) -> int:
+    def _onset_available(self) -> bool:
+        """Whether every step carries a plug-in log-LR increment.
+
+        Steps loaded from a pre-0.3 payload carry ``log_e_increment =
+        None`` -- that payload simply does not record the series
+        :func:`~probcal.monitor._onset.estimate_onset` reads, and there is
+        no way to reconstruct it from the retained batches. Onset is then
+        unavailable and both :meth:`report` and
+        :meth:`apply_recommendation` fall back to the ``"trailing"``
+        window.
+        """
+        return all(s.log_e_increment is not None for s in self.steps_)
+
+    def _onset_index(self) -> int | None:
         """Backward-CUSUM argmax onset index (spec M3), by index -- not by label.
 
         Shared by :meth:`report` and :meth:`apply_recommendation` so the
@@ -316,11 +337,16 @@ class CalibrationMonitor:
         recomputes :func:`~probcal.monitor._onset.estimate_onset` directly
         instead, exactly as :meth:`report` does.
 
+        Returns ``None`` when onset is unavailable
+        (:meth:`_onset_available`).
+
         Meaningful only once at least one batch has been processed (both
         call sites only reach this after an alarm has fired, which implies
         ``steps_`` is non-empty).
         """
-        increments = np.array([s.log_e_increment for s in self.steps_])
+        if not self._onset_available():
+            return None
+        increments = np.array([s.log_e_increment for s in self.steps_], dtype=np.float64)
         return estimate_onset(increments)
 
     # ------------------------------------------------------------------ updates
@@ -511,7 +537,7 @@ class CalibrationMonitor:
                 grade_table=grade_table,
             )
         onset_idx = self._onset_index()
-        onset_label = self.steps_[onset_idx].label
+        onset_label = self.steps_[onset_idx].label if onset_idx is not None else None
         # Shared with apply_recommendation() (_onset_index,
         # _recommendation_window_start), so the diagnostic window here and
         # the action window there never disagree.
@@ -538,8 +564,13 @@ class CalibrationMonitor:
             f"Cox-vs-offset residual LR on the trailing window {resid_lr:.2f} "
             + ("exceeds" if shape_needed else "is within")
             + " the chi-square(1) 5% bound 3.84",
-            f"estimated drift onset at {onset_label} (backward-CUSUM argmax of the plug-in "
-            "log-LR increments — an estimate, not a test)",
+            (
+                f"estimated drift onset at {onset_label} (backward-CUSUM argmax of the "
+                "plug-in log-LR increments — an estimate, not a test)"
+                if onset_idx is not None
+                else "drift onset unavailable: steps recorded before 0.3.0 carry no log-e "
+                "increments (trailing window used)"
+            ),
             "the recommendation is a diagnostic, not a test — see the monitoring chapter",
         ]
         recommendation = "re-offset" if (slope_ok and not shape_needed) else "re-fit"
@@ -562,7 +593,10 @@ class CalibrationMonitor:
         :meth:`_recommendation_window_start` -- the same window
         :meth:`report` uses for its trailing-window diagnostics; the onset
         index is recomputed directly rather than looked up by
-        ``rep.onset_label``, since batch labels are opaque and may repeat),
+        ``rep.onset_label``, since batch labels are opaque and may repeat,
+        and is unavailable altogether when any step came from a pre-0.3
+        payload -- the window is then the trailing one, as in
+        :meth:`report`),
         composes the fitted offset onto ``target`` (see
         below), and returns a **fresh** monitor with the same constructor
         parameters (:meth:`_ctor_params`) to watch the corrected pipeline.

@@ -1,6 +1,7 @@
 """Tests for probcal.monitor._onset and the since-onset recommendation window (spec M3)."""
 
 import importlib.util
+import json
 import pathlib
 from dataclasses import replace
 
@@ -17,6 +18,14 @@ _SPEC = importlib.util.spec_from_file_location(
 )
 sim = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(sim)
+
+
+_DATA_DIR = pathlib.Path(__file__).parent / "data"
+
+_UNAVAILABLE = (
+    "drift onset unavailable: steps recorded before 0.3.0 carry no log-e "
+    "increments (trailing window used)"
+)
 
 
 def _batch(n=2000, shift=0.0, slope=1.0, seed=0, event_rate=0.05):
@@ -149,6 +158,61 @@ def test_trailing_window_matches_since_onset_when_onset_is_batch_zero() -> None:
     assert rep_since.alarm_at == "m0"
     assert rep_since.onset_label == "m0"
     assert rep_since.reasoning == rep_trailing.reasoning
+
+
+# ---------------------------------------------------------------- pre-0.3 payloads
+
+# tests/data/monitor_0_2_0_alarmed.json was built by loading
+# tests/data/monitor_0_2_0.json, feeding four drifted batches (n=2000,
+# shift=0.9, seeds 700..703), then stripping from to_dict() everything a
+# 0.2.0 writer never wrote: every step's log_e_increment and
+# grade_delta_ci, the grade_cs_* state, and the recommendation_window
+# param.
+
+
+def _load_alarmed(window: str | None = None) -> CalibrationMonitor:
+    d = json.loads((_DATA_DIR / "monitor_0_2_0_alarmed.json").read_text(encoding="utf-8"))
+    if window is not None:
+        d["params"] = {**d["params"], "recommendation_window": window}
+    return CalibrationMonitor.from_dict(d)
+
+
+def test_pre_0_3_steps_load_without_increments() -> None:
+    mon = _load_alarmed()
+    assert all(s.log_e_increment is None for s in mon.steps_)
+    assert mon.report().alarm_at is not None
+
+
+def test_fresh_steps_always_carry_an_increment() -> None:
+    mon = CalibrationMonitor()
+    for k in range(4):
+        y, p = _batch(n=500, shift=0.5, seed=20 + k)
+        mon.update(y, p, label=f"m{k}")
+    assert all(isinstance(s.log_e_increment, float) for s in mon.steps_)
+
+
+def test_pre_0_3_payload_reports_no_onset_and_uses_the_trailing_window() -> None:
+    # No increments to search, so no onset may be claimed and the
+    # diagnostics must fall back to the trailing window -- the default
+    # "since_onset" monitor must agree, number for number, with an
+    # explicit "trailing" run on the very same restored state.
+    mon = _load_alarmed()
+    rep = mon.report()
+    assert mon.recommendation_window == "since_onset"
+    assert rep.onset_label is None
+    assert _UNAVAILABLE in rep.reasoning
+    assert not any("estimated drift onset" in r for r in rep.reasoning)
+    assert rep.reasoning == _load_alarmed("trailing").report().reasoning
+
+
+def test_pre_0_3_payload_apply_recommendation_uses_the_trailing_window() -> None:
+    mon = _load_alarmed()
+    action = mon.apply_recommendation()
+    trailing = _load_alarmed("trailing").apply_recommendation()
+    assert action.window == tuple(s.label for s in mon.steps_)  # plug_in_window is None
+    assert action.window == trailing.window
+    assert action.audit["onset_label"] is None
+    assert action.audit["delta"] == trailing.audit["delta"]
 
 
 # ---------------------------------------------------------------- injected-drift localization

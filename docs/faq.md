@@ -27,6 +27,7 @@ and results as frozen dataclasses of arrays with `as_dict()` when you want a Dat
 Every monotone calibrator implements the duck-typed protocol
 
 ```python
+# docs: no-run — "probability" | "logit" denotes a choice of literal, not an expression
 raw_lo, raw_hi = cal.interval_inverse(lo, hi, space="probability" | "logit",
                                       buffer_logit=0.0)
 ```
@@ -46,6 +47,7 @@ Calibration does not change counterfactual geometry — only the target interval
 recipe, for a "PD ≤ 2% after calibration" target:
 
 ```python
+# docs: no-run — cal/treecf stand in for a fitted calibrator and the treecf module
 lo_z, hi_z = cal.interval_inverse(0.0, 0.02, space="logit")
 target = treecf.Target.raw(range=(lo_z, hi_z))
 ```

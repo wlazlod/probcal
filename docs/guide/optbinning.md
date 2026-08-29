@@ -10,13 +10,22 @@ that affine map to machine precision.
 Scorecard → calibration → masterscale → monitoring, end to end:
 
 ```python
-import numpy as np
 import pandas as pd
 from optbinning import BinningProcess, Scorecard
 from sklearn.linear_model import LogisticRegression
 
+from probcal._math import logit
 from probcal.integrations.optbinning import calibrate_scorecard
 from probcal.monitor import CalibrationMonitor
+
+# X_train, y_train: training split; X_cal, y_cal: held-out calibration
+# split; X_new: new applicants — built here from s_cal/s_new (one numeric
+# feature, the model's own logit) since the walkthrough carries no raw
+# tabular features.
+X_train = pd.DataFrame({"z": logit(s_cal)})
+y_train = y_cal.astype(int)
+X_cal = X_train
+X_new = pd.DataFrame({"z": logit(s_new)})
 
 # 1. A fitted scorecard (train split).
 sc = Scorecard(
@@ -43,6 +52,7 @@ cs.to_json("scorecard-calibration.json")   # calibrator envelope +
 cs.fingerprint()                           # scorecard-table fingerprint
 
 # 5. Monitoring: matured cohorts through the anytime-valid monitor.
+cohorts = {"m0": (X_cal.iloc[:1500], y_cal[:1500]), "m1": (X_cal.iloc[1500:], y_cal[1500:])}
 mon = CalibrationMonitor(alpha=0.05)
 for label, (X_b, y_b) in cohorts.items():
     mon.update(y_b, cs.predict_proba(X_b), label=label)

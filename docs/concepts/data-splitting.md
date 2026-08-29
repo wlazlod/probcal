@@ -121,6 +121,12 @@ Tasche (2013), and let the per-grade backtests of
 ```python
 from probcal import CalibratedModel, PlattCalibrator
 
+# X_cal, X, X_new: feature matrices for the model — here, s_cal/s_new
+# reshaped, since the stub model reads the score off X[:, 0].
+X_cal = s_cal.reshape(-1, 1)
+X, y = X_cal, y_cal
+X_new = s_new.reshape(-1, 1)
+
 # Prefit: the model is trained, a separate calibration set exists (the canon).
 wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
 

@@ -86,6 +86,7 @@ The intended deployment pattern keeps the calibrator's JSON beside the
 model in whatever registry the model lives in:
 
 ```python
+# docs: no-run — registry is a stand-in for whatever model registry the caller uses
 artifact_dir = registry.upload(model, name="pd-model", version="2026.09")
 cal.to_json(artifact_dir / "calibrator.json")
 registry.tag(name="pd-model", version="2026.09",

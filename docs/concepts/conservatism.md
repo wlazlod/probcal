@@ -150,6 +150,7 @@ maximum — and warns (`UserWarning`) only when that adjustment changed somethin
 
 ```python
 import numpy as np
+from probcal import BetaCalibrator
 from probcal.metrics import jeffreys_upper_bands
 from probcal.thresholds import calibrated_bands_to_raw
 
@@ -159,7 +160,8 @@ p = np.array([0.01] * 100 + [0.05] * 100)
 bands = jeffreys_upper_bands(y, p, grades, level=0.9)
 # {"A": (0.0, 0.0134...), "B": (0.0134..., 0.0846...)}
 
-raw_bands = calibrated_bands_to_raw(fitted_calibrator, bands)  # doctest: +SKIP
+fitted_calibrator = BetaCalibrator().fit(s_cal, y_cal)  # s_cal, y_cal: held-out calibration scores and outcomes
+raw_bands = calibrated_bands_to_raw(fitted_calibrator, bands)
 ```
 
 ## Margin of conservatism: composing with calibration, not replacing it

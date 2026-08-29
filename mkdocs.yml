@@ -6,6 +6,11 @@ repo_name: wlazlod/probcal
 
 strict: true
 
+# README.md is a contributor note (the snippet convention), not a built
+# page — it would otherwise collide with index.md as the implicit index.
+exclude_docs: |
+  README.md
+
 theme:
   name: material
   features:

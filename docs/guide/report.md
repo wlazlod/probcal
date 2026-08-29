@@ -6,15 +6,19 @@ APIs documented in their own chapters (*Metrics and tests*,
 *Monitoring*) — this page covers only assembling them into one document.
 
 ```python
+# s_cal, y_cal: held-out calibration scores and outcomes
+from probcal import BetaCalibrator
 from probcal.report import validation_report   # probcal[viz]
 
+cal = BetaCalibrator().fit(s_cal, y_cal)
+
 html = validation_report(
-    y, scores,
-    calibrator=cal,      # optional: adds the appendix (to_json + interpret())
-    monitor=mon,          # optional: adds the e-process trajectory section
-    grades=grades,        # optional: adds the Jeffreys/Pluto-Tasche section
-    by=segment,           # optional: adds the grouped-evaluation section
-    n_boot=200, seed=42,  # one shared knob for every resampling site
+    y_cal, s_cal,
+    calibrator=cal,        # optional: adds the appendix (to_json + interpret())
+    monitor=mon,            # optional: adds the e-process trajectory section
+    grades=grades,          # optional: adds the Jeffreys/Pluto-Tasche section
+    by=segments,            # optional: adds the grouped-evaluation section
+    n_boot=50, seed=42,     # one shared knob for every resampling site
     path="validation.html",
 )
 ```
@@ -42,7 +46,7 @@ table row.
 
 ```python
 validation_report(
-    y, scores, grades=grades,
+    y_cal, s_cal, grades=grades,
     format="markdown", path="validation.md",
 )
 ```

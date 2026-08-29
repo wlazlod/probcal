@@ -71,6 +71,12 @@ emits raw logits, convert first with the exported `probcal.expit`.
 ```python
 from probcal import CalibratedModel, PlattCalibrator
 
+# X_cal, X_train, X_new: feature matrices for the model — here, s_cal/s_new
+# reshaped, since the stub model reads the score off X[:, 0].
+X_cal = s_cal.reshape(-1, 1)
+X_train, y_train = X_cal, y_cal
+X_new = s_new.reshape(-1, 1)
+
 # Prefit flow: the model is already trained, a separate calibration set exists.
 wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
 p = wrapped.predict_proba(X_new)

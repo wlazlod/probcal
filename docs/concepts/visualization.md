@@ -217,13 +217,18 @@ guard raises with the install instruction rather than a bare `ImportError`.
 ## In probcal
 
 ```python
-from probcal import calibration_belt, reliability_binned, reliability_loess
+# s_cal, y_cal: held-out calibration scores and outcomes
+import numpy as np
+from probcal import BetaCalibrator, LogitOffset, calibration_belt, reliability_binned, reliability_loess
 from probcal.curves import ecce_curve, reliability_smooth
 from probcal.metrics import jeffreys_grade_test, reliability_summary
 from probcal.plots import (  # [viz] extra
     plot_belt, plot_comparison, plot_ecce, plot_grade_backtest,
     plot_offset_audit, plot_reliability,
 )
+
+s_raw, y = s_cal, y_cal                            # raw, miscalibrated scores
+p = BetaCalibrator().fit(s_raw, y).predict_proba(s_raw)  # calibrated probabilities
 
 curve = reliability_binned(y, p, n_bins=10)        # Wilson CIs, both scales
 smooth = reliability_loess(y, p)
@@ -241,6 +246,8 @@ ax = plot_belt(belt)
 fig = plot_comparison(reliability_binned(y, s_raw), reliability_binned(y, p))
 ax = plot_ecce([ecce_curve(y, s_raw), ecce_curve(y, p)], labels=["raw", "calibrated"])
 ax = plot_grade_backtest(jeffreys_grade_test(y, p, grades))
+
+fitted_offset = LogitOffset(target_mean=float(np.mean(y))).fit(p)
 ax = plot_offset_audit(fitted_offset)              # a fitted LogitOffset stage
 ```
 

@@ -96,7 +96,10 @@ clean: policy fixed, mapping versioned.
 ## In probcal
 
 ```python
-from probcal import UnattainableTargetError, calibrated_bands_to_raw
+# s_cal, y_cal: held-out calibration scores and outcomes
+from probcal import BetaCalibrator, UnattainableTargetError, calibrated_bands_to_raw
+
+cal = BetaCalibrator().fit(s_cal, y_cal)
 
 lo_s, hi_s = cal.interval_inverse(0.0, 0.02)               # "PD <= 2%" in score space
 lo_z, hi_z = cal.interval_inverse(0.0, 0.02, space="logit")  # ... in raw margins

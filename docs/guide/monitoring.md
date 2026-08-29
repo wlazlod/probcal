@@ -9,7 +9,8 @@ from probcal.monitor import CalibrationMonitor
 mon = CalibrationMonitor(alpha=0.05)
 
 # Each time a cohort's outcomes mature (arrival order — never reordered):
-step = mon.update(y_batch, p_batch, grade=grades, label="2026Q3")
+y_batch, p_batch, grade_batch = y_cal[:200], s_cal[:200], grades[:200]
+step = mon.update(y_batch, p_batch, grade=grade_batch, label="2026Q3")
 step.e_global      # the alarm statistic (alarm when it ever reaches 1/alpha)
 step.delta_ci      # anytime-valid CI for the current offset, e.g. (0.15, 0.40)
 

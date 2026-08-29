@@ -5,20 +5,22 @@ tests* concepts chapter — this page covers only what `by=` adds on top of
 it.
 
 ```python
+# s_cal, y_cal: held-out calibration scores and outcomes
+import numpy as np
 from probcal.metrics import evaluate
 from probcal.plots import plot_reliability   # probcal[viz]
 from probcal.curves import reliability_binned
 
-segment = np.where(scores < 0.01, "retail", "corporate")
+segment = np.where(s_cal < 0.01, "retail", "corporate")
 
-report = evaluate(y, scores, n_boot=1000, seed=42, by=segment)
+report = evaluate(y_cal, s_cal, n_boot=100, seed=42, by=segment)   # 100: fast for the docs harness
 report.groups          # sorted labels, e.g. ("corporate", "retail")
 report.pooled          # MetricReport on the full data (seed unchanged)
 report.reports         # one MetricReport per group, aligned with .groups
 report.counts          # observation count per group
 report.to_frame()      # long-format rows: group, metric, value, ci_low, ci_high
 
-fig = plot_reliability(reliability_binned(y, scores), y=y, p=scores, by=segment)
+fig = plot_reliability(reliability_binned(y_cal, s_cal), y=y_cal, p=s_cal, by=segment)
 ```
 
 Each group's report is the same call you would make by hand on that

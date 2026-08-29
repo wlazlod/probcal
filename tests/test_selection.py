@@ -200,3 +200,20 @@ def test_default_complexity_rank() -> None:
         """Not a BaseCalibrator; exercises the selector's getattr fallback."""
 
     assert getattr(_DuckTyped(), "complexity_rank", 100.0) == 100.0
+
+
+def test_selection_report_has_mcb_dsc_columns() -> None:
+    """report_ carries a CORP decomposition per candidate on its OOF vector,
+    and it round-trips through to_dict/from_dict (task V2)."""
+    s, y = _distorted(1500)
+    sel = CalibratorSelector(cv=3, random_state=3).fit(s, y)
+    rep = sel.report_
+    assert rep.mcb is not None and rep.mcb.shape == (len(rep.methods),)
+    assert rep.dsc is not None and rep.dsc.shape == (len(rep.methods),)
+    assert rep.unc is not None
+    assert np.all(rep.mcb >= -1e-12) and np.all(rep.dsc >= -1e-12)
+
+    sel2 = CalibratorSelector.from_dict(sel.to_dict())
+    np.testing.assert_allclose(sel2.report_.mcb, rep.mcb)
+    np.testing.assert_allclose(sel2.report_.dsc, rep.dsc)
+    assert sel2.report_.unc == pytest.approx(rep.unc)

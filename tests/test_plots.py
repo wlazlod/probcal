@@ -248,3 +248,140 @@ def test_plot_e_process_smoke() -> None:
     assert ax.get_yscale() == "log"
     labels = [t.get_text() for t in ax.get_xticklabels()]
     assert labels == [f"m{k}" for k in range(4)]
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_plot_reliability_kernel_smooth_renders_variable_width_curve() -> None:
+    import matplotlib
+    from matplotlib.collections import LineCollection
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from probcal.curves import reliability_binned, reliability_smooth
+    from probcal.plots import plot_reliability
+
+    y, p = _calibrated(800)
+    curve = reliability_binned(y, p)
+    smooth = reliability_smooth(y, p, grid_size=60, n_boot=0)
+
+    for scale in ("probability", "logit"):
+        ax = plot_reliability(curve, smooth=smooth, scale=scale)
+        # `errorbar` also emits a (constant-width) LineCollection for its bars;
+        # the kernel curve's is the one with more than one distinct width.
+        variable_width = [
+            c
+            for c in ax.collections
+            if isinstance(c, LineCollection) and len(set(c.get_linewidths())) > 1
+        ]
+        assert len(variable_width) == 1
+        assert len(variable_width[0].get_linewidths()) > 1
+        # Miscalibration-area shading and the CI ribbon are both fill_betweens
+        # (PolyCollections), in addition to the two LineCollections above.
+        assert len(ax.collections) >= 4
+        assert any("smECE" in t.get_text() for t in ax.texts)
+        plt.close("all")
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_plot_reliability_stats_box_bool() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from probcal.curves import reliability_binned
+    from probcal.plots import plot_reliability
+
+    y, p = _calibrated()
+    curve = reliability_binned(y, p)
+    ax = plot_reliability(curve, y=y, p=p, stats=True)
+    box_text = "\n".join(t.get_text() for t in ax.texts)
+    for label in ("n", "events", "intercept", "slope", "ICI", "smECE", "Brier"):
+        assert f"{label} = " in box_text or f"{label} =" in box_text
+    # stats replaces the default annotate box, not both.
+    assert "Spiegelhalter" not in box_text
+    assert "E90" not in box_text
+    plt.close("all")
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_plot_reliability_stats_box_metric_report() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from probcal._results import MetricReport
+    from probcal.curves import reliability_binned
+    from probcal.plots import plot_reliability
+
+    y, p = _calibrated()
+    curve = reliability_binned(y, p)
+    report = MetricReport(
+        names=("intercept", "slope", "log_loss"),
+        values=np.array([0.01, 0.98, 0.42]),
+        ci_low=np.array([-0.05, 0.9, 0.4]),
+        ci_high=np.array([0.07, 1.05, 0.44]),
+    )
+    ax = plot_reliability(curve, y=y, p=p, stats=report)
+    box_text = "\n".join(t.get_text() for t in ax.texts)
+    assert "intercept = " in box_text
+    assert "slope = " in box_text
+    assert "log_loss" not in box_text  # not in the stats-box name set
+    assert "n = " in box_text
+    assert "events = " in box_text
+    plt.close("all")
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_plot_reliability_risk_dist_split() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from probcal.curves import reliability_binned
+    from probcal.plots import plot_reliability
+
+    y, p = _calibrated()
+    curve = reliability_binned(y, p)
+    ax = plot_reliability(curve, y=y, p=p, risk_dist="split")
+    heights = [patch.get_height() for patch in ax.patches]
+    assert any(h > 0 for h in heights)
+    assert any(h < 0 for h in heights)
+    assert not [ln for ln in ax.lines if ln.get_marker() == "|"]
+    plt.close("all")
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_plot_reliability_rug_false_disables_split_too() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from probcal.curves import reliability_binned
+    from probcal.plots import plot_reliability
+
+    y, p = _calibrated()
+    curve = reliability_binned(y, p)
+    ax = plot_reliability(curve, y=y, p=p, rug=False, risk_dist="split")
+    assert not ax.patches
+    assert not [ln for ln in ax.lines if ln.get_marker() == "|"]
+    plt.close("all")
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_plot_reliability_invalid_risk_dist_raises() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+
+    from probcal.curves import reliability_binned
+    from probcal.plots import plot_reliability
+
+    y, p = _calibrated(200)
+    curve = reliability_binned(y, p)
+    with pytest.raises(ValueError, match="risk_dist"):
+        plot_reliability(curve, risk_dist="bogus")

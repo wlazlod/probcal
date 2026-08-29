@@ -25,14 +25,18 @@ from probcal import (  # noqa: E402
     reliability_binned,
     reliability_loess,
 )
-from probcal.curves import ecce_curve  # noqa: E402
+from probcal.curves import corp_reliability, ecce_curve, reliability_smooth  # noqa: E402
 from probcal.metrics import jeffreys_grade_test  # noqa: E402
 from probcal.plots import (  # noqa: E402
+    plot_attributes,
     plot_belt,
     plot_comparison,
+    plot_corp,
     plot_ecce,
     plot_grade_backtest,
     plot_interval,
+    plot_mcb_dsc,
+    plot_murphy,
     plot_offset_audit,
     plot_reliability,
     plot_selection,
@@ -62,6 +66,16 @@ def main() -> None:
     save(
         plot_reliability(curve, smooth=smooth, scale="logit", y=y, p=scores),
         "reliability_logit.png",
+    )
+
+    kernel = reliability_smooth(y, scores)
+    save(
+        plot_reliability(curve, smooth=kernel, scale="logit"),
+        "reliability_smooth.png",
+    )
+    save(
+        plot_reliability(curve, smooth=smooth, scale="logit", y=y, p=scores, risk_dist="split"),
+        "reliability_split.png",
     )
 
     save(plot_belt(calibration_belt(y, scores)), "belt.png")
@@ -98,6 +112,17 @@ def main() -> None:
 
     offset = LogitOffset(target_mean=float(y.mean())).fit(scores)
     save(plot_offset_audit(offset), "offset_audit.png")
+
+    save(plot_attributes(y, scores, scale="logit"), "attributes.png")
+
+    save(
+        plot_murphy({"raw scores": (y, scores), "beta-calibrated": (y, p_cal)}, diff=True),
+        "murphy.png",
+    )
+
+    corp = corp_reliability(y, scores, n_resamples=200)
+    save(plot_corp(corp, scale="logit"), "corp.png")
+    save(plot_mcb_dsc(sel.report_), "mcb_dsc.png")
 
 
 if __name__ == "__main__":

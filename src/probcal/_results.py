@@ -156,6 +156,17 @@ class SelectionReport(_ResultBase):
         Boolean flag marking the selected candidate.
     criterion : str
         Name of the scoring criterion.
+    mcb, dsc : numpy.ndarray or None
+        Per-candidate CORP miscalibration/discrimination terms
+        (:func:`probcal._corp.decompose`) on the same out-of-fold
+        predictions as ``score_mean``, decomposing Brier when
+        ``criterion == "brier"`` and log loss otherwise. ``None`` for
+        reports produced before probcal 0.3 (e.g. loaded from an older
+        golden), since the columns did not exist to compute.
+    unc : float or None
+        CORP uncertainty term, identical across candidates (it depends
+        only on ``y`` and the sample weights, not on the predictions).
+        ``None`` exactly when ``mcb``/``dsc`` are ``None``.
     """
 
     methods: tuple[str, ...]
@@ -164,20 +175,43 @@ class SelectionReport(_ResultBase):
     guardrails_ok: np.ndarray
     chosen: np.ndarray
     criterion: str
+    mcb: np.ndarray | None = None
+    dsc: np.ndarray | None = None
+    unc: float | None = None
 
     def __repr__(self) -> str:
-        rows = [
-            (m, sm, sd, bool(g), "*" if c else "")
-            for m, sm, sd, g, c in zip(
-                self.methods,
-                self.score_mean,
-                self.score_sd,
-                self.guardrails_ok,
-                self.chosen,
-                strict=True,
-            )
-        ]
-        table = _aligned_table(("method", self.criterion, "sd", "guardrails", "chosen"), rows)
+        has_corp = self.mcb is not None and self.dsc is not None
+        headers: tuple[str, ...]
+        rows: list[tuple[object, ...]]
+        if has_corp:
+            headers = ("method", self.criterion, "sd", "guardrails", "chosen", "mcb", "dsc")
+            rows = [
+                (m, sm, sd, bool(g), "*" if c else "", mc, ds)
+                for m, sm, sd, g, c, mc, ds in zip(
+                    self.methods,
+                    self.score_mean,
+                    self.score_sd,
+                    self.guardrails_ok,
+                    self.chosen,
+                    self.mcb,  # type: ignore[arg-type]
+                    self.dsc,  # type: ignore[arg-type]
+                    strict=True,
+                )
+            ]
+        else:
+            headers = ("method", self.criterion, "sd", "guardrails", "chosen")
+            rows = [
+                (m, sm, sd, bool(g), "*" if c else "")
+                for m, sm, sd, g, c in zip(
+                    self.methods,
+                    self.score_mean,
+                    self.score_sd,
+                    self.guardrails_ok,
+                    self.chosen,
+                    strict=True,
+                )
+            ]
+        table = _aligned_table(headers, rows)
         return f"SelectionReport (criterion: {self.criterion})\n{table}"
 
 
@@ -231,3 +265,114 @@ class SmoothReliabilityCurve(_ResultBase):
 
     def __repr__(self) -> str:
         return f"SmoothReliabilityCurve (grid of {len(self.grid_p)} points)"
+
+
+@dataclass(frozen=True)
+class KernelReliabilityCurve(_ResultBase):
+    """smECE-consistent kernel reliability curve (``curves.reliability_smooth``).
+
+    Attributes
+    ----------
+    grid_p, grid_logit : numpy.ndarray
+        Evaluation grid on the probability and logit scales.
+    event_rate : numpy.ndarray
+        Kernel-smoothed ``E[y | logit p]`` at ``sigma_star``, evaluated at
+        each grid point.
+    density : numpy.ndarray
+        Kernel-smoothed prediction density at each grid point, normalized
+        to sum to 1 over the grid.
+    ci_low, ci_high : numpy.ndarray
+        Seeded bootstrap percentile band for ``event_rate`` at the fixed
+        ``sigma_star`` (empty band collapses to ``event_rate`` when
+        ``n_boot=0``).
+    sigma_star : float
+        The smECE fixed-point bandwidth the curve is smoothed at.
+    smooth_ece : float
+        ``metrics.smooth_ece(y, p, bins=bins)``, reproduced exactly (same
+        lattice and path selection) from the same ``sigma_star``.
+    """
+
+    grid_p: np.ndarray
+    grid_logit: np.ndarray
+    event_rate: np.ndarray
+    density: np.ndarray
+    ci_low: np.ndarray
+    ci_high: np.ndarray
+    sigma_star: float
+    smooth_ece: float
+
+    def __repr__(self) -> str:
+        return (
+            f"KernelReliabilityCurve (grid of {len(self.grid_p)} points, "
+            f"sigma_star={self.sigma_star:.4g}, smooth_ece={self.smooth_ece:.4g})"
+        )
+
+
+@dataclass(frozen=True)
+class CorpResult(_ResultBase):
+    """CORP reliability fit: PAV recalibration with the MCB-DSC-UNC decomposition.
+
+    Attributes
+    ----------
+    block_lo, block_hi : numpy.ndarray
+        Left and right edge (min/max ``p``) of each PAV block.
+    block_level : numpy.ndarray
+        PAV fitted event rate per block.
+    block_weight : numpy.ndarray
+        Pooled weight per block.
+    pav : numpy.ndarray
+        PAV fit expanded to observations, in the original input order.
+    brier, brier_mcb, brier_dsc, brier_unc : float
+        Brier score and its miscalibration/discrimination/uncertainty terms
+        (``brier == brier_mcb - brier_dsc + brier_unc``).
+    log_loss, log_loss_mcb, log_loss_dsc, log_loss_unc : float
+        Log loss and its miscalibration/discrimination/uncertainty terms
+        (``log_loss == log_loss_mcb - log_loss_dsc + log_loss_unc``).
+    bands : {"consistency", "confidence", None}
+        Band type requested.
+    level : float
+        Nominal coverage level of the bands.
+    band_grid, band_low, band_high : numpy.ndarray
+        Band evaluation grid and bounds (empty when ``bands`` is ``None``).
+    n : int
+        Number of observations.
+    events : int
+        Number of events (``sum(y)``).
+    """
+
+    block_lo: np.ndarray
+    block_hi: np.ndarray
+    block_level: np.ndarray
+    block_weight: np.ndarray
+    pav: np.ndarray
+    brier: float
+    brier_mcb: float
+    brier_dsc: float
+    brier_unc: float
+    log_loss: float
+    log_loss_mcb: float
+    log_loss_dsc: float
+    log_loss_unc: float
+    bands: str | None
+    level: float
+    band_grid: np.ndarray
+    band_low: np.ndarray
+    band_high: np.ndarray
+    n: int
+    events: int
+
+    def __repr__(self) -> str:
+        rows = [
+            (lo, hi, lvl, wt)
+            for lo, hi, lvl, wt in zip(
+                self.block_lo, self.block_hi, self.block_level, self.block_weight, strict=True
+            )
+        ]
+        table = _aligned_table(("block_lo", "block_hi", "block_level", "block_weight"), rows)
+        return (
+            f"CorpResult (n={self.n}, events={self.events})\n{table}\n"
+            f"Brier: {self.brier:.6g} = MCB {self.brier_mcb:.6g} - DSC {self.brier_dsc:.6g} "
+            f"+ UNC {self.brier_unc:.6g}\n"
+            f"Log loss: {self.log_loss:.6g} = MCB {self.log_loss_mcb:.6g} - "
+            f"DSC {self.log_loss_dsc:.6g} + UNC {self.log_loss_unc:.6g}"
+        )

@@ -180,7 +180,9 @@ out of scope unless a future workload demands it.
 Built with mkdocs-material; run locally with `uv run mkdocs serve`. Start with
 *Getting started*, then the *Concepts* chapters — the package's theoretical foundation —
 and the executed *PD calibration walkthrough* notebook. The *Visualization* chapter is a
-gallery of every plot, regenerated deterministically by `docs/scripts/generate_figures.py`.
+gallery of every plot, regenerated deterministically by `docs/scripts/generate_figures.py`;
+the CORP reliability diagram, MCB-DSC plane, and score decomposition have their own
+*CORP and score decomposition* chapter.
 
 ## License
 

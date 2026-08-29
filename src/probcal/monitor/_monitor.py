@@ -179,10 +179,16 @@ class CalibrationMonitor:
         estimate_onset` on ``MonitorStep.log_e_increment`) onward — the
         rationale is that a window starting where the evidence trail
         actually turns is more informative than one anchored to
-        ``plug_in_window``, which predates any alarm. ``"trailing"`` is
-        the escape hatch restoring 0.2.0 behaviour exactly: it ignores the
-        onset estimate and uses ``plug_in_window`` (or all past batches)
-        instead, unconditionally.
+        ``plug_in_window``, which predates any alarm. When ``plug_in_window``
+        is also set, the window starts at the LATER of the two starts
+        (``max(onset_idx, n_batches - plug_in_window)``), so a short
+        ``plug_in_window`` still bounds how far back the since-onset window
+        can reach. ``"trailing"`` is the escape hatch restoring 0.2.0
+        behaviour exactly for those diagnostic INPUTS: it ignores the onset
+        estimate and uses ``plug_in_window`` (or all past batches) instead,
+        unconditionally. ``onset_label`` and the onset sentence in
+        ``reasoning`` are populated under both modes — only the
+        diagnostic window differs.
 
     Attributes
     ----------
@@ -466,7 +472,14 @@ class CalibrationMonitor:
         onset_idx = estimate_onset(increments)
         onset_label = self.steps_[onset_idx].label
         if self.recommendation_window == "since_onset":
-            pz, py, pw = self._since(onset_idx)
+            # Respect plug_in_window when both are set: the window starts at
+            # the LATER of the onset and the plug_in_window trailing start,
+            # so a short plug_in_window still bounds how far back the
+            # since-onset window can reach.
+            start = onset_idx
+            if self.plug_in_window is not None:
+                start = max(onset_idx, len(self._z) - self.plug_in_window)
+            pz, py, pw = self._since(start)
         else:
             pz, py, pw = self._past()
         delta_now = plug_in_delta(pz, py, pw)

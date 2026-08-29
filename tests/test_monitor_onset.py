@@ -2,6 +2,7 @@
 
 import importlib.util
 import pathlib
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -96,6 +97,38 @@ def test_log_e_increment_round_trips_through_json(tmp_path) -> None:
 def test_recommendation_window_validation() -> None:
     with pytest.raises(ValueError, match="recommendation_window"):
         CalibrationMonitor(recommendation_window="nope")
+
+
+def test_since_onset_window_respects_plug_in_window() -> None:
+    # plug_in_window bounds the since-onset window: an onset estimated far
+    # earlier than the trailing window must not widen the window used by
+    # delta_now/_slope_ci/_residual_shape_lr beyond plug_in_window batches.
+    mon = CalibrationMonitor(alpha=0.05, plug_in_window=3, recommendation_window="since_onset")
+    mon_trailing = CalibrationMonitor(
+        alpha=0.05, plug_in_window=3, recommendation_window="trailing"
+    )
+    for k in range(10):
+        y, p = _batch(shift=0.8, seed=k)
+        mon.update(y, p, label=f"m{k}")
+        mon_trailing.update(y, p, label=f"m{k}")
+    assert mon.report().alarm_at is not None  # both monitors saw identical batches
+
+    # Force the onset estimate to batch 2 of 10 (index 2), well before the
+    # plug_in_window=3 trailing start (index 7 = 10 - 3).
+    forced = [-1.0, -1.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
+    assert estimate_onset(np.array(forced)) == 2
+    mon.steps_ = [replace(s, log_e_increment=v) for s, v in zip(mon.steps_, forced, strict=True)]
+
+    rep = mon.report()
+    assert rep.onset_label == "m2"  # the onset estimate itself is unaffected
+    rep_trailing = mon_trailing.report()
+
+    # start = max(onset_idx=2, n_batches=10 - plug_in_window=3) = 7, i.e. the
+    # last 3 batches -- exactly the "trailing" window with plug_in_window=3 --
+    # so every non-onset reasoning number coincides bit-for-bit.
+    since_numbers = rep.reasoning[:4] + rep.reasoning[5:]
+    trailing_numbers = rep_trailing.reasoning[:4] + rep_trailing.reasoning[5:]
+    assert since_numbers == trailing_numbers
 
 
 def test_trailing_window_matches_since_onset_when_onset_is_batch_zero() -> None:

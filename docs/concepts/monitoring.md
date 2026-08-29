@@ -148,9 +148,16 @@ diagnostics — `delta_now`, the Cox slope bootstrap CI, the Cox-vs-offset resid
 are computed on batches from the estimated onset onward rather than on the full (or
 `plug_in_window`-trimmed) history: once an alarm fires, a window anchored where the
 evidence trail actually turns is more informative than one anchored to a config knob
-set before any drift was suspected. **Escape hatch:** `recommendation_window="trailing"`
-restores 0.2.0 behaviour exactly, ignoring the onset estimate and using
-`plug_in_window` (or all past batches) unconditionally. `tests/test_monitor_sim.py::
+set before any drift was suspected. When `plug_in_window` is also set, the window
+starts at the LATER of the two starts — `max(onset_idx, n_batches - plug_in_window)`
+— so a short `plug_in_window` still bounds how far back the since-onset window can
+reach; a `plug_in_window` of 3 with an onset at batch 2 of 10, for example, uses the
+last 3 batches, not the 8 since onset. **Escape hatch:** `recommendation_window="trailing"`
+restores 0.2.0 behaviour exactly for those diagnostic INPUTS (`delta_now`, the slope
+CI, the residual LR): it ignores the onset estimate and uses `plug_in_window` (or all
+past batches) instead, unconditionally. `onset_label` and the onset sentence in
+`reasoning` are still populated under `"trailing"` — only the diagnostic window
+differs between the two modes. `tests/test_monitor_sim.py::
 test_recommendation_correct_on_pure_drift` re-runs the 90%-correct gate under the new
 default.
 

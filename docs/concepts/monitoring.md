@@ -124,6 +124,41 @@ posterior upper quantile of the observed event rate (the same quantile
 `metrics.jeffreys_grade_test`/`metrics.jeffreys_upper_bands` use), via `LogitOffset`'s
 existing mode B (`target_mean`).
 
+## Drift-onset estimate and the since-onset window
+
+Each step also carries `MonitorStep.log_e_increment`: the batch's additive plug-in
+log-LR contribution — the offset plug-in's `bern_log_lr` factor (0 when `delta_hat ==
+0`) plus the shape plug-in's (0 when its plug-in is the identity). `e_global` is a
+logsumexp mixture and is *not* additive across batches, so it cannot be searched for
+where the evidence trail turns; `log_e_increment` is purely additive and exists for
+exactly that purpose.
+
+`monitor._onset.estimate_onset(increments) -> int` finds `k* = argmax_k sum_{j>=k}
+increments[j]` — a backward-CUSUM argmax over that additive series, with ties resolved
+to the latest `k`. This is an **estimate, not a change-point test**: it carries no
+type-I control and no confidence set, only an answer to "which batch does the
+accumulated evidence point to". `report()` runs it whenever an alarm has fired and
+exposes the result as `MonitorReport.onset_label`, appending "estimated drift onset at
+{label} (backward-CUSUM argmax of the plug-in log-LR increments — an estimate, not a
+test)" to `reasoning`. Steps loaded from a pre-0.3 payload carry `log_e_increment =
+0.0` (the field's trailing default) — onset is unavailable for those steps.
+
+By default (`recommendation_window="since_onset"`), `report()`'s trailing-window
+diagnostics — `delta_now`, the Cox slope bootstrap CI, the Cox-vs-offset residual LR —
+are computed on batches from the estimated onset onward rather than on the full (or
+`plug_in_window`-trimmed) history: once an alarm fires, a window anchored where the
+evidence trail actually turns is more informative than one anchored to a config knob
+set before any drift was suspected. **Escape hatch:** `recommendation_window="trailing"`
+restores 0.2.0 behaviour exactly, ignoring the onset estimate and using
+`plug_in_window` (or all past batches) unconditionally. `tests/test_monitor_sim.py::
+test_recommendation_correct_on_pure_drift` re-runs the 90%-correct gate under the new
+default.
+
+Localization accuracy (batches built like `docs/scripts/monitor_sim.py`'s, drift
+injected at batch 12 of 24 with `shift=0.6`, 40 seeded runs, `tests/test_monitor_onset.py`,
+`pytest.mark.slow`): median `|onset − 12| = 1.0` (gate `<= 2`); error distribution
+`[0×4, 1×24, 2×5, 3×3, 4, 6, 8, 9]`.
+
 ## The recommendation rule — a diagnostic, not a test
 
 After an alarm the monitor reports one of `re-offset` / `re-fit`, from two
@@ -238,7 +273,9 @@ simulator against the shipped `CalibrationMonitor` class.
 
 The recommendation gate (correct call in ≥ 90% of pure-offset and
 pure-slope runs) is enforced through the real `CalibrationMonitor` in the
-same CI suite.
+same CI suite, under the default `recommendation_window="since_onset"`:
+18/20 pure-offset runs correctly called `re-offset`, 20/20 pure-slope runs
+correctly called `re-fit`.
 
 ### `hl_e_test` (spec M1)
 

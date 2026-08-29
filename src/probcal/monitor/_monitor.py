@@ -16,7 +16,10 @@ from .._registry import register
 from .._serialize import SCHEMA_VERSION, check_schema, fingerprint_of_dict
 from .._validation import validate_scores, validate_weights
 from ..metrics.regression import calibration_slope
+from ._onset import estimate_onset
 from ._processes import OffsetProcess, bern_log_lr, logsumexp, plug_in_delta, plug_in_shape
+
+_RECOMMENDATION_WINDOWS = ("since_onset", "trailing")
 
 _COMPONENTS = ("offset", "shape")
 
@@ -65,6 +68,15 @@ class MonitorStep:
         Per-grade time-uniform confidence sequence for that grade's own
         offset, same construction and grid as ``delta_ci`` (empty when no
         grades were given; absent for steps loaded from a pre-0.3 payload).
+    log_e_increment : float
+        This batch's additive plug-in log-LR increment: the offset
+        plug-in's ``bern_log_lr`` contribution (0.0 when ``delta_hat ==
+        0``) plus the shape plug-in's (0.0 when its plug-in is the
+        identity). Unlike ``e_global`` — a logsumexp mixture, not additive
+        across batches — this is the purely additive series
+        :func:`~probcal.monitor._onset.estimate_onset` localizes drift
+        onset from. Steps loaded from a pre-0.3 payload default to 0.0:
+        onset is unavailable for those steps.
     """
 
     label: str
@@ -80,6 +92,7 @@ class MonitorStep:
     delta_hat: float
     slope_hat: float
     grade_delta_ci: dict[str, tuple[float, float] | None] = field(default_factory=dict)
+    log_e_increment: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -102,6 +115,11 @@ class MonitorReport:
         ``probcal.plots.plot_e_process``).
     grade_table : dict[str, float]
         Latest per-grade e-values.
+    onset_label : str or None
+        Label of the batch :func:`~probcal.monitor._onset.estimate_onset`
+        points to as the drift onset (backward-CUSUM argmax of
+        ``MonitorStep.log_e_increment``); ``None`` unless ``alarm_at`` is
+        also set. An estimate, not a test.
     """
 
     steps: tuple[MonitorStep, ...]
@@ -110,6 +128,7 @@ class MonitorReport:
     reasoning: tuple[str, ...]
     alpha: float = 0.05
     grade_table: dict[str, float] = field(default_factory=dict)
+    onset_label: str | None = None
 
     def to_frame(self) -> object:
         """Steps as a list of dicts, or a pandas DataFrame when pandas is importable."""
@@ -149,8 +168,21 @@ class CalibrationMonitor:
         Number of past batches required before the plug-ins engage
         (before that they are the identity and their factors equal 1).
     plug_in_window : int or None
-        Trailing number of past batches used by the plug-ins and by the
-        recommendation rule; ``None`` uses all past batches.
+        Trailing number of past batches used by the plug-ins, and by the
+        recommendation rule when ``recommendation_window="trailing"``;
+        ``None`` uses all past batches.
+    recommendation_window : {"since_onset", "trailing"}
+        Which batches feed ``report()``'s trailing-window diagnostics
+        (``delta_now``, the Cox slope CI, the residual-shape LR) once an
+        alarm has fired. ``"since_onset"`` (the default) uses batches from
+        the estimated drift onset (:func:`~probcal.monitor._onset.
+        estimate_onset` on ``MonitorStep.log_e_increment`) onward — the
+        rationale is that a window starting where the evidence trail
+        actually turns is more informative than one anchored to
+        ``plug_in_window``, which predates any alarm. ``"trailing"`` is
+        the escape hatch restoring 0.2.0 behaviour exactly: it ignores the
+        onset estimate and uses ``plug_in_window`` (or all past batches)
+        instead, unconditionally.
 
     Attributes
     ----------
@@ -167,6 +199,8 @@ class CalibrationMonitor:
         delta_ci_grid: tuple[float, float, int] = (-3.0, 3.0, 241),
         min_history: int = 1,
         plug_in_window: int | None = None,
+        *,
+        recommendation_window: str = "since_onset",
     ) -> None:
         if not 0.0 < alpha < 1.0:
             raise ValueError(f"alpha must lie in (0, 1), got {alpha}")
@@ -175,6 +209,11 @@ class CalibrationMonitor:
             raise ValueError(
                 f"components must be a non-empty subset of {_COMPONENTS}, got {components!r}"
             )
+        if recommendation_window not in _RECOMMENDATION_WINDOWS:
+            raise ValueError(
+                "recommendation_window must be one of "
+                f"{_RECOMMENDATION_WINDOWS}, got {recommendation_window!r}"
+            )
         self.alpha = alpha
         self.components = tuple(components)
         self.grades = grades
@@ -182,6 +221,7 @@ class CalibrationMonitor:
         self.delta_ci_grid = tuple(delta_ci_grid)
         self.min_history = min_history
         self.plug_in_window = plug_in_window
+        self.recommendation_window = recommendation_window
         self._init_state()
 
     # ------------------------------------------------------------------ state
@@ -227,6 +267,13 @@ class CalibrationMonitor:
         if not parts:
             return np.empty(0), np.empty(0), np.empty(0)
         return tuple(np.concatenate(a) for a in zip(*parts, strict=True))  # type: ignore[return-value]
+
+    def _since(self, start: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Portfolio-level batches from index ``start`` onward (for the since-onset window)."""
+        zs, ys, ws = self._z[start:], self._y[start:], self._w[start:]
+        if not zs:
+            return np.empty(0), np.empty(0), np.empty(0)
+        return np.concatenate(zs), np.concatenate(ys), np.concatenate(ws)
 
     # ------------------------------------------------------------------ updates
 
@@ -291,9 +338,12 @@ class CalibrationMonitor:
         else:
             delta_hat, (c_hat, a_hat) = 0.0, (0.0, 1.0)
 
-        self._offset.update(z, p_arr, y_arr, w_arr, delta_hat)
+        offset_inc = self._offset.update(z, p_arr, y_arr, w_arr, delta_hat)
+        shape_inc = 0.0
         if (c_hat, a_hat) != (0.0, 1.0):  # identity plug-in: factor exactly 1
-            self._log_shape += bern_log_lr(y_arr, p_arr, expit(c_hat + a_hat * z), w_arr)
+            shape_inc = bern_log_lr(y_arr, p_arr, expit(c_hat + a_hat * z), w_arr)
+            self._log_shape += shape_inc
+        log_e_increment = offset_inc + shape_inc
 
         if g_arr is not None:
             for g in np.unique(g_arr):
@@ -341,7 +391,7 @@ class CalibrationMonitor:
         self._w.append(w_arr)
         self._g.append(g_arr)
 
-        step = self._make_step(label, y_arr, w_arr, delta_hat, a_hat)
+        step = self._make_step(label, y_arr, w_arr, delta_hat, a_hat, log_e_increment)
         self.steps_.append(step)
         return step
 
@@ -352,6 +402,7 @@ class CalibrationMonitor:
         w_arr: np.ndarray,
         delta_hat: float,
         a_hat: float,
+        log_e_increment: float,
     ) -> MonitorStep:
         log_parts: list[float] = []
         e_offset = e_shape = float("nan")
@@ -393,6 +444,7 @@ class CalibrationMonitor:
             delta_hat=float(delta_hat),
             slope_hat=float(a_hat),
             grade_delta_ci=grade_delta_ci,
+            log_e_increment=float(log_e_increment),
         )
 
     # ------------------------------------------------------------------ report
@@ -410,7 +462,13 @@ class CalibrationMonitor:
                 alpha=self.alpha,
                 grade_table=grade_table,
             )
-        pz, py, pw = self._past()
+        increments = np.array([s.log_e_increment for s in self.steps_])
+        onset_idx = estimate_onset(increments)
+        onset_label = self.steps_[onset_idx].label
+        if self.recommendation_window == "since_onset":
+            pz, py, pw = self._since(onset_idx)
+        else:
+            pz, py, pw = self._past()
         delta_now = plug_in_delta(pz, py, pw)
         e_shape = self.steps_[-1].e_shape
         lo, hi = self._slope_ci(pz, py, pw)
@@ -432,6 +490,8 @@ class CalibrationMonitor:
             f"Cox-vs-offset residual LR on the trailing window {resid_lr:.2f} "
             + ("exceeds" if shape_needed else "is within")
             + " the chi-square(1) 5% bound 3.84",
+            f"estimated drift onset at {onset_label} (backward-CUSUM argmax of the plug-in "
+            "log-LR increments — an estimate, not a test)",
             "the recommendation is a diagnostic, not a test — see the monitoring chapter",
         ]
         recommendation = "re-offset" if (slope_ok and not shape_needed) else "re-fit"
@@ -442,6 +502,7 @@ class CalibrationMonitor:
             reasoning=tuple(reasoning),
             alpha=self.alpha,
             grade_table=grade_table,
+            onset_label=onset_label,
         )
 
     @staticmethod
@@ -494,6 +555,7 @@ class CalibrationMonitor:
                 "delta_ci_grid": list(self.delta_ci_grid),
                 "min_history": self.min_history,
                 "plug_in_window": self.plug_in_window,
+                "recommendation_window": self.recommendation_window,
             },
             "state": {
                 "z": [a.tolist() for a in self._z],
@@ -544,6 +606,7 @@ class CalibrationMonitor:
         params["grades"] = tuple(params["grades"]) if params["grades"] is not None else None
         params["mixture_grid"] = tuple(params["mixture_grid"])
         params["delta_ci_grid"] = tuple(params["delta_ci_grid"])
+        params["recommendation_window"] = params.get("recommendation_window", "since_onset")
         mon = cls(**params)
         st = d["state"]
         mon._z = [np.asarray(a, dtype=np.float64) for a in st["z"]]

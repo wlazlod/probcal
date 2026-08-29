@@ -156,5 +156,6 @@ line each. The score-level contract itself is pinned by
 | Python | 3.11, 3.12, 3.13 | CI matrix |
 | numpy | ≥ 1.26, including 2.x | CI (lockfile tracks latest) |
 | scikit-learn (adapter extra) | ≥ 1.4 | CI jobs at 1.4.2 and latest |
+| scikit-learn (bare-core duck typing, no adapter) | ≥ 1.6 only | `tests/test_sklearn_duck.py` (`importorskip(minversion="1.6")`); runs in the main CI matrix (latest sklearn), skipped on the 1.4.2 `sklearn-min` job |
 | optbinning (integration extra) | ≥ 0.21 | CI job at 0.21.0 |
 | treecf (integration extra) | ≥ 0.2.1 | joint smoke test when installed |

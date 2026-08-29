@@ -60,7 +60,9 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.arithmatex:
       generic: true
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      dedent_subsections: true
+      check_paths: true
   - toc:
       permalink: true
 

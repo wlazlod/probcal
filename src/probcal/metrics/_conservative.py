@@ -18,8 +18,7 @@ import numpy as np
 
 from .._math import beta_ppf, pava
 from .._results import Interpretation, _ResultBase
-from .._validation import validate_weights
-from .scores import _prep
+from .._validation import validate_scores, validate_weights
 
 
 def _validate_binary_y(y: object) -> np.ndarray:
@@ -364,7 +363,10 @@ def jeffreys_upper_bands(
     Parameters
     ----------
     y : array_like
-        Binary outcomes in ``{0, 1}``.
+        Binary outcomes in ``{0, 1}``. Unlike most probcal metrics (but like
+        :func:`pluto_tasche_from_arrays`), an all-zero ``y`` is accepted --
+        the low- and zero-default portfolio is this module's motivating
+        case.
     p : array_like
         Predicted probabilities in ``[0, 1]`` (only used, alongside
         ``grades``, to determine the default best-to-worst ``order`` when
@@ -405,7 +407,10 @@ def jeffreys_upper_bands(
     >>> bands["A"][1] < bands["B"][1]
     True
     """
-    y_arr, p_arr, _ = _prep(y, p, None)
+    y_arr = _validate_binary_y(y)
+    p_arr = validate_scores(p, name="p")
+    if len(p_arr) != len(y_arr):
+        raise ValueError("y and p must have equal length")
     g_arr = np.asarray(grades)
     if g_arr.ndim != 1 or len(g_arr) != len(y_arr):
         raise ValueError("grades must be a 1-D array matching y and p in length")
@@ -413,7 +418,7 @@ def jeffreys_upper_bands(
         raise ValueError("level must lie in (0, 1)")
 
     g_str = np.array([str(g) for g in g_arr])
-    unique_labels = tuple(sorted(np.unique(g_str)))
+    unique_labels = tuple(sorted(str(u) for u in np.unique(g_str)))
 
     if order is None:
         mean_p = {lab: float(np.mean(p_arr[g_str == lab])) for lab in unique_labels}
@@ -443,4 +448,4 @@ def jeffreys_upper_bands(
         )
 
     lo = np.concatenate(([0.0], hi[:-1]))
-    return {label: (float(lo[i]), float(hi[i])) for i, label in enumerate(order_t)}
+    return {str(label): (float(lo[i]), float(hi[i])) for i, label in enumerate(order_t)}

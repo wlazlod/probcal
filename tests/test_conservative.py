@@ -306,6 +306,29 @@ def test_zero_default_grade_still_gets_positive_hi() -> None:
     assert bands["A"][1] > 0.0
 
 
+def test_all_grades_zero_default_still_positive_and_monotone() -> None:
+    # The module's own motivating case (see the module docstring): every
+    # grade has zero observed defaults. Unlike the standard
+    # probcal._validation.validate_binary_y path, jeffreys_upper_bands must
+    # still accept this (matching pluto_tasche_from_arrays), and every
+    # grade's hi must come out strictly positive from the Jeffreys prior
+    # alone.
+    grades = np.array(["A"] * 300 + ["B"] * 200 + ["C"] * 100)
+    y = np.zeros(600)
+    p = np.array([0.005] * 300 + [0.02] * 200 + [0.06] * 100)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        bands = jeffreys_upper_bands(y, p, grades, level=0.9)
+    order = ["A", "B", "C"]
+    prev_hi = 0.0
+    for g in order:
+        lo, hi = bands[g]
+        assert hi > 0.0
+        assert lo == pytest.approx(prev_hi)
+        assert hi >= lo
+        prev_hi = hi
+
+
 def test_default_order_is_by_mean_p_ascending() -> None:
     # Grade labels deliberately out of alphabetical order relative to risk.
     grades = np.array(["Z"] * 100 + ["A"] * 100)

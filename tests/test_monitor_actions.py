@@ -174,3 +174,27 @@ def test_chain_with_moc_offset_serializes_and_inverts() -> None:
     lo, hi = chain.interval_inverse(0.0, 0.3, space="logit", buffer_logit=0.1)
     assert np.isneginf(lo)
     assert np.isfinite(hi) or np.isposinf(hi)
+
+
+def test_chain_with_monitor_moc_offset_serializes_and_inverts() -> None:
+    # The brief's named scenario: Chain([cal, moc_offset(mon)]) -- the
+    # monitor-derived offset, not the counts variant covered above.
+    d = make_pd_portfolio(n=1500, random_state=10)
+    cal = BetaCalibrator().fit(d.scores, d.y)
+    mon = _drifted_monitor(shift=0.8, n_batches=5)
+    off = moc_offset(mon)
+    chain = Chain([cal, off])
+
+    payload = chain.to_dict()
+    restored = Chain.from_dict(payload)
+    q = np.linspace(0.05, 0.5, 10)
+    np.testing.assert_allclose(chain.predict_proba(q), restored.predict_proba(q))
+
+    lo, hi = chain.interval_inverse(0.0, 0.5, space="logit", buffer_logit=0.1)
+    assert np.isneginf(lo)
+    assert np.isfinite(hi) or np.isposinf(hi)
+
+    # BetaCalibrator has an exact point inverse, so the Chain does too.
+    p_target = chain.predict_proba(d.scores[:20])
+    s = chain.point_inverse(p_target)
+    np.testing.assert_allclose(chain.predict_proba(s), p_target, atol=1e-8)

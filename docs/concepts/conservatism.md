@@ -1,4 +1,4 @@
-# Conservative most-prudent PDs
+# Conservatism: most-prudent PDs and margins of conservatism
 
 The per-grade backtests in [Metrics and tests](metrics.md) — `binomial_grade_test`,
 `jeffreys_grade_test` — ask whether a grade's *assigned* PD is consistent with its
@@ -10,7 +10,32 @@ PD to assign going forward (regulators do not accept "the PD is exactly zero"). 
 Tasche (2005) solve a different, decision-relevant problem instead: not "is the assigned PD
 consistent with the data", but "what is the *most-prudent* (upper-bound) PD I can defend for
 this grade, at a stated confidence, given everything I know about the whole rating scale".
-`probcal.metrics.pluto_tasche` implements their one-period estimator.
+`probcal.metrics.pluto_tasche` implements their one-period estimator; `jeffreys_upper_bands`
+answers the related masterscale-wide question with a different tool; and `monitor.moc_offset`
+/ `monitor.moc_offset_from_counts` carry the same most-prudent logic from a rating grade to
+an already-calibrated portfolio, as an offset that stacks on top of calibration rather than
+replacing it.
+
+## When each mechanism applies
+
+Four tools solve four distinct instances of "give me a defensible upper reading, not a point
+estimate", and picking the right one depends on what is available and at what granularity the
+number is needed:
+
+| Mechanism | Applies when | Granularity | Needs |
+|---|---|---|---|
+| `metrics.pluto_tasche(_from_arrays)` | A rating scale has zero- or low-default grades and rating-order is trusted | Per grade | Ordered grades, own + pooled counts |
+| `metrics.jeffreys_upper_bands` | Publishing a full, contiguous masterscale band table for `thresholds.calibrated_bands_to_raw` | Per grade (own counts only, no pooling) | Ordered grades, own counts |
+| `monitor.moc_offset` | A `CalibrationMonitor` is already tracking the portfolio and its confidence sequence is live | Portfolio-wide | A live monitor, or its frozen report |
+| `monitor.moc_offset_from_counts` | No monitor is running — only aggregate outcome counts are on hand | Portfolio-wide | Realized `(y, p)` |
+
+Pluto-Tasche and the Jeffreys bands both answer "what PD may I *assign* to this grade" —
+they are inputs to a masterscale, evaluated before or at the point of grading. The two
+`monitor.moc_offset*` functions answer a different question, downstream of grading: "given
+what I have observed about an *already-calibrated* portfolio's outcomes, by how much should
+I conservatively shift it". They return a fitted `LogitOffset` rather than a per-grade
+number, meant to be applied — see [Margin of conservatism](#margin-of-conservatism-composing-with-calibration-not-replacing-it)
+below.
 
 ## The monotonicity assumption
 
@@ -136,6 +161,74 @@ bands = jeffreys_upper_bands(y, p, grades, level=0.9)
 
 raw_bands = calibrated_bands_to_raw(fitted_calibrator, bands)  # doctest: +SKIP
 ```
+
+## Margin of conservatism: composing with calibration, not replacing it
+
+`monitor.moc_offset` and `monitor.moc_offset_from_counts` (theory: [Monitoring](monitoring.md#margin-of-conservatism-offsets))
+turn monitoring or outcome evidence into a fitted `probcal.LogitOffset` that shifts an
+*already-calibrated* portfolio further, conservatively. `moc_offset(mon)` reads the upper end
+of a running `CalibrationMonitor`'s time-uniform confidence sequence for the current offset;
+`moc_offset_from_counts(y, p)` re-anchors `p`'s mean at the one-sided Jeffreys posterior upper
+quantile of the realized outcomes when no monitor is running — the same Jeffreys quantile
+`jeffreys_upper_bands` uses, one level up, on the portfolio mean instead of a per-grade rate.
+
+Both return a fitted `LogitOffset`, not a calibrator: they carry no shape correction, only a
+uniform log-odds shift. **The margin of conservatism composes with calibration; it never
+substitutes for it.** A calibrator still does the job of getting the reliability curve right
+in the first place — MoC only adds a defensible margin on top, exactly as `probcal.Chain`
+composes any calibrator with `LogitOffset` stages elsewhere in the package (see
+[Offset](offset.md#audit-trail-and-composition)):
+
+```python
+import numpy as np
+
+from probcal import BetaCalibrator, Chain, expit, logit
+from probcal.datasets import make_pd_portfolio
+from probcal.monitor import CalibrationMonitor, moc_offset
+
+train = make_pd_portfolio(n=4000, random_state=0)
+cal = BetaCalibrator().fit(train.scores, train.y)
+
+# A monitor observes six batches drawn under an injected +0.3 log-odds drift.
+mon = CalibrationMonitor(alpha=0.05)
+rng = np.random.default_rng(1)
+for seed in range(6):
+    batch = make_pd_portfolio(n=500, random_state=100 + seed)
+    p_batch = cal.predict_proba(batch.scores)
+    y_batch = (rng.random(500) < expit(logit(p_batch) + 0.3)).astype(float)
+    mon.update(y_batch, p_batch, label=f"m{seed}")
+
+chain = Chain([cal, moc_offset(mon)])  # calibration first, MoC offset second
+
+test = make_pd_portfolio(n=2000, random_state=999)
+print(cal.predict_proba(test.scores).mean())    # ~0.0265 — calibrated, undercorrected
+print(chain.predict_proba(test.scores).mean())  # ~0.0384 — conservatively re-anchored
+```
+
+`Chain` enforces the ordering in its constructor — the first stage must be a fitted
+calibrator, every stage after it a fitted `LogitOffset` — so `Chain([moc_offset(mon), cal])`
+is not expressible by accident; the calibration step always comes first, the conservatism
+margin is layered on afterward, and both stages stay separately auditable
+(`chain.calibrator_`, `chain.offsets_`).
+
+## What the one-period bound does not cover
+
+Every bound on this page — Pluto-Tasche's Clopper-Pearson upper bound, the Jeffreys upper
+bands, and the confidence sequence `moc_offset` reads from — is a **one-period** estimator:
+it treats each obligor's default as an independent Bernoulli draw within the observation
+window. Real portfolios violate that assumption. Defaults share exposure to common risk
+factors (the same macro cycle, sector, or geography), so the *effective* variance of the
+portfolio default count is higher than the binomial variance these bounds are built on. Under
+positive cross-obligor correlation, **the one-period most-prudent bound understates the true
+uncertainty** — its nominal coverage overstates the actual coverage the confidence level would
+suggest, because correlated defaults cluster together in the bad states that matter most for
+tail risk exactly where independence assumes they scatter.
+
+Extending these bounds to a multi-period setting with explicit default correlation (asset
+correlation as in Pluto & Tasche's own follow-on work, or a systematic-factor model as in the
+Basel IRB framework more broadly) is **deliberately out of scope for probcal 0.3**. The
+one-period bound is a defensible, well-understood floor — not a correlation-robust one — and
+should be documented as such wherever it informs a masterscale or a production offset.
 
 ## Simulation verification
 

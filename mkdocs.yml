@@ -87,7 +87,6 @@ nav:
       - Nonparametric methods: concepts/methods-nonparametric.md
       - Distribution-free methods: concepts/methods-distribution-free.md
       - Metrics and tests: concepts/metrics.md
-      - Conservative most-prudent PDs: concepts/conservatism.md
       - Data splitting: concepts/data-splitting.md
       - Offset: concepts/offset.md
       - SHAP and calibration: concepts/shap-calibration.md
@@ -97,6 +96,7 @@ nav:
       - Automatic selection: concepts/auto-selection.md
       - Visualization: concepts/visualization.md
       - CORP and score decomposition: concepts/corp.md
+      - Conservative most-prudent PDs and margins of conservatism: concepts/conservatism.md
   - Tutorials:
       - End-to-end on a rare-event portfolio: notebooks/pd_end_to_end.ipynb
       - PD calibration walkthrough: notebooks/pd_calibration_walkthrough.ipynb

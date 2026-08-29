@@ -2,11 +2,9 @@
 
 ## Which calibrator should I use?
 
-Diagnose first (guardrails + logit-scale reliability curve), then let
-`CalibratorSelector` decide on out-of-fold log loss. Rules of thumb: a pure level error
-wants the one-parameter [offset](concepts/offset.md); a wrong slope wants the parametric
-family; visible curvature wants isotonic/CIR or the spline — if the event count can fund
-them (see [calibration-set sizing](concepts/data-splitting.md)).
+Diagnose first, then read the catalog: [Choose a calibrator](guide/choosing.md) has the
+table (monotonicity, which inverse exists, data appetite, use when / avoid when) and the
+decision path, ending at `CalibratorSelector` when the answer is not obvious.
 
 ## My model outputs logits, not probabilities. What do I pass?
 
@@ -16,29 +14,29 @@ your margins exactly, so nothing is lost in the round trip.
 
 ## Why is there no pandas/sklearn dependency?
 
-The runtime is numpy-only by design: auditable installs, no version-conflict surface,
-and results as frozen dataclasses of arrays with `as_dict()` when you want a DataFrame
-(`pd.DataFrame(result.as_dict())`). Everything remains sklearn-*compatible* —
-`get_params`/`set_params` are implemented manually, and `CalibratedModel` clones with
-`sklearn.base.clone` when sklearn happens to be installed.
+The runtime is numpy-only by design: auditable installs, no version-conflict surface, and
+results as frozen dataclasses of arrays with `as_dict()` when you want a DataFrame
+(`pd.DataFrame(result.as_dict())`).
+
+That is not a compatibility gap. On scikit-learn >= 1.6 a bare probcal calibrator already
+*is* a valid sklearn estimator — `fit`/`predict_proba`, `get_params`/`set_params`,
+`__sklearn_is_fitted__`, `__sklearn_tags__` — so `clone`, `check_is_fitted`, `get_tags`
+and CV loops with a custom scorer work with no adapter and no import from
+`probcal.sklearn`. What duck typing cannot dissolve is sklearn's *shape* convention: a
+classifier's `predict_proba` returns `(n, 2)` and carries `classes_`, while a calibrator
+returns `(n,)`. `SklearnCalibrator` and `CalibratedClassifier` (extra:
+`pip install "probcal[sklearn]"`) exist exactly for the places that require the matrix
+convention — `Pipeline`, `VotingClassifier`, `GridSearchCV` scoring on `"neg_log_loss"`.
+The three tiers, and which one your situation needs:
+[scikit-learn adapter](guide/sklearn.md).
 
 ## How do I translate a calibrated cutoff back to a raw score?
 
-Every monotone calibrator implements the duck-typed protocol
-
-```python
-# docs: no-run — "probability" | "logit" denotes a choice of literal, not an expression
-raw_lo, raw_hi = cal.interval_inverse(lo, hi, space="probability" | "logit",
-                                      buffer_logit=0.0)
-```
-
-together with the `is_monotone_` flag. `space="logit"` returns bounds on the model's
-raw margin. Unattainable targets raise `UnattainableTargetError` — never a silent clamp.
-For a whole masterscale, `calibrated_bands_to_raw(cal, {grade: (lo, hi), ...})`
-translates every grade edge in one call. For a single calibrated probability rather than
-an interval, `cal.point_inverse(p, space=...)` gives the exact raw preimage on affine-logit
-and beta calibrators (and `LogitOffset`); non-affine monotone and step maps still need
-`interval_inverse`. Details and the plateau/robustness caveats:
+`cal.interval_inverse(lo, hi, space="probability" | "logit", buffer_logit=0.0)` on any
+monotone calibrator — with `calibrated_bands_to_raw` for a whole masterscale and
+`point_inverse` for an exact single preimage. Worked examples, both spaces, the
+`UnattainableTargetError` case, and the points-scale hand-off:
+[Set cutoffs and invert maps](guide/cutoffs.md); the theory is
 [Inverse maps](concepts/inverse-maps.md).
 
 ## How does this interoperate with a counterfactual engine (treecf)?

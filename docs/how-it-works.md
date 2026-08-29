@@ -87,9 +87,12 @@ just at one pre-planned horizon. If the e-process ever crosses its alarm thresho
 diagnosis into a fitted `LogitOffset` plus a **fresh** monitor for the corrected
 pipeline — the re-offset composes onto the deployed calibrator, and re-anchoring
 starts again at stage 4, with the new offset consumed exactly as before at stage 5.
-No alarm, no action: the monitor keeps watching. Details: the
-[Monitoring concepts chapter](concepts/monitoring.md) for the statistics, the
-[Monitoring how-to](guide/monitoring.md) for the calling code.
+No alarm, no action: the monitor keeps watching. Every applied action leaves an
+`AppliedAction.audit` record naming the evidence, the window, the size of the change
+and the fingerprints on both sides of it — [Auditability](guide/auditability.md)
+collects that record together with the rest of the chain a validator can re-derive.
+Details: the [Monitoring concepts chapter](concepts/monitoring.md) for the statistics,
+the [Monitoring how-to](guide/monitoring.md) for the calling code.
 
 ## The two flows
 

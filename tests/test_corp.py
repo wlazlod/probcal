@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from probcal._math import expit
 from probcal.metrics import brier_score, log_loss
@@ -72,3 +73,36 @@ def test_corp_log_loss_degenerate_levels_are_clipped():
     y = np.array([0.0, 0.0, 1.0, 1.0])
     r = corp_reliability(y, p, bands=None)  # PAV levels are exactly 0 and 1
     assert np.isfinite(r.log_loss_mcb) and np.isfinite(r.log_loss_dsc)
+
+
+def test_corp_level_must_be_in_unit_interval():
+    from probcal.curves import corp_reliability
+
+    y, p = _calibrated(200)
+    for level in (0.0, 1.0, -0.1, 1.5):
+        with pytest.raises(ValueError, match="level"):
+            corp_reliability(y, p, bands=None, level=level)
+
+
+def test_consistency_bands_are_seeded_and_contain_identity_mostly():
+    from probcal.curves import corp_reliability
+
+    y, p = _calibrated(3000)
+    r1 = corp_reliability(y, p, bands="consistency", n_resamples=50, random_state=3)
+    r2 = corp_reliability(y, p, bands="consistency", n_resamples=50, random_state=3)
+    np.testing.assert_array_equal(r1.band_low, r2.band_low)
+    assert r1.bands == "consistency" and r1.level == 0.9
+    assert len(r1.band_grid) == len(r1.band_low) == len(r1.band_high)
+    assert np.all(r1.band_low <= r1.band_high)
+    inside = (r1.band_grid >= r1.band_low) & (r1.band_grid <= r1.band_high)
+    assert inside.mean() > 0.8  # identity lies inside consistency bands under the null
+
+
+def test_confidence_bands_bracket_the_fit():
+    from probcal._corp import eval_step
+    from probcal.curves import corp_reliability
+
+    y, p = _calibrated(3000)
+    r = corp_reliability(y, p, bands="confidence", n_resamples=50, random_state=5)
+    fit = eval_step(r.block_lo, r.block_hi, r.block_level, r.band_grid)
+    assert np.mean((fit >= r.band_low - 1e-12) & (fit <= r.band_high + 1e-12)) > 0.9

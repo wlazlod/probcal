@@ -97,6 +97,44 @@ def decompose(
     return s_p, s_p - s_pav, unc - s_pav, unc
 
 
+def eval_step(lo: np.ndarray, hi: np.ndarray, level: np.ndarray, grid: np.ndarray) -> np.ndarray:
+    """Value of a PAV block fit at each grid point.
+
+    Right-continuous step function: a grid point below the first block's
+    left edge takes the first block's level.
+
+    Parameters
+    ----------
+    lo : numpy.ndarray
+        Left edge of each block (``corp_fit``'s ``block_lo``).
+    hi : numpy.ndarray
+        Right edge of each block (``corp_fit``'s ``block_hi``); unused, kept
+        for symmetry with ``block_lo``/``block_hi`` call sites.
+    level : numpy.ndarray
+        Fitted level of each block (``corp_fit``'s ``block_level``).
+    grid : numpy.ndarray
+        Points at which to evaluate the step function.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``level`` indexed by the block containing (or preceding) each grid
+        point, same shape as ``grid``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> lo = np.array([0.1, 0.5])
+    >>> hi = np.array([0.4, 0.9])
+    >>> level = np.array([0.2, 0.7])
+    >>> eval_step(lo, hi, level, np.array([0.0, 0.3, 0.6]))
+    array([0.2, 0.2, 0.7])
+    """
+    idx = np.searchsorted(lo, grid, side="right") - 1
+    idx = np.clip(idx, 0, len(level) - 1)
+    return level[idx]
+
+
 def corp_bands(
     y: np.ndarray,
     p: np.ndarray,
@@ -106,7 +144,14 @@ def corp_bands(
     n_resamples: int,
     random_state: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Consistency/confidence bands for the CORP fit (stub; see Task V1b).
+    """Consistency/confidence bands for the CORP fit, by resampling.
+
+    Consistency bands simulate the PAV fit under the null that ``p`` is
+    already calibrated (``y_b ~ Bernoulli(p)``); confidence bands bootstrap
+    ``(y, p, w)`` triples. Both evaluate each resampled fit on a shared grid
+    of 201 points between the 0.5% and 99.5% quantiles of ``p`` (via
+    ``eval_step``) and take the ``level`` central quantile interval across
+    resamples at each grid point.
 
     Parameters
     ----------
@@ -119,7 +164,7 @@ def corp_bands(
     bands : {"consistency", "confidence", None}
         Band type; already validated by the caller.
     level : float
-        Nominal coverage level.
+        Nominal coverage level; must satisfy ``0 < level < 1``.
     n_resamples : int
         Number of resamples to draw.
     random_state : int
@@ -128,15 +173,32 @@ def corp_bands(
     Returns
     -------
     band_grid, band_low, band_high : numpy.ndarray
-        Empty arrays when ``bands`` is ``None``.
+        Empty arrays when ``bands`` is ``None``; otherwise 201-point grid and
+        pointwise band bounds.
 
-    Raises
-    ------
-    NotImplementedError
-        When ``bands`` is ``"consistency"`` or ``"confidence"`` — implemented
-        in Task V1b.
+    Examples
+    --------
+    >>> import numpy as np
+    >>> rng = np.random.default_rng(0)
+    >>> p = rng.uniform(0.1, 0.9, 500)
+    >>> y = (rng.random(500) < p).astype(float)
+    >>> grid, lo, hi = corp_bands(y, p, np.ones(500), "consistency", 0.9, 50, 0)
+    >>> len(grid) == len(lo) == len(hi) == 201
+    True
     """
     if bands is None:
         empty = np.array([], dtype=np.float64)
         return empty, empty, empty
-    raise NotImplementedError("bands are implemented in the next task")
+    rng = np.random.default_rng(random_state)
+    grid = np.linspace(np.quantile(p, 0.005), np.quantile(p, 0.995), 201)
+    sims = np.empty((n_resamples, grid.size))
+    for b in range(n_resamples):
+        if bands == "consistency":
+            y_b = (rng.random(p.size) < p).astype(float)
+            lo, hi, lev, _, _ = corp_fit(y_b, p, w)
+        else:  # "confidence"
+            idx = rng.integers(0, p.size, p.size)
+            lo, hi, lev, _, _ = corp_fit(y[idx], p[idx], w[idx])
+        sims[b] = eval_step(lo, hi, lev, grid)
+    a = (1.0 - level) / 2.0
+    return grid, np.quantile(sims, a, axis=0), np.quantile(sims, 1.0 - a, axis=0)

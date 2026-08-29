@@ -191,11 +191,12 @@ def corp_reliability(
     sample_weight : array_like or None, keyword-only
         Optional non-negative weights, same length as ``y``.
     bands : {"consistency", "confidence", None}, keyword-only
-        Band type to compute around the PAV fit. Only ``None`` is
-        implemented in this release; ``"consistency"`` and ``"confidence"``
-        raise ``NotImplementedError`` (Task V1b).
+        Band type to compute around the PAV fit. ``"consistency"`` resamples
+        ``y ~ Bernoulli(p)`` under the null that ``p`` is calibrated;
+        ``"confidence"`` bootstraps ``(y, p, sample_weight)`` triples. Both
+        give pointwise, not simultaneous, bands (see Notes).
     level : float, keyword-only
-        Nominal coverage level of the bands.
+        Nominal coverage level of the bands; must satisfy ``0 < level < 1``.
     n_resamples : int, keyword-only
         Number of resamples used to build the bands.
     random_state : int, keyword-only
@@ -211,7 +212,17 @@ def corp_reliability(
     ------
     ValueError
         If ``bands`` is not one of ``"consistency"``, ``"confidence"``, or
-        ``None``.
+        ``None``, or if ``level`` is not in ``(0, 1)``.
+
+    Notes
+    -----
+    Bands are pointwise: at each grid point, ``level`` of resamples fall
+    inside, not that the whole curve does so simultaneously (the
+    ``docs/scripts/corp_sim.py`` coverage simulation reports the gap between
+    pointwise and uniform coverage). ``corp_reliability`` with
+    ``n=10_000, n_resamples=200`` takes about 3.5 s (measured once on the
+    development machine) — the PAV step is a Python loop over unique scores
+    (``_math.pava``), and the bands refit PAV ``n_resamples`` times.
 
     Examples
     --------
@@ -226,6 +237,8 @@ def corp_reliability(
     """
     if bands not in _BANDS:
         raise ValueError('bands must be "consistency", "confidence", or None')
+    if not (0.0 < level < 1.0):
+        raise ValueError("level must satisfy 0 < level < 1")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     lo, hi, level_b, w_b, pav = corp_fit(y_arr, p_arr, w)
     b = decompose(y_arr, p_arr, pav, w, "brier")

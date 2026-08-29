@@ -303,6 +303,12 @@ def reliability_smooth(
         boot_rate = np.empty((n_boot, grid_size))
         for i in range(n_boot):
             idx_b = rng.integers(0, n, n)
+            # `lattice` is the point estimate's fixed (width, t_lo, b) — never
+            # rederived here. The ribbon is meant to reflect uncertainty in the
+            # rate given sigma_star, not uncertainty in sigma_star or its
+            # lattice; re-solving the smECE fixed point per resample would also
+            # make each resample's rate estimate use a different bandwidth and
+            # bin grid, so resamples would stop being comparable pointwise.
             boot_rate[i], _ = _kernel_rate_density(
                 t[idx_b], y_arr[idx_b], w[idx_b], sigma_star, grid_logit, lattice
             )

@@ -184,10 +184,12 @@ def plot_reliability(
     Passing a :class:`probcal.curves.KernelReliabilityCurve` (from
     :func:`probcal.curves.reliability_smooth`) as ``smooth`` renders the
     density-weighted variable-width curve instead of a plain line: a
-    ``LineCollection`` whose width tracks the local prediction density, the
-    shaded miscalibration area between the curve and the identity, the
-    bootstrap ribbon, and an ``smECE = ...`` readout in the bottom-right
-    corner.
+    ``LineCollection`` whose width tracks the local prediction density (one
+    width per segment, ``density[:-1]`` — the density at the *left* endpoint
+    of each ``[grid[i], grid[i+1]]`` segment, since a ``LineCollection`` of
+    ``len(grid) - 1`` segments needs exactly that many widths), the shaded
+    miscalibration area between the curve and the identity, the bootstrap
+    ribbon, and an ``smECE = ...`` readout in the bottom-right corner.
 
     Passing the raw ``y``/``p`` enables the stats box and the risk
     distribution; both are silently skipped when ``y``/``p`` are absent.
@@ -251,6 +253,17 @@ def plot_reliability(
     ValueError
         If ``y``/``p`` are not given together, or ``risk_dist`` is not one
         of ``"rug"``, ``"split"``, ``None``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from probcal.curves import reliability_binned
+    >>> from probcal.plots import plot_reliability
+    >>> rng = np.random.default_rng(0)
+    >>> p = rng.uniform(0.05, 0.5, 300)
+    >>> y = (rng.random(300) < p).astype(float)
+    >>> curve = reliability_binned(y, p, n_bins=10)
+    >>> ax = plot_reliability(curve, scale="logit", y=y, p=p)  # doctest: +SKIP
     """
     _require_mpl()
     if (y is None) != (p is None):

@@ -112,8 +112,11 @@ def test_evaluate_n10k_boot1000_under_150s() -> None:
     # (304.2s in 0.2.x, before the shared per-replicate sort, the vectorized
     # ``ece_sweep`` scan, and the vectorized LOESS anchor evaluation). 150s is a
     # ~1.7x ceiling rather than this file's usual >=5x: a 5x ceiling would put a
-    # 7-minute test in CI, and at 150s the check still fails outright on a
-    # revert of any of the three (each alone puts this well past 150s).
+    # 7-minute test in CI. Reverting the LOESS vectorization alone puts this
+    # back near 220s and fails outright; reverting only the ``ece_sweep`` scan
+    # lands near 160s (0.089s + 0.071s per replicate), which clears the ceiling
+    # by too little to call a reliable detector on slower hardware -- the
+    # behavioural guards in ``test_metrics_binned.py`` are what pin that change.
     d = make_pd_portfolio(n=10_000, random_state=3)
     t0 = time.perf_counter()
     evaluate(d.y, d.scores, n_boot=1000)

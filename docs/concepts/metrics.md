@@ -455,6 +455,20 @@ sub-ulp difference (≤ 2.3×10⁻¹⁶ relative) worth taking because numpy sen
 vectorized search reproduces the scalar two-pointer rule's comparison verbatim and is tested to
 land on the same index, tied scores included.
 
+The sub-ulp bound holds **on well-conditioned windows only**. If a window is rank-deficient —
+every non-zero tricube weight sitting on one distinct `p`, which needs the far half of the
+window to lie at exactly the bandwidth — the local-linear determinant is pure cancellation
+(~10⁻²³ rather than 0), and the ulp-level weight difference can put the two paths on opposite
+sides of the `abs(det) < _FPMIN` guard, giving values that differ by O(1). On such a window the
+`swy / sw` branch (the weighted mean, what a rank-deficient local *linear* fit degenerates to)
+is the well-defined answer and either path may be the one that takes it; the other divides by
+cancellation noise and is already arbitrary in the scalar loop, independently of the
+vectorization. Since anchors are data quantiles, this has not been observed to reach a reported
+value: zero end-to-end differences across 1,738 two-distinct-score configurations whose anchor
+grid straddles the gap. The guard is deliberately left as it is — changing it would move the
+point-estimate path — and the corner is pinned by
+`tests/test_math.py::test_loess_vectorized_rank_deficient_window`.
+
 Measured on the dev host at n=10⁴, one full-catalog replicate costs 0.089s — ICI family 0.051s
 (58%), `ece_sweep`'s scan 0.024s (27%), `intercept`/`slope` 0.009s (10%), `smooth_ece` 0.003s,
 the whole binned ECE family 0.4ms. `evaluate(n=10⁴, n_boot=1000)` takes 87s, down from 304s in

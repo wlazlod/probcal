@@ -350,7 +350,13 @@ def evaluate(
     are bit-for-bit what 0.2.x produced; only the replicates take the fast
     path, whose reordered sums move percentile CI bounds in their last bits
     (measured <= 4e-11 relative) and whose tricube weight cubes by
-    multiplication rather than ``** 3`` (<= 2.3e-16 relative). On the dev
+    multiplication rather than ``** 3`` (<= 2.3e-16 relative on a
+    well-conditioned window; on a rank-deficient one the
+    ``abs(det) < _FPMIN`` guard in the local-linear solve can select a
+    different branch than the scalar loop, where the ``swy / sw`` branch is
+    the well-defined answer — see ``_math._loess_fit_sorted_vec``. Anchors
+    are data quantiles, so this has not been observed to reach a reported
+    value). On the dev
     host at n=1e4 a full-catalog replicate costs 0.089s — 58% of it the ICI
     family's LOESS fit, 27% the ``ece_sweep`` scan, 10% intercept/slope,
     0.5% the whole binned ECE family — and the full run

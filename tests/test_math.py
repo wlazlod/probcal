@@ -514,3 +514,62 @@ def test_loess_presorted_without_grid_still_uses_the_scalar_loop() -> None:
     order = np.argsort(d.scores, kind="stable")
     xs, ys = d.scores[order], d.y[order]
     assert np.array_equal(loess(xs, ys, frac=0.75, presorted=True), loess(xs, ys, frac=0.75))
+
+
+def _two_score_fixture() -> tuple[np.ndarray, np.ndarray, int]:
+    """1025 rows carrying only two distinct scores, 837 low / 188 high."""
+    rng = np.random.default_rng(0)
+    n, n_low = 1025, 837
+    xs = np.concatenate([np.full(n_low, 0.1), np.full(n - n_low, 0.9)])
+    ys = (rng.random(n) < 0.3).astype(float)
+    return xs, ys, min(max(int(np.ceil(0.75 * n)), 2), n)
+
+
+def test_loess_vectorized_rank_deficient_window() -> None:
+    """The sub-ulp agreement bound does not cover rank-deficient windows.
+
+    With only two distinct scores, an eval point above their midpoint puts the
+    far group at exactly the bandwidth ``h``, so its tricube weight is exactly
+    zero and every surviving row shares one ``x``. The local *linear* system is
+    then singular and ``det = sw * swxx - swx * swx`` is pure cancellation,
+    computed as ~1e-23 rather than 0 — small enough that the ulp-level weight
+    difference between ``u ** 3`` and ``u * u * u`` can land the loop and the
+    vectorized routine on opposite sides of the ``abs(det) < _FPMIN`` guard.
+    Here the vectorized path takes the ``swy / sw`` branch, which for a
+    single-``x`` window is the plain mean of ``y`` over the surviving rows and
+    the only well-defined answer; the loop divides by the cancellation noise and
+    returns an arbitrary value. Which path lands where is a property of the
+    rounding, not of the algorithm — the loop's own value on such a window is
+    already arbitrary, so this is a characterization test of a known corner, not
+    a correctness bound. The guard is deliberately not changed: that would move
+    the point-estimate path.
+    """
+    xs, ys, r = _two_score_fixture()
+    x0 = 0.50148
+    start = _loess_window_starts(xs, np.array([x0]), r)[0]
+    xw, yw = xs[start : start + r], ys[start : start + r]
+    h = max(x0 - xs[start], xs[start + r - 1] - x0)
+    tri = np.clip(1.0 - (np.abs(xw - x0) / h) ** 3, 0.0, None) ** 3
+    surviving = tri > 0
+    assert len(np.unique(xw[surviving])) == 1  # rank-deficient by construction
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        vec = _loess_fit_sorted_vec(xs, ys, np.array([x0]), r, 1)[0]
+        scalar = _loess_fit_sorted(xs, ys, np.array([x0]), r, 1)[0]
+    assert vec == float(np.mean(yw[surviving]))  # the swy/sw branch
+    assert abs(scalar - vec) > 0.1  # the loop's cancellation-noise branch
+
+
+def test_loess_rank_deficient_windows_do_not_reach_reported_values() -> None:
+    """Anchors are data quantiles, so the corner above stays off the fit.
+
+    ``loess`` evaluates at ``np.unique(np.quantile(ev, ...))``, which for this
+    fixture is just the two data values — neither of which sits above the
+    midpoint with the far group excluded. The end-to-end presorted result is
+    therefore exactly the default one, which is the guarantee that matters.
+    """
+    xs, ys, _ = _two_score_fixture()
+    fast = loess(xs, ys, frac=0.75, grid_size=512, presorted=True)
+    slow = loess(xs, ys, frac=0.75, grid_size=512)
+    np.testing.assert_allclose(fast, slow, rtol=1e-9, atol=1e-12)
+    assert np.max(np.abs(fast - slow)) <= 1e-12

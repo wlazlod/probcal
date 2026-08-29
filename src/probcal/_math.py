@@ -769,8 +769,15 @@ def _loess_window_starts(xs: np.ndarray, evs: np.ndarray, r: int) -> np.ndarray:
     ``2 * x0`` lands on that index or within a few of it; the two exact-
     comparison sweeps then move to the loop's index, since the sum form and the
     difference form round differently (``0.3 - 0.2 < 0.2 - 0.1`` while
-    ``0.1 + 0.3 == 2 * 0.2``). Both sweeps are monotone and bounded by
-    ``n - r``, and on tie-free data neither fires.
+    ``0.1 + 0.3 == 2 * 0.2``). Both sweeps are monotone and bounded by ``n - r``.
+
+    The forward sweep does fire, routinely, on quantized scores — 156 index
+    steps across the 42 distinct anchors of 2-dp-rounded ``make_pd_portfolio``
+    at n=4000/frac=0.75, 538 at frac=0.2, 3987 at n=1e5 — and not at all on the
+    tie-free portfolios (0 steps at both sizes). The backward sweep has not been
+    observed to fire. The result is exact either way; the cost is bounded, and
+    measured at 20% of ``_loess_fit_sorted_vec`` at n=1e5 on 2-dp scores against
+    a negligible share on continuous ones.
     """
     n = xs.shape[0]
     limit = n - r
@@ -812,10 +819,27 @@ def _loess_fit_sorted_vec(
     The tricube weight cubes by multiplication (``u * u * u``) where the loop
     writes ``u ** 3``. numpy sends ``** 3`` to ``libm`` ``pow`` — 10x the cost of
     two multiplies, and the two tricube exponentiations are ~80% of this
-    routine's arithmetic — for a result that differs by at most one ulp
-    (measured <= 2.3e-16 relative). That is the only intended numeric difference
-    from the loop, and it is confined to the bootstrap path; the point-estimate
-    path still runs the loop unchanged.
+    routine's arithmetic — for a result that differs by at most one ulp **on a
+    well-conditioned window** (measured <= 2.3e-16 relative). That is the only
+    intended numeric difference, and it is confined to the bootstrap path; the
+    point-estimate path still runs the loop unchanged.
+
+    On a *rank-deficient* window — every non-zero tricube weight sitting on one
+    distinct ``x``, which happens when the far half of the window lies at exactly
+    the bandwidth ``h`` — that bound does not hold. There ``det`` is pure
+    cancellation (``W**2 * c**2 - (W * c)**2``, computed as ~1e-23 rather than
+    0), so the ulp-level weight difference can put the loop and this routine on
+    opposite sides of the ``abs(det) < _FPMIN`` guard, and the two values then
+    differ by O(1). The ``swy / sw`` branch — the weighted mean, which is what a
+    rank-deficient local *linear* fit degenerates to — is the well-defined
+    answer, and either path may be the one that lands on it; the other divides
+    by cancellation noise and is already arbitrary in the loop, independently of
+    this routine. Grid anchors are data quantiles, and no reported value has been
+    observed to come from such a window (0 differences across 1,738 two-group
+    configurations whose anchor grid does straddle the gap); see
+    ``tests/test_math.py::test_loess_vectorized_rank_deficient_window``. The
+    ``abs(det) < _FPMIN`` guard is deliberately left alone: changing it would
+    move the point-estimate path.
     """
     m = evs.shape[0]
     start = _loess_window_starts(xs, evs, r)
@@ -851,7 +875,11 @@ def _loess_fit_sorted_vec(
             vals = np.where(
                 singular, swy / sw, (swxx * swy - swx * swxy) / np.where(singular, 1.0, det)
             )
-        out[lo:hi] = np.where(degenerate, yw.mean(axis=1), vals)
+        # ``yw.mean(axis=1)`` is another full pass over the block; only pay it
+        # when some window actually collapsed to a single distinct x.
+        if degenerate.any():
+            vals = np.where(degenerate, yw.mean(axis=1), vals)
+        out[lo:hi] = vals
     return out
 
 

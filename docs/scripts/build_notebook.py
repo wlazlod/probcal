@@ -34,11 +34,12 @@ md(
 md("""\
 # PD calibration end to end: rare events, audit, recourse, monitoring
 
-One credit-risk portfolio taken through the whole probcal 0.2.0 surface:
+One credit-risk portfolio taken through the whole probcal surface:
 baseline GBM → reliability diagnosis → automatic calibrator selection with
 bootstrap CIs → per-grade regulatory backtests → an auditable macro offset →
 policy-threshold translation and a treecf counterfactual → anytime-valid
-monitoring → JSON serialization of every artifact.
+monitoring and the closed re-offset loop → conservative margins → a
+self-contained validation report → JSON serialization of every artifact.
 
 **Data.** The primary dataset is [Home Credit Default Risk
 (2018)](https://www.kaggle.com/c/home-credit-default-risk) — ~307k

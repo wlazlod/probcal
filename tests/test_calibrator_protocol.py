@@ -179,7 +179,7 @@ def test_calibrated_scorecard_conforms() -> None:
         cs.interval_inverse(0.09, 0.1, space="logit", buffer_logit=3.0)
 
 
-# ---------------------------------------------------------------- plateau contract (P3)
+# ---------------------------------------------------------------- plateau contract
 
 
 @pytest.mark.parametrize(

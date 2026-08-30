@@ -54,7 +54,7 @@ class CalibratorSelector(BaseCalibrator):
     ----------
     candidates : dict[str, BaseCalibrator] or None
         Candidate instances (cloned per fold via ``get_params``). ``None``
-        uses the spec's default menu: platt, temperature, beta_abm,
+        uses the default menu: platt, temperature, beta_abm,
         isotonic, cir, histogram_mass, scaling_binning, ivap. The heavier
         methods (spline, BBQ, ENIR, CVAP) join by explicit opt-in.
     scoring : {"log_loss", "brier", "ici", "smooth_ece", "ece_sweep"}

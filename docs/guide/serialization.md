@@ -28,5 +28,5 @@ Objects with external parts keep them as references, never blobs:
 table's fingerprint before attaching. The monitor serializes its whole
 past (`CalibrationMonitor.from_json` resumes bit-for-bit).
 
-Every 0.x release reads schema 1 — enforced by committed golden files in
-CI, not promised on trust.
+Every 0.x release reads schema 1, enforced by committed golden files in
+CI rather than promised on trust.

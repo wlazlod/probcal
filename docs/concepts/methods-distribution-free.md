@@ -3,12 +3,12 @@
 Every method so far produces a point estimate of the calibrated probability and hopes, with
 varying statistical justification, that it is close. Venn–Abers predictors make a different
 kind of promise: a **validity guarantee that holds by construction**, under no assumption
-beyond exchangeability of the data — no model of the score distribution, no smoothness, no
+beyond exchangeability of the data: no model of the score distribution, no smoothness, no
 correctness of the underlying classifier. The price is honesty about form: the guaranteed
 object is not a single probability but a pair of them, an interval that widens exactly where
 the calibration data run thin. This chapter develops the construction of Vovk and Petej
 (2014), its inductive and cross-validated variants as implemented in `probcal.vennabers`, and
-the precise scope of the guarantee — including what is lost when the interval is collapsed to
+the precise scope of the guarantee, including what is lost when the interval is collapsed to
 a scalar.
 
 ## The inductive Venn–Abers predictor (IVAP)
@@ -17,33 +17,33 @@ Fix a calibration set \( (s_1, y_1), \ldots, (s_n, y_n) \) and a new score \( s 
 is unknown. The IVAP asks two counterfactual questions. If the new observation's label were
 \( 0 \), what would isotonic regression fitted on the augmented set
 \( \{(s_i, y_i)\} \cup \{(s, 0)\} \) predict at \( s \)? Call it \( p_0 \). And if the label
-were \( 1 \) — the same construction with \( (s, 1) \) appended — call the prediction
+were \( 1 \) (the same construction with \( (s, 1) \) appended), call the prediction
 \( p_1 \). Each question is answered by a full PAVA fit on \( n + 1 \) points, and the pair
 satisfies \( p_0 \le p_1 \) always.
 
-The interval \( [p_0, p_1] \) is the Venn–Abers prediction. Its width is not noise — it is the
+The interval \( [p_0, p_1] \) is the Venn–Abers prediction. Its width is not noise; it is the
 construction reporting how much influence a single label at \( s \) has over the isotonic fit
 there. In dense, well-behaved regions of the score axis one appended point moves nothing and
 the interval is tight; in sparse regions, or at scores near a block boundary, one label can
 tip the pooling and the interval opens up. `VennAbersCalibrator.predict_interval()` returns
-the pair, and `interpret()` summarizes the mean and maximum width over the scored set — a
+the pair, and `interpret()` summarizes the mean and maximum width over the scored set, a
 direct, assumption-free reading of *where* the calibration is trustworthy.
 
 **The guarantee.** Venn–Abers predictors are a special case of Venn predictors, and inherit
 their defining property: under exchangeability, the multiprobability prediction is
 **perfectly calibrated** in the precise sense that one of the two announced probabilities is
 the output of a perfectly calibrated probability forecaster (Vovk and Petej, 2014). The
-theorem is distribution-free — it requires only that the calibration observations and the test
-observation are exchangeable — and it is a guarantee about the *pair*, which is what makes the
+theorem is distribution-free (it requires only that the calibration observations and the test
+observation are exchangeable), and it is a guarantee about the *pair*, which is what makes the
 next section necessary.
 
 **Scope note on sample weights.** The theorem is stated and proved for exchangeable, unweighted
 observations. probcal's IVAP accepts `sample_weight`, and the weighted fit inserts the query at
-weight 1 into weighted calibration data — the natural generalization, and the only one that
-keeps a single test case from being scaled by an arbitrary calibration weight, but not a case
-the theorem covers as proved. Read weighted Venn–Abers intervals as the weighted-isotonic
-analogue of the guaranteed object rather than as carrying the guarantee itself; with unit
-weights (the default) the two coincide.
+weight 1 into weighted calibration data. That is the natural generalization, and the only one
+that keeps a single test case from being scaled by an arbitrary calibration weight, but it is
+not a case the theorem covers as proved. Read weighted Venn–Abers intervals as the
+weighted-isotonic analogue of the guaranteed object rather than as carrying the guarantee
+itself; with unit weights (the default) the two coincide.
 
 ## Scalarization, and what it costs
 
@@ -57,14 +57,14 @@ p \;=\; \frac{p_1}{1 - p_0 + p_1}\,,
 which probcal uses as the scalar output of `predict_proba`. It lands inside \( [p_0, p_1] \),
 behaves sensibly at the extremes, and in the regime \( p_0 \approx p_1 \) reduces to the
 common value. But the validity theorem does **not** transfer to it: the guarantee attaches to
-the interval object, and any scalarization — this one included — is a lossy summary whose
+the interval object, and any scalarization, this one included, is a lossy summary whose
 calibration is excellent in practice but no longer holds by construction. probcal's
 documentation states this precisely wherever the scalar output appears, because the
 distinction is exactly the kind that evaporates in second-hand summaries: *the package
 guarantees the interval; it recommends the scalar.*
 
 The scalarized map is monotone in the score. Both \( p_0(s) \) and \( p_1(s) \) are
-non-decreasing — each is read off an isotonic fit — and the merger is non-decreasing in
+non-decreasing (each is read off an isotonic fit), and the merger is non-decreasing in
 \( p_1 \) and in \( p_0 \) (its partial derivatives are positive on the relevant domain), so
 the composition is non-decreasing in \( s \). This is what allows `VennAbersCalibrator` to
 participate in the [inverse-map machinery](inverse-maps.md) via its block structure, and the
@@ -74,15 +74,15 @@ claim is unit-tested rather than assumed.
 
 The single assumption deserves scrutiny, because it is the entire foundation.
 **Exchangeability** requires that the joint distribution of the calibration observations and
-the test observation is invariant under permutation — informally, that the new case is "of the
+the test observation is invariant under permutation: informally, that the new case is "of the
 same kind" as the calibration cases, with no distinguished ordering. It is weaker than
 independence and identical distribution, and it makes no demand whatsoever on the shape of the
 score distribution or the correctness of the model that produced the scores. That is the
 strength: the guarantee survives arbitrary miscalibration of the underlying classifier.
 
 What it does not survive is **distribution shift between calibration and deployment**. A PD
-model calibrated on last year's originations and applied to this year's — after a change in
-underwriting policy, marketing channel, or macroeconomic regime — is scoring observations that
+model calibrated on last year's originations and applied to this year's (after a change in
+underwriting policy, marketing channel, or macroeconomic regime) is scoring observations that
 are not exchangeable with the calibration set, and the Venn–Abers guarantee lapses along with
 every other method's assumptions. The failure is not graceful degradation unique to
 Venn–Abers; it is the shared failure mode of all post-hoc calibration, and the periodic
@@ -95,8 +95,8 @@ fits on \( n + 1 \) points. Vovk and Petej (2014) show the augmented fits can in
 from structures precomputed once from the calibration set, and since 0.1.3 probcal does exactly
 that: fitting sweeps the cumulative-sum diagram left to right, maintaining the lower hulls of
 the prefix and suffix point sets and reading the fitted value at every insertion position from
-the bridge between them. The result is two tables of length \( n + 1 \) — `F0_` and `F1_`,
-non-decreasing — and prediction becomes a `searchsorted` lookup: fitting costs
+the bridge between them. The result is two tables of length \( n + 1 \) (`F0_` and `F1_`,
+non-decreasing), and prediction becomes a `searchsorted` lookup: fitting costs
 \( O(n \log n) \) (dominated by sorting the calibration scores; the sweep itself is linear),
 and a batch of \( m \) queries costs \( O(m \log n) \), for a total of \( O((n+m)\log(n+m)) \)
 rather than \( O(mn) \). The brute-force refit is retained in the test suite as the frozen
@@ -104,8 +104,8 @@ correctness reference the precomputation is checked against.
 
 ## The cross Venn–Abers predictor (CVAP)
 
-The IVAP spends the calibration set once. When data are scarce — the standing condition of
-this package — the **cross** variant stretches them: split the available data into \( K \)
+The IVAP spends the calibration set once. When data are scarce (the standing condition of
+this package), the **cross** variant stretches them: split the available data into \( K \)
 folds, and for each fold \( k \) form an IVAP whose isotonic fits use the other \( K - 1 \)
 folds, yielding pairs \( (p_0^{(k)}, p_1^{(k)}) \) for the test score. The \( K \) intervals
 are then merged by the geometric-mean rule of Vovk and Petej (2014):
@@ -119,8 +119,8 @@ p \;=\;
 
 the log-loss-motivated aggregation of the fold-wise multiprobabilities.
 `CrossVennAbersCalibrator` implements this with stratified, seeded folds. The cross variant
-trades a little of the inductive variant's conceptual purity — the folds are not independent,
-and the merged scalar stands one further step from the raw guarantee — for markedly better
+trades a little of the inductive variant's conceptual purity (the folds are not independent,
+and the merged scalar stands one further step from the raw guarantee) for markedly better
 sample efficiency, and Vovk and Petej's empirical results favor it on small data. On a
 few-hundred-point PD calibration set it is the variant to reach for.
 
@@ -130,7 +130,7 @@ Three practical readings summarize the method's role in probcal.
 
 As a **calibrator**, IVAP/CVAP is isotonic regression made cautious: it inherits the
 shape-freedom of PAVA while the two-fit construction protects against the single most
-damaging isotonic pathology, the infinitely confident 0 or 1 in the tail — appending the
+damaging isotonic pathology, the infinitely confident 0 or 1 in the tail: appending the
 counterfactual label pulls the extreme block off the boundary, so \( p_1 > 0 \) and
 \( p_0 < 1 \) everywhere by construction.
 
@@ -143,8 +143,8 @@ portfolio learns more from "the Venn–Abers interval at the approval cutoff is
 As a **selector candidate**, its scalarization competes on out-of-fold log loss like every
 other method, with one caveat the [selector chapter](auto-selection.md) repeats: interval
 width does not enter the scoring, so a Venn–Abers win says the scalar predicts well, not that
-the intervals were needed. When the intervals are the point — regulatory conservatism,
-low-default portfolios in the spirit of Pluto and Tasche (2005) — choose it directly rather
+the intervals were needed. When the intervals are the point, as in regulatory conservatism or
+low-default portfolios in the spirit of Pluto and Tasche (2005), choose it directly rather
 than through the selector.
 
 ## In probcal

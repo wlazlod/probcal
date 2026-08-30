@@ -4,7 +4,7 @@ A binary classifier that outputs probabilities makes a quantitative promise: amo
 scored \( p = 0.03 \), about 3% should turn out positive. Calibration is the discipline of
 checking that promise and repairing it when it fails. This chapter fixes the definitions used
 throughout probcal, explains where miscalibration comes from, and develops the decision-theoretic
-and regulatory reasons why it matters — with credit-risk probability-of-default (PD) models as
+and regulatory reasons why it matters, using credit-risk probability-of-default (PD) models as
 the running example.
 
 ## Definitions
@@ -20,7 +20,7 @@ Conditioning on the prediction is the essential point. Calibration is a property
 *conditional* event rate given the score, not of the marginal event rate: a model can match the
 portfolio-level default rate exactly while being badly miscalibrated region by region, and vice
 versa. Two weaker notions recur in practice. **Calibration-in-the-large** requires only that the
-mean prediction matches the mean outcome, \( \mathbb{E}[\hat{p}] = \Pr(Y = 1) \) — a single
+mean prediction matches the mean outcome, \( \mathbb{E}[\hat{p}] = \Pr(Y = 1) \): a single
 scalar condition, necessary but far from sufficient. The recalibration-regression framework of
 Cox (1958) interpolates between the two: fitting a logistic regression of \( Y \) on
 \( \operatorname{logit}(\hat{p}) \) and asking whether the intercept is 0 and the slope is 1
@@ -29,8 +29,8 @@ common failure modes without demanding the full conditional property. probcal im
 family of diagnostics in `probcal.metrics.regression` and the corresponding tests are discussed
 in [Metrics and tests](metrics.md).
 
-Calibration says nothing about whether the model separates classes well. **Discrimination** —
-the ability to rank positives above negatives — is a different axis entirely. The constant
+Calibration says nothing about whether the model separates classes well. **Discrimination**,
+the ability to rank positives above negatives, is a different axis entirely. The constant
 predictor \( \hat{p} \equiv \bar{y} \) is perfectly calibrated and perfectly useless for
 ranking; a distorted but strictly monotone transform of a strong score ranks flawlessly while
 being arbitrarily miscalibrated. **Sharpness** names the third axis: how concentrated the
@@ -39,7 +39,7 @@ rate. A useful probabilistic model should be *as sharp as possible subject to ca
 three properties are related but not exchangeable, and post-hoc calibration operates on
 exactly one of them: every method in this package applies a (typically monotone) map
 \( g : \hat{p} \mapsto g(\hat{p}) \) that changes calibration and sharpness while leaving
-discrimination essentially untouched — a strictly monotone \( g \) preserves the ranking
+discrimination essentially untouched; a strictly monotone \( g \) preserves the ranking
 exactly.
 
 ## Where miscalibration comes from
@@ -52,8 +52,8 @@ whose leaf frequencies are estimated on few observations. Both distortions were 
 detail by Zadrozny and Elkan (2001), who introduced histogram binning and popularized isotonic
 regression as remedies precisely because the distortions are not logistic in shape.
 
-**Margin-based training.** Classifiers trained on hinge loss or similar margins — support
-vector machines being the canonical case — do not produce probabilities at all; their outputs
+**Margin-based training.** Classifiers trained on hinge loss or similar margins (support
+vector machines are the canonical case) do not produce probabilities at all; their outputs
 are distances to a separating surface. Platt (1999) proposed mapping such outputs through a
 fitted sigmoid, which is the origin of the whole post-hoc calibration family described in
 [Parametric methods](methods-parametric.md).
@@ -62,7 +62,7 @@ fitted sigmoid, which is the origin of the whole post-hoc calibration family des
 makes predictions systematically underconfident; overfitting does the reverse. Boosted
 ensembles are a well-known case of the latter pattern in the tails combined with
 characteristic distortions induced by the loss: Zadrozny and Elkan (2002) treat boosted naive
-Bayes explicitly. Modern deep networks miscalibrate for related reasons — Guo et al. (2017)
+Bayes explicitly. Modern deep networks miscalibrate for related reasons. Guo et al. (2017)
 showed that depth, width, and weight decay all shift calibration even as accuracy improves,
 and that the resulting distortion is often well repaired by a single temperature parameter.
 
@@ -82,7 +82,7 @@ under exactly this regime. The offset mechanism, again, is the auditable answer.
 
 ## Consequences in decisioning
 
-If probabilities feed a decision rule, miscalibration is not a cosmetic defect — it changes the
+If probabilities feed a decision rule, miscalibration is not a cosmetic defect. It changes the
 decisions.
 
 **Expected-loss pricing.** Risk-based pricing multiplies PD by exposure and loss-given-default
@@ -92,8 +92,8 @@ adverse selection compounds the error, since mispriced risky applicants accept a
 
 **Cutoff policies.** A policy such as "approve when PD ≤ 2%" is stated on the calibrated
 scale. Under miscalibration the effective cutoff sits somewhere else entirely, and the achieved
-approval rate and bad rate both drift from their designed values. (The reverse translation —
-carrying a calibrated-scale policy back to the raw score that a deployed model emits — is its
+approval rate and bad rate both drift from their designed values. (The reverse translation,
+carrying a calibrated-scale policy back to the raw score that a deployed model emits, is its
 own problem, treated in [Inverse maps](inverse-maps.md).)
 
 **Capital.** In the internal-ratings-based (IRB) approach, PD estimates enter the regulatory
@@ -101,8 +101,8 @@ risk-weight functions directly, so PD bias propagates into required capital. Sup
 validation therefore treats calibration backtesting as a first-class exercise: the Basel
 Committee's Working Paper No. 14 (BCBS, 2005) surveys the statistical machinery, and the
 European Central Bank's reporting instructions (ECB, 2019) prescribe a concrete battery of
-per-grade tests — notably the Jeffreys test that probcal implements in
-`probcal.metrics.grade` — that banks must run against each rating grade of each IRB model.
+per-grade tests (notably the Jeffreys test that probcal implements in
+`probcal.metrics.grade`) that banks must run against each rating grade of each IRB model.
 An audit trail for every transformation applied to a PD is not optional in this setting, which
 is why every probcal calibrator exposes `interpret()` and why the offset keeps its pre- and
 post-adjustment state.
@@ -110,7 +110,7 @@ post-adjustment state.
 **Small samples and low event rates.** The same regulatory portfolios that demand calibrated
 PDs make calibration statistically hard: a calibration set with a 3% event rate and a few
 hundred observations contains a handful of defaults. Method choice becomes a bias–variance
-question — a three-parameter parametric map may beat a nonparametric one simply because the
+question: a three-parameter parametric map may beat a nonparametric one simply because the
 data cannot support more resolution. Pluto and Tasche (2005) treat the extreme case of
 low-default portfolios. This tension motivates both the small-sample tests in probcal's suite
 and the nested-validation [selector](auto-selection.md).
@@ -132,7 +132,7 @@ S_{\text{Brier}} = (\hat{p} - y)^2 .
 
 Propriety is what makes these scores safe *selection criteria*: a calibration map chosen to
 minimize out-of-fold log loss cannot win by making predictions dishonest. Metrics that measure
-calibration error directly — the ECE family, Hosmer–Lemeshow — are valuable *reports* but are
+calibration error directly (the ECE family, Hosmer–Lemeshow) are valuable *reports* but are
 not proper and behave badly as objectives; the full argument, including estimator bias and
 binning sensitivity, is developed in [Metrics and tests](metrics.md).
 
@@ -154,7 +154,7 @@ precisely what post-hoc calibration can and cannot do: a monotone recalibration 
 reliability term toward zero and can only redistribute, never manufacture, resolution.
 Bröcker (2009) put the decomposition of general proper scores on rigorous footing, and Ferro
 and Fricker (2012) supplied the bias corrections needed when the terms are estimated from
-finite samples by binning — both matter for the estimators implemented in
+finite samples by binning. Both matter for the estimators implemented in
 `probcal.metrics.scores`.
 
 The practical reading of this chapter, and the stance taken throughout probcal: calibrate with
@@ -183,7 +183,7 @@ print(report)
 - Bröcker, J. (2009). "Reliability, sufficiency, and the decomposition of proper scores." *Quarterly Journal of the Royal Meteorological Society* 135(643), 1512–1519.
 - BCBS (2005). *Studies on the Validation of Internal Rating Systems.* Working Paper No. 14, revised version, May 2005. Bank for International Settlements.
 - Cox, D. R. (1958). "Two further applications of a model for binary regression." *Biometrika* 45, 562–565.
-- ECB (2019). *Instructions for reporting the validation results of internal models — IRB Pillar I models for credit risk.* European Central Bank Banking Supervision, February 2019.
+- ECB (2019). *Instructions for reporting the validation results of internal models: IRB Pillar I models for credit risk.* European Central Bank Banking Supervision, February 2019.
 - Elkan, C. (2001). "The Foundations of Cost-Sensitive Learning." IJCAI, 973–978.
 - Ferro, C. A. T., Fricker, T. E. (2012). "A bias-corrected decomposition of the Brier score." *Quarterly Journal of the Royal Meteorological Society* 138(668), 1954–1960.
 - Guo, C., Pleiss, G., Sun, Y., Weinberger, K. Q. (2017). "On Calibration of Modern Neural Networks." ICML, PMLR 70, 1321–1330.

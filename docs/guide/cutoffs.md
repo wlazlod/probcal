@@ -1,7 +1,7 @@
 # Set cutoffs and invert maps
 
-Policies are written on calibrated probabilities — "approve below 2% PD",
-"grade B is 0.5% to 2%" — and every consumer downstream of the calibrator
+Policies are written on calibrated probabilities ("approve below 2% PD",
+"grade B is 0.5% to 2%"), and every consumer downstream of the calibrator
 lives on the raw score: the decision engine, the masterscale, the
 scorecard's points, the counterfactual generator. This page is the
 translation service. The theory behind it (generalized inverses, plateau
@@ -32,8 +32,8 @@ cut = cal.point_inverse(np.array([0.02]))[0]
 print(cut, cal.predict_proba(np.array([cut]))[0])   # round-trips to 0.02
 ```
 
-`lo=0` and `hi=1` mean "the full raw range on that side" — `0.0`/`1.0` in
-probability space, `∓inf` in logit space — which is why a one-sided policy
+`lo=0` and `hi=1` mean "the full raw range on that side" (`0.0`/`1.0` in
+probability space, `∓inf` in logit space), which is why a one-sided policy
 is expressed as an interval with an open end rather than as a special
 case. `space="logit"` is what a consumer holding the model's raw margin
 wants (a sigmoid-link scorer, a counterfactual engine); `space="probability"`
@@ -60,7 +60,7 @@ except UnattainableTargetError as err:
 This is routine on low-default portfolios: an isotonic map's range is the
 span of its block means, so nothing above the top block is reachable. The
 same refusal covers `point_inverse` targets at exactly 0 or 1, and
-probability-space results whose raw logit exceeds `logit(1 - 1e-12)` —
+probability-space results whose raw logit exceeds `logit(1 - 1e-12)`;
 there the error names `space="logit"`, where the answer is exact.
 
 ## A whole masterscale in one call
@@ -82,7 +82,7 @@ for grade, (band_lo, band_hi) in raw_bands.items():
 Adjacent grades share their edge exactly (`A`'s upper bound *is* `B`'s
 lower bound), so the translated ladder covers the raw line without gaps or
 overlaps. Store the output next to the calibrator's fingerprint: policy
-fixed, mapping versioned — that pair is what makes a grade assignment
+fixed, mapping versioned. That pair is what makes a grade assignment
 reproducible months later ([Auditability](auditability.md)).
 
 ## `buffer_logit`: cutoffs that survive the next re-anchoring
@@ -111,10 +111,10 @@ off the monitor's anytime-valid confidence sequence for the current offset
 [Monitor and act](monitoring.md)). The confidence sequence covers the
 plausible *offset* at level `1 - alpha` simultaneously at every stopping
 time, which makes its width a defensible order of magnitude for "how far
-might the next re-anchoring move things" — but it is not a bound on the
-size of the update you will actually apply, and it says nothing at all
-about a slope drift or a full re-fit, which change the map's shape rather
-than translating it. Use it as a sized default, record the number you
+might the next re-anchoring move things". It is not a bound on the size
+of the update you will actually apply, and it says nothing at all about a
+slope drift or a full re-fit, which change the map's shape rather than
+translating it. Use it as a sized default, record the number you
 used, and re-derive cutoffs after any re-fit regardless.
 
 `probcal.monitor.moc_offset(mon)` takes the *upper end* of the same
@@ -156,7 +156,7 @@ cs = calibrate_scorecard(sc, X_cal, y_cal)
 print(cs.masterscale(masterscale))   # {'A': (638.7, inf), 'B': (598.9, 638.7), ...}
 ```
 
-The points are untouched by calibration — only the mapping from points to
+The points are untouched by calibration; only the mapping from points to
 PD changed, which is exactly what a recalibration should mean for a
 deployed scorecard.
 
@@ -182,9 +182,9 @@ against.
 
 ## Related
 
-- [Inverse maps](../concepts/inverse-maps.md) — generalized inverses,
+- [Inverse maps](../concepts/inverse-maps.md): generalized inverses,
   plateau semantics, the beta point-inverse construction.
-- [Choose a calibrator](choosing.md) — which map gives you which inverse.
-- [Auditability](auditability.md) — re-deriving a cutoff from the archived
+- [Choose a calibrator](choosing.md): which map gives you which inverse.
+- [Auditability](auditability.md): re-deriving a cutoff from the archived
   calibrator, months later.
-- [Monitor and act](monitoring.md) — where `delta_ci` comes from.
+- [Monitor and act](monitoring.md): where `delta_ci` comes from.

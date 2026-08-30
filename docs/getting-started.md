@@ -15,12 +15,12 @@ uv sync --extra dev            # tests, lint, type-check
 ```
 
 probcal requires Python ≥ 3.11. The core import path touches nothing beyond numpy and the
-standard library — scipy, scikit-learn, pandas, and matplotlib are never imported by
+standard library: scipy, scikit-learn, pandas, and matplotlib are never imported by
 `probcal` itself (matplotlib only inside the optional `probcal.plots`).
 
 ## Score-level quickstart
 
-Calibrators work directly on scores — no model object required. The example uses the
+Calibrators work directly on scores; no model object is required. The example uses the
 built-in synthetic PD portfolio (3% event rate, asymmetric tail distortion):
 
 ```python
@@ -99,14 +99,14 @@ print(sel.report_)                             # ranked table with guardrail fla
 p = sel.predict_proba(s_new)                   # the refitted winner
 ```
 
-The selector never scores a candidate on the data it was fitted on — see
+The selector never scores a candidate on the data it was fitted on. See
 [Automatic selection](concepts/auto-selection.md) for the protocol and
 [Data splitting](concepts/data-splitting.md) for why the nesting is mandatory.
 
 ## Where to go next
 
 - The [Concepts](concepts/why-calibration.md) chapters are the package's theoretical
-  foundation — method derivations, metric pathologies, and the selection rules.
+  foundation: method derivations, metric pathologies, and the selection rules.
 - The [tutorial notebook](notebooks/pd_calibration_walkthrough.ipynb) walks a full PD
   calibration cycle: diagnose, select, fit, re-anchor, backtest, and translate cutoffs
   back to raw scores.

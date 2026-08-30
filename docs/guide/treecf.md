@@ -114,7 +114,7 @@ released as treecf 0.2.4, which the `probcal[treecf]` extra now pins.
   probcal's generalized-inverse step contract and once with real probcal
   isotonic/centered-isotonic fits — asserting identical feasibility
   decisions on closed intervals.
-- **T4 — test matrix:** a matrix test module in treecf with probcal as an
+- **Test matrix:** a matrix test module in treecf with probcal as an
   optional test dependency: {Platt, Temperature, Beta `abm`, Isotonic,
   CenteredIsotonic, `Chain(Beta + offset)`, `CalibratedModel.chain_`} ×
   {`op="<="`, `op=">="`, `range`, `bands`} × {`buffer_logit` 0, 0.2} on
@@ -133,7 +133,7 @@ released as treecf 0.2.4, which the `probcal[treecf]` extra now pins.
   0.2.3, which the `probcal[treecf]` extra pins. XGBoost also casts
   features to float32 natively — the analogous fix is a treecf
   follow-up.
-- **T5 — docs:** treecf's `concepts/calibration.md` documents provenance
+- **Docs:** treecf's `concepts/calibration.md` documents provenance
   and the read-out, and pin tests count exactly one `interval_inverse`
   call per `explain_batch` (one per band for ladders).
 

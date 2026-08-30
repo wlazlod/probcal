@@ -3,12 +3,12 @@
 ## The question
 
 A calibrated forecast is deployed. Matured outcome batches arrive
-periodically — monthly cohorts of `(p_i, y_i)` pairs. Is the forecast *still*
-calibrated — and if not, is a level shift enough (re-offset with
+periodically, as monthly cohorts of `(p_i, y_i)` pairs. Is the forecast *still*
+calibrated? And if not, is a level shift enough (re-offset with
 `LogitOffset`) or has the shape changed (re-fit the calibrator)?
 
-The obvious procedure — run `binomial_grade_test` or Hosmer–Lemeshow every
-month and act on the first rejection — is invalid. Fixed-sample tests
+The obvious procedure, running `binomial_grade_test` or Hosmer–Lemeshow every
+month and acting on the first rejection, is invalid. Fixed-sample tests
 control type-I error only for a pre-specified evaluation window; testing
 *every* window and stopping at the first rejection inflates the error
 without bound (with enough looks, a true null is rejected almost surely).
@@ -25,7 +25,7 @@ P_{H_0}\bigl(\exists k:\; E_k \ge 1/\alpha\bigr) \le \alpha .
 $$
 
 The rule "alarm the first time `E_k >= 1/alpha`" therefore has type-I error
-at most `alpha` *however long monitoring runs and whenever it stops* — the
+at most `alpha` *however long monitoring runs and whenever it stops*, the
 property fixed-sample p-values cannot provide. `p_anytime = min(1, 1/max_k
 E_k)` is a p-value valid at every stopping time.
 
@@ -48,7 +48,7 @@ $$
 
 whose conditional expectation under `H_0` is exactly 1 for **any
 predictable** alternative `q_i` (computed from strictly earlier data). The
-running product is then a test martingale, and — the second tool — the
+running product is then a test martingale. The second tool is that the
 *average* of e-values is an e-value (Vovk & Wang 2021), which is how
 components and variants combine below.
 
@@ -59,9 +59,9 @@ components and variants combine below.
 
 - the **predictable plug-in**: before batch `k`, `delta_hat_k` is the
   `LogitOffset` mode-B solution on batches `1..k-1` (the shift matching the
-  past outcome rate) — it adapts to sustained drift;
+  past outcome rate). It adapts to sustained drift.
 - the **mixture** over a fixed grid `delta in {+-0.1, +-0.25, +-0.5,
-  +-1.0}` with uniform prior — it protects the first batches, when the
+  +-1.0}` with uniform prior. It protects the first batches, when the
   plug-in is still noise.
 
 **Shape process** `E_shape`. Alternative: Cox recalibration
@@ -84,13 +84,13 @@ The figure is the whole rule in one view: twelve cohorts of a deployed
 beta calibration, the true PD shifted by +0.6 log-odds from month seven
 onward. Wealth hovers around 1 while the forecast is calibrated, the
 alarm fires at the first crossing of `1/alpha` (batch `m08`), and the
-components say *what* moved — offset and shape both climb here.
+components say *what* moved: offset and shape both climb here.
 
 The grade panel below shows how unevenly that evidence accrues. Every
 grade's confidence sequence tightens, but by `m12` only the two
 event-rich grades have moved clear of zero: `G4` at `(+0.25, +0.33)` on
-490 events and `G5` at `(+0.10, +0.25)` on 559. `G1`, `G2` and `G3` —
-14, 41 and 155 events — still contain zero, so on their own evidence the
+490 events and `G5` at `(+0.10, +0.25)` on 559. `G1`, `G2` and `G3`, with
+14, 41 and 155 events, still contain zero, so on their own evidence the
 drift is not yet established, even though the portfolio-level alarm fired
 four batches earlier. That gap is the point of reading both panels: the
 global e-process pools evidence the thin grades cannot supply alone.
@@ -100,7 +100,7 @@ code is in [Monitor and act](../guide/monitoring.md).
 ## A confidence sequence for the current offset
 
 Inverting the offset process against a grid of shifted nulls `delta_0 in
-[-3, 3]` — "the deployed forecast, moved by `delta_0`, is calibrated" —
+[-3, 3]` ("the deployed forecast, moved by `delta_0`, is calibrated")
 yields a **time-uniform** `(1 - alpha)` confidence sequence for the current
 calibration-in-the-large offset: with 95% *anytime* confidence, statements
 like "the model is currently 0.15–0.40 log-odds too optimistic". Each null
@@ -113,7 +113,7 @@ the sequence cannot invalidate a buffered counterfactual.
 ## Per-grade confidence sequences
 
 When a `grade` array is passed, each grade also gets its own time-uniform
-confidence sequence for its own offset — the same construction as the
+confidence sequence for its own offset, built the same way as the
 portfolio-level one above (same `delta_ci_grid`, same predictable-plug-in
 alternative), restricted to that grade's slice of the batch and using the
 grade's own plug-in `d_g` in place of the portfolio-level `delta_hat`. This
@@ -127,40 +127,40 @@ grades_panel=True)` adds a second axes plotting every grade's CS band
 ## Drift-onset estimate and the since-onset window
 
 Each step also carries `MonitorStep.log_e_increment`: the batch's additive plug-in
-log-LR contribution — the offset plug-in's `bern_log_lr` factor (0 when `delta_hat ==
+log-LR contribution, the offset plug-in's `bern_log_lr` factor (0 when `delta_hat ==
 0`) plus the shape plug-in's (0 when its plug-in is the identity). `e_global` is a
 logsumexp mixture and is *not* additive across batches, so it cannot be searched for
 where the evidence trail turns; `log_e_increment` is purely additive and exists for
 exactly that purpose.
 
 `monitor._onset.estimate_onset(increments) -> int` finds `k* = argmax_k sum_{j>=k}
-increments[j]` — a backward-CUSUM argmax over that additive series, with ties resolved
+increments[j]`, a backward-CUSUM argmax over that additive series, with ties resolved
 to the latest `k`. This is an **estimate, not a change-point test**: it carries no
 type-I control and no confidence set, only an answer to "which batch does the
 accumulated evidence point to". `report()` runs it whenever an alarm has fired and
-exposes the result as `MonitorReport.onset_label`, appending "estimated drift onset at
-{label} (backward-CUSUM argmax of the plug-in log-LR increments — an estimate, not a
-test)" to `reasoning`. Steps loaded from a pre-0.3 payload carry `log_e_increment =
-None` — that payload records no increments, so a monitor holding any such step reports
-`onset_label = None`, replaces the onset sentence in `reasoning` with "drift onset
-unavailable: steps recorded before 0.3.0 carry no log-e increments (trailing window
+exposes the result as `MonitorReport.onset_label`, and appends a line to `reasoning` that
+names the estimated onset batch and repeats that the backward-CUSUM argmax of the plug-in
+log-LR increments is an estimate, not a test. Steps loaded from a pre-0.3 payload carry
+`log_e_increment = None`. That payload records no increments, so a monitor holding any such
+step reports `onset_label = None`, replaces the onset sentence in `reasoning` with "drift
+onset unavailable: steps recorded before 0.3.0 carry no log-e increments (trailing window
 used)", and computes its diagnostics on the `"trailing"` window whatever
 `recommendation_window` says.
 
 By default (`recommendation_window="since_onset"`), `report()`'s trailing-window
-diagnostics — `delta_now`, the Cox slope bootstrap CI, the Cox-vs-offset residual LR —
+diagnostics (`delta_now`, the Cox slope bootstrap CI, the Cox-vs-offset residual LR)
 are computed on batches from the estimated onset onward rather than on the full (or
 `plug_in_window`-trimmed) history: once an alarm fires, a window anchored where the
 evidence trail actually turns is more informative than one anchored to a config knob
 set before any drift was suspected. When `plug_in_window` is also set, the window
-starts at the LATER of the two starts — `max(onset_idx, n_batches - plug_in_window)`
-— so a short `plug_in_window` still bounds how far back the since-onset window can
+starts at the LATER of the two starts, `max(onset_idx, n_batches - plug_in_window)`,
+so a short `plug_in_window` still bounds how far back the since-onset window can
 reach; a `plug_in_window` of 3 with an onset at batch 2 of 10, for example, uses the
 last 3 batches, not the 8 since onset. **Escape hatch:** `recommendation_window="trailing"`
 restores 0.2.0 behaviour exactly for those diagnostic INPUTS (`delta_now`, the slope
 CI, the residual LR): it ignores the onset estimate and uses `plug_in_window` (or all
 past batches) instead, unconditionally. `onset_label` and the onset sentence in
-`reasoning` are still populated under `"trailing"` — only the diagnostic window
+`reasoning` are still populated under `"trailing"`; only the diagnostic window
 differs between the two modes. `tests/test_monitor_sim.py::
 test_recommendation_correct_on_pure_drift` re-runs the 90%-correct gate under the new
 default.
@@ -170,7 +170,7 @@ injected at batch 12 of 24 with `shift=0.6`, 40 seeded runs, `tests/test_monitor
 `pytest.mark.slow`): median `|onset − 12| = 1.0` (gate `<= 2`); error distribution
 `[0×4, 1×24, 2×5, 3×3, 4, 6, 8, 9]`.
 
-## The recommendation rule — a diagnostic, not a test
+## The recommendation rule: a diagnostic, not a test
 
 After an alarm the monitor reports one of `re-offset` / `re-fit`, from two
 trailing-window diagnostics: recommend **re-offset** when the Cox slope
@@ -181,7 +181,7 @@ otherwise **re-fit**. The shape *e-process* is always reported alongside
 but is deliberately not the discriminator: its alternative family contains
 the intercept, so it fires under pure level drift too and cannot separate
 the two failure modes on its own. The rule is a *diagnostic summary with no
-error guarantee* — every component process is reported so the reader can
+error guarantee*, and every component process is reported so the reader can
 disagree with it.
 
 ## Closing the loop: `apply_recommendation`
@@ -189,16 +189,16 @@ disagree with it.
 `mon.apply_recommendation(target=None)` turns `report()`'s recommendation into an
 action, returning an `AppliedAction(kind, offset, composed, monitor, window, audit)`:
 
-- **`kind="re-offset"`.** Estimates the log-odds shift by maximum likelihood
+- `kind="re-offset"`. Estimates the log-odds shift by maximum likelihood
   (`offset.estimate_offset`) on the batches from the same window `report()`'s
-  trailing diagnostics used (`CalibrationMonitor._recommendation_window_start`
-  — factored out so the two windows can never disagree), and fits a
-  `LogitOffset` on it. If `target` is given, the offset is composed onto it —
+  trailing diagnostics used (`CalibrationMonitor._recommendation_window_start`,
+  factored out so the two windows can never disagree), and fits a
+  `LogitOffset` on it. If `target` is given, the offset is composed onto it:
   `Chain([target.calibrator_, *target.offsets_, offset])` for a `Chain`, or
   `copy.deepcopy(target).offset_to(delta=est.delta)` for a `CalibratedModel`
   (`target` itself is never mutated either way; `None` leaves `composed=None`).
   A **fresh** `CalibrationMonitor` is returned too, built with the same
-  constructor parameters (`CalibrationMonitor(**mon._ctor_params())`) — fresh,
+  constructor parameters (`CalibrationMonitor(**mon._ctor_params())`): fresh,
   not continued, because the e-process is a martingale under the null "the
   CURRENTLY DEPLOYED forecast is calibrated"; once the pipeline changes, the
   old accumulated evidence describes a forecast that no longer exists, and
@@ -206,11 +206,11 @@ action, returning an `AppliedAction(kind, offset, composed, monitor, window, aud
   same reasoning behind "start a new monitor after any re-calibration" in
   *Validity conditions* below). Feed the corrected stream
   (`offset.transform(p)`) into the fresh monitor going forward.
-- **`kind="re-fit"` / `kind="none"`.** No offset, composed target, or fresh
+- `kind="re-fit"` / `kind="none"`. No offset, composed target, or fresh
   monitor is produced (`window` names the suggested re-fit window, or is
   empty when there is nothing to suggest). **Automatic refits are out of
   scope by design**: a slope drift needs a human to choose and validate a
-  new calibrator on new data — a mechanical action here could silently ship
+  new calibrator on new data, and a mechanical action here could silently ship
   a worse model.
 
 `AppliedAction.audit` records `alarm_at`, `onset_label`, fingerprints of the
@@ -220,7 +220,7 @@ estimated `delta`/`se`. `AppliedAction` is itself serializable
 `composed`, and `monitor` as their own envelopes; a `composed` `CalibratedModel`
 stores only a model reference, reattached via `AppliedAction.from_dict(d,
 model=...)` exactly as `CalibratedModel.from_dict` itself does. `mon` is never
-mutated by the call — `to_dict()` before and after are identical.
+mutated by the call: `to_dict()` before and after are identical.
 
 ```python
 action = mon.apply_recommendation()  # target=None: offset only
@@ -237,8 +237,8 @@ default, or a level recomputed directly from the monitor's running `_cs_grid`/`_
 state) and returns a fitted `LogitOffset(delta=hi)`. Shifting by the CS's *upper* end rather
 than the point-estimate plug-in (`delta_hat`) is the conservative choice: the CS covers the
 true offset with `1 - alpha` confidence at every stopping time, so `hi` corrects for at least
-as much drift as the evidence plausibly supports — a margin of conservatism, not a best
-guess. `level` requires a live `CalibrationMonitor` (it reads running arrays a frozen
+as much drift as the evidence plausibly supports. That is a margin of conservatism, not a
+best guess. `level` requires a live `CalibrationMonitor` (it reads running arrays a frozen
 `MonitorReport` does not retain); a report input still works with `level=None`, fit on a
 placeholder batch since a report keeps no per-batch data.
 
@@ -249,7 +249,7 @@ posterior upper quantile of the observed event rate (the same quantile
 existing mode B (`target_mean`).
 
 This is a different move than `apply_recommendation`'s re-offset: `apply_recommendation` acts
-on an *alarm* — a level shift the evidence says is really there — while `moc_offset*` can be
+on an *alarm*, a level shift the evidence says is really there, while `moc_offset*` can be
 called at any time, alarmed or not, to make an already-calibrated portfolio's reported PDs
 more conservative on purpose. See [Conservatism: most-prudent PDs and margins of
 conservatism](conservatism.md#margin-of-conservatism-composing-with-calibration-not-replacing-it)
@@ -260,31 +260,31 @@ caveat that applies to every bound on that page, this one included.
 
 - **Predictability.** Parameters for batch `k` use only batches `< k`; the
   observation order within a batch is fixed and arbitrary; past batches are
-  never re-run or reordered — persist the monitor state (`to_json`) between
+  never re-run or reordered, so persist the monitor state (`to_json`) between
   updates rather than recomputing from raw data.
 - **Within-cohort dependence.** Macro shocks that hit a whole cohort are
   *not* covered by the martingale null: the guarantee is conditional
   calibration given the forecast, and a portfolio-wide shock will trip the
-  alarm — which is the desired behavior, not a false positive to engineer
+  alarm, which is the desired behavior, not a false positive to engineer
   away.
 - **Delayed labels.** The process advances only when labels mature; batch
   labels are opaque strings, and batches whose outcomes arrive out of
   calendar order are simply processed in arrival order.
-- **After re-calibration**, start a **new** monitor on the new forecasts —
-  the old null no longer describes production.
+- **After re-calibration**, start a **new** monitor on the new forecasts: the
+  old null no longer describes production.
 - **Weights.** Sample weights enter as exponents on the Bernoulli factors
   for reporting parity with the rest of probcal, but non-integer weights
-  break the exact martingale property — the monitor warns once when it
+  break the exact martingale property, and the monitor warns once when it
   sees them.
 
 ## Relation to existing tools
 
 `optbinning.ScorecardMonitoring` provides PSI and fixed-sample
-characteristic tests — *population stability*, complementary to sequential
+characteristic tests for *population stability*, complementary to sequential
 calibration validity: PSI asks "has the input mix moved", this monitor asks
 "are the probabilities still right, accounting for every look we have
 taken". Fixed-sample e-value tests such as the safe Hosmer–Lemeshow test
-(Henzi, Puke, Dimitriadis & Ziegel 2024) answer a third question — a
+(Henzi, Puke, Dimitriadis & Ziegel 2024) answer a third question, a
 one-shot audit with e-value semantics; `metrics.hl_e_test` (below) is a
 first step in that direction, built from the pieces already in this module.
 
@@ -293,11 +293,11 @@ first step in that direction, built from the pieces already in this module.
 `metrics.hl_e_test(y, p, grades, *, mixture_grid=(0.1, 0.25, 0.5, 1.0),
 sample_weight=None) -> HlEResult` is a **one-shot, fixed-sample** e-value
 audit per rating grade, for the case where there is no sequence of matured
-batches to monitor — just one dataset to check once. It reuses the same
+batches to monitor, just one dataset to check once. It reuses the same
 mixture construction `CalibrationMonitor`'s offset e-process uses
 (`monitor._processes.bern_log_lr`, `logsumexp`, the symmetrized
 `mixture_grid`), applied once per grade with **no predictable plug-in
-component** — a fixed sample has no strictly-earlier data to learn one
+component**: a fixed sample has no strictly-earlier data to learn one
 from, so the honest e-value here is the mixture average alone:
 
 $$
@@ -311,7 +311,7 @@ across grades, `log E = sum_g log E_g`, `e_value = exp(log E)`, is itself a
 valid e-value for the joint null: each `E_g` is an average of e-values
 (expectation exactly 1 under H0 for every fixed `delta`), hence itself an
 e-value with expectation 1, and the product of e-values built from
-independent — here, disjoint-observation — factors is an e-value.
+independent (here, disjoint-observation) factors is an e-value.
 `p_value = min(1, 1 / e_value)` follows from Markov's inequality.
 
 **Naming.** This is named the "mixture-LR grade e-test (safe
@@ -320,7 +320,7 @@ Puke, Dimitriadis & Ziegel (2024) is cited as the paper that motivated
 building a fixed-sample e-value analogue of Hosmer–Lemeshow, not as a
 description of what is implemented. Their construction is not reproduced
 here, and no claim is made that this test matches its power or optimality
-properties — it is the monitor's existing mixture machinery, repurposed for
+properties: it is the monitor's existing mixture machinery, repurposed for
 a one-shot audit rather than sequential monitoring.
 
 Sample weights, when given, enter as exponents on the Bernoulli factors
@@ -363,10 +363,10 @@ correctly called `re-fit`.
 ### Per-grade CS coverage and drift-onset localization
 
 Produced by `docs/scripts/monitor_grade_onset_sim.py` (100 seeded runs): a full-size rerun of
-the two constructions that already gate in CI at reduced run counts —
+the two constructions that already gate in CI at reduced run counts,
 `tests/test_monitor_grades.py::test_two_grade_drift_confidence_sequence_coverage` (per-grade
 CS coverage, 20 runs) and `tests/test_monitor_onset.py::test_onset_localizes_injected_drift`
-(onset localization, 40 runs) — read at the documented, larger size. The `shift=0.4` onset row
+(onset localization, 40 runs), read at the documented, larger size. The `shift=0.4` onset row
 is a weaker drift than the CI gate's `shift=0.6` and is reported, not gated.
 
 | experiment                                              | result | gate |

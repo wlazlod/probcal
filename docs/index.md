@@ -1,7 +1,7 @@
 # probcal
 
 Post-hoc probability calibration **and calibration governance** for binary
-classifiers — the evidence a regulated PD model needs alongside the map itself.
+classifiers: the evidence a regulated PD model needs alongside the map itself.
 The core is numpy-only; everything else is an optional extra.
 
 One deployed calibration runs a loop, and probcal covers all of it:
@@ -13,10 +13,10 @@ One deployed calibration runs a loop, and probcal covers all of it:
 [report](guide/report.md), then back to re-anchoring. The
 [How it works](how-it-works.md) page draws that loop once, in one view.
 
-**Calibrate.** Thirteen calibrators — Platt, temperature, beta, isotonic, centered
+**Calibrate.** Thirteen calibrators: Platt, temperature, beta, isotonic, centered
 isotonic, histogram binning, scaling-binning, BBQ, ENIR, Venn–Abers (IVAP and CVAP),
-spline, and segmented — plus a rigid, auditable logit offset, automatic selection
-under nested cross-validation, and prefit / cross-validation data flows.
+spline, and segmented. With them come a rigid, auditable logit offset, automatic
+selection under nested cross-validation, and prefit / cross-validation data flows.
 [Choose a calibrator](guide/choosing.md) is the catalog.
 
 **Evaluate.** Proper scores, binned and binning-free calibration errors, the CORP
@@ -29,9 +29,9 @@ Jeffreys upper bands, margin-of-conservatism offsets).
 a whole masterscale, refusing unattainable targets instead of clamping.
 [Set cutoffs and invert maps](guide/cutoffs.md).
 
-**Monitor and act.** Anytime-valid **monitoring** — an e-process whose alarm keeps its
-type-I guarantee at every look — with drift-onset localization and a recommendation
-that can be applied as a new offset, on the record.
+**Monitor and act.** Anytime-valid **monitoring** runs on an e-process whose alarm keeps
+its type-I guarantee at every look. It localizes the onset of drift and issues a
+recommendation that can be applied as a new offset, on the record.
 [Monitor and act](guide/monitoring.md).
 
 **Prove it.** JSON **serialization** (never pickle) with fingerprints and a golden-file

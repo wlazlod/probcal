@@ -3,8 +3,8 @@
 Every calibration claim in this package has a picture, and the pictures are built in two
 layers: `probcal.curves` computes plotting-ready dataclasses with numpy alone, and
 `probcal.plots` renders them when matplotlib (the `[viz]` extra) is installed. The
-separation means every curve is available to any backend — or to no backend, in a batch
-report — and the rendering layer adds convention, not computation.
+separation means every curve is available to any backend, or to no backend at all in a batch
+report, and the rendering layer adds convention, not computation.
 
 ## Reliability constructions
 
@@ -12,7 +12,7 @@ The reliability diagram plots estimated event rate against predicted probability
 calibrated model traces the diagonal. probcal builds it four ways, because the
 construction *is* the estimator and inherits its trade-offs. `reliability_binned` groups
 predictions (equal-mass by default), plotting each bin's mean prediction against its event
-rate with a **Wilson confidence interval** — the binomial interval that behaves sensibly at
+rate with a **Wilson confidence interval**, the binomial interval that behaves sensibly at
 the small counts and extreme rates a PD portfolio produces. Data density is shown by the
 per-class rug along the axis edges (a count-bar margin remains available via
 `counts=True`), so sparse regions announce themselves. `reliability_loess` and
@@ -24,8 +24,8 @@ plot time, not at computation time.
 
 `reliability_smooth` (`KernelReliabilityCurve`) is the fourth construction, and the only
 one whose bandwidth is not a free choice: it reuses `metrics.smooth_ece`'s fixed-point
-bandwidth `sigma_star` — the same equal-width logit lattice and the same truncated
-Gaussian kernel — so `curve.smooth_ece` reproduces the metric exactly rather than merely
+bandwidth `sigma_star`, with the same equal-width logit lattice and the same truncated
+Gaussian kernel, so `curve.smooth_ece` reproduces the metric exactly rather than merely
 tracking it, and the diagram and the number it is read against always agree. Because
 `sigma_star` is tuned for the smECE aggregate rather than for a low-variance curve, the
 pointwise estimate is noisier than `reliability_loess`'s wide, fraction-of-data bandwidth
@@ -46,34 +46,34 @@ The same data on the logit scale, where the miscalibration becomes readable:
 
 ![Annotated reliability diagram on the logit scale: binned points with Wilson intervals sit below the identity, the stats box reports intercept, slope, ICI, E90 and the Spiegelhalter p-value, and the event/non-event rug shows where the data live](img/reliability_logit.png)
 
-Plotting on the logit scale stretches exactly where the decisions are —
-the difference between 0.5% and 1% PD is a factor of two in price and a full grade on a
+Plotting on the logit scale stretches exactly where the decisions are.
+The difference between 0.5% and 1% PD is a factor of two in price and a full grade on a
 masterscale, and it is invisible on \( [0,1] \) but a fixed distance in log-odds.
 `plot_reliability(scale="logit")` is therefore the package's default recommendation for
 credit work, with axis ticks *labeled in probabilities* at logit positions, so the reader
 keeps probability intuition while the geometry keeps resolution. Parametric calibrators are
 straight lines on this scale (slope and intercept readable by eye), the
-[offset](offset.md) is a vertical translation, and tail miscalibration — the kind that
-costs money at the approval cutoff — stops hiding in the corner.
+[offset](offset.md) is a vertical translation, and tail miscalibration, the kind that
+costs money at the approval cutoff, stops hiding in the corner.
 
 ## The annotated reliability diagram
 
 Passing the raw `y`/`p` to `plot_reliability` upgrades the diagram in the `rms::val.prob`
-tradition: the picture carries its own numbers. The stats box — computed by
-`probcal.metrics.reliability_summary`, never inside the plotting layer — reports the sample
+tradition: the picture carries its own numbers. The stats box, computed by
+`probcal.metrics.reliability_summary` and never inside the plotting layer, reports the sample
 size and event count, the [calibration intercept and slope](metrics.md) (level and spread of
 the miscalibration in log-odds), ICI and E90 (typical and near-worst absolute distance to
 the smoothed curve, in probability units), and Spiegelhalter's p-value (the classical
 unbiasedness test). One glance answers the three questions a validator asks of a
 reliability diagram: how much data, how wrong, and is it statistically distinguishable from
 calibrated. The rug along the axis edges marks events (top) and non-events (bottom),
-deterministically thinned to at most 1000 marks per class — sorted, evenly strided, no RNG
-anywhere in plotting — so two renders of the same data are always identical. All probcal
+deterministically thinned to at most 1000 marks per class (sorted, evenly strided, no RNG
+anywhere in plotting), so two renders of the same data are always identical. All probcal
 plots style themselves through a per-call `rc_context`; your global matplotlib
 configuration is never touched.
 
 `risk_dist` picks the style of that density layer: `"rug"` (the default, described above),
-`"split"` (a 30-equal-mass-bin spike histogram of `p` — events upward, non-events downward,
+`"split"` (a 30-equal-mass-bin spike histogram of `p`, events upward and non-events downward,
 from a shared `y = 0.12` baseline in axis-fraction coordinates, since axis coordinates
 cannot go negative; heights are scaled so whichever class peaks higher reaches the full
 0.12), or `None` for no density layer at all. `rug=False` turns the layer off regardless of
@@ -88,14 +88,14 @@ reports `n, events, intercept, slope, ICI, smECE, Brier` (smECE and Brier are st
 proper / self-consistent scores that E90 and Spiegelhalter's test do not cover); passing a
 `MetricReport` (e.g. from `metrics.evaluate`) instead reports `name = value [ci_low, ci_high]`
 for whichever of `intercept`, `slope`, `ici`, `smooth_ece`, `brier` the report carries, plus
-`n`/`events` read off `y`. `annotate` is ignored whenever `stats` is truthy — the two boxes
+`n`/`events` read off `y`. `annotate` is ignored whenever `stats` is truthy, so the two boxes
 never stack.
 
 Passing a `KernelReliabilityCurve` (from `reliability_smooth`) as `smooth` renders it as a
 density-weighted curve rather than a plain line: a variable-width `LineCollection` (wide
 where predictions are dense, `linewidths = 0.5 + 4.0 * density / density.max()`), the
 miscalibration area shaded between the curve and the identity, its bootstrap ribbon, and an
-`smECE = ...` readout in the bottom-right corner — the same convention that fills the fourth
+`smECE = ...` readout in the bottom-right corner, the same convention that fills the fourth
 reliability construction described above.
 
 ![Reliability diagram with the kernel curve: the density-weighted smECE-consistent line (wide where predictions are dense), its bootstrap ribbon, and the smECE readout](img/reliability_smooth.png)
@@ -108,8 +108,8 @@ fit a polynomial logistic recalibration of the outcome on \( \operatorname{logit
 selecting the polynomial degree by forward likelihood-ratio testing (capped at degree 4),
 then invert the likelihood-ratio acceptance region pointwise into a band around the fitted
 curve at the requested confidence levels (80% and 95% by default). Where the band excludes
-the diagonal, the data affirmatively reject calibration in that region — a localized,
-test-backed statement no eyeballed curve provides — and the associated p-value summarizes
+the diagonal, the data affirmatively reject calibration in that region: a localized,
+test-backed statement no eyeballed curve provides. The associated p-value summarizes
 the global test. The construction (Nattino et al., 2017, describe the practitioner-facing
 version) is reimplemented in probcal from the papers, on the numpy-only χ² machinery of
 `probcal._math`.
@@ -122,11 +122,11 @@ The [ECCE](metrics.md) sorts observations by prediction and accumulates the resi
 resulting walk hovers near zero under calibration and drifts under systematic error, and
 *where* it drifts localizes the miscalibration along the score range without any binning or
 bandwidth choice. `ecce_curve` computes the walk (its `stat_max` agrees exactly with
-`metrics.ecce`) and `plot_ecce` renders one or several — raw versus calibrated is the
+`metrics.ecce`) and `plot_ecce` renders one or several; raw versus calibrated is the
 natural pair. Each curve's maximum drift is quoted in the legend and marked by a dotted
 tick at the position where it occurs. The grey envelope is ±2 *pointwise* standard
 deviations of the walk under calibration: an honest reading aid, not a simultaneous
-confidence band — a walk can exit a pointwise envelope somewhere by chance more often than
+confidence band. A walk can exit a pointwise envelope somewhere by chance more often than
 the nominal level suggests, and the formal max-statistic test of Arrieta-Ibarra et al.
 (2022) is not implemented in this release.
 
@@ -137,7 +137,7 @@ the nominal level suggests, and the formal max-statistic test of Arrieta-Ibarra 
 `plot_grade_backtest` turns a [per-grade backtest result](metrics.md) into the chart a
 validation committee reads: observed default rates as circles colored by the grade's
 traffic light, the assigned PDs as wide dashes underneath, and grey whiskers spanning each
-grade's 90% display interval — the central Jeffreys posterior interval or the
+grade's 90% display interval, either the central Jeffreys posterior interval or the
 Clopper–Pearson interval, matching the test that produced the result. The intervals are
 display companions, not the test: the verdict is carried by the lights from the unchanged
 one-sided tests, which is why no p-values appear on the canvas. Per-grade `n` and `k`
@@ -153,8 +153,8 @@ translation on the logit scale. The blue offset map runs parallel to the grey id
 distance \( \delta \); the red and green markers place the pre- and post-adjustment
 central tendencies, joined by the annotated shift arrow, with the target mean as a thin
 reference line when the offset was fitted in target-mean mode. The stats box reads
-everything from the fitted attributes — \( \delta \) in log-odds, the odds factor
-\( e^{\delta} \), both means, and the fit timestamp — so the chart audits the *stage*
+everything from the fitted attributes (\( \delta \) in log-odds, the odds factor
+\( e^{\delta} \), both means, and the fit timestamp), so the chart audits the *stage*
 itself; for the before/after guardrail comparison on outcomes, `audit_report()` remains
 the tool.
 
@@ -164,8 +164,8 @@ the tool.
 
 `plot_attributes` draws the classic Hsu and Murphy (1986) attributes diagram, which puts a
 reliability curve in the context of two references at once instead of just the identity.
-The horizontal and vertical lines at the weighted base rate \( \bar y \) mark climatology —
-the constant forecast \( p = \bar y \) that carries no resolution — and the no-skill line
+The horizontal and vertical lines at the weighted base rate \( \bar y \) mark climatology,
+the constant forecast \( p = \bar y \) that carries no resolution. The no-skill line
 \( y = (x + \bar y) / 2 \), equidistant between climatology and the identity at every \( x
 \), is the boundary the Brier skill score is measured against. The light green shading
 marks where a point beats climatology pointwise, \( (y - x)^2 \le (x - \bar y)^2 \): closer
@@ -173,17 +173,17 @@ to the identity than to the no-resolution line. `method="binned"` overlays
 `reliability_binned` as markers scaled by bin count (`n_bins=10` by default, the same
 default as the curve itself); `method="corp"` overlays the CORP PAV step fit instead,
 trading the binning choice for the same discretization-free construction used by
-`plot_corp` — the reliability diagram, bands, and score decomposition covered in
-[CORP and score decomposition](corp.md). `scale="logit"` transforms every drawn quantity —
-identity, references, shading, and curve alike — through the same clipped logit as the rest
+`plot_corp`, whose reliability diagram, bands, and score decomposition are covered in
+[CORP and score decomposition](corp.md). `scale="logit"` transforms every drawn quantity
+(identity, references, shading, and curve alike) through the same clipped logit as the rest
 of the package, so a low-PD portfolio stays readable.
 
 ![Attributes diagram on a 3% base-rate PD portfolio (logit scale): the shaded positive-skill region between climatology and the identity, the no-skill line, and the binned reliability curve](img/attributes.png)
 
 ## The Murphy diagram
 
-`plot_murphy` renders `metrics.murphy_curve` — the elementary-score view of the Brier score
-described in [Metrics and tests](metrics.md) — as either a set of labelled lines
+`plot_murphy` renders `metrics.murphy_curve`, the elementary-score view of the Brier score
+described in [Metrics and tests](metrics.md), as either a set of labelled lines
 (`{name: MurphyCurve}`, or a single curve with no legend) or, with `diff=True`, the pointwise
 difference between exactly two named forecasts. The diff form needs the raw `(y, p)` pairs
 rather than precomputed curves, because a `MurphyCurve` retains only its threshold grid and
@@ -192,19 +192,19 @@ and adds a seeded paired bootstrap band (resampling the same indices for both fo
 the comparison is on the same observations) at the 5th/95th percentile, plus a zero reference
 line. Because the Murphy diagram decomposes the Brier *difference* across the whole decision
 spectrum instead of collapsing it to one number, a diff that crosses zero shows exactly which
-threshold range favors which forecast — information a single Brier-score comparison discards.
+threshold range favors which forecast, information a single Brier-score comparison discards.
 
 ![Murphy diagram (difference form) comparing raw scores against their beta-calibrated recalibration: the pointwise elementary-score gap with a 90% bootstrap band and the zero reference line](img/murphy.png)
 
 ## The remaining plots
 
 Three further views complete `probcal.plots`. `plot_comparison(before, after)` puts
-pre- and post-calibration (or pre- and post-offset) reliability on one axis pair — the
+pre- and post-calibration (or pre- and post-offset) reliability on one axis pair, the
 picture a validation report leads with. `plot_interval` draws
 [Venn–Abers interval widths](methods-distribution-free.md) against score, localizing where
 calibration uncertainty concentrates. `plot_selection` renders the
 [SelectionReport](auto-selection.md) as a ranked dot plot with fold-spread whiskers and
-guardrail markers — the table, made presentable. All of them accept the dataclasses from
+guardrail markers: the table, made presentable. All of them accept the dataclasses from
 `probcal.curves`, and none of them is importable without the `[viz]` extra; the import
 guard raises with the install instruction rather than a bare `ImportError`.
 

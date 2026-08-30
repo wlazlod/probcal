@@ -1,7 +1,7 @@
 # Segmented calibration: shrunken per-segment offsets
 
 A single calibration map is often right on average but wrong for a specific slice of the
-portfolio — a product line, a vintage, a geography — because that slice's true residual
+portfolio (a product line, a vintage, a geography) because that slice's true residual
 miscalibration differs from the pooled average the map was fit to correct. Fitting one offset
 *per segment* from scratch overfits: a 20-obligor segment's offset MLE has a huge standard
 error and mostly reflects sampling noise, not a real segment effect. Ignoring segments
@@ -12,8 +12,8 @@ average", governed by how much genuine between-segment heterogeneity the data su
 
 ## Design rationale
 
-Shrinking a per-segment *offset* toward the shared base map — rather than shrinking a full
-per-segment refit toward a shared model — keeps four properties for free. The result stays
+Shrinking a per-segment *offset* toward the shared base map, rather than shrinking a full
+per-segment refit toward a shared model, keeps four properties for free. The result stays
 **monotone**: a level shift on the logit scale cannot un-sort scores that `base_` already
 sorted. It stays **invertible**: inverting a scalar shift through `base_`'s own exact inverse
 is closed-form for any `base_` (see *Protocol notes* below), whereas inverting a shrunk
@@ -25,7 +25,7 @@ exactly how much of its own signal survived shrinkage versus how much fell back 
 map. A full per-segment refit (an independent `BetaCalibrator`, say, fit per segment, with
 *its* parameters shrunk toward the pooled fit) does not shrink naturally to a well-defined
 "no effect" point in parameter space, does not preserve monotonicity or exact invertibility
-under shrinkage, and loses the one-number-per-segment audit trail — that design is out of
+under shrinkage, and loses the one-number-per-segment audit trail; that design is out of
 scope here.
 
 ## The model
@@ -45,18 +45,18 @@ For each segment \( g \), it then fits the offset-only logistic MLE
 \]
 
 \( \hat\delta_g \) is the natural, unbiased read of "how far off is `base` for segment \( g \)
-specifically" — but for a small segment its standard error is large, and using it directly
+specifically", but for a small segment its standard error is large, and using it directly
 (no pooling) would put wide, noisy jumps into predictions for exactly the customers with the
 least data behind them.
 
 ## Empirical-Bayes shrinkage (DerSimonian-Laird)
 
 Treat the segment-level MLEs \( \hat\delta_g \) as noisy measurements of true, unknown
-per-segment effects drawn from a common population with variance \( \tau^2 \) — the classic
+per-segment effects drawn from a common population with variance \( \tau^2 \): the classic
 random-effects setup, here across segments instead of across independent studies
 (DerSimonian & Laird, 1986). \( \tau^2 \) is estimated by their method-of-moments estimator,
-restricted to the segments with a finite standard error (a single-class segment has no MLE —
-see below — and contributes nothing to \( \tau^2 \)):
+restricted to the segments with a finite standard error (a single-class segment has no MLE,
+see below, and contributes nothing to \( \tau^2 \)):
 
 \[
 w_g = \frac{1}{\widehat{\mathrm{se}}_g^{\,2}}, \qquad
@@ -82,7 +82,7 @@ mean of the *residual* offsets is 0 by construction):
 A small, noisy segment (large \( \widehat{\mathrm{se}}_g \)) has \( \text{shrink}_g \) near 0
 and is pulled almost entirely back to the base map; a large, precise segment (small
 \( \widehat{\mathrm{se}}_g \)) keeps most of its own estimate. When \( \tau^2 = 0 \) (no
-detected heterogeneity beyond sampling noise), every segment shrinks fully to 0 — complete
+detected heterogeneity beyond sampling noise), every segment shrinks fully to 0: complete
 pooling, recovered exactly. Prediction applies the shrunk offset on the logit scale:
 
 \[
@@ -90,10 +90,10 @@ p(s, g) = \sigma\bigl(\operatorname{logit}(p_0(s)) + \tilde\delta_g\bigr).
 \]
 
 A segment with only one outcome class has no offset MLE (`estimate_offset` raises
-`ValueError` — the score equation has no interior root); `SegmentedCalibrator` records it as
-\( \hat\delta_g = 0 \), \( \widehat{\mathrm{se}}_g = \infty \), which shrinks fully
-(\( \tau^2 / (\tau^2 + \infty) = 0 \)) — the honest reading, since an infinite-variance
-estimate carries zero weight in the pooling.
+`ValueError`, since the score equation has no interior root); `SegmentedCalibrator` records
+it as \( \hat\delta_g = 0 \), \( \widehat{\mathrm{se}}_g = \infty \), which shrinks fully
+(\( \tau^2 / (\tau^2 + \infty) = 0 \)). That is the honest reading, since an
+infinite-variance estimate carries zero weight in the pooling.
 
 ## Unseen segments and the `Chain` limitation
 
@@ -101,23 +101,23 @@ estimate carries zero weight in the pooling.
 calibrator signature: `segments=None` at fit time collapses to one segment `"__all__"`
 (so the zero-argument protocol call `SegmentedCalibrator().fit(s, y)` still works), and
 `segments=None` at predict time returns the plain base map (`delta=0`, no segment-specific
-adjustment) rather than raising — there is no segment information to look anything up with.
+adjustment) rather than raising, since there is no segment information to look up with.
 A label present in `segments` at predict time but never seen at fit time is handled by the
 constructor's `unseen` policy: `"global"` (default) applies `delta=0`; `"raise"` raises
 `ValueError`, for deployments where an unrecognized segment must not silently fall back.
 
 Labels are compared as strings (`_coerce_segments` calls `.astype(str)`): fitting with
 integer labels `0`, `1` stores them as `"0"`, `"1"`, but predicting with float labels `0.0`,
-`1.0` looks up `"0.0"`, `"1.0"` — a silent mismatch, since every row then looks "unseen" and,
-under the default `unseen="global"`, falls back to the base map without raising. Pass
-`segments` with the *same* representation at fit and predict time (cast to `str` yourself if
-the label type is not guaranteed to match). As a backstop, `predict_proba` and the
+`1.0` looks up `"0.0"`, `"1.0"`. That is a silent mismatch, since every row then looks
+"unseen" and, under the default `unseen="global"`, falls back to the base map without
+raising. Pass `segments` with the *same* representation at fit and predict time (cast to
+`str` yourself if the label type is not guaranteed to match). As a backstop, `predict_proba` and the
 `segment=` inverse paths raise a `UserWarning` whenever *every* row of one call is unseen and
-`unseen="global"` — the exact failure mode this int/float mismatch produces — naming the
+`unseen="global"`, the exact failure mode this int/float mismatch produces, and it names the
 fitted `segments_` so the mismatch is easy to spot; a partial overlap (some rows match,
 others are genuinely new segments) stays silent, since that is a legitimate use case.
 
-`probcal.chain.Chain` has no `segments=` slot — every stage's `predict_proba` is called with
+`probcal.chain.Chain` has no `segments=` slot: every stage's `predict_proba` is called with
 no extra arguments. `Chain([seg, ...])` therefore always predicts through `seg`'s global map
 (`segments=None`, `delta=0`); the per-segment shift is never applied inside a `Chain`. Use
 `SegmentedCalibrator` directly, passing `segments=`, whenever the per-segment offset must
@@ -126,12 +126,12 @@ portfolio-wide offset (e.g. `monitor.moc_offset_from_counts`), same as any other
 
 ## Protocol notes
 
-`is_monotone_` is `base_.is_monotone_` — segmentation adds a level shift per segment, which
-does not change monotonicity in the raw score. `affine_logit_coeffs_` (the whole-calibrator
+`is_monotone_` is `base_.is_monotone_`, since segmentation adds a level shift per segment,
+which does not change monotonicity in the raw score. `affine_logit_coeffs_` (the whole-calibrator
 property external tooling, e.g. attribution repair, reads) is `(a, b + delta_tilde)` only when
 exactly one segment was fitted and `base_` is itself affine on the logit scale; with more than
 one segment there is no single affine map for the whole object (each segment has its own
-intercept shift), so it is `None` — this does not affect `SegmentedCalibrator`'s own
+intercept shift), so it is `None`. This does not affect `SegmentedCalibrator`'s own
 `interval_inverse`/`point_inverse`, which always invert through `base_` directly (composed
 with the requested segment's `delta_tilde` via `Chain([base_, LogitOffset(delta=delta_tilde_g)])`,
 or `base_` alone when `segment=None` or the shrunk offset is exactly 0), and so work for any
@@ -139,8 +139,8 @@ number of segments as long as `base_` itself has an exact inverse.
 
 ## Example
 
-Three segments of very different size and true miscalibration — `micro` (n=30), `mid`
-(n=300), `large` (n=3000) — with `base_` fit on the pooled data:
+Three segments of very different size and true miscalibration, `micro` (n=30), `mid`
+(n=300) and `large` (n=3000), with `base_` fit on the pooled data:
 
 ```python
 import numpy as np
@@ -187,7 +187,7 @@ delta.mid    -0.484786
 ```
 
 `large` is precise (`se=0.04`) and keeps 99.2% of its own offset MLE. `micro` is noisy
-(`se=0.47`, only 30 observations) and is pulled halfway back toward the population — its raw
+(`se=0.47`, only 30 observations) and is pulled halfway back toward the population: its raw
 MLE overshoots the true `-0.6` at `-1.11`, but `delta_tilde=-0.52` is much closer.
 
 ## Recovery simulation
@@ -208,7 +208,7 @@ same gates at a reduced run count in CI.
 | homogeneous (all true delta = 0, n=3000) | 2000 | -              | -                      | max\|mean delta_tilde\| = 0.0003 |
 
 Empirical Bayes beats both no pooling and complete pooling on the heterogeneous scenario (it
-never has to choose between "trust this tiny segment" and "ignore segments" — it blends the
+never has to choose between "trust this tiny segment" and "ignore segments"; it blends the
 two per segment, weighted by how much of a segment's disagreement with its peers survives
 sampling noise), and collapses to complete pooling (shrunk offsets near 0) once there is no
 real heterogeneity left to detect.

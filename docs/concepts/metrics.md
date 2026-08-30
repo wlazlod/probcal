@@ -1,7 +1,7 @@
 # Metrics and tests
 
-Measuring calibration is harder than fixing it. The quantity of interest —
-\( \Pr(Y = 1 \mid \hat{p}) \) — is a conditional expectation that no finite sample reveals
+Measuring calibration is harder than fixing it. The quantity of interest,
+\( \Pr(Y = 1 \mid \hat{p}) \), is a conditional expectation that no finite sample reveals
 directly, so every metric estimates it through some smoothing device, and every smoothing
 device imports bias, sensitivity, or both. This chapter walks the full catalog implemented in
 `probcal.metrics`, states each estimator's formula and known pathologies, and ends with the
@@ -70,13 +70,13 @@ S_\theta(p, y) = \theta \cdot \mathbb{1}\{p > \theta,\, y = 0\} + (1 - \theta) \
 whose weighted mean over \( \theta \in [0, 1] \) traces the diagram; doubling its integral
 recovers the Brier score exactly (Ehm, Gneiting, Jordan and Krüger, 2016), since a single
 observation's continuous integral is \( p^2/2 \) (\( y = 0 \)) or \( (1-p)^2/2 \)
-(\( y = 1 \)) — exactly half the Brier contribution. Plotting \( S_\theta(A) - S_\theta(B) \)
+(\( y = 1 \)), exactly half the Brier contribution. Plotting \( S_\theta(A) - S_\theta(B) \)
 for two forecasts (`plots.plot_murphy(..., diff=True)`) shows *where* along the decision
 spectrum one beats the other, rather than collapsing the comparison to a single Brier
 difference that a cancellation across thresholds can mask. `murphy_curve` defaults
 `thresholds=513` (`numpy.linspace(0, 1, 513)`, the package's dense-grid convention), evaluated
 in \( O(n \log n + T \log n) \) by sorting \( p \) once; the discrete identity converges to the
-exact one at rate roughly \( 1/n \) — \( S_\theta \) is piecewise linear between consecutive
+exact one at rate roughly \( 1/n \). \( S_\theta \) is piecewise linear between consecutive
 unique \( p \) values but jumps exactly there, so a trapezoid over the default grid recovers
 Brier to about \( 10^{-3} \) on typical portfolios, tightening as \( n \) grows. Isotonic (PAV)
 recalibration never increases \( S_\theta \) at any threshold, so a raw forecast plotted
@@ -104,11 +104,11 @@ with variants: `strategy="mass"` (equal-count bins, the recommended default) or 
 calibration error** (MCE). Two pathologies are structural, not incidental. First, **binning
 sensitivity**: ECE is a function of \( B \) and the bin edges, and rankings of models can flip
 under a different, equally defensible binning. Second, **finite-sample bias**: within each bin
-the absolute difference of two noisy means is biased upward — a *perfectly calibrated*
-model has positive expected ECE, and the bias grows with \( B \) and shrinks portfolio-size
+the absolute difference of two noisy means is biased upward, so a *perfectly calibrated*
+model has positive expected ECE, and the bias grows with \( B \) and shrinks with portfolio size
 slowly. `ece_debiased` applies the bias correction in the spirit of Bröcker (2009) and Ferro
 and Fricker (2012); `ece_sweep` implements the monotonic-sweep calibration error of Roelofs
-et al. (2022), which chooses the largest equal-mass \( B \) whose bin means remain monotone —
+et al. (2022), which chooses the largest equal-mass \( B \) whose bin means remain monotone,
 a principled, data-driven resolution choice that markedly reduces bias. `adaptive_ece` is an
 explicit alias for equal-mass ECE, provided because the literature uses the name; the
 documentation states the equivalence.
@@ -135,10 +135,10 @@ Four estimators avoid the binning choice altogether.
 **Smooth ECE** (Błasiok and Nakkiran, 2024) replaces hard bins with kernel smoothing: the
 residuals \( y_i - p_i \) are smoothed with a reflected Gaussian kernel (probcal applies it on
 the logit scale) and the calibration error is read from the smoothed curve, with the bandwidth
-chosen by the paper's self-consistency principle — the reported error is the fixed point where
-the measurement scale matches the error magnitude. The result is a continuous, reparametrization-
-robust quantity with none of ECE's edge artifacts; any implementation simplification is
-recorded in the changelog.
+chosen by the paper's self-consistency principle: the reported error is the fixed point where
+the measurement scale matches the error magnitude. The result is a continuous quantity,
+insensitive to reparametrization, with none of ECE's edge artifacts; any implementation
+simplification is recorded in the changelog.
 
 **ECCE**, the empirical cumulative calibration error (Arrieta-Ibarra, Gujral, Tannen, Tygert
 and Xu, 2022), sorts observations by \( p \) and tracks the cumulative deviation
@@ -146,7 +146,7 @@ and Xu, 2022), sorts observations by \( p \) and tracks the cumulative deviation
 hovering near zero; systematic over- or under-prediction makes it drift. The Kolmogorov-style
 maximum \( \max_k |C_k|/n \) and the mean absolute deviation summarize the drift, and the plot
 of \( C_k \) against sorted \( p \) localizes *where* the miscalibration lives without any
-smoothing parameter at all — rendered by `ecce_curve` and `plot_ecce`
+smoothing parameter at all; `ecce_curve` and `plot_ecce` render it
 ([Visualization](visualization.md)).
 
 **ICI and its quantiles** (Austin and Steyerberg, 2019). Fit a LOESS smoother
@@ -178,9 +178,9 @@ regional errors.
 
 The squared kernel calibration error (Widmann, Lindsten and Zachariah, 2019) embeds the
 residual measure in a reproducing-kernel Hilbert space: the population SKCE is zero exactly
-when the model is calibrated, for any universal kernel. In probcal's binary specialization —
-the paper's identity-matrix kernel construction with predictions represented as
-\( (1-p, p) \) — the kernel term reduces to
+when the model is calibrated, for any universal kernel. In probcal's binary specialization
+(the paper's identity-matrix kernel construction with predictions represented as
+\( (1-p, p) \)), the kernel term reduces to
 
 \[
 h_{ij} = 2\, \tilde{k}(s_i, s_j)\, (y_i - p_i)(y_j - p_j) ,
@@ -198,19 +198,19 @@ logit-transformed (`scale="logit"`, the low-PD option). Three consistent estimat
 | `"ul"` | \( \lfloor n/2 \rfloor^{-1} \sum_i h_{(2i-1),(2i)} \) over seeded disjoint pairs | unbiased; O(n); higher variance |
 
 The defaults follow the paper's own experiments: a Laplacian kernel
-\( \exp(-|d|/\mathrm{bw}) \) with the median-heuristic bandwidth (Gretton et al., 2012) —
+\( \exp(-|d|/\mathrm{bw}) \) with the median-heuristic bandwidth (Gretton et al., 2012),
 implemented deterministically (an evenly strided subsample of at most 4096 points above
 \( n = 4096 \), a mean-distance fallback when heavy ties drive the median to zero, and a
 refusal with instructions when all scores are identical). A Gaussian kernel is available.
 
 `skce_test` turns the estimate into a one-sided test of H0: calibrated. The default
 `method="bootstrap"` uses the quadratic statistic with the Arcones–Giné (1992) centered
-resampling — the construction the paper itself states in its Appendix G, not the wild
-bootstrap other implementations substitute — at O(n_boot · n²) cost. `method="asymptotic"`
+resampling, the construction the paper itself states in its Appendix G rather than the wild
+bootstrap other implementations substitute, at O(n_boot · n²) cost. `method="asymptotic"`
 uses the linear estimator with a normal approximation at O(n), the practical choice for
-\( n \gtrsim 20\,000 \); the trade, stated openly, is power: a single random pairing can
+\( n \gtrsim 20\,000 \); the trade, stated openly, is power. A single random pairing can
 miss slope-type miscalibration (residual means that change sign across the score range)
-that the bootstrap test rejects on the same data — the paper's documented power gap. Both
+that the bootstrap test rejects on the same data, the paper's documented power gap. Both
 report `p_value_bound`, the distribution-free bound
 \( \min\!\bigl(1, \exp(-\lfloor n/2 \rfloor\, t^2 / 8)\bigr) \): valid without any
 asymptotics but loose, so treat it as a worst-case check and decide with `p_value`.
@@ -230,18 +230,18 @@ on the prediction. Three quantities, all fitted by the shared IRLS core:
 
 The **calibration intercept** fits \( \operatorname{logit} \Pr(Y=1) = \alpha +
 \operatorname{logit}(p) \) with the slope fixed at 1 (an offset-term logistic regression):
-\( \alpha \) is calibration-in-the-large in log-odds — on a PD portfolio,
+\( \alpha \) is calibration-in-the-large in log-odds. On a PD portfolio,
 \( \alpha = -0.3 \) says the model overestimates portfolio risk by a factor
 \( e^{0.3} \approx 1.35 \) in odds.
 
 The **calibration slope** fits \( \operatorname{logit} \Pr(Y=1) = \alpha + \beta\,
 \operatorname{logit}(p) \) and reads \( \beta \): values below 1 mean predictions are too
-spread out — the signature of overfitting — and values above 1 mean underfitting. These are
+spread out (the signature of overfitting), and values above 1 mean underfitting. These are
 the same parameters a [Platt calibrator](methods-parametric.md) would *fit as repairs*, here
 estimated as *diagnoses*.
 
 The **calibration test** is the likelihood-ratio test of \( (\alpha, \beta) = (0, 1) \)
-jointly, on 2 degrees of freedom — the Cox-framed "weak calibration" test, in the lineage
+jointly, on 2 degrees of freedom: the Cox-framed "weak calibration" test, in the lineage
 running through Miller, Hui and Tierney (1991). Its χ² p-value comes from
 `probcal._math.gammainc_lower`, keeping the runtime numpy-only.
 
@@ -256,14 +256,14 @@ documented as such.
 Credit-risk validation operates on rating grades, not on continuous scores. Given grade
 assignments and per-grade PDs, `binomial_grade_test` computes for each grade the exact
 binomial tail probability of observing at least the realized number of defaults under the
-grade's PD — the incomplete-beta representation via `probcal._math.betainc` keeps it exact at
-any \( n \) — alongside the normal approximation, in the traffic-light style summary
+grade's PD (the incomplete-beta representation via `probcal._math.betainc` keeps it exact at
+any \( n \)), alongside the normal approximation, in the traffic-light style summary
 supervisors expect (BCBS, 2005). `jeffreys_grade_test` implements the ECB's preferred
 formulation (ECB, 2019): the posterior for the grade's true default rate under the Jeffreys
 prior is \( \mathrm{Beta}(k + \tfrac12,\; n - k + \tfrac12) \), and the reported p-value is
 the posterior probability that the true rate lies at or below the assigned PD. The reading is
-one-sided and conservative by design — a small value flags a grade whose PD is likely
-understated — and the documentation says so explicitly, because two-sided misreadings of the
+one-sided and conservative by design, so a small value flags a grade whose PD is likely
+understated. The documentation says so explicitly, because two-sided misreadings of the
 Jeffreys test are a recurring validation error. Both results carry 90% display intervals
 (`ci_low`/`ci_high`) for `plot_grade_backtest` ([Visualization](visualization.md)); the
 intervals are for reading, the traffic lights carry the verdict.
@@ -275,29 +275,29 @@ percent-level event rates are noisy in ways intuition underestimates. `evaluate(
 therefore attaches confidence intervals to every scalar it reports, by the case-resampling
 bootstrap: draw \( n \) observations with replacement from the evaluation pairs, recompute
 the metric, repeat `n_boot=1000` times with a seeded generator, and report the 2.5th and
-97.5th percentiles of the bootstrap distribution. The percentile method is chosen for
-robustness of implementation and transparency — it makes no normality assumption, matters for
-bounded and skewed statistics like ECE near zero, and is reproducible bit for bit given the
-seed.
+97.5th percentiles of the bootstrap distribution. The percentile method is chosen
+because it is simple to implement and easy to state: it makes no normality assumption, which
+matters for bounded and skewed statistics like ECE near zero, and it is reproducible bit for
+bit given the seed.
 
 **Stratification is the default.** Each replicate resamples the negative and positive classes
-separately — case resampling within strata, the pROC-style default — so every replicate
+separately (case resampling within strata, the pROC-style default), so every replicate
 reproduces the observed class counts exactly. This conditions the CI on the observed class
 balance: it excludes the additional variance a plain i.i.d. bootstrap picks up from the event
 *count* itself fluctuating replicate to replicate, which on low-event-rate data can be the
 dominant source of resampling noise. Excluding that source of variance can *narrow* the
 interval relative to i.i.d. resampling on exactly the rare-event, small-\( n \) data where it
-matters most — the opposite of the intuition that stratifying always tightens or always
-widens a CI; the direction depends on which variance source dominates. `evaluate(...,
+matters most. That is the opposite of the intuition that stratifying always tightens or
+always widens a CI: the direction depends on which variance source dominates. `evaluate(...,
 stratify=False)` restores plain i.i.d. resampling, redrawing a degenerate (single-class)
 replicate up to 100 times before raising rather than silently substituting anything. An older
-substitution rule — reusing the point estimate as a zero-variance replicate whenever an i.i.d.
-draw came back single-class — was removed for the same reason: it narrowed the i.i.d. path
+substitution rule (reusing the point estimate as a zero-variance replicate whenever an i.i.d.
+draw came back single-class) was removed for the same reason: it narrowed the i.i.d. path
 artificially rather than reporting the sampling variance honestly. Neither the stratified
 default nor its removal makes CIs uniformly wider or narrower; both make the reported interval
 mean what it claims to measure.
 
-Bootstrap intervals for *biased* estimators still center on the biased value — a bootstrap CI
+Bootstrap intervals for *biased* estimators still center on the biased value. A bootstrap CI
 around plain ECE quantifies its variance, not its bias, so the interval can exclude zero for a
 perfectly calibrated model. The report pairs ECE with its debiased variant precisely so this
 artifact is visible rather than misread. Bootstrap-heavy computations carry the `slow` pytest
@@ -306,56 +306,56 @@ marker and a fixed default seed, per the package's reproducibility conventions.
 **Grouping (`by=`).** `evaluate(..., by=labels)` runs the exact same pooled call above on the
 full data plus one independent call per sorted group, returning a `GroupedMetricReport`
 instead of a plain `MetricReport`. Group `i` (in sorted-label order) uses `seed + 1000 * i`
-rather than reusing `seed` for every group — a fixed, label-independent offset, so
+rather than reusing `seed` for every group. The offset is fixed and label-independent, so
 reproducibility does not depend on how many groups exist or what they are named, and no two
 groups' bootstrap draws can coincide by construction. This is side-by-side reporting, not a
 test: no comparison across groups is computed, and no multiple-comparison correction is
 applied, because none is implied by returning several independent reports. Formal
-group-conditional calibration testing is future work — see `docs/guide/groups.md`.
+group-conditional calibration testing is future work; see `docs/guide/groups.md`.
 
 **Weighted quantiles.** `e50`, `e90`, and the `reliability_summary` stats box compute their
 quantile step with `probcal._math.weighted_quantile` (Hazen interpolation positions) whenever
 `sample_weight` is given and not uniform; unweighted and equal-weight calls short-circuit to
 plain `np.quantile` so 0.1.2 results stay bit-identical (Hazen differs from numpy's default
-quantile method even at equal weights, so the short-circuit — not a numerical coincidence —
-is what protects those anchors).
+quantile method even at equal weights, so it is the short-circuit, not a numerical
+coincidence, that protects those anchors).
 
 ## Reading a report
 
 A `MetricReport` is designed to be read in a fixed order. Start with log loss and Brier
-against their pre-calibration values — did the repair help at all, and is the improvement
-larger than the bootstrap intervals overlap? Then the guardrail triplet — slope, intercept,
-Spiegelhalter — which localizes any remaining defect to spread, level, or neither. Then the
-descriptive family — debiased ECE, smooth ECE, ICI, ECCE — read as a cross-check: these
+against their pre-calibration values: did the repair help at all, and is the improvement
+larger than the bootstrap intervals overlap? Then the guardrail triplet of slope, intercept
+and Spiegelhalter, which localizes any remaining defect to spread, level, or neither. Then the
+descriptive family (debiased ECE, smooth ECE, ICI, ECCE), read as a cross-check: these
 should broadly agree, and when they do not, the disagreement itself is diagnostic (a large
 MCE with small ICI means one bad region, not global miscalibration; a large ECCE maximum with
 small mean means a localized drift). Per-grade tests come last, because they answer a
-different question — not "is the map good" but "which grades would a supervisor flag". The
+different question: not "is the map good" but "which grades would a supervisor flag". The
 [visualization chapter](visualization.md) pairs each layer of this reading with a plot.
 
-## What to select on — the table
+## What to select on: the table
 
 | Metric | Proper | Binning-sensitive | Finite-sample bias | Formal test | Selection use |
 |--------|--------|-------------------|--------------------|-------------|---------------|
 | Log loss | strictly | no | unbiased | no | **default criterion** |
 | Brier score | strictly | no | unbiased | no | **alternative criterion** |
 | Brier skill score | derived | no | mild (ratio) | no | report |
-| Murphy / LL decompositions | — | yes | corrected variant available | no | report |
+| Murphy / LL decompositions | n/a | yes | corrected variant available | no | report |
 | ECE (mass/width, MCE) | no | **yes** | **upward** | no | **never** |
 | Debiased ECE | no | yes | reduced | no | report |
 | ECE sweep (Roelofs) | no | reduced | reduced | no | optional, with care |
 | Smooth ECE | no | no | low | no | optional, with care |
 | ECCE | no | no | low | max-statistic | report |
 | ICI / E50 / E90 / Emax | no | no (LOESS frac) | low | no | optional |
-| Spiegelhalter z | — | no | — | **yes** | never (it is a test) |
-| SKCE (skce, skce_test) | — | no (bandwidth) | uq/ul unbiased | **yes** | never (it is a test) |
-| Hosmer–Lemeshow | no | **yes** | — | **yes** | **never** |
-| Calibration intercept/slope | — | no | — | yes (LR/Wald) | guardrails |
-| Binomial / Jeffreys per grade | — | grades fixed | — | **yes** | never (backtest) |
+| Spiegelhalter z | n/a | no | n/a | **yes** | never (it is a test) |
+| SKCE (skce, skce_test) | n/a | no (bandwidth) | uq/ul unbiased | **yes** | never (it is a test) |
+| Hosmer–Lemeshow | no | **yes** | n/a | **yes** | **never** |
+| Calibration intercept/slope | n/a | no | n/a | yes (LR/Wald) | guardrails |
+| Binomial / Jeffreys per grade | n/a | grades fixed | n/a | **yes** | never (backtest) |
 
 The logic behind the verdicts compresses to one principle. Selection is optimization, and
 optimizing a biased, binning-dependent, non-proper quantity invites the optimizer to exploit
-the estimator rather than improve the calibration — a calibrator can win an ECE contest by
+the estimator rather than improve the calibration. A calibrator can win an ECE contest by
 emitting values that straddle bin edges favorably, and win a Hosmer–Lemeshow contest by
 blurring predictions until the test loses power. Strictly proper scores close that loophole by
 construction. The [selector](auto-selection.md) therefore defaults to out-of-fold log loss,
@@ -397,7 +397,7 @@ changing what they measure.
 
 **The ICI family** (`ici`, `e50`, `e90`, `emax`, and the `reliability_summary` stats box) fits
 a LOESS smoother \( \hat{c}(p) \) and previously refit it at every one of the \( n \)
-observations, each fit itself scanning an O(n)-window — effectively O(n²) at portfolio scale.
+observations, each fit itself scanning an O(n)-window, effectively O(n²) at portfolio scale.
 `grid_size` (default 512) fits the smoother at that many equal-mass anchors spanning the
 prediction range and linearly interpolates the rest, the same device R's `stats::lowess` uses
 via its `delta` parameter. Windows and bandwidths are computed against the full data, so this
@@ -413,12 +413,12 @@ then evaluates that binned measure directly on its own lattice by truncated-Gaus
 convolution, independent of n. A small-bandwidth guard retries once on an adaptively refined
 binning (`bins <- ceil(range / (sigma/8))`) whenever the found bandwidth would be under-resolved
 by the current bins, then falls back to the exact per-observation computation only if that
-refinement is infeasible (above 2^20 bins) or still under-resolved — so accuracy never degrades
+refinement is infeasible (above 2^20 bins) or still under-resolved, so accuracy never degrades
 silently, and the binned path no longer reuses the exact
 path's 257-point grid (that reuse aliased against the bin lattice and was a cost-only defect).
 The lattice path engages for every call with a non-degenerate
 logit range (0.1.3 engaged it only for `n > bins`, leaving typical calibration-set sizes on
-the exact path — the "size cliff", now removed); `bins=None` or a
+the exact path: the "size cliff", now removed); `bins=None` or a
 degenerate range is bit-identical to the pre-0.1.3 exact computation. For
 `n <= bins` the lattice value may differ from the exact grid at the ~1e-4 level on typical
 portfolios (measured ≤ 2.4e-4 on `make_pd_portfolio`); on wide clipped-logit-range data the
@@ -430,24 +430,24 @@ estimate in the requested catalog is recomputed `n_boot` times (default 1000). P
 scores, ECCE, and the regression framework are O(n); binned ECEs are O(n log n); the ICI
 family shares one LOESS fit at O(grid_size · frac · n); `smooth_ece` bins once in O(n) and then
 costs O(bins · taps) per bisection step, where taps is the truncated-Gaussian kernel width
-(at most ~161 taps), independent of n — measured at ~ms per call for n up to 10⁵. `metrics=`
+(at most ~161 taps), independent of n, measured at ~ms per call for n up to 10⁵. `metrics=`
 restricts the catalog to the names actually needed.
 
 0.3.0 removes the large constant factors *inside* the loop, in three steps. First, each
 replicate is sorted by prediction once (`np.argsort(..., kind="stable")`) and that order is
-shared: the LOESS fit and ECCE skip their own sorts, `ece`/`ece_debiased`/`mce` — which all bin
-at 15 equal-mass bins — share a single binning pass instead of three. Second, `ece_sweep`'s
+shared: the LOESS fit and ECCE skip their own sorts, and `ece`/`ece_debiased`/`mce`, which all
+bin at 15 equal-mass bins, share a single binning pass instead of three. Second, `ece_sweep`'s
 ~99-candidate monotonicity scan reads per-bin weighted sums off prefix-sum differences at
 `searchsorted` cut positions instead of rebuilding a length-n bin index per candidate. Third,
 the LOESS anchor evaluation is vectorized: the 512 anchors' tricube-weighted local fits are
-solved in cache-sized blocks of whole windows rather than one Python iteration each — every
-window holds exactly the same number of points, so the block is rectangular — which is the
-step that actually moves the total, since the anchor fit was 84% of a replicate after the
+solved in cache-sized blocks of whole windows rather than one Python iteration each (every
+window holds exactly the same number of points, so the block is rectangular). That third step
+is what actually moves the total, since the anchor fit was 84% of a replicate after the
 first two.
 
 Reported **point estimates are untouched**: they are still computed on the unsorted, scalar
 path, bit-for-bit. Only the bootstrap replicates take the fast path, and it differs from the
-slow one in two harmless ways — the reordered weighted sums move percentile CI bounds in their
+slow one in two harmless ways. The reordered weighted sums move percentile CI bounds in their
 last bits (measured ≤ 4×10⁻¹¹ relative on a n=10⁴/`n_boot`=1000 full-catalog run), and the
 vectorized tricube weight cubes by multiplication where the scalar loop writes `** 3`, a
 sub-ulp difference (≤ 2.3×10⁻¹⁶ relative) worth taking because numpy sends `** 3` to `libm`
@@ -455,9 +455,9 @@ sub-ulp difference (≤ 2.3×10⁻¹⁶ relative) worth taking because numpy sen
 vectorized search reproduces the scalar two-pointer rule's comparison verbatim and is tested to
 land on the same index, tied scores included.
 
-The sub-ulp bound holds **on well-conditioned windows only**. If a window is rank-deficient —
-every non-zero tricube weight sitting on one distinct `p`, which needs the far half of the
-window to lie at exactly the bandwidth — the local-linear determinant is pure cancellation
+The sub-ulp bound holds **on well-conditioned windows only**. If a window is rank-deficient
+(every non-zero tricube weight sitting on one distinct `p`, which needs the far half of the
+window to lie at exactly the bandwidth), the local-linear determinant is pure cancellation
 (~10⁻²³ rather than 0), and the ulp-level weight difference can put the two paths on opposite
 sides of the `abs(det) < _FPMIN` guard, giving values that differ by O(1). On such a window the
 `swy / sw` branch (the weighted mean, what a rank-deficient local *linear* fit degenerates to)
@@ -465,11 +465,11 @@ is the well-defined answer and either path may be the one that takes it; the oth
 cancellation noise and is already arbitrary in the scalar loop, independently of the
 vectorization. Since anchors are data quantiles, this has not been observed to reach a reported
 value: zero end-to-end differences across 1,738 two-distinct-score configurations whose anchor
-grid straddles the gap. The guard is deliberately left as it is — changing it would move the
-point-estimate path — and the corner is pinned by
+grid straddles the gap. The guard is deliberately left as it is, since changing it would move
+the point-estimate path, and the corner is pinned by
 `tests/test_math.py::test_loess_vectorized_rank_deficient_window`.
 
-Measured on the dev host at n=10⁴, one full-catalog replicate costs 0.089s — ICI family 0.051s
+Measured on the dev host at n=10⁴, one full-catalog replicate costs 0.089s: ICI family 0.051s
 (58%), `ece_sweep`'s scan 0.024s (27%), `intercept`/`slope` 0.009s (10%), `smooth_ece` 0.003s,
 the whole binned ECE family 0.4ms. `evaluate(n=10⁴, n_boot=1000)` takes 87s, down from 304s in
 0.2.x (3.5x); the intermediate figure after the sort and sweep changes alone was 226s, and the
@@ -510,11 +510,11 @@ and 0.046s respectively at n=10⁴.
 - Brier, G. W. (1950). "Verification of forecasts expressed in terms of probability." *Monthly Weather Review* 78(1), 1–3.
 - Bröcker, J. (2009). "Reliability, sufficiency, and the decomposition of proper scores." *Quarterly Journal of the Royal Meteorological Society* 135(643), 1512–1519.
 - Cox, D. R. (1958). "Two further applications of a model for binary regression." *Biometrika* 45, 562–565.
-- ECB (2019). *Instructions for reporting the validation results of internal models — IRB Pillar I models for credit risk.* European Central Bank Banking Supervision, February 2019.
+- ECB (2019). *Instructions for reporting the validation results of internal models: IRB Pillar I models for credit risk.* European Central Bank Banking Supervision, February 2019.
 - Ehm, W., Gneiting, T., Jordan, A., Krüger, F. (2016). "Of quantiles and expectiles: consistent scoring functions, Choquet representations and forecast rankings." *Journal of the Royal Statistical Society: Series B* 78(3), 505–562.
 - Ferro, C. A. T., Fricker, T. E. (2012). "A bias-corrected decomposition of the Brier score." *Quarterly Journal of the Royal Meteorological Society* 138(668), 1954–1960.
 - Gretton, A., Borgwardt, K. M., Rasch, M. J., Schölkopf, B., Smola, A. (2012). "A Kernel Two-Sample Test." *Journal of Machine Learning Research* 13, 723–773.
-- Hosmer, D. W., Lemeshow, S. (1980). "Goodness of fit tests for the multiple logistic regression model." *Communications in Statistics — Theory and Methods* 9(10), 1043–1069.
+- Hosmer, D. W., Lemeshow, S. (1980). "Goodness of fit tests for the multiple logistic regression model." *Communications in Statistics - Theory and Methods* 9(10), 1043–1069.
 - Kumar, A., Sarawagi, S., Jain, U. (2018). "Trainable Calibration Measures for Neural Networks from Kernel Mean Embeddings." ICML, PMLR 80, 2805–2814.
 - Miller, M. E., Hui, S. L., Tierney, W. M. (1991). "Validation techniques for logistic regression models." *Statistics in Medicine* 10(8), 1213–1226.
 - Murphy, A. H. (1973). "A New Vector Partition of the Probability Score." *Journal of Applied Meteorology* 12(4), 595–600.

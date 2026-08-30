@@ -39,9 +39,9 @@ sequences below the wealth curves; the
 rendered figure on a twelve-cohort drift scenario and reads it line by
 line.
 
-Three operational rules: persist the state instead of recomputing from raw
-data (predictability is what makes the guarantee hold); a portfolio-wide
-macro shock *should* trip the alarm — that is the monitor working, not a
-false positive; after re-calibrating, start a **new** monitor on the new
+Three operational rules. Persist the state instead of recomputing from raw
+data; predictability is what makes the guarantee hold. A portfolio-wide
+macro shock *should* trip the alarm: that is the monitor working, not a
+false positive. After re-calibrating, start a **new** monitor on the new
 forecasts. The `delta_ci` half-width is also the principled `buffer_logit`
-for recourse certificates — see the treecf guide.
+for recourse certificates; see the treecf guide.

@@ -5,7 +5,7 @@
 `probcal.integrations.optbinning` (extra: `pip install "probcal[optbinning]"`,
 optbinning ≥ 0.21) calibrates a fitted `Scorecard` without touching the
 deployed points, and translates calibrated PD policies to the points scale
-*exactly* — `Scorecard.score` is affine in the logistic regression's
+*exactly*. `Scorecard.score` is affine in the logistic regression's
 log-odds unless `rounding=True`, and the integration recovers and verifies
 that affine map to machine precision.
 
@@ -63,11 +63,11 @@ print(mon.report().recommendation)
 
 With `rounding=True` the points are no longer affine in log-odds:
 `calibrate_scorecard` warns, `points_affine_coeffs_` is `None`, and
-`masterscale` refuses — use `interval_inverse` on the raw model probability
+`masterscale` refuses. Use `interval_inverse` on the raw model probability
 instead (the exact escape hatch; no silent approximation).
 
 Reattaching after a reload: persist the scorecard with optbinning's own
 `save`/`load` and the calibration layer as JSON, then
-`CalibratedScorecard.from_dict(d, scorecard=sc)` — the stored
+`CalibratedScorecard.from_dict(d, scorecard=sc)`. The stored
 scorecard-table fingerprint is checked, so a calibration layer can never be
 silently attached to a different scorecard.

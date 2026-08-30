@@ -12,15 +12,15 @@ time.
 
 Methods: probcal `BetaCalibrator` (abm), `SplineCalibrator`,
 `VennAbersCalibrator` (IVAP), `CalibratorSelector` (default menu); the
-sklearn recipes (sigmoid = logistic on logits, isotonic — the two maps
-inside `CalibratedClassifierCV`); netcal `BBQ`, `ENIR`, `BetaCalibration`;
+two sklearn maps inside `CalibratedClassifierCV` (sigmoid = logistic on
+logits, and isotonic); netcal `BBQ`, `ENIR`, `BetaCalibration`;
 and the reference `betacal` package. All methods see identical calibration
 scores, so the comparison isolates the calibration map.
 
 **Read the CIs, not the point ranks.** Most differences between reasonable
 methods on a given dataset sit inside each other's bootstrap intervals;
 what separates families is behavior at rare event rates (plateau variance
-for the step methods) and what you get besides the map — interpretation,
+for the step methods) and what you get besides the map: interpretation,
 inverses, serialization, monitoring. Where probcal loses, the table says
 so.
 
@@ -103,25 +103,25 @@ pins: scikit-learn 1.9.0, netcal 1.4.0, betacal 1.1.0, n_boot=200
 
 ## Reading the table
 
-- **The beta rows agree to the fourth decimal** across probcal, netcal, and
-  `betacal` — same family, three implementations; a useful correctness
+- The beta rows agree to the fourth decimal across probcal, netcal, and
+  `betacal`: same family, three implementations, and a useful correctness
   anchor for the harness.
-- **Rare events punish plateaus.** On Satellite (1.5%) and mammography
+- Rare events punish plateaus. On Satellite (1.5%) and mammography
   (2.3%), `sklearn isotonic` and `netcal ENIR` land at 1.6–3.5× the log
-  loss of the parametric maps — sparse tail blocks generalize badly — and
+  loss of the parametric maps (sparse tail blocks generalize badly), and
   the effect explodes on tiny credit-g (isotonic/ENIR ≈ 0.84 vs ≈ 0.55).
   probcal's IVAP keeps step-function flexibility without the blow-up
   (regularized by the label-conditional sweep) and posts the best probcal
   log loss on both rare sets.
-- **Where probcal loses:** on credit-g, `netcal BBQ` beats every probcal
+- Where probcal loses: on credit-g, `netcal BBQ` beats every probcal
   method on all three metrics (log loss 0.542 vs 0.548 for our best, ICI
-  0.032 vs 0.052, 100% grade pass) — Bayesian averaging over binnings is
-  genuinely strong on small samples; on Satellite its ECE-sweep (0.0023) is
-  the best in the table. If a single number on a small portfolio is all
+  0.032 vs 0.052, 100% grade pass); Bayesian averaging over binnings is
+  genuinely strong on small samples. On Satellite, BBQ's ECE-sweep (0.0023)
+  is the best in the table. If a single number on a small portfolio is all
   you need, BBQ is a fine choice (probcal ships one too); the CIs show
   most of these gaps are within resampling noise.
-- **Fit time** is negligible for everything except spline/selector
-  (sub-2s) and `netcal ENIR` (up to ~6s here; quadratic in unique scores —
+- Fit time is negligible for everything except spline/selector
+  (sub-2s) and `netcal ENIR` (up to ~6s here; quadratic in unique scores,
   the same scaling probcal's ENIR warns about).
 - `nan` CIs on the netcal BBQ ICI rows: bootstrap replicates where the
   piecewise-constant output degenerates leave the LOESS-based ICI

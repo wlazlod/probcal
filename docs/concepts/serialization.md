@@ -23,7 +23,7 @@ cal.fingerprint()                              # sha-256 provenance id
 | `probcal_version` | The probcal release that wrote the file |
 | `class` | Registered class name, used for `from_dict` dispatch |
 | `params` | Constructor parameters (`get_params()`) |
-| `state` | The fitted attributes — everything `predict_proba` needs |
+| `state` | The fitted attributes; everything `predict_proba` needs |
 | `fit_meta` | `n_obs`, `n_events`, `weight_sum`, `fitted_at_utc` (ISO 8601), `data_fingerprint`, convergence flags where they exist |
 
 State is JSON-native throughout: floats, ints, bools, strings; 1-D float64
@@ -31,17 +31,17 @@ arrays as plain lists; any other array as a nested list tagged with explicit
 `dtype`/`shape`; nested probcal objects (a scaling-binning stage's Platt map,
 a selector's winner, a wrapper's offsets) embed their own full envelopes.
 `VennAbersCalibrator` stores its sorted calibration set and both
-cumulative-sum-diagram sweeps — O(n) by design, because that *is* the fitted
+cumulative-sum-diagram sweeps: O(n) by design, because that *is* the fitted
 map. `CalibratedModel` stores a *reference* to the base model (class name,
 user-supplied `model_id`, `get_params()` when JSON-encodable), never the
 model object; reattach on load with
 `CalibratedModel.from_dict(d, model=...)`.
 
-## Why JSON — and never pickle
+## Why JSON, and never pickle
 
 Pickle executes arbitrary code on load: a poisoned artifact is a remote-code
 path, and no reviewer can read one. A probcal JSON is inert data a validator
-can open, diff, and archive — the parameters a regulator asks about are in
+can open, diff, and archive. The parameters a regulator asks about are in
 plain sight, and loading it can only ever build registered probcal classes
 via their documented constructors. There is no pickle anywhere in the
 package, and there will not be.
@@ -69,13 +69,13 @@ run. A change that breaks reading old files breaks the build.
 
 Two hashes serve provenance:
 
-- **`fingerprint()`** — SHA-256 of the canonical JSON of `to_dict()`,
+- `fingerprint()` is the SHA-256 of the canonical JSON of `to_dict()`,
   excluding `probcal_version` and the fit timestamps. Two identical fits on
   identical data produce the same fingerprint; any change to parameters or
   fitted state changes it. Consumers (model registries, the monitoring
   workstream, recourse engines) record it to name exactly which calibrator
   a decision was computed against.
-- **`fit_meta["data_fingerprint"]`** — SHA-256 of the row-sorted training
+- `fit_meta["data_fingerprint"]` is the SHA-256 of the row-sorted training
   triple `(s, y, w)` (probabilities and weights only, for `LogitOffset`).
   Sorting makes it permutation-invariant: the same sample in any order
   hashes identically.

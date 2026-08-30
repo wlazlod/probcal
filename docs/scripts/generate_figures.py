@@ -148,12 +148,12 @@ def main() -> None:
     seg_y = (
         np.random.default_rng(8).random(y.size) < expit(logit(scores) + seg_shift[segment_idx])
     ).astype(float)
-    save(
-        plot_reliability(
-            reliability_binned(seg_y, scores), y=seg_y, p=scores, scale="logit", by=segment
-        ),
-        "reliability_faceted.png",
+    faceted = plot_reliability(
+        reliability_binned(seg_y, scores), y=seg_y, p=scores, scale="logit", by=segment
     )
+    for panel in faceted.axes:  # every panel keeps its own x tick labels
+        panel.tick_params(labelbottom=True)
+    save(faceted, "reliability_faceted.png")
 
     scenario = build_drift_scenario()
     save(plot_e_process(scenario.monitor.report(), grades_panel=True), "e_process.png")

@@ -41,7 +41,9 @@ def thumbnail(y: np.ndarray, p: np.ndarray, path: Path) -> None:
 
     The report itself is HTML; rasterizing it would need a browser, so the
     thumbnail re-renders the same header numbers and the same first figure
-    (``plot_corp`` on the same ``corp_reliability`` call) with matplotlib.
+    (``plot_corp`` on the same ``corp_reliability`` call) with matplotlib. It
+    is a reconstruction, not a screenshot, so it carries no version string or
+    timestamp it would have to be kept in sync with.
     """
     corp = corp_reliability(y, p, n_resamples=N_BOOT, random_state=SEED)
 
@@ -51,8 +53,7 @@ def thumbnail(y: np.ndarray, p: np.ndarray, path: Path) -> None:
     head = fig.add_subplot(grid[0])
     head.axis("off")
     head.text(0, 1.0, TITLE, fontsize=15, fontweight="bold", va="top")
-    head.text(0, 0.84, "Generated ... UTC (probcal 0.3.0)", fontsize=8, color="0.45", va="top")
-    head.text(0, 0.66, "Portfolio summary", fontsize=11, fontweight="bold", va="top")
+    head.text(0, 0.76, "Portfolio summary", fontsize=11, fontweight="bold", va="top")
     rows = [
         ("n", f"{len(y):,}"),
         ("events", f"{int(np.sum(y)):,}"),
@@ -60,8 +61,8 @@ def thumbnail(y: np.ndarray, p: np.ndarray, path: Path) -> None:
         ("mean predicted probability", f"{float(np.mean(p)):.4%}"),
     ]
     for i, (key, value) in enumerate(rows):
-        head.text(0, 0.50 - 0.13 * i, key, fontsize=9, color="0.35", va="top")
-        head.text(0.42, 0.50 - 0.13 * i, value, fontsize=9, va="top")
+        head.text(0, 0.58 - 0.13 * i, key, fontsize=9, color="0.35", va="top")
+        head.text(0.42, 0.58 - 0.13 * i, value, fontsize=9, va="top")
     head.text(0, -0.06, "Reliability", fontsize=11, fontweight="bold", va="top")
 
     plot_corp(corp, ax=fig.add_subplot(grid[1]))

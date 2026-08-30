@@ -10,7 +10,7 @@ every section switched on, over the twelve-cohort drift scenario the
 [monitoring chapter](../concepts/monitoring.md#components) plots. It is a
 single self-contained HTML file, so the link is the whole artifact.
 
-[![First screen of the sample validation report: the document title, the generated-at line, the portfolio summary block of n, events, event rate and mean predicted probability, and below it the CORP reliability diagram with its consistency band and score-decomposition box](../assets/sample_validation_report.png)](../assets/sample_validation_report.html)
+[![Reconstruction of the report's first screen: the document title, the portfolio summary block of n, events, event rate and mean predicted probability, and below it the CORP reliability diagram with its consistency band and score-decomposition box](../assets/sample_validation_report.png)](../assets/sample_validation_report.html)
 
 Regenerate it deliberately, not on every build:
 `uv run python docs/scripts/generate_sample_report.py`.
@@ -29,6 +29,7 @@ html = validation_report(
     grades=grades,          # optional: adds the Jeffreys/Pluto-Tasche section
     by=segments,            # optional: adds the grouped-evaluation section
     n_boot=50, seed=42,     # one shared knob for every resampling site
+                            # (50: reduced for the docs harness; use 200+)
     path="validation.html",
 )
 ```

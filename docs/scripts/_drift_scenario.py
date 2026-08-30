@@ -1,11 +1,12 @@
 """The drift scenario shared by the e-process figure and the sample report.
 
-One deployed beta calibration watched over twelve monthly cohorts: the first
-six are calibrated, from month seven the true PD is the deployed forecast
-shifted by +0.6 log-odds — a sustained central-tendency deterioration the
-monitor is meant to catch. Everything is seeded, so both
-``generate_figures.py`` and ``generate_sample_report.py`` render the same
-trajectory.
+One deployed beta calibration watched over twelve monthly cohorts. Three
+business segments sit at different levels throughout (retail below the
+deployed map, corporate above it, sme on it); on top of that, from month
+seven the whole portfolio's true PD is the deployed forecast shifted by
++0.6 log-odds — a sustained central-tendency deterioration the monitor is
+meant to catch. Everything is seeded, so ``generate_figures.py`` and
+``generate_sample_report.py`` render the same trajectory.
 """
 
 from dataclasses import dataclass
@@ -18,6 +19,14 @@ from probcal.monitor import CalibrationMonitor
 GRADE_EDGES = (0.005, 0.01, 0.02, 0.05)
 GRADE_NAMES = np.array(["G1", "G2", "G3", "G4", "G5"])
 SEGMENT_NAMES = np.array(["retail", "sme", "corporate"])
+# Segment levels as deviations from the deployed map — retail below it,
+# corporate above, sme between — then centered so the pooled portfolio is
+# still calibrated before the drift starts. Without the centering the spread
+# alone is a portfolio-level error the monitor would (correctly) alarm on in
+# the first batches, hiding the drift the scenario is actually about.
+_SEGMENT_SPREAD = np.array([-0.4, 0.0, 0.45])
+_LEVEL_CENTERING = 0.07
+SEGMENT_SHIFT = _SEGMENT_SPREAD - _LEVEL_CENTERING
 
 
 @dataclass(frozen=True)
@@ -50,20 +59,29 @@ def build(
 
     monitor = CalibrationMonitor(alpha=0.05)
     rng = np.random.default_rng(seed)
-    ys, ps, gs = [], [], []
+    # Segments draw from their own stream, so changing the segment structure
+    # never perturbs the outcome draw (and with it the monitor's trajectory).
+    seg_rng = np.random.default_rng(seed + 1)
+    ys, ps, gs, segs = [], [], [], []
     for k in range(n_batches):
         cohort = make_pd_portfolio(n=batch_size, random_state=100 + k)
         p_batch = calibrator.predict_proba(cohort.scores)
-        true_pd = p_batch if k < onset else expit(logit(p_batch) + drift_logit)
+        segment_idx = seg_rng.integers(0, SEGMENT_NAMES.size, size=batch_size)
+        drift = drift_logit if k >= onset else 0.0
+        true_pd = expit(logit(p_batch) + drift + SEGMENT_SHIFT[segment_idx])
         y_batch = (rng.random(batch_size) < true_pd).astype(float)
         grade_batch = _grades(p_batch)
         monitor.update(y_batch, p_batch, grade=grade_batch, label=f"m{k + 1:02d}")
         ys.append(y_batch)
         ps.append(p_batch)
         gs.append(grade_batch)
+        segs.append(SEGMENT_NAMES[segment_idx])
 
-    y = np.concatenate(ys)
-    p = np.concatenate(ps)
-    grades = np.concatenate(gs)
-    segments = SEGMENT_NAMES[np.arange(y.size) % SEGMENT_NAMES.size]
-    return DriftScenario(calibrator, y, p, grades, segments, monitor)
+    return DriftScenario(
+        calibrator,
+        np.concatenate(ys),
+        np.concatenate(ps),
+        np.concatenate(gs),
+        np.concatenate(segs),
+        monitor,
+    )

@@ -1,4 +1,4 @@
-"""Slow coverage-simulation gate for probcal.curves.corp_reliability bands (spec V1).
+"""Slow coverage-simulation gate for probcal.curves.corp_reliability bands.
 
 The full-size table (500 runs, n in {1000, 5000}, level in {0.8, 0.9}) is
 produced by ``docs/scripts/corp_sim.py`` and pasted into

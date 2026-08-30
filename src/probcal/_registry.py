@@ -1,4 +1,4 @@
-"""Registry of serializable classes for from_dict dispatch (spec W5)."""
+"""Registry of serializable classes for from_dict dispatch."""
 
 from typing import TypeVar
 

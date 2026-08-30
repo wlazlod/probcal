@@ -1,4 +1,4 @@
-"""CalibrationMonitor: anytime-valid e-process monitoring (spec W7/W8).
+"""CalibrationMonitor: anytime-valid e-process monitoring.
 
 Statistical design, validity conditions, and references:
 ``docs/concepts/monitoring.md``.
@@ -147,7 +147,7 @@ class MonitorReport:
 
 @register
 class CalibrationMonitor:
-    """Anytime-valid calibration monitoring by e-processes (spec W7/W8).
+    """Anytime-valid calibration monitoring by e-processes.
 
     Feed matured outcome batches in arrival order; the alarm rule
     "``E >= 1/alpha``" has type-I error at most ``alpha`` at every stopping
@@ -326,7 +326,7 @@ class CalibrationMonitor:
         return all(s.log_e_increment is not None for s in self.steps_)
 
     def _onset_index(self) -> int | None:
-        """Backward-CUSUM argmax onset index (spec M3), by index -- not by label.
+        """Backward-CUSUM argmax onset index, by index -- not by label.
 
         Shared by :meth:`report` and :meth:`apply_recommendation` so the
         two never disagree about which batch onset points to. Batch labels
@@ -585,7 +585,7 @@ class CalibrationMonitor:
         )
 
     def apply_recommendation(self, target: object = None) -> object:
-        """Apply :meth:`report`'s recommendation once, closing the re-offset loop (spec M4).
+        """Apply :meth:`report`'s recommendation once, closing the re-offset loop.
 
         ``"re-offset"``: estimates the log-odds shift by maximum likelihood
         (:func:`~probcal.offset.estimate_offset`) on the batches from the

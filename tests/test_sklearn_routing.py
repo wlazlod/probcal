@@ -1,4 +1,4 @@
-"""Sample-weight delivery through the adapter, both metadata-routing modes (spec K3).
+"""Sample-weight delivery through the adapter, both metadata-routing modes.
 
 What these tests pin down, verified identically on scikit-learn 1.4.2, 1.6.1
 and 1.9.0:
@@ -16,7 +16,7 @@ and 1.9.0:
   declaration is involved.
 * A base estimator whose ``fit`` has no ``sample_weight`` parameter gets exactly
   one ``UserWarning`` and unweighted inner fits; the calibrator fit stays
-  weighted. Before spec K3 this raised ``TypeError`` instead.
+  weighted. Before this fix, it raised ``TypeError`` instead.
 """
 
 import warnings

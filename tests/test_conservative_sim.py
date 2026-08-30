@@ -1,4 +1,4 @@
-"""Slow coverage-simulation gate for probcal.metrics.pluto_tasche (spec C1).
+"""Slow coverage-simulation gate for probcal.metrics.pluto_tasche.
 
 The full-size table (2000 runs) is produced by
 ``docs/scripts/conservative_sim.py`` and pasted into

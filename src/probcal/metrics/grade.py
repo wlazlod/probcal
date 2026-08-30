@@ -13,7 +13,7 @@ import numpy as np
 from .._math import beta_ppf, betainc, norm_cdf
 
 # Re-exported so `probcal.metrics.grade.pluto_tasche` sits alongside the
-# per-grade backtests it complements; defined in `_conservative.py` (spec C1).
+# per-grade backtests it complements; defined in `_conservative.py`.
 from ._conservative import (  # noqa: F401
     PlutoTascheResult,
     jeffreys_upper_bands,
@@ -22,7 +22,7 @@ from ._conservative import (  # noqa: F401
 )
 
 # Re-exported so `probcal.metrics.grade.hl_e_test` sits alongside the other
-# per-grade tests; defined in `_safe.py` (spec M1).
+# per-grade tests; defined in `_safe.py`.
 from ._safe import HlEResult, hl_e_test  # noqa: F401
 from .scores import _prep
 

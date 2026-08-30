@@ -184,7 +184,7 @@ the two failure modes on its own. The rule is a *diagnostic summary with no
 error guarantee* — every component process is reported so the reader can
 disagree with it.
 
-## Closing the loop: `apply_recommendation` (spec M4)
+## Closing the loop: `apply_recommendation`
 
 `mon.apply_recommendation(target=None)` turns `report()`'s recommendation into an
 action, returning an `AppliedAction(kind, offset, composed, monitor, window, audit)`:
@@ -329,7 +329,7 @@ the same caveat noted above.
 
 ## Simulation verification
 
-Produced by `docs/scripts/monitor_sim.py` (spec W9): 2000 seeded runs × 24
+Produced by `docs/scripts/monitor_sim.py`: 2000 seeded runs × 24
 monthly batches of n=2000 at a 5% event rate; drift experiments inject the
 shift at batch 12; reduced-size versions of the same gates run in CI
 (`tests/test_monitor_sim.py`), which also cross-checks the vectorized
@@ -360,7 +360,7 @@ same CI suite, under the default `recommendation_window="since_onset"`:
 18/20 pure-offset runs correctly called `re-offset`, 20/20 pure-slope runs
 correctly called `re-fit`.
 
-### Per-grade CS coverage and drift-onset localization (spec M2/M3)
+### Per-grade CS coverage and drift-onset localization
 
 Produced by `docs/scripts/monitor_grade_onset_sim.py` (100 seeded runs): a full-size rerun of
 the two constructions that already gate in CI at reduced run counts —
@@ -376,7 +376,7 @@ is a weaker drift than the CI gate's `shift=0.6` and is reported, not gated.
 | onset \|onset-12\| (shift=0.6, n=100)                    | median 1.0, IQR [1.0, 2.0] | <= 2 (median) |
 | onset \|onset-12\| (shift=0.4, n=100)                    | median 1.0, IQR [1.0, 2.0] | reported |
 
-### `hl_e_test` (spec M1)
+### `hl_e_test`
 
 Produced by `docs/scripts/hl_e_sim.py` (2000 seeded runs, n=2000, 5
 equal-mass grades; wall time ≈ 19s): under H0 (`y ~ Bernoulli(p)`, the

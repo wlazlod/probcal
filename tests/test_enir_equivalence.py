@@ -1,4 +1,4 @@
-"""Equivalence gate for the W8 ENIR vectorized path rewrite (task-8b-brief.md): the
+"""Equivalence gate for the ENIR vectorized path rewrite: the
 new ``ENIRCalibrator._path_fit`` must reproduce the frozen v0.1.2 reference
 (``tests/_enir_reference.py``) on ``path_lambdas_``, ``path_solutions_`` and
 predictions.

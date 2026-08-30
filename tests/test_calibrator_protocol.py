@@ -1,4 +1,4 @@
-"""Protocol conformance across every inverse-capable object (spec W11 P2).
+"""Protocol conformance across every inverse-capable object.
 
 The contract a recourse engine (treecf's ``_SupportsIntervalInverse``)
 relies on: keyword ``interval_inverse(lo, hi, space="logit",
@@ -179,7 +179,7 @@ def test_calibrated_scorecard_conforms() -> None:
         cs.interval_inverse(0.09, 0.1, space="logit", buffer_logit=3.0)
 
 
-# ---------------------------------------------------------------- plateau contract (P3)
+# ---------------------------------------------------------------- plateau contract
 
 
 @pytest.mark.parametrize(

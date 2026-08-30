@@ -1,4 +1,4 @@
-"""Tests for probcal.report.validation_report (spec E2)."""
+"""Tests for probcal.report.validation_report."""
 
 import importlib.util
 import re

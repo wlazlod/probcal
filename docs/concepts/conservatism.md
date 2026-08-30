@@ -234,7 +234,7 @@ should be documented as such wherever it informs a masterscale or a production o
 
 ## Simulation verification
 
-Produced by `docs/scripts/conservative_sim.py` (spec C1): a four-grade portfolio
+Produced by `docs/scripts/conservative_sim.py`: a four-grade portfolio
 (`n = (2000, 2000, 1000, 500)`, true PD `(0.5%, 1%, 3%, 8%)`, monotone by construction),
 2000 seeded runs per confidence level. Coverage for grade *i* is the share of runs with
 `pd_upper_i >= pd_true_i`; the gated quantity is the minimum over grades, since that is the

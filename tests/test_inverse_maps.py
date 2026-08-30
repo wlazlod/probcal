@@ -48,7 +48,7 @@ def test_isotonic_block_edge_semantics() -> None:
     raw_lo, raw_hi = cal.interval_inverse(0.2, 0.9)
     assert raw_lo == 0.2  # left edge of the first block with mean >= 0.2
     assert raw_hi == np.nextafter(0.5, 0.0)  # one float below the last block start:
-    # the bound is itself in the preimage, so closed-bound consumers are safe (W11 P3)
+    # the bound is itself in the preimage, so closed-bound consumers are safe
 
 
 def test_isotonic_unattainable_raises() -> None:
@@ -343,7 +343,7 @@ def test_exports() -> None:
 def test_point_inverse_boundary_p_raises() -> None:
     # p = 0 and p = 1 are not attained by any finite raw score: refusal is
     # all-or-nothing (one bad element fails the whole call), never a silent
-    # clip to [1e-12, 1 - 1e-12] followed by a finite "inverse" (W2 doctrine).
+    # clip to [1e-12, 1 - 1e-12] followed by a finite "inverse".
     platt = PlattCalibrator().fit(*_sample())
     beta = BetaCalibrator().fit(*_sample())
     off = LogitOffset(delta=0.3).fit(expit(RNG.normal(-1.0, 1.0, 200)))
@@ -402,7 +402,7 @@ def test_offset_interval_inverse_respects_representable_range() -> None:
 
 
 def test_point_and_interval_inverse_agree_on_attainability() -> None:
-    # Spec W2: the two inverse maps must classify the same target the same way.
+    # The two inverse maps must classify the same target the same way.
     # (a) Degenerate beta a=0: attainable range is (sigma(c), 1).
     cal = _beta_with_params(0.0, 2.0, 0.1)
     lo = float(expit(np.array([0.1]))[0])

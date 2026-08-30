@@ -1,4 +1,4 @@
-"""Tests for probcal.metrics._safe (mixture-LR grade e-test, spec M1)."""
+"""Tests for probcal.metrics._safe (mixture-LR grade e-test)."""
 
 import numpy as np
 import pytest

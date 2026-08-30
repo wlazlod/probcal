@@ -1,4 +1,4 @@
-"""Tests for probcal.monitor._onset and the since-onset recommendation window (spec M3)."""
+"""Tests for probcal.monitor._onset and the since-onset recommendation window."""
 
 import importlib.util
 import json

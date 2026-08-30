@@ -1,4 +1,4 @@
-"""Self-contained HTML/markdown validation report (spec E2).
+"""Self-contained HTML/markdown validation report.
 
 :func:`validation_report` assembles a single document — one HTML file with
 base64-embedded PNG figures, or a markdown file plus a sibling directory of

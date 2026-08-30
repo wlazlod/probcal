@@ -1,4 +1,4 @@
-"""Slow type-I/power simulation gates for probcal.metrics.hl_e_test (spec M1).
+"""Slow type-I/power simulation gates for probcal.metrics.hl_e_test.
 
 The full-size table (2000 runs) is produced by ``docs/scripts/hl_e_sim.py``
 and pasted into ``docs/concepts/monitoring.md``; this suite enforces the

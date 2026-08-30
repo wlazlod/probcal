@@ -1,4 +1,4 @@
-"""Per-grade offset confidence sequences (spec M2); slow power sim excluded from -m "not slow"."""
+"""Per-grade offset confidence sequences; slow power sim excluded from -m "not slow"."""
 
 import pathlib
 

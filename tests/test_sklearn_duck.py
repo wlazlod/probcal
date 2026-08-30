@@ -1,4 +1,4 @@
-"""Bare-core duck typing against sklearn >= 1.6 (spec K1).
+"""Bare-core duck typing against sklearn >= 1.6.
 
 These tests use no adapter: a plain probcal calibrator is handed straight to
 ``sklearn.base.clone``, ``sklearn.utils.get_tags``, ``check_is_fitted`` and

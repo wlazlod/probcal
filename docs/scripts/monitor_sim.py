@@ -1,4 +1,4 @@
-"""W9 verification simulations for probcal.monitor (spec W9).
+"""Verification simulations for probcal.monitor.
 
 Usage: ``uv run python docs/scripts/monitor_sim.py [--fast]``
 
@@ -10,7 +10,7 @@ cross-checks this replay against the shipped ``CalibrationMonitor`` class
 below; the full-size table printed here is pasted into
 ``docs/concepts/monitoring.md``.
 
-Gates (spec W9, full sizes):
+Gates (full sizes):
 - type I: alarm fraction <= alpha + 2*sqrt(alpha*(1-alpha)/runs) for
   alpha in {0.05, 0.01}, per component and global, 2000 runs x 24 monthly
   batches x n=2000 (event rate 5%), plus per-grade and heterogeneous-size

@@ -96,7 +96,7 @@ identity. Calibrated policies go through `Target.calibrated` (or
 Implemented in [treecf#23](https://github.com/wlazlod/treecf/pull/23),
 released as treecf 0.2.4, which the `probcal[treecf]` extra now pins.
 
-- **T1 — provenance:** the certificate's calibrated-target block carries a
+- **Provenance:** the certificate's calibrated-target block carries a
   structured `calibrator` sub-block `{embedded, fingerprint, type,
   buffer_logit}` — the fingerprint from the duck-typed `fingerprint()`
   (available on every probcal object), `null` when absent — and every
@@ -104,18 +104,17 @@ released as treecf 0.2.4, which the `probcal[treecf]` extra now pins.
   `Explainer.check_certificate(cert, calibrator=...)` re-checks the
   fingerprint and re-inverts the stored `lo`/`hi` against the stored raw
   interval. (Field names shipped as `calibrator_fingerprint` on batch
-  records and `score_calibrated` for the read-out — not the spec's
-  provisional `calibrated_probability`.)
-- **T2 — calibrated read-out:** `Counterfactual.score_calibrated` and the
+  records and `score_calibrated` for the read-out.)
+- **Calibrated read-out:** `Counterfactual.score_calibrated` and the
   certificate factual block's `score_calibrated` carry the calibrator's
   probability at the counterfactual and factual points (presentational;
   optimization stays on the raw margin).
-- **T3 — plateau-aware feasibility tests:** an engine-level plateau suite
+- **Plateau-aware feasibility tests:** an engine-level plateau suite
   against brute force, run twice — once with a counting stub implementing
   probcal's generalized-inverse step contract and once with real probcal
   isotonic/centered-isotonic fits — asserting identical feasibility
   decisions on closed intervals.
-- **T4 — test matrix:** a matrix test module in treecf with probcal as an
+- **Test matrix:** a matrix test module in treecf with probcal as an
   optional test dependency: {Platt, Temperature, Beta `abm`, Isotonic,
   CenteredIsotonic, `Chain(Beta + offset)`, `CalibratedModel.chain_`} ×
   {`op="<="`, `op=">="`, `range`, `bands`} × {`buffer_logit` 0, 0.2} on
@@ -134,7 +133,7 @@ released as treecf 0.2.4, which the `probcal[treecf]` extra now pins.
   0.2.3, which the `probcal[treecf]` extra pins. XGBoost also casts
   features to float32 natively — the analogous fix is a treecf
   follow-up.
-- **T5 — docs:** treecf's `concepts/calibration.md` documents provenance
+- **Docs:** treecf's `concepts/calibration.md` documents provenance
   and the read-out, and pin tests count exactly one `interval_inverse`
   call per `explain_batch` (one per band for ladders).
 

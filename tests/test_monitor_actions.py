@@ -366,7 +366,7 @@ def test_apply_recommendation_rejects_unknown_target_type() -> None:
 
 def test_apply_recommendation_closes_the_drift_loop() -> None:
     """End-to-end: alarm -> apply_recommendation() -> feed the corrected
-    stream into the fresh monitor -> no further alarm (spec M4)."""
+    stream into the fresh monitor -> no further alarm."""
     mon = CalibrationMonitor(alpha=0.05)
     alarm_batch = None
     batches = []

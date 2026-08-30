@@ -1,4 +1,4 @@
-"""Mirror of sklearn's generic checks on valid score-level data (spec K4.2).
+"""Mirror of sklearn's generic checks on valid score-level data.
 
 `sklearn.utils.estimator_checks` generates multi-column feature matrices of
 arbitrary reals, which no score-level estimator can accept — those checks are
@@ -26,7 +26,7 @@ Checks with no score-level analogue, and why:
   `n_features_in_` is always 1 and is pinned in `tests/test_sklearn.py`; the
   bare core has no such attribute by design.
 * `check_fit1d`, `check_fit2d_predict1d` — both expect a raise on 1-D `X`,
-  which is the core's primary input form (spec W6/K2).
+  which is the core's primary input form.
 * `check_supervised_y_2d` — expects a `DataConversionWarning` and a silent
   ravel of column-vector `y`; `_validation.validate_binary_y` stays strictly
   1-D and raises instead.

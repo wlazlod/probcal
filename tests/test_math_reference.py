@@ -114,7 +114,7 @@ def test_irls_offset_vs_statsmodels() -> None:
 
 def test_irls_soft_targets_vs_statsmodels() -> None:
     # GLM(Binomial) accepts interior-valued targets: the smoothed Platt targets
-    # on wide-score data must give matching coefficients (IRLS_SPEC W4.6).
+    # on wide-score data must give matching coefficients.
     sm = pytest.importorskip("statsmodels.api")
     rng = np.random.default_rng(11)  # local rng: keep the module RNG draw order intact
     n = 20_000

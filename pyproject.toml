@@ -47,7 +47,7 @@ dev = [
     "scipy>=1.11",          # reference for tests ONLY — never imported by src/probcal
     "scikit-learn>=1.4",    # reference for tests ONLY
     "statsmodels>=0.14",    # reference for tests ONLY
-    "nbmake>=1.5",          # executes the end-to-end notebook in CI (W12)
+    "nbmake>=1.5",          # executes the end-to-end notebook in CI
 ]
 docs = [
     "mkdocs-material>=9.5",

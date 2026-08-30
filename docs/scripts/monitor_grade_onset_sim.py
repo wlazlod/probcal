@@ -1,5 +1,5 @@
-"""Full-size reporting tables for per-grade CS coverage (spec M2) and drift-onset
-localization (spec M3).
+"""Full-size reporting tables for per-grade CS coverage and drift-onset
+localization.
 
 Usage: ``uv run python docs/scripts/monitor_grade_onset_sim.py [--fast]``
 

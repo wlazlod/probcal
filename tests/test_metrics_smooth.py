@@ -222,8 +222,8 @@ def test_smece_lattice_evaluator_beats_257_grid_accuracy() -> None:
 def _old_smooth_ece(
     y: object, p: object, *, sample_weight: object = None, bins: int | None = 8192
 ) -> float:
-    """Verbatim copy of ``smooth_ece``'s body before the Task V3a lattice
-    refactor (which factored ``_lattice``/``_smece_solve`` out of it), kept
+    """Verbatim copy of ``smooth_ece``'s body before the lattice refactor
+    (which factored ``_lattice``/``_smece_solve`` out of it), kept
     here to pin bit-identical behavior across the refactor.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
@@ -253,7 +253,7 @@ def _old_smooth_ece(
 
 
 def test_smooth_ece_refactor_bit_identical_to_old_impl() -> None:
-    # Task V3a factored a shared _lattice/_smece_solve helper out of
+    # A shared _lattice/_smece_solve helper was factored out of
     # smooth_ece for reuse by curves.reliability_smooth. Every branch of the
     # old inline implementation must still produce bit-identical output.
     d = make_pd_portfolio(n=4000, random_state=21)

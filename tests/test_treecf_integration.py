@@ -1,4 +1,4 @@
-"""Joint smoke test with treecf (spec W11 P4). Skipped without treecf.
+"""Joint smoke test with treecf. Skipped without treecf.
 
 Correctness is always re-verified through sklearn's own predict — never
 trusted from treecf's report. These tests surfaced a treecf boundary-routing
@@ -60,7 +60,7 @@ def test_counterfactual_hits_calibrated_target(setup) -> None:
     assert hasattr(res, "x_cf"), f"expected a counterfactual, got {type(res).__name__}"
     x_cf = np.asarray(res.x_cf, dtype=np.float64)
     p_cf = cal.predict_proba(model.predict_proba(x_cf.reshape(1, -1))[:, 1])
-    assert p_cf[0] <= 0.05 + 1e-9  # closed interval per the P3 contract
+    assert p_cf[0] <= 0.05 + 1e-9  # closed interval per the plateau contract
 
 
 def test_score_calibrated_readout(setup) -> None:

@@ -1,4 +1,4 @@
-"""Slow simulation gates for probcal.monitor (spec W9, reduced sizes).
+"""Slow simulation gates for probcal.monitor (reduced sizes).
 
 The full-size table (2000 runs) is produced by ``docs/scripts/monitor_sim.py``
 and pasted into ``docs/concepts/monitoring.md``; this suite enforces the same

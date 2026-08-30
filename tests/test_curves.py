@@ -95,7 +95,7 @@ def test_belt_grid_scales_consistent() -> None:
 
 def test_belt_separated_data_stops_extension() -> None:
     # Perfectly separated outcomes: the degree-1 fit separates (ridge fallback)
-    # and the forward LR loop must not extend to higher degrees (IRLS_SPEC W3.3).
+    # and the forward LR loop must not extend to higher degrees.
     rng = np.random.default_rng(9)
     n = 200
     p = np.concatenate([rng.uniform(0.02, 0.2, n // 2), rng.uniform(0.8, 0.98, n // 2)])

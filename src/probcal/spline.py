@@ -29,7 +29,7 @@ def _second_difference_penalty(k: int) -> np.ndarray:
 
 
 # Independent of _math.irls_logistic: the lam * penalty term already regularizes,
-# so the separation handling of IRLS_SPEC is not needed here.
+# so its separation handling is not needed here.
 def _penalized_irls(
     basis: np.ndarray,
     y: np.ndarray,

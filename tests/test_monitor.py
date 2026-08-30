@@ -1,4 +1,4 @@
-"""Fast tests for probcal.monitor (spec W8); simulations live in test_monitor_sim.py."""
+"""Fast tests for probcal.monitor; simulations live in test_monitor_sim.py."""
 
 import json
 

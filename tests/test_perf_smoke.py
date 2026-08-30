@@ -25,7 +25,7 @@ bootstrap loop and metric dispatch above both the smECE bin-lattice default
 (8,192) and the LOESS anchor grid (512); the n=10,000/n_boot=1000 case below
 pins the full-catalog acceptance scale.
 
-ENIR's ceiling uses n=20,000, not the spec's m=1e5: the vectorized engine (the
+ENIR's ceiling uses n=20,000, not the design target m=1e5: the vectorized engine (the
 production memory fix) is O(m*G) in time, and 1e5 is not
 reachable under any headroom multiple on this host (measured 35.5s at m=5e4).
 n=20,000 is the largest size that still leaves >=5x headroom to a practical

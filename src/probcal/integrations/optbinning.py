@@ -1,4 +1,4 @@
-"""Calibrated optbinning scorecards (spec W10).
+"""Calibrated optbinning scorecards.
 
 Requires the ``probcal[optbinning]`` extra (optbinning >= 0.21). The
 scorecard stays the deployed artifact — points are untouched; probcal adds a

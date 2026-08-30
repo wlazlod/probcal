@@ -14,6 +14,8 @@ runs whenever both are installed.
 ## Case 1 — parametric: "below 2% calibrated PD"
 
 ```python
+# docs: no-run — needs a real tree-ensemble model and feature matrix;
+# see tests/test_treecf_integration.py for a runnable fixture
 from treecf import Explainer, Target
 from probcal import BetaCalibrator
 
@@ -41,6 +43,7 @@ overshoot into the next block. The full contract, with a worked example:
 the *Inverse maps* chapter, "The step-calibrator contract".
 
 ```python
+# docs: no-run — continues the Case 1 setup (exp, x); see that block's note
 iso = IsotonicCalibrator().fit(model_scores_cal, y_cal)
 res = exp.explain(x, target=Target.calibrated(iso, op="<=", value=plateau_level),
                   seed=0, backend="exact")
@@ -55,6 +58,7 @@ policy. `Chain` composes the stages exactly, and
 `CalibratedModel.chain_` hands you the composed map without the model:
 
 ```python
+# docs: no-run — continues the Case 1 setup (cal, exp, x); see that block's note
 from probcal import Chain, LogitOffset
 
 off = LogitOffset(target_mean=0.031).fit(cal.predict_proba(model_scores_now))

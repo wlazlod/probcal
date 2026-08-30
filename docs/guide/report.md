@@ -5,16 +5,31 @@ APIs documented in their own chapters (*Metrics and tests*,
 *Visualization*, *CORP and score decomposition*, *Conservatism*,
 *Monitoring*) — this page covers only assembling them into one document.
 
+**[Open a full sample report](../assets/sample_validation_report.html)** —
+every section switched on, over the twelve-cohort drift scenario the
+[monitoring chapter](../concepts/monitoring.md#components) plots. It is a
+single self-contained HTML file, so the link is the whole artifact.
+
+[![Reconstruction of the report's first screen: the document title, the portfolio summary block of n, events, event rate and mean predicted probability, and below it the CORP reliability diagram with its consistency band and score-decomposition box](../assets/sample_validation_report.png)](../assets/sample_validation_report.html)
+
+Regenerate it deliberately, not on every build:
+`uv run python docs/scripts/generate_sample_report.py`.
+
 ```python
+# s_cal, y_cal: held-out calibration scores and outcomes
+from probcal import BetaCalibrator
 from probcal.report import validation_report   # probcal[viz]
 
+cal = BetaCalibrator().fit(s_cal, y_cal)
+
 html = validation_report(
-    y, scores,
-    calibrator=cal,      # optional: adds the appendix (to_json + interpret())
-    monitor=mon,          # optional: adds the e-process trajectory section
-    grades=grades,        # optional: adds the Jeffreys/Pluto-Tasche section
-    by=segment,           # optional: adds the grouped-evaluation section
-    n_boot=200, seed=42,  # one shared knob for every resampling site
+    y_cal, s_cal,
+    calibrator=cal,        # optional: adds the appendix (to_json + interpret())
+    monitor=mon,            # optional: adds the e-process trajectory section
+    grades=grades,          # optional: adds the Jeffreys/Pluto-Tasche section
+    by=segments,            # optional: adds the grouped-evaluation section
+    n_boot=50, seed=42,     # one shared knob for every resampling site
+                            # (50: reduced for the docs harness; use 200+)
     path="validation.html",
 )
 ```
@@ -42,7 +57,7 @@ table row.
 
 ```python
 validation_report(
-    y, scores, grades=grades,
+    y_cal, s_cal, grades=grades,
     format="markdown", path="validation.md",
 )
 ```

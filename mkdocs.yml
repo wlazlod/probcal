@@ -6,6 +6,11 @@ repo_name: wlazlod/probcal
 
 strict: true
 
+# README.md is a contributor note (the snippet convention), not a built
+# page — it would otherwise collide with index.md as the implicit index.
+exclude_docs: |
+  README.md
+
 theme:
   name: material
   features:
@@ -72,36 +77,46 @@ extra_javascript:
 
 nav:
   - Home: index.md
-  - How it works: how-it-works.md
-  - Guide:
+  - Learn:
       - Install and quickstart: getting-started.md
-      - scikit-learn adapter: guide/sklearn.md
-      - optbinning scorecards: guide/optbinning.md
-      - treecf counterfactuals: guide/treecf.md
-      - Monitoring: guide/monitoring.md
-      - Serialization: guide/serialization.md
-      - Grouped evaluation: guide/groups.md
-      - Validation report: guide/report.md
+      - How it works: how-it-works.md
+      - "Tutorial: PD calibration walkthrough": notebooks/pd_calibration_walkthrough.ipynb
+  - Guide:
+      - Workflows:
+          - Choose a calibrator: guide/choosing.md
+          - Set cutoffs and invert maps: guide/cutoffs.md
+          - Grouped evaluation: guide/groups.md
+          - Monitor and act: guide/monitoring.md
+          - Serialize and persist: guide/serialization.md
+          - Build a validation report: guide/report.md
+          - Auditability: guide/auditability.md
+      - Integrations:
+          - scikit-learn: guide/sklearn.md
+          - optbinning scorecards: guide/optbinning.md
+          - treecf counterfactuals: guide/treecf.md
   - Concepts:
-      - Why calibration: concepts/why-calibration.md
-      - Parametric methods: concepts/methods-parametric.md
-      - Nonparametric methods: concepts/methods-nonparametric.md
-      - Distribution-free methods: concepts/methods-distribution-free.md
-      - Metrics and tests: concepts/metrics.md
-      - Data splitting: concepts/data-splitting.md
-      - Offset: concepts/offset.md
-      - Segmented calibration: concepts/segmented.md
-      - SHAP and calibration: concepts/shap-calibration.md
-      - Inverse maps: concepts/inverse-maps.md
-      - Serialization: concepts/serialization.md
-      - Monitoring: concepts/monitoring.md
-      - Automatic selection: concepts/auto-selection.md
-      - Visualization: concepts/visualization.md
-      - CORP and score decomposition: concepts/corp.md
-      - Conservative most-prudent PDs and margins of conservatism: concepts/conservatism.md
+      - Foundations:
+          - Why calibration: concepts/why-calibration.md
+          - Data splitting: concepts/data-splitting.md
+      - Methods:
+          - Parametric: concepts/methods-parametric.md
+          - Nonparametric: concepts/methods-nonparametric.md
+          - Distribution-free: concepts/methods-distribution-free.md
+          - Offset: concepts/offset.md
+          - Segmented calibration: concepts/segmented.md
+      - Evaluation and diagnostics:
+          - Metrics and tests: concepts/metrics.md
+          - CORP and score decomposition: concepts/corp.md
+          - Visualization: concepts/visualization.md
+          - Automatic selection: concepts/auto-selection.md
+      - Consuming and governing:
+          - Inverse maps: concepts/inverse-maps.md
+          - SHAP and calibration: concepts/shap-calibration.md
+          - Conservatism and low-default portfolios: concepts/conservatism.md
+          - Monitoring: concepts/monitoring.md
+          - Serialization: concepts/serialization.md
   - Tutorials:
-      - End-to-end on a rare-event portfolio: notebooks/pd_end_to_end.ipynb
-      - PD calibration walkthrough: notebooks/pd_calibration_walkthrough.ipynb
+      - Full lifecycle on a rare-event portfolio: notebooks/pd_end_to_end.ipynb
   - Benchmarks:
       - Comparison: benchmarks/comparison.md
   - API reference:

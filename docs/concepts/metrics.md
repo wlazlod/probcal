@@ -365,6 +365,7 @@ Hosmer–Lemeshow entirely, and prints the guardrail flags next to whatever crit
 ## In probcal
 
 ```python
+# s_cal, y_cal: held-out calibration scores and outcomes
 import numpy as np
 from probcal.metrics import (
     brier_score, calibration_guardrails, calibration_slope, ece, ece_debiased,
@@ -372,18 +373,18 @@ from probcal.metrics import (
     spiegelhalter_z,
 )
 
-print(log_loss(y, p), brier_score(y, p))          # proper: safe to select on
-print(ece(y, p), ece_debiased(y, p))              # report-only; note the bias
-print(smooth_ece(y, p), ici(y, p))                # binning-free
-print(calibration_slope(y, p), spiegelhalter_z(y, p))
-print(skce(y, p), skce_test(y, p).p_value)        # kernel calibration error + test
-print(calibration_guardrails(y, p))               # the three-flag summary
+print(log_loss(y_cal, s_cal), brier_score(y_cal, s_cal))  # proper: safe to select on
+print(ece(y_cal, s_cal), ece_debiased(y_cal, s_cal))      # report-only; note the bias
+print(smooth_ece(y_cal, s_cal), ici(y_cal, s_cal))        # binning-free
+print(calibration_slope(y_cal, s_cal), spiegelhalter_z(y_cal, s_cal))
+print(skce(y_cal, s_cal), skce_test(y_cal, s_cal).p_value)  # kernel calibration error + test
+print(calibration_guardrails(y_cal, s_cal))               # the three-flag summary
 
-report = evaluate(y, p, n_boot=1000, seed=42)     # everything + bootstrap CIs
+report = evaluate(y_cal, s_cal, n_boot=100, seed=42)      # everything + bootstrap CIs
 print(report)
 
-grades = np.array(["G1", "G2", "G3"])[np.searchsorted([0.01, 0.05], p)]
-print(jeffreys_grade_test(y, p, grades))          # ECB-style backtest, traffic lights
+grades = np.array(["G1", "G2", "G3"])[np.searchsorted([0.01, 0.05], s_cal)]
+print(jeffreys_grade_test(y_cal, s_cal, grades))          # ECB-style backtest, traffic lights
 ```
 
 ## Computational cost

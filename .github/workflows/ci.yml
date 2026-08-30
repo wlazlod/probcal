@@ -88,7 +88,7 @@ jobs:
         run: pytest -q tests/test_optbinning.py tests/test_calibrator_protocol.py
 
   notebook:
-    name: end-to-end notebook executes on the synthetic fallback
+    name: notebooks execute (walkthrough + end-to-end on the synthetic fallback)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -104,5 +104,5 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system -e ".[dev,viz]"
 
-      - name: Execute the notebook (no kagglehub -> synthetic fallback)
-        run: pytest -q --nbmake --nbmake-timeout=1200 docs/notebooks/pd_end_to_end.ipynb
+      - name: Execute the notebooks (no kagglehub -> synthetic fallback)
+        run: pytest -q --nbmake --nbmake-timeout=1200 docs/notebooks/pd_calibration_walkthrough.ipynb docs/notebooks/pd_end_to_end.ipynb

@@ -173,7 +173,7 @@ port = make_pd_portfolio(n=8000, random_state=42)   # synthetic 3% PD portfolio
 g = calibration_guardrails(port.y, port.scores)     # slope / intercept / Spiegelhalter
 print(g.slope, g.intercept, g.all_ok)
 
-report = evaluate(port.y, port.scores)              # full catalog + bootstrap CIs
+report = evaluate(port.y, port.scores, n_boot=100)   # full catalog + bootstrap CIs
 print(report)
 ```
 

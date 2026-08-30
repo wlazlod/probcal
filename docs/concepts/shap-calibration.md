@@ -115,6 +115,8 @@ additivity repair this module performs.
 ## In probcal
 
 ```python
+# docs: no-run — phi/base_value/calibrator/explanation stand in for a real
+# SHAP explanation and a fitted calibrator; see attribution.py's own doctests
 from probcal import adjust_attributions
 
 # phi: (n, d) SHAP values on the margin (logit) scale; base: scalar or (n,).

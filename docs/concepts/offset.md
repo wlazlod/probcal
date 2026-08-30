@@ -68,12 +68,12 @@ monitor's own read on uncertainty is the confidence sequence (see
 around a point estimate.
 
 ```python
-import numpy as np
+# s_cal, y_cal: held-out calibration scores and outcomes
 from probcal.offset import estimate_offset, offset_from_estimate
 
-est = estimate_offset(y_cal, p_cal)
+est = estimate_offset(y_cal, s_cal)
 print(est)                       # delta=+0.1234 +/- 0.0287, n=..., events=...
-off = offset_from_estimate(est, p_cal)  # same LogitOffset mode A would give
+off = offset_from_estimate(est, s_cal)  # same LogitOffset mode A would give
 ```
 
 ## Three derivations of the same number
@@ -185,17 +185,22 @@ subtraction, so [inverse maps](inverse-maps.md) pass through it exactly — a qu
 ## In probcal
 
 ```python
+# s_cal, y_cal: held-out calibration scores and outcomes
 from probcal import LogitOffset
 
-off = LogitOffset(target_mean=0.031).fit(p_cal)   # mode B: solve delta by bisection
-p_new = off.transform(p_cal)
+off = LogitOffset(target_mean=0.031).fit(s_cal)   # mode B: solve delta by bisection
+p_new = off.transform(s_cal)
 print(off.delta_, off.pre_mean_, off.post_mean_)
 
-print(off.audit_report(y_cal, p_cal))             # pre/post guardrails, one table
+print(off.audit_report(y_cal, s_cal))             # pre/post guardrails, one table
 
-off = LogitOffset(delta=-0.42).fit(p_cal)         # mode A: explicit shift
+off = LogitOffset(delta=-0.42).fit(s_cal)         # mode A: explicit shift
 
 # On a wrapped model, the offset stays a separate, inspectable stage:
+from probcal import CalibratedModel, PlattCalibrator
+
+X_cal = s_cal.reshape(-1, 1)   # the stub model reads the score off X[:, 0]
+wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
 wrapped.offset_to(target_mean=0.031)
 print(wrapped.offsets_[0].interpret())
 ```

@@ -4,9 +4,15 @@ How-to; what is stored, why JSON and never pickle, and the compatibility
 promise live in the *Serialization* concepts chapter.
 
 ```python
-cal = BetaCalibrator().fit(scores_cal, y_cal)
+# s_cal, y_cal: held-out calibration scores and outcomes
+import json
 
-cal.to_json("calibrator.json")                  # human-readable, versioned
+from probcal import BetaCalibrator
+
+cal = BetaCalibrator().fit(s_cal, y_cal)
+
+text = cal.to_json()                            # human-readable, versioned string
+cal.to_json("calibrator.json")                  # or straight to a file
 loaded = BetaCalibrator.from_json("calibrator.json")
 # ...or without knowing the class:
 from probcal import BaseCalibrator

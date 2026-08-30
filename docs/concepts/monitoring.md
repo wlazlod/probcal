@@ -78,6 +78,25 @@ portfolio-level mean is preserved.
 **Global alarm** on `E = mean(E_off, E_shape[, E_grades])` at level
 `alpha`; component e-values are always reported for diagnosis.
 
+![E-process trajectory over twelve monthly cohorts: the global wealth curve and its offset, shape and per-grade components stay near 1 for six batches, then climb on a log scale and cross the dashed 1/alpha threshold at the labelled alarm batch m08; the lower panel plots each grade's time-uniform offset confidence sequence tightening from batch to batch, with the two event-rich grades ending clear of zero and the three thinner ones still straddling it](img/e_process.png)
+
+The figure is the whole rule in one view: twelve cohorts of a deployed
+beta calibration, the true PD shifted by +0.6 log-odds from month seven
+onward. Wealth hovers around 1 while the forecast is calibrated, the
+alarm fires at the first crossing of `1/alpha` (batch `m08`), and the
+components say *what* moved — offset and shape both climb here.
+
+The grade panel below shows how unevenly that evidence accrues. Every
+grade's confidence sequence tightens, but by `m12` only the two
+event-rich grades have moved clear of zero: `G4` at `(+0.25, +0.33)` on
+490 events and `G5` at `(+0.10, +0.25)` on 559. `G1`, `G2` and `G3` —
+14, 41 and 155 events — still contain zero, so on their own evidence the
+drift is not yet established, even though the portfolio-level alarm fired
+four batches earlier. That gap is the point of reading both panels: the
+global e-process pools evidence the thin grades cannot supply alone.
+Reproduce the figure with `docs/scripts/generate_figures.py`; the calling
+code is in [Monitor and act](../guide/monitoring.md).
+
 ## A confidence sequence for the current offset
 
 Inverting the offset process against a grid of shifted nulls `delta_0 in

@@ -1,4 +1,4 @@
-"""Structural acceptance for the docs reorganization (spec W8, DOCS_REORG_SPEC).
+"""Structural acceptance for the docs reorganization.
 
 Five properties the reader-oriented structure has to keep:
 

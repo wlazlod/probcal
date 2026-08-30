@@ -1,4 +1,4 @@
-"""Executable-snippet contract for the docs (spec W7.3, DOCS_REORG_SPEC).
+"""Executable-snippet contract for the docs.
 
 Every ```python fenced block in docs/**/*.md (except the changelog) is
 executed, in order, in one namespace per page — pre-seeded with the fixed

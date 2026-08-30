@@ -24,6 +24,7 @@ _ROOT = pathlib.Path(__file__).parent.parent
 _DOCS = _ROOT / "docs"
 _INDEX = _DOCS / "index.md"
 _SAMPLE_HTML = _DOCS / "assets" / "sample_validation_report.html"
+_SAMPLE_PNG = _DOCS / "assets" / "sample_validation_report.png"
 _NEW_PAGES = ("guide/choosing.md", "guide/cutoffs.md", "guide/auditability.md")
 
 # Figure coverage: the noun each plot function's figure must be identifiable by,
@@ -108,7 +109,10 @@ def test_every_plot_function_has_a_figure_on_a_prose_page() -> None:
 
 def test_sample_validation_report_is_linked_and_self_contained() -> None:
     assert _SAMPLE_HTML.exists(), "run docs/scripts/generate_sample_report.py"
-    assert "assets/sample_validation_report.html" in (_DOCS / "guide" / "report.md").read_text()
+    assert _SAMPLE_PNG.exists(), "the thumbnail is written by the same script"
+    report_md = (_DOCS / "guide" / "report.md").read_text()
+    assert "assets/sample_validation_report.html" in report_md
+    assert "assets/sample_validation_report.png" in report_md
     text = _SAMPLE_HTML.read_text()
     assert "http" not in text
     assert "<script" not in text

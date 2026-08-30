@@ -36,7 +36,7 @@ print(cut, cal.predict_proba(np.array([cut]))[0])   # round-trips to 0.02
 probability space, `∓inf` in logit space — which is why a one-sided policy
 is expressed as an interval with an open end rather than as a special
 case. `space="logit"` is what a consumer holding the model's raw margin
-wants (a SIGMOID-link scorer, a counterfactual engine); `space="probability"`
+wants (a sigmoid-link scorer, a counterfactual engine); `space="probability"`
 is what a threshold on the model's own output wants. The two are the same
 number under `expit`, so pick by consumer, not by preference.
 
@@ -137,7 +137,7 @@ import pandas as pd
 from optbinning import BinningProcess, Scorecard
 from sklearn.linear_model import LogisticRegression
 
-from probcal._math import logit
+from probcal import logit
 from probcal.integrations.optbinning import calibrate_scorecard
 
 # X_cal: the calibration split's features — built here from s_cal alone

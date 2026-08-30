@@ -49,7 +49,7 @@ changes without a re-fit, so it carries its own record:
 
 ```python
 import numpy as np
-from probcal._math import expit, logit
+from probcal import expit, logit
 from probcal.datasets import make_pd_portfolio
 from probcal.monitor import CalibrationMonitor
 
@@ -119,7 +119,7 @@ its fingerprint block, and the assertions are the same.
 
 Note what the reviewer never needed: the training data, the scoring model,
 the modeller's environment, or any code from the modelling team. Two of
-the four checks (`from_json`, `fingerprint`) are also what the
+the five checks (`from_json`, `fingerprint`) are also what the
 [serialization chapter](../concepts/serialization.md) promises across
 releases, so the same session still runs against an artifact archived two
 minors ago.

@@ -65,9 +65,8 @@ CI runs the harness in a `[dev,viz]` environment, so optbinning and treecf
 are absent there. A page whose blocks genuinely need one declares it once,
 anywhere in the file:
 
-```markdown
-<!-- docs: requires optbinning -->
-```
+`<!-- docs: requires <package> -->`, with the package's import name in
+place of `<package>`.
 
 The harness then `importorskip`s each named package and skips the whole
 page where it is missing. Declare it only when the *page* is about that
@@ -75,3 +74,21 @@ integration (`guide/optbinning.md`); when one block on an otherwise
 core page reaches for an extra — the scorecard and treecf blocks in
 `guide/cutoffs.md` — mark that block `# docs: no-run` instead, so the rest
 of the page stays under test.
+
+The marker is matched against the whole page, code fences included, so
+this note deliberately writes it with a `<package>` placeholder: a literal
+example marker anywhere on a page — even inside a fenced block showing the
+syntax — would make the harness skip that page for real.
+
+## Regenerating figures
+
+`docs/scripts/generate_figures.py` writes every PNG under
+`docs/concepts/img/`, and `docs/scripts/generate_sample_report.py` writes
+the sample report and its thumbnail under `docs/assets/`. Neither runs at
+build time; both are deliberate.
+
+The PNGs are **not** byte-reproducible across matplotlib versions or
+platforms — re-running the generator on a different machine rewrites files
+whose content is unchanged. Commit a regenerated figure only when the
+picture actually changed; `git checkout` the rest rather than adding a
+diff nobody can review.

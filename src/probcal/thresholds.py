@@ -1,7 +1,7 @@
 """Calibrated-to-raw interval and masterscale-band mapping.
 
-Thin functional wrappers over the calibrators' ``interval_inverse`` protocol
-(spec §10): numpy-only, arrays and floats, no knowledge of any consumer. The
+Thin functional wrappers over the calibrators' ``interval_inverse`` protocol:
+numpy-only, arrays and floats, no knowledge of any consumer. The
 canonical rating-grade workflow — masterscale bands defined on calibrated PD,
 translated once per recalibration into raw-score intervals — is
 ``calibrated_bands_to_raw``; its output plugs directly into band-style raw

@@ -1,6 +1,6 @@
 """Reference tests: probcal._math vs scipy / scikit-learn / statsmodels.
 
-These libraries are dev/test-only dependencies (spec §1.2); every test here is
+These libraries are dev/test-only dependencies; every test here is
 marked `reference` and skipped when the library is absent.
 """
 

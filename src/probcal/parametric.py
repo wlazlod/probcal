@@ -314,7 +314,7 @@ class TemperatureCalibrator(BaseCalibrator):
 class BetaCalibrator(BaseCalibrator):
     """Beta calibration: ``logit g(s) = a·ln s − b·ln(1 − s) + c``.
 
-    Variants (spec §6): ``"abm"`` fits ``(a, b, c)``;
+    Variants: ``"abm"`` fits ``(a, b, c)``;
     ``"ab"`` ties ``a = b`` (equivalent to Platt scaling on logits); ``"a"``
     additionally fixes ``c = 0`` (a single-parameter map, the temperature
     family in a different parameterization). The monotonicity constraint

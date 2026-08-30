@@ -28,7 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
 class UnattainableTargetError(ValueError):
     """The requested calibrated target is unattainable.
 
-    Raised instead of silently clamping — spec §10 — when an interval does
+    Raised instead of silently clamping when an interval does
     not intersect the calibrator's output range (or was emptied by
     ``buffer_logit``), when a point-inverse target lies outside the open
     interval ``(0, 1)``, or when a probability-space point-inverse result
@@ -226,7 +226,7 @@ class BaseCalibrator(ABC):
         """Coefficients ``(a, b)`` of ``logit g(s) = a * logit(s) + b``, if affine.
 
         ``None`` for calibrators that are not affine on the logit scale.
-        Consumed by the attribution adjustment (spec §9).
+        Consumed by the attribution adjustment.
         """
         return None
 

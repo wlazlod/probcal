@@ -127,7 +127,7 @@ def test_monotone_prediction(cal_factory) -> None:
     ids=["platt", "temperature", "beta"],
 )
 def test_small_sample_stability(cal_factory) -> None:
-    # n=200 with ~20 events (spec §13).
+    # n=200 with ~20 events.
     n = 200
     s = expit(RNG.normal(-2.2, 1.0, n))
     y = np.zeros(n)

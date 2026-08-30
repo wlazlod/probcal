@@ -1,4 +1,4 @@
-"""Tests for interval_inverse across the calibrator catalog (spec §10)."""
+"""Tests for interval_inverse across the calibrator catalog."""
 
 import numpy as np
 import pytest

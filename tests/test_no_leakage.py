@@ -1,4 +1,4 @@
-"""Structural no-leakage tests (spec §13): the cv flow never scores a training
+"""Structural no-leakage tests: the cv flow never scores a training
 fold with a model that saw it."""
 
 import numpy as np

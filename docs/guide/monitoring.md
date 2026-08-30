@@ -4,15 +4,21 @@ How-to; the statistics (and why fixed-sample tests are invalid under
 optional stopping) live in the *Monitoring* concepts chapter.
 
 ```python
+# s_cal, y_cal, grades: held-out calibration scores, outcomes, rating labels
+from probcal import BetaCalibrator
 from probcal.monitor import CalibrationMonitor
 
+deployed = BetaCalibrator().fit(s_cal, y_cal)   # the map actually in production
 mon = CalibrationMonitor(alpha=0.05)
 
-# Each time a cohort's outcomes mature (arrival order — never reordered):
-y_batch, p_batch, grade_batch = y_cal[:200], s_cal[:200], grades[:200]
+# Each time a cohort's outcomes mature (arrival order — never reordered).
+# The monitor watches the *calibrated* forecast, never the raw score:
+y_batch, p_batch, grade_batch = y_cal[:200], deployed.predict_proba(s_cal[:200]), grades[:200]
 step = mon.update(y_batch, p_batch, grade=grade_batch, label="2026Q3")
 step.e_global      # the alarm statistic (alarm when it ever reaches 1/alpha)
-step.delta_ci      # anytime-valid CI for the current offset, e.g. (0.15, 0.40)
+step.delta_ci      # anytime-valid CI for the current offset: (-3.0, 0.55) here,
+                   # i.e. one 200-row batch buys almost no precision; the
+                   # sequence tightens as cohorts accumulate
 
 # Persist between batches; resuming reproduces the trajectory bit-for-bit:
 mon.to_json("monitor-state.json")

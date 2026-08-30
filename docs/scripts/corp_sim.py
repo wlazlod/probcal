@@ -1,4 +1,4 @@
-"""Coverage simulation for probcal.curves.corp_reliability bands (spec V1).
+"""Coverage simulation for probcal.curves.corp_reliability bands.
 
 Usage: ``uv run python docs/scripts/corp_sim.py``
 
@@ -10,7 +10,7 @@ grid point). ``tests/test_corp_sim.py`` cross-checks this at a reduced size
 (``n=1000, runs=60, n_resamples=100``) and enforces the pointwise gate only;
 the full-size table printed here is pasted into ``docs/concepts/corp.md``.
 
-Gate (spec V1, full size): pointwise coverage at level ``L`` is close to
+Gate (full size): pointwise coverage at level ``L`` is close to
 ``L`` (bands are pointwise, not simultaneous); uniform coverage is lower and
 reported, not gated.
 """

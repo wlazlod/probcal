@@ -1,4 +1,4 @@
-"""Build docs/notebooks/pd_end_to_end.ipynb (spec W12), unexecuted.
+"""Build docs/notebooks/pd_end_to_end.ipynb, unexecuted.
 
 Execute afterwards with:
 ``uv run jupyter nbconvert --to notebook --execute --inplace docs/notebooks/pd_end_to_end.ipynb``
@@ -85,7 +85,7 @@ def load_freddie_mac_stub():
 
 
 def make_synthetic(n=100_000):
-    \"\"\"The documented fallback (spec W12): a synthetic feature portfolio with a
+    \"\"\"The documented fallback: a synthetic feature portfolio with a
     mildly non-linear true PD, so the GBM ranks well but mis-calibrates in the
     tail — the regime the rest of the notebook is about.\"\"\"
     rng = np.random.default_rng(7)
@@ -309,8 +309,8 @@ md("""\
 ## 7. Monitoring: an e-process that survives being looked at monthly
 
 Monthly cohorts replay through `CalibrationMonitor`. This dataset has no
-time axis, so the replay is simulated the same way the W9 verification
-does it: for the stable months, outcomes are drawn from the calibrated
+time axis, so the replay is simulated the same way the monitor verification
+simulation does it: for the stable months, outcomes are drawn from the calibrated
 forecast itself (calibrated by construction); from month 14, from the
 forecast shifted by +0.5 log-odds — a sustained macro deterioration. The
 alarm rule "wealth ≥ 1/α" keeps its type-I guarantee at *every* look — no

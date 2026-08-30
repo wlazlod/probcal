@@ -1,4 +1,4 @@
-"""Tests for probcal.integrations.optbinning (spec W10). Skipped without optbinning."""
+"""Tests for probcal.integrations.optbinning. Skipped without optbinning."""
 
 import numpy as np
 import pytest

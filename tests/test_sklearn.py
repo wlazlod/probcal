@@ -1,4 +1,4 @@
-"""Tests for the probcal.sklearn adapter (spec W6). Skipped without sklearn."""
+"""Tests for the probcal.sklearn adapter. Skipped without sklearn."""
 
 import pickle
 

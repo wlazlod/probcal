@@ -1,4 +1,4 @@
-"""Joint smoke test with treecf (spec W11 P4). Skipped without treecf.
+"""Joint smoke test with treecf. Skipped without treecf.
 
 Correctness is always re-verified through sklearn's own predict — never
 trusted from treecf's report. These tests surfaced a treecf boundary-routing

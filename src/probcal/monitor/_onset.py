@@ -1,4 +1,4 @@
-"""Backward-CUSUM drift-onset estimate (spec M3).
+"""Backward-CUSUM drift-onset estimate.
 
 ``CalibrationMonitor`` stores, per batch, the additive plug-in log-LR
 increment (``MonitorStep.log_e_increment``): the offset plug-in's own

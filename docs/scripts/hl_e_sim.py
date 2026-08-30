@@ -1,4 +1,4 @@
-"""Type-I and power simulations for probcal.metrics.hl_e_test (spec M1).
+"""Type-I and power simulations for probcal.metrics.hl_e_test.
 
 Usage: ``uv run python docs/scripts/hl_e_sim.py [--fast]``
 

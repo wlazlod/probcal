@@ -225,7 +225,7 @@ class CalibratorSelector(BaseCalibrator):
             sds[i] = fold_scores.std(ddof=1)
             guards[i] = calibration_guardrails(y_arr, oof, sample_weight=w_arr).all_ok
             # One corp_fit/decompose per candidate on its own OOF vector — cheap
-            # relative to the cv-fold refits above (task-V2).
+            # relative to the cv-fold refits above.
             _, _, _, _, pav = corp_fit(y_arr, oof, w_arr)
             _, mcbs[i], dscs[i], unc = decompose(y_arr, oof, pav, w_arr, corp_score)
 

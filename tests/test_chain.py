@@ -1,4 +1,4 @@
-"""Tests for probcal.Chain (spec W11 P1): calibrator + offsets composition."""
+"""Tests for probcal.Chain: calibrator + offsets composition."""
 
 import numpy as np
 import pytest

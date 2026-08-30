@@ -1,4 +1,4 @@
-"""Protocol conformance across every inverse-capable object (spec W11 P2).
+"""Protocol conformance across every inverse-capable object.
 
 The contract a recourse engine (treecf's ``_SupportsIntervalInverse``)
 relies on: keyword ``interval_inverse(lo, hi, space="logit",

@@ -1,4 +1,4 @@
-"""Margin-of-conservatism (MoC) offsets, and ``AppliedAction`` (spec M4).
+"""Margin-of-conservatism (MoC) offsets, and ``AppliedAction``.
 
 Theory: ``docs/concepts/monitoring.md``.
 """
@@ -200,7 +200,7 @@ def moc_offset_from_counts(
 @register
 @dataclass(frozen=True)
 class AppliedAction:
-    """The result of :meth:`CalibrationMonitor.apply_recommendation` (spec M4).
+    """The result of :meth:`CalibrationMonitor.apply_recommendation`.
 
     Attributes
     ----------

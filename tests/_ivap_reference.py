@@ -1,5 +1,5 @@
 """Frozen v0.1.2 IVAP pair refit, kept verbatim as the equivalence gate's ground
-truth for the W9 Vovk-Petej precomputation (task-10-brief.md). Do not "fix" or
+truth for the Vovk-Petej precomputation. Do not "fix" or
 optimize this file — its only job is to keep reproducing the pre-rewrite behavior,
 tie convention included (``searchsorted`` with ``side="left"``, query inserted at
 unit weight, two full PAVA fits read back at the insertion index).

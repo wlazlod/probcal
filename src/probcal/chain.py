@@ -1,4 +1,4 @@
-"""Chain: model-free composition of a calibrator with logit-offset stages (W11 P1).
+"""Chain: model-free composition of a calibrator with logit-offset stages.
 
 The object a recourse engine inverts after a macro re-offset: recourse must
 run through ``offset ∘ calibrator`` exactly, and every stage stays separately

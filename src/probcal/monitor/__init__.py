@@ -1,4 +1,4 @@
-"""Anytime-valid calibration monitoring by e-processes (spec W7/W8).
+"""Anytime-valid calibration monitoring by e-processes.
 
 Theory, validity conditions, and the simulation verification:
 ``docs/concepts/monitoring.md``. numpy + stdlib only, like the core.

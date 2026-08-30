@@ -1,4 +1,4 @@
-"""Value encoding, canonical JSON, and hashes for versioned serialization (spec W5)."""
+"""Value encoding, canonical JSON, and hashes for versioned serialization."""
 
 import hashlib
 import json
@@ -79,8 +79,8 @@ def fingerprint_of_dict(d: dict) -> str:
     """SHA-256 of the canonical JSON of ``d`` minus version/timestamp keys.
 
     ``fitted_at_utc``, ``probcal_version``, and ``timestamp_`` are dropped
-    recursively so two identical fits produce the same fingerprint (spec W5;
-    ``timestamp_`` covers the LogitOffset audit stamp).
+    recursively so two identical fits produce the same fingerprint
+    (``timestamp_`` covers the LogitOffset audit stamp).
     """
     return sha256_hex(canonical_json(_strip(d)))
 

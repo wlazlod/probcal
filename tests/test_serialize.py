@@ -1,4 +1,4 @@
-"""Serialization round-trips, fingerprints, and the class registry (spec W5)."""
+"""Serialization round-trips, fingerprints, and the class registry."""
 
 import numpy as np
 import pytest

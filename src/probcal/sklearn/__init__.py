@@ -1,4 +1,4 @@
-"""scikit-learn adapter: probcal calibrators as sklearn estimators (spec W6).
+"""scikit-learn adapter: probcal calibrators as sklearn estimators.
 
 Requires the ``probcal[sklearn]`` extra; ``import probcal`` itself stays
 numpy-only — this subpackage is imported explicitly by its users.

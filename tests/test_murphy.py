@@ -1,4 +1,4 @@
-"""Tests for probcal.metrics.murphy_curve and probcal.plots.plot_murphy (V5)."""
+"""Tests for probcal.metrics.murphy_curve and probcal.plots.plot_murphy."""
 
 import importlib.util
 

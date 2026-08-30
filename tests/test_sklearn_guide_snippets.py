@@ -1,4 +1,4 @@
-"""Runnable snippets embedded in ``docs/guide/sklearn.md`` (spec K5).
+"""Runnable snippets embedded in ``docs/guide/sklearn.md``.
 
 Every code block in the guide's three-tier story is included from this file
 via ``pymdownx.snippets`` (``--8<-- "tests/test_sklearn_guide_snippets.py:NAME"``),

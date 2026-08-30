@@ -1,4 +1,4 @@
-"""Coverage simulation for probcal.metrics.pluto_tasche (spec C1).
+"""Coverage simulation for probcal.metrics.pluto_tasche.
 
 Usage: ``uv run python docs/scripts/conservative_sim.py [--fast]``
 
@@ -11,7 +11,7 @@ independent -- the reported "all-grades" figure gives the joint rate).
 count in CI; this script prints the full-size table pasted into
 ``docs/concepts/conservatism.md``.
 
-Gate (spec C1): the minimum per-grade coverage over grades is at least
+Gate: the minimum per-grade coverage over grades is at least
 ``confidence - 2 * sqrt(confidence * (1 - confidence) / runs)``.
 """
 

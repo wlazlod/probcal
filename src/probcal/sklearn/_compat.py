@@ -88,7 +88,7 @@ _ARBITRARY_REAL_DATA: dict[str, str] = {
 CALIBRATOR_XFAIL_CHECKS: dict[str, str] = {
     name: (
         f"inapplicable: the check generates {data}, and a score-level estimator "
-        "takes exactly one score column by contract (spec W6)"
+        "takes exactly one score column by contract"
     )
     for name, data in _MULTI_COLUMN_DATA.items()
 }
@@ -97,14 +97,14 @@ CALIBRATOR_XFAIL_CHECKS.update(
         name: (
             f"inapplicable: the check generates {data} — arbitrary reals outside "
             "[0, 1], where a score-level estimator takes one column of "
-            "probabilities (spec W6)"
+            "probabilities"
         )
         for name, data in _ARBITRARY_REAL_DATA.items()
     }
 )
 CALIBRATOR_XFAIL_CHECKS["check_fit1d"] = (
     "inapplicable: the check expects a raise on 1-D X, which a score-level "
-    "estimator accepts by design (spec W6)"
+    "estimator accepts by design"
 )
 
 # Cause 3: an internal CV split. Its fold assignment depends on n, so weighting

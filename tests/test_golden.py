@@ -1,4 +1,4 @@
-"""Golden-file guarantee: every 0.x release reads schema 1 (spec W5).
+"""Golden-file guarantee: every 0.x release reads schema 1.
 
 The JSONs in tests/golden/ were written by the release that introduced
 serialization and are committed; this suite proves the current build still

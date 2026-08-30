@@ -107,7 +107,7 @@ class HistogramBinningCalibrator(BaseCalibrator):
 
     def _inverse_right(self, t: float) -> float:
         # One float below the next bin's edge: the bound is in the preimage,
-        # so closed-bound consumers cannot overshoot a plateau (spec W11 P3).
+        # so closed-bound consumers cannot overshoot a plateau.
         j = int(np.searchsorted(self.bin_rate_, t, side="right")) - 1
         if j >= len(self.bin_rate_) - 1:
             return 1.0

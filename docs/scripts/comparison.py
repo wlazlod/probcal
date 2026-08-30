@@ -1,4 +1,4 @@
-"""W13 comparison benchmark: probcal vs sklearn / netcal / betacal.
+"""Comparison benchmark: probcal vs sklearn / netcal / betacal.
 
 Usage: ``uv run python docs/scripts/comparison.py [--fast]``
 Requires ``probcal[bench]`` (pins recorded in the output header). Datasets

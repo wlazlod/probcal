@@ -559,7 +559,7 @@ def calibration_belt(
 
     # Forward LR selection of the polynomial degree. A separated fit's
     # coefficients come from the ridge fallback: usable as a terminal fit,
-    # never a basis for extension (IRLS_SPEC W3.3).
+    # never a basis for extension.
     degree = 1
     fit = irls_logistic(design(1, z), y_arr, w=w)
     ll = loglik(fit.beta, 1)

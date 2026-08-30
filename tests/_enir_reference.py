@@ -1,5 +1,5 @@
 """Frozen v0.1.2 ENIR path/BIC reference, kept verbatim as the equivalence gate's
-ground truth for the W8 heap-scheduled rewrite (task-8-brief.md). Do not "fix" or
+ground truth for the heap-scheduled rewrite. Do not "fix" or
 optimize this file — its only job is to keep reproducing the pre-rewrite behavior.
 """
 

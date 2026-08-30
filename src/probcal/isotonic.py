@@ -115,7 +115,7 @@ class IsotonicCalibrator(BaseCalibrator):
     def _inverse_right(self, t: float) -> float:
         # Largest raw score whose level stays within t: one float below the
         # next block's left edge, so the returned bound is itself in the
-        # preimage — consumers may treat both bounds as closed (spec W11 P3).
+        # preimage — consumers may treat both bounds as closed.
         j = int(np.searchsorted(self.block_mean_, t, side="right")) - 1
         if j >= self.n_blocks_ - 1:
             return 1.0

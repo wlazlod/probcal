@@ -204,7 +204,7 @@ def test_default_complexity_rank() -> None:
 
 def test_selection_report_has_mcb_dsc_columns() -> None:
     """report_ carries a CORP decomposition per candidate on its OOF vector,
-    and it round-trips through to_dict/from_dict (task V2)."""
+    and it round-trips through to_dict/from_dict."""
     s, y = _distorted(1500)
     sel = CalibratorSelector(cv=3, random_state=3).fit(s, y)
     rep = sel.report_

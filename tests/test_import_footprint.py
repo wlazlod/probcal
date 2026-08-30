@@ -1,4 +1,4 @@
-"""The sklearn duck hooks must not drag sklearn into a probcal import (spec K1).
+"""The sklearn duck hooks must not drag sklearn into a probcal import.
 
 Runs regardless of whether sklearn is installed: the point is what a fit /
 predict / is-fitted round trip pulls into ``sys.modules``, in a fresh

@@ -1,4 +1,4 @@
-"""Equivalence gate for the W9 IVAP precomputation (task-10-brief.md): the fitted
+"""Equivalence gate for the IVAP precomputation: the fitted
 ``F0_``/``F1_`` tables read through ``predict_interval`` must reproduce the frozen
 v0.1.2 brute-force pair refit (``tests/_ivap_reference.py``) exactly.
 

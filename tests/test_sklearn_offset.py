@@ -55,7 +55,7 @@ def test_replacing_the_offset_step_leaves_the_calibrator_untouched():
 
 
 def test_chain_prototype_as_the_final_pipeline_step():
-    # spec W2: pipeline end-to-end with the chain as the final step
+    # pipeline end-to-end with the chain as the final step
     d = make_pd_portfolio(n=400, random_state=7)
     q = make_pd_portfolio(n=150, random_state=8).scores
     est = SklearnCalibrator(calibrator=Chain([BetaCalibrator(), LogitOffset(target_mean=0.03)]))
@@ -71,7 +71,7 @@ def test_chain_prototype_as_the_final_pipeline_step():
 
 
 def test_calibrated_classifier_accepts_a_chain_prototype():
-    # spec W2: CalibratedClassifier(..., calibrator=Chain([...])) works unchanged
+    # CalibratedClassifier(..., calibrator=Chain([...])) works unchanged
     d = make_pd_portfolio(n=400, random_state=7)
     rng = np.random.default_rng(0)
     X = np.column_stack([d.scores, rng.normal(size=len(d.scores))])

@@ -117,3 +117,42 @@ CLASSIFIER_XFAIL_CHECKS: dict[str, str] = {
     "check_sample_weight_equivalence_on_dense_data": _CV_WEIGHT_REASON,
     "check_sample_weights_invariance": _CV_WEIGHT_REASON,  # the < 1.6 name
 }
+
+# SklearnOffset is a y-optional, non-classifier transformer: the classifier-only
+# checks (multi-class arms, the one-label sample-weight check, the supervised
+# 2-D y check, container/dtype handling gated behind ClassifierMixin) are never
+# generated for it by sklearn's own estimator-check machinery, so they are
+# dropped from the calibrator's union rather than declared here.
+_OFFSET_CLASSIFIER_ONLY: frozenset[str] = frozenset(
+    {
+        "check_classifier_data_not_an_array",
+        "check_classifiers_classes",
+        "check_classifiers_one_label_sample_weights",
+        "check_classifiers_train",
+        "check_supervised_y_2d",
+    }
+)
+# check_fit1d generates 1-D X of 3 * U(0, 1): most values exceed 1, so
+# SklearnOffset's own [0, 1] domain check raises ValueError as the check
+# expects — unlike the calibrator (whose logit mode accepts arbitrary reals
+# and so does not raise there), this check genuinely passes for SklearnOffset
+# and is dropped rather than declared.
+_OFFSET_NOT_APPLICABLE: frozenset[str] = _OFFSET_CLASSIFIER_ONLY | {"check_fit1d"}
+OFFSET_XFAIL_CHECKS: dict[str, str] = {
+    name: reason
+    for name, reason in CALIBRATOR_XFAIL_CHECKS.items()
+    if name not in _OFFSET_NOT_APPLICABLE
+}
+# Without a y-driven classification check to short-circuit first (as the
+# calibrator's binary-class check happens to for these two), these two
+# checks reach SklearnOffset's own column/domain validation directly, whose
+# message wording does not match sklearn's expected patterns.
+OFFSET_XFAIL_CHECKS["check_fit2d_1sample"] = (
+    "inapplicable: the check generates 10 columns of 3 * U(0, 1) noise, and "
+    "this estimator takes one probability column or a two-column probability "
+    "matrix by contract"
+)
+OFFSET_XFAIL_CHECKS["check_fit2d_1feature"] = (
+    "inapplicable: the check generates 1 column of 3 * U(0, 1) — values "
+    "outside [0, 1], where this estimator takes one column of probabilities"
+)

@@ -65,7 +65,7 @@ jobs:
         run: uv pip install --system -e ".[dev,viz]" "scikit-learn==1.4.2"
 
       - name: Run the sklearn adapter suite
-        run: pytest -q tests/test_sklearn.py tests/test_sklearn_routing.py tests/test_sklearn_mirror_checks.py tests/test_import_footprint.py tests/test_sklearn_duck.py tests/test_sklearn_guide_snippets.py
+        run: pytest -q tests/test_sklearn.py tests/test_sklearn_offset.py tests/test_sklearn_routing.py tests/test_sklearn_mirror_checks.py tests/test_import_footprint.py tests/test_sklearn_duck.py tests/test_sklearn_guide_snippets.py
 
   integrations:
     name: optbinning integration on the pinned version

@@ -286,13 +286,13 @@ def test_calibrated_classifier_clone_and_pickle() -> None:
 
 
 def _compliance_estimators():
-    from probcal.sklearn import CalibratedClassifier
+    from probcal.sklearn import CalibratedClassifier, SklearnOffset
 
     # SklearnCalibrator runs the suite on the logit scale: sklearn's generic
     # checks feed unbounded Gaussian features, which are legal logits but not
     # legal probabilities (the domain restriction sklearn special-cases its
     # own IsotonicRegression for). The default stays input="probability".
-    return [SklearnCalibrator(input="logit"), CalibratedClassifier()]
+    return [SklearnCalibrator(input="logit"), CalibratedClassifier(), SklearnOffset(delta=0.1)]
 
 
 # Expected-failure tables live in probcal.sklearn._compat (one source of
@@ -301,12 +301,17 @@ def _compliance_estimators():
 from probcal.sklearn._compat import (  # noqa: E402
     CALIBRATOR_XFAIL_CHECKS,
     CLASSIFIER_XFAIL_CHECKS,
+    OFFSET_XFAIL_CHECKS,
 )
 
 
 def _expected_failures(estimator) -> dict:
+    from probcal.sklearn import SklearnOffset
+
     if isinstance(estimator, SklearnCalibrator):
         return dict(CALIBRATOR_XFAIL_CHECKS)
+    if isinstance(estimator, SklearnOffset):
+        return dict(OFFSET_XFAIL_CHECKS)
     return dict(CLASSIFIER_XFAIL_CHECKS)
 
 

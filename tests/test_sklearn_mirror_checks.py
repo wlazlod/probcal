@@ -65,10 +65,11 @@ from sklearn.utils.validation import check_is_fitted  # noqa: E402
 from probcal import BetaCalibrator, make_pd_portfolio  # noqa: E402
 from probcal._registry import SERIALIZABLE  # noqa: E402
 from probcal.base import BaseCalibrator  # noqa: E402
-from probcal.sklearn import SklearnCalibrator  # noqa: E402
+from probcal.sklearn import SklearnCalibrator, SklearnOffset  # noqa: E402
 from probcal.sklearn._compat import (  # noqa: E402
     CALIBRATOR_XFAIL_CHECKS,
     CLASSIFIER_XFAIL_CHECKS,
+    OFFSET_XFAIL_CHECKS,
 )
 
 _D = make_pd_portfolio(n=600, random_state=21)
@@ -110,6 +111,8 @@ _MIRRORED_BY: dict[str, str] = {
     "check_sample_weights_shape": "test_wrong_shape_sample_weight_raises",
     "check_transformer_general": "test_fit_transform_equals_fit_then_transform",
     "check_transformer_preserve_dtypes": "test_fit_transform_equals_fit_then_transform",
+    "check_fit2d_1sample": "test_offset_rejects_a_ten_column_matrix_with_an_informative_message",
+    "check_fit2d_1feature": "test_offset_domain_check_rejects_an_out_of_range_single_column",
 }
 
 # Declared-inapplicable checks with no score-level analogue at all; each is
@@ -483,6 +486,29 @@ def test_adapter_zero_weight_equals_dropping_the_row() -> None:
     )
 
 
+# --------------------------------------------------- SklearnOffset-only mirrors
+# check_fit2d_1sample and check_fit2d_1feature are declared inapplicable only
+# for SklearnOffset (see OFFSET_XFAIL_CHECKS): the calibrator's own binary-class
+# check happens to raise a matching message first on the same generated data,
+# so these two never reach the calibrator's own validation and are not
+# declared there. For the offset (no y validation to short-circuit first) they
+# reach SklearnOffset's own column-count/domain checks directly.
+
+
+def test_offset_rejects_a_ten_column_matrix_with_an_informative_message() -> None:
+    """check_fit2d_1sample: an oversized column count is refused, informatively."""
+    X = 3.0 * np.random.default_rng(0).uniform(size=(20, 10))
+    with pytest.raises(ValueError, match="columns"):
+        SklearnOffset(delta=0.1).fit(X)
+
+
+def test_offset_domain_check_rejects_an_out_of_range_single_column() -> None:
+    """check_fit2d_1feature: a single column outside [0, 1] is refused, informatively."""
+    X = 3.0 * np.random.default_rng(0).uniform(size=(20, 1))
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        SklearnOffset(delta=0.1).fit(X)
+
+
 # ------------------------------------------------------------ table guards
 
 
@@ -495,7 +521,9 @@ def test_every_tolerance_entry_names_a_registered_calibrator() -> None:
 
 def test_every_declared_check_is_mirrored_or_explained() -> None:
     """Every declared-inapplicable check is either mirrored here or explained above."""
-    declared = set(CALIBRATOR_XFAIL_CHECKS) | set(CLASSIFIER_XFAIL_CHECKS)
+    declared = (
+        set(CALIBRATOR_XFAIL_CHECKS) | set(CLASSIFIER_XFAIL_CHECKS) | set(OFFSET_XFAIL_CHECKS)
+    )
     accounted = set(_MIRRORED_BY) | _NO_ANALOGUE
     assert declared == accounted, {
         "declared but unaccounted": sorted(declared - accounted),

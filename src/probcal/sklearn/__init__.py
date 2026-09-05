@@ -14,5 +14,6 @@ except ImportError as exc:  # pragma: no cover - exercised via monkeypatch in te
 
 from ._calibrator import SklearnCalibrator
 from ._classifier import CalibratedClassifier
+from ._offset import SklearnOffset
 
-__all__ = ["CalibratedClassifier", "SklearnCalibrator"]
+__all__ = ["CalibratedClassifier", "SklearnCalibrator", "SklearnOffset"]

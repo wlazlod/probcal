@@ -413,6 +413,11 @@ class CalibratedModel:
         Hand this to a recourse engine when the base model stays behind:
         the chain calibrates on the model *probability*, so its
         ``space="logit"`` bounds are bounds on the raw margin.
+
+        The returned chain aliases this wrapper's own fitted calibrator and
+        offsets rather than copying them, so calling ``fit`` on the chain
+        refits this :class:`CalibratedModel`'s calibrator and offsets in
+        place.
         """
         self._check_fitted()
         if self.ensemble_:

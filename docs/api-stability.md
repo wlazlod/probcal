@@ -32,7 +32,7 @@ The public API is exactly the export lists below; anything prefixed with
 - `probcal.monitor.__all__`: `CalibrationMonitor`, `MonitorStep`,
   `MonitorReport`, `AppliedAction`, `moc_offset`, `moc_offset_from_counts`.
 - `probcal.sklearn` (extra `probcal[sklearn]`): `SklearnCalibrator`,
-  `CalibratedClassifier`.
+  `SklearnOffset`, `CalibratedClassifier`.
 - `probcal.integrations.optbinning` (extra `probcal[optbinning]`):
   `calibrate_scorecard`, `CalibratedScorecard`.
 - `probcal.plots` (extra `probcal[viz]`): the plotting catalog,
@@ -102,6 +102,29 @@ rather than starting a new one for later 0.3.0 additions):
   loops on sklearn >= 1.6 without the adapter; sklearn is imported inside
   `__sklearn_tags__` only, so `import probcal` stays numpy-only. See the
   *sklearn* guide.
+
+## Added in 0.3.1
+
+New public symbols and behavior relative to 0.3.0, kept here as one running
+list for this release regardless of which chapter documents them:
+
+- `_validation.validate_scores` accepts a two-column probability matrix
+  (`(n, 2)`, entries in `[0, 1]`, rows summing to 1 within `1e-6`), inherited
+  everywhere scores enter the package — every calibrator, `LogitOffset`,
+  `Chain`, the metric catalog, and `probcal.sklearn`'s probability mode; see
+  the *sklearn* guide.
+- `Chain(stages)` accepts unfitted stages, and `Chain.fit(s, y,
+  sample_weight=None)` fits them sequentially (supersedes the 0.3.0 note that
+  a chain composes only fitted stages); `get_params`/`set_params` gain
+  `stages__i__param` nesting. See the *sklearn* guide.
+- `SklearnOffset` (`probcal.sklearn`): a `TransformerMixin`/`BaseEstimator`
+  wrapping `LogitOffset`; see the new "Stacking an offset" section of the
+  *sklearn* guide.
+- `positive_column` keyword-only parameter on `SklearnCalibrator` and
+  `SklearnOffset`, plus the orientation `UserWarning` fired at fit; see the
+  *sklearn* guide.
+- `LogitOffset.fit(y=)` keyword-only parameter, accepted and ignored, giving
+  `Chain.fit`'s sequential protocol one call shape across stages.
 
 ## Conventions that will not silently change
 

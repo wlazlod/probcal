@@ -209,7 +209,7 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
                     "both classes are required."
                 )
         proto = self.calibrator if self.calibrator is not None else BetaCalibrator()
-        self.calibrator_ = type(proto)(**proto.get_params())
+        self.calibrator_ = clone(proto)
         self.calibrator_.fit(oof, y_bin, sample_weight=sw)
         return self
 

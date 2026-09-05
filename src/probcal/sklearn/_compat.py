@@ -1,5 +1,7 @@
 """Version shims for the supported scikit-learn range (>= 1.4)."""
 
+import warnings
+
 import numpy as np
 
 try:  # sklearn >= 1.6
@@ -12,6 +14,26 @@ except ImportError:  # pragma: no cover - sklearn 1.4/1.5
         return estimator._validate_data(X, y, **kwargs)
 
 
+def _validate_data_quietly(estimator, *args, **kwargs):
+    """``_validate_data``, with sklearn's own finite-check summation warning muted.
+
+    Sklearn's ``check_array`` probes finiteness with a fast ``sum(X)``
+    before raising; a two-sided input (e.g. ``[-inf, inf]`` in the same
+    row, as a rejected two-column probability matrix produces) makes that
+    internal sum itself emit ``RuntimeWarning: invalid value encountered
+    in reduce``. The warning is sklearn's implementation detail, not a
+    signal for our callers: the resulting ``ValueError`` is unaffected and
+    still raised from underneath this filter.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="invalid value encountered in reduce",
+            category=RuntimeWarning,
+        )
+        return _validate_data(estimator, *args, **kwargs)
+
+
 def validate_X_y(
     estimator, X, y, *, reset: bool, allow_1d: bool = False
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -19,7 +41,7 @@ def validate_X_y(
     X_arr = X if hasattr(X, "toarray") else np.asarray(X)
     if allow_1d and getattr(X_arr, "ndim", 2) == 1:
         X_arr = X_arr.reshape(-1, 1)
-    return _validate_data(estimator, X_arr, y, reset=reset, dtype=np.float64)
+    return _validate_data_quietly(estimator, X_arr, y, reset=reset, dtype=np.float64)
 
 
 def validate_X(estimator, X, *, reset: bool = False, allow_1d: bool = False) -> np.ndarray:
@@ -27,7 +49,7 @@ def validate_X(estimator, X, *, reset: bool = False, allow_1d: bool = False) -> 
     X_arr = X if hasattr(X, "toarray") else np.asarray(X)
     if allow_1d and getattr(X_arr, "ndim", 2) == 1:
         X_arr = X_arr.reshape(-1, 1)
-    return _validate_data(estimator, X_arr, reset=reset, dtype=np.float64)
+    return _validate_data_quietly(estimator, X_arr, reset=reset, dtype=np.float64)
 
 
 # Checks that cannot apply to these estimators, declared through sklearn's
@@ -117,3 +139,66 @@ CLASSIFIER_XFAIL_CHECKS: dict[str, str] = {
     "check_sample_weight_equivalence_on_dense_data": _CV_WEIGHT_REASON,
     "check_sample_weights_invariance": _CV_WEIGHT_REASON,  # the < 1.6 name
 }
+
+# SklearnOffset is a y-optional, non-classifier transformer: the classifier-only
+# checks (multi-class arms, the one-label sample-weight check, the supervised
+# 2-D y check, container/dtype handling gated behind ClassifierMixin) are never
+# generated for it by sklearn's own estimator-check machinery, so they are
+# dropped from the calibrator's union rather than declared here.
+_OFFSET_CLASSIFIER_ONLY: frozenset[str] = frozenset(
+    {
+        "check_classifier_data_not_an_array",
+        "check_classifiers_classes",
+        "check_classifiers_one_label_sample_weights",
+        "check_classifiers_train",
+        "check_supervised_y_2d",
+    }
+)
+# check_fit1d generates 1-D X of 3 * U(0, 1): most values exceed 1, so
+# SklearnOffset's own [0, 1] domain check raises ValueError as the check
+# expects — unlike the calibrator (whose logit mode accepts arbitrary reals
+# and so does not raise there), this check genuinely passes for SklearnOffset
+# and is dropped rather than declared.
+_OFFSET_NOT_APPLICABLE: frozenset[str] = _OFFSET_CLASSIFIER_ONLY | {"check_fit1d"}
+# The offset's reasons are its own, not the calibrator's: SklearnOffset does
+# accept a two-column matrix, so the operative refusal for the generated data
+# is the column count (three or more) or the probability-simplex rule, never
+# a one-column contract.
+OFFSET_XFAIL_CHECKS: dict[str, str] = {
+    name: (
+        f"inapplicable: the check generates {data}, and this estimator takes one "
+        "probability column or a two-column probability matrix (rows summing "
+        "to 1) — the generated data is neither"
+    )
+    for name, data in _MULTI_COLUMN_DATA.items()
+    if name not in _OFFSET_NOT_APPLICABLE
+}
+OFFSET_XFAIL_CHECKS.update(
+    {
+        name: (
+            f"inapplicable: the check generates {data} — arbitrary reals outside "
+            "[0, 1], never a probability column or simplex matrix"
+        )
+        for name, data in _ARBITRARY_REAL_DATA.items()
+        if name not in _OFFSET_NOT_APPLICABLE
+    }
+)
+# check_fit2d_1sample: the calibrator's own y-driven binary-class check
+# happens to raise a message matching this check's expected pattern first (a
+# single sample yields a single class); SklearnOffset has no y validation at
+# all, so this reaches its own column-count check directly, whose message
+# wording does not match the check's expected patterns.
+# check_fit2d_1feature: the calibrator's logit mode accepts arbitrary reals
+# outside [0, 1] without raising anything (the same mechanism already
+# excluded above for check_fit1d); SklearnOffset's own [0, 1] domain check
+# does raise here, but again with wording that does not match the check's
+# expected patterns.
+OFFSET_XFAIL_CHECKS["check_fit2d_1sample"] = (
+    "inapplicable: the check generates 10 columns of 3 * U(0, 1) noise, and "
+    "this estimator takes one probability column or a two-column probability "
+    "matrix by contract"
+)
+OFFSET_XFAIL_CHECKS["check_fit2d_1feature"] = (
+    "inapplicable: the check generates 1 column of 3 * U(0, 1) — values "
+    "outside [0, 1], where this estimator takes one column of probabilities"
+)

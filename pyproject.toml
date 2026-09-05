@@ -1,6 +1,6 @@
 [project]
 name = "probcal"
-version = "0.3.0"
+version = "0.3.1"
 description = "Universal post-hoc probability calibration for binary classifiers: methods, metrics, diagnostics, and auditable offsetting — numpy-only."
 readme = "README.md"
 requires-python = ">=3.11"

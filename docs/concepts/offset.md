@@ -182,6 +182,16 @@ subtraction, so [inverse maps](inverse-maps.md) pass through it exactly: a quart
 \( \delta \) update of magnitude at most \( m \) moves every raw-score threshold by at most
 \( m \) in logit units, which is the fact the `buffer_logit` robustness margin is built on.
 
+The same discipline holds when a `Chain` is fit directly rather than built by
+`offset_to`. `Chain.fit(s, y, sample_weight=None)` refits every stage in sequence on the same
+calibration data: the calibrator first, then each offset stage on the calibrator's own output,
+so the fitted offset anchors the calibrator's in-sample predictions exactly as
+`CalibratedModel.offset_to` does. There is no cross-fitting between stages, and no automatic
+maximum-likelihood offset; `estimate_offset` remains an explicit choice `Chain.fit` never makes
+on its own. Because `fit` always refits every stage, including ones already fitted at
+construction, keeping one stage frozen means composing already-fitted objects and skipping
+`fit`, the same pattern that worked before `Chain` had a `fit` method at all.
+
 ## In probcal
 
 ```python

@@ -101,6 +101,15 @@ def _skip_if_not_monotone(obj):
         pytest.skip("non-monotone fit: refusal verified, inversion not applicable")
 
 
+def test_unfitted_chain_conforms_once_fitted() -> None:
+    # An unfitted Chain built from unfitted stages must conform to the same
+    # interval_inverse protocol as every other case once fit() has run.
+    chain = Chain([BetaCalibrator(), LogitOffset(delta=0.2)]).fit(_D.scores, _D.y)
+    lo_z, hi_z = chain.interval_inverse(0.0, 0.5, space="logit", buffer_logit=0.1)
+    assert np.isneginf(lo_z)  # lo = 0 -> the full lower raw range
+    assert np.isfinite(hi_z) or np.isposinf(hi_z)
+
+
 @pytest.mark.parametrize("name", sorted(_CASES))
 def test_interval_inverse_keyword_protocol(name: str) -> None:
     obj = _CASES[name]

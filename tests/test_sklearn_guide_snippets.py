@@ -261,9 +261,9 @@ def test_sklearn_offset_replace_step() -> None:
 
     from probcal.sklearn import SklearnCalibrator, SklearnOffset
 
-    pipe = Pipeline(
-        [("cal", SklearnCalibrator()), ("off", SklearnOffset(target_mean=0.2))]
-    ).fit(s.reshape(-1, 1), y)
+    pipe = Pipeline([("cal", SklearnCalibrator()), ("off", SklearnOffset(target_mean=0.2))]).fit(
+        s.reshape(-1, 1), y
+    )
     fp_before = pipe.named_steps["cal"].calibrator_.fingerprint()
 
     # Governance produced a new delta (e.g. from mon.apply_recommendation()).

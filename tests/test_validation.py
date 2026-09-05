@@ -110,9 +110,9 @@ def test_validate_scores_accepts_two_column_simplex() -> None:
 @pytest.mark.parametrize(
     "bad",
     [
-        np.array([[0.4, 0.5], [0.3, 0.6]]),          # rows sum to 0.9
-        np.array([[1.2, -0.2], [0.3, 0.7]]),          # entry outside [0, 1]
-        np.full((3, 3), 1.0 / 3.0),                   # (n, 3) stays rejected
+        np.array([[0.4, 0.5], [0.3, 0.6]]),  # rows sum to 0.9
+        np.array([[1.2, -0.2], [0.3, 0.7]]),  # entry outside [0, 1]
+        np.full((3, 3), 1.0 / 3.0),  # (n, 3) stays rejected
     ],
     ids=["rows-sum-0.9", "entry-1.2", "three-columns"],
 )

@@ -22,9 +22,7 @@ def test_lightgbm_predict_proba_matrix_through_the_pipeline():
     P_cal = model.predict_proba(X[1000:1600])  # the (n, 2) matrix, no wrapper
     P_new = model.predict_proba(X[1600:])
     target_mean = float(d.y.mean())
-    pipe = Pipeline(
-        [("cal", SklearnCalibrator()), ("off", SklearnOffset(target_mean=target_mean))]
-    )
+    pipe = Pipeline([("cal", SklearnCalibrator()), ("off", SklearnOffset(target_mean=target_mean))])
     pipe.fit(P_cal, d.y[1000:1600])
 
     out = pipe.predict_proba(P_new)

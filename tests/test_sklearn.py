@@ -1,6 +1,7 @@
 """Tests for the probcal.sklearn adapter. Skipped without sklearn."""
 
 import pickle
+import warnings
 
 import numpy as np
 import pytest
@@ -38,9 +39,53 @@ def test_sklearn_calibrator_accepts_flat_and_column_x() -> None:
 
 
 def test_sklearn_calibrator_rejects_multicolumn_x() -> None:
-    X = np.column_stack([_D.scores, _D.scores])
-    with pytest.raises(ValueError, match="score-level"):
+    X = np.column_stack([_D.scores, _D.scores, _D.scores])
+    with pytest.raises(ValueError, match="one score column, or a two-column probability matrix"):
         SklearnCalibrator().fit(X, _D.y)
+
+
+def test_two_column_matrix_equals_column_one() -> None:
+    X1 = _D.scores.reshape(-1, 1)
+    X2 = np.column_stack([1.0 - _D.scores, _D.scores])
+    a = SklearnCalibrator().fit(X1, _D.y)
+    b = SklearnCalibrator().fit(X2, _D.y)
+    np.testing.assert_array_equal(
+        a.predict_proba(_Q.scores.reshape(-1, 1)),
+        b.predict_proba(np.column_stack([1.0 - _Q.scores, _Q.scores])),
+    )
+    assert b.n_features_in_ == 2 and a.n_features_in_ == 1
+
+
+def test_positive_column_zero_on_a_reversed_matrix_equals_default() -> None:
+    X = np.column_stack([1.0 - _D.scores, _D.scores])  # positive in column 1
+    Xr = X[:, ::-1]  # positive in column 0
+    a = SklearnCalibrator().fit(X, _D.y)
+    b = SklearnCalibrator(positive_column=0).fit(Xr, _D.y)
+    np.testing.assert_array_equal(a.predict_proba(X), b.predict_proba(Xr))
+
+
+def test_orientation_warning_fires_exactly_once_on_a_reversed_matrix() -> None:
+    Xr = np.column_stack([_D.scores, 1.0 - _D.scores])  # default column 1 is wrong
+    with pytest.warns(UserWarning, match="positive_column=0") as rec:
+        SklearnCalibrator().fit(Xr, _D.y)
+    assert len(rec) == 1
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # never on a correct matrix
+        SklearnCalibrator().fit(np.column_stack([1.0 - _D.scores, _D.scores]), _D.y)
+
+
+def test_width_change_between_fit_and_predict_raises() -> None:
+    est = SklearnCalibrator().fit(np.column_stack([1.0 - _D.scores, _D.scores]), _D.y)
+    with pytest.raises(ValueError):
+        est.predict_proba(_Q.scores.reshape(-1, 1))
+
+
+def test_logit_input_stays_single_column() -> None:
+    from probcal._math import logit
+
+    z = logit(_D.scores)
+    with pytest.raises(ValueError, match="one score column"):
+        SklearnCalibrator(input="logit").fit(np.column_stack([z, -z]), _D.y)
 
 
 def test_sklearn_calibrator_classes_and_string_labels() -> None:

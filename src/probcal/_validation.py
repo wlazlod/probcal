@@ -11,14 +11,24 @@ def validate_scores(s: object, *, name: str = "s") -> np.ndarray:
 
     A single-column 2-D input of shape ``(n, 1)`` — what an sklearn
     cross-validation loop hands an estimator — is ravelled before the
-    checks below. This holds wherever the function is used: calibrator
-    ``fit``/``predict_proba`` and the metrics alike. Every other 2-D
-    shape is still rejected, and :func:`validate_binary_y` stays strict.
+    checks below. A two-column 2-D input of shape ``(n, 2)`` is accepted
+    as a probability-simplex matrix (each row sums to 1 within 1e-6
+    absolute tolerance); the positive class column is extracted. This
+    convention is shared across scikit-learn, LightGBM, XGBoost, and
+    CatBoost predict_proba outputs, and the simplex check ensures that an
+    arbitrary two-feature matrix will not be silently accepted as a
+    probability estimate. This holds wherever the function is used:
+    calibrator ``fit``/``predict_proba`` and the metrics alike. Every
+    other 2-D shape is rejected, and :func:`validate_binary_y` stays
+    strict.
 
     Parameters
     ----------
     s : array_like
-        Scores in ``[0, 1]``, shape ``(n,)`` or ``(n, 1)``. Values at the
+        Scores in ``[0, 1]``, shape ``(n,)``, ``(n, 1)``, or ``(n, 2)``.
+        A ``(n, 2)`` array is treated as a probability matrix from
+        ``predict_proba``; each row must sum to 1 within ``1e-6`` absolute
+        tolerance, and all entries must lie in ``[0, 1]``. Values at the
         boundaries are clipped to ``[EPS, 1 - EPS]`` so that logits stay
         finite.
     name : str
@@ -32,14 +42,31 @@ def validate_scores(s: object, *, name: str = "s") -> np.ndarray:
     Raises
     ------
     ValueError
-        If the input is neither 1-D nor a single column, contains
-        non-finite values, or lies outside ``[0, 1]``.
+        If the input is neither 1-D nor a single column nor a valid
+        two-column simplex, contains non-finite values, or lies outside
+        ``[0, 1]``.
     """
     arr = np.asarray(s, dtype=np.float64)
     if arr.ndim == 2 and arr.shape[1] == 1:
         arr = arr.ravel()
+    elif arr.ndim == 2 and arr.shape[1] == 2:
+        ok = (
+            bool(np.all(np.isfinite(arr)))
+            and bool(np.all(arr >= 0.0))
+            and bool(np.all(arr <= 1.0))
+            and bool(np.all(np.abs(arr.sum(axis=1) - 1.0) <= 1e-6))
+        )
+        if not ok:
+            raise ValueError(
+                f"{name}: expected 1-D scores, a single column, or a two-column "
+                f"probability matrix (rows summing to 1); got shape {arr.shape}"
+            )
+        arr = arr[:, 1]
     if arr.ndim != 1:
-        raise ValueError(f"{name}: expected 1-D scores (or a single column); got shape {arr.shape}")
+        raise ValueError(
+            f"{name}: expected 1-D scores, a single column, or a two-column "
+            f"probability matrix (rows summing to 1); got shape {arr.shape}"
+        )
     if not np.all(np.isfinite(arr)):
         raise ValueError(f"{name} must contain only finite values")
     if np.any(arr < 0.0) or np.any(arr > 1.0):

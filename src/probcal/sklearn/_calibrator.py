@@ -1,7 +1,7 @@
 """SklearnCalibrator: a probcal calibrator as an sklearn estimator over scores."""
 
 import numpy as np
-from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin, clone
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import _check_sample_weight, check_is_fitted
 
@@ -112,7 +112,7 @@ class SklearnCalibrator(ClassifierMixin, TransformerMixin, BaseEstimator):
                     "both classes are required."
                 )
         proto = self.calibrator if self.calibrator is not None else BetaCalibrator()
-        self.calibrator_ = type(proto)(**proto.get_params())
+        self.calibrator_ = clone(proto)
         self.calibrator_.fit(s, y_bin, sample_weight=sw)
         return self
 

@@ -9,6 +9,7 @@ King & Zeng (2001); Elkan (2001); Tasche (2013) — full records in the
 documentation.
 """
 
+import inspect
 import json
 import os
 from dataclasses import dataclass
@@ -163,6 +164,32 @@ class LogitOffset:
     def __sklearn_is_fitted__(self) -> bool:
         """Fitted state for sklearn >= 1.6 (``delta_`` fixed or solved)."""
         return bool(self.fitted_)
+
+    # ------------------------------------------------------------- parameters
+    # Same manual sklearn-compatible convention as BaseCalibrator.get_params
+    # / set_params: LogitOffset is not a BaseCalibrator subclass, so it is
+    # duplicated here rather than shared.
+
+    def get_params(self, deep: bool = True) -> dict[str, object]:
+        """Constructor parameters as a dict (manual sklearn-compatible clone info)."""
+        sig = inspect.signature(type(self).__init__)
+        return {
+            name: getattr(self, name)
+            for name in sig.parameters
+            if name not in ("self", "args", "kwargs")
+        }
+
+    def set_params(self, **params: object) -> Self:
+        """Set constructor parameters; unknown names raise ``ValueError``."""
+        valid = self.get_params()
+        for key, value in params.items():
+            if key not in valid:
+                raise ValueError(
+                    f"unknown parameter {key!r} for {type(self).__name__}; "
+                    f"valid: {sorted(valid)}"
+                )
+            setattr(self, key, value)
+        return self
 
     @property
     def affine_logit_coeffs_(self) -> tuple[float, float]:

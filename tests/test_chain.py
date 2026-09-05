@@ -84,10 +84,49 @@ def test_chain_validation() -> None:
         Chain([off, cal])
     with pytest.raises(ValueError, match="LogitOffset"):
         Chain([cal, cal])
-    with pytest.raises(RuntimeError, match="fitted"):
-        Chain([BetaCalibrator()])
     with pytest.raises(ValueError, match="at least"):
         Chain([])
+    # Unfitted stages are legal at construction now; the not-fitted error
+    # only surfaces from the reading methods (see the tests below).
+    unfitted = Chain([BetaCalibrator()])
+    assert unfitted.fitted_ is False
+    with pytest.raises(RuntimeError, match="not fitted; call fit\\(\\) first"):
+        unfitted.predict_proba(_D.scores)
+
+
+def test_unfitted_chain_fits_like_the_manual_two_step() -> None:
+    chain = Chain([BetaCalibrator(), LogitOffset(target_mean=0.03)]).fit(_D.scores, _D.y)
+    cal = BetaCalibrator().fit(_D.scores, _D.y)
+    off = LogitOffset(target_mean=0.03).fit(cal.predict_proba(_D.scores))
+    manual = Chain([cal, off])
+    np.testing.assert_array_equal(chain.predict_proba(_Q), manual.predict_proba(_Q))
+
+
+def test_unfitted_chain_methods_raise_the_standard_not_fitted_error() -> None:
+    chain = Chain([BetaCalibrator(), LogitOffset(delta=0.1)])
+    assert chain.fitted_ is False
+    assert chain.__sklearn_is_fitted__() is False
+    with pytest.raises(RuntimeError, match=r"not fitted; call fit\(\) first"):
+        chain.predict_proba(_D.scores)
+    with pytest.raises(RuntimeError, match="not fitted"):
+        chain.to_dict()
+    with pytest.raises(RuntimeError, match="not fitted"):
+        chain.interval_inverse(0.1, 0.2)
+
+
+def test_constructor_still_validates_types_and_order() -> None:
+    with pytest.raises(ValueError, match="first stage must be a calibrator"):
+        Chain([LogitOffset(delta=0.1)])
+    with pytest.raises(ValueError, match="must be a LogitOffset"):
+        Chain([BetaCalibrator(), BetaCalibrator()])
+
+
+def test_fit_refits_already_fitted_stages() -> None:
+    cal = BetaCalibrator().fit(_D.scores, _D.y)
+    before = cal.fingerprint()
+    _D2 = make_pd_portfolio(n=2000, random_state=15)
+    Chain([cal, LogitOffset(delta=0.1)]).fit(_D2.scores, _D2.y)  # different data
+    assert cal.fingerprint() != before
 
 
 def test_chain_serialization_round_trip() -> None:

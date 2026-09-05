@@ -22,74 +22,143 @@ from .offset import LogitOffset
 
 @register
 class Chain:
-    """A fitted calibrator followed by zero or more fitted ``LogitOffset`` stages.
+    """A calibrator followed by zero or more ``LogitOffset`` stages.
 
     Exposes the full calibrator protocol — forward map, exact inverse maps,
     monotonicity, affine coefficients, interpretation, serialization — for
     the composed map ``sigma(logit(g(s)) + delta_1 + ... + delta_m)``.
 
+    Stages may be given fitted (the chain is then immediately usable) or
+    unfitted (the chain must be fitted with :meth:`fit` before any reading
+    method is called). ``fit`` always refits every stage in place,
+    sequentially: the calibrator on ``(s, y, sample_weight)``, then each
+    offset in turn on the running calibrated probabilities.
+
     Parameters
     ----------
     stages : Sequence
-        A fitted :class:`~probcal.base.BaseCalibrator` first, then zero or
-        more fitted :class:`~probcal.offset.LogitOffset` stages, in
-        application order.
+        A :class:`~probcal.base.BaseCalibrator` first, then zero or more
+        :class:`~probcal.offset.LogitOffset` stages, in application order.
+        Stored verbatim (as ``self.stages``) when a list is given.
 
     Attributes
     ----------
+    stages : list[object]
+        The stages, in application order, stored verbatim.
     calibrator_ : BaseCalibrator
-        The first stage.
+        Read-only view of ``stages[0]``.
     offsets_ : tuple[LogitOffset, ...]
-        The offset stages, in application order.
+        Read-only view of ``stages[1:]``.
+    fitted_ : bool
+        ``True`` iff every stage is fitted.
     is_monotone_ : bool
         True iff every stage is monotone (offsets always are).
     """
 
     def __init__(self, stages: "Sequence[object]") -> None:
-        stages = list(stages)
-        if not stages:
+        listed = stages if isinstance(stages, list) else list(stages)
+        if not listed:
             raise ValueError("Chain needs at least a calibrator stage")
-        head, tail = stages[0], stages[1:]
+        head, tail = listed[0], listed[1:]
         if not isinstance(head, BaseCalibrator):
-            raise ValueError(
-                f"the first stage must be a fitted calibrator, got {type(head).__name__}"
-            )
+            raise ValueError(f"the first stage must be a calibrator, got {type(head).__name__}")
         for off in tail:
             if not isinstance(off, LogitOffset):
                 raise ValueError(
-                    "every stage after the first must be a LogitOffset, got "
-                    f"{type(off).__name__}"
+                    f"every stage after the first must be a LogitOffset, got {type(off).__name__}"
                 )
-        for stage in stages:
-            if not getattr(stage, "fitted_", False):
-                raise RuntimeError(
-                    f"Chain stages must already be fitted; {type(stage).__name__} is not"
-                )
-        self.calibrator_: BaseCalibrator = head
-        self.offsets_: tuple[LogitOffset, ...] = tuple(tail)  # type: ignore[arg-type]
+        # Stored verbatim when a list is given: sklearn's clone() constructs
+        # with the params it just cloned and then checks identity via get_params.
+        self.stages: list[object] = listed
+        self.fitted_: bool = all(getattr(st, "fitted_", False) for st in listed)
+
+    @property
+    def calibrator_(self) -> BaseCalibrator:
+        """Read-only view of the first stage."""
+        return self.stages[0]  # type: ignore[return-value]
+
+    @property
+    def offsets_(self) -> "tuple[LogitOffset, ...]":
+        """Read-only view of the offset stages, in application order."""
+        return tuple(self.stages[1:])  # type: ignore[arg-type]
+
+    def _check_fitted(self) -> None:
+        if not self.fitted_:
+            raise RuntimeError("Chain is not fitted; call fit() first")
+
+    def fit(self, s: object, y: object, sample_weight: object = None) -> "Chain":
+        """Fit every stage sequentially on the same calibration data.
+
+        The head calibrator is fitted on ``(s, y, sample_weight)``; each
+        offset is then fitted on the running calibrated probabilities, so
+        the offset anchors the calibrator's in-sample output — exactly what
+        ``CalibratedModel.offset_to`` does. There is no cross-fitting inside
+        a chain and no automatic MLE offset (``estimate_offset`` remains an
+        explicit choice). ``fit`` always refits every stage, including
+        stages that were already fitted at construction; to keep a stage
+        frozen, compose fitted objects and skip ``fit``, as before.
+        """
+        self.calibrator_.fit(s, y, sample_weight=sample_weight)
+        p = self.calibrator_.predict_proba(s)
+        for off in self.offsets_:
+            off.fit(p, sample_weight=sample_weight, y=y)
+            p = off.transform(p)
         self.fitted_ = True
+        return self
+
+    def get_params(self, deep: bool = True) -> dict[str, object]:
+        """Constructor parameters, with ``stages__i[__param]`` nesting when ``deep``."""
+        params: dict[str, object] = {"stages": self.stages}
+        if deep:
+            for i, stage in enumerate(self.stages):
+                params[f"stages__{i}"] = stage
+                for key, value in stage.get_params(deep=True).items():  # type: ignore[attr-defined]
+                    params[f"stages__{i}__{key}"] = value
+        return params
+
+    def set_params(self, **params: object) -> "Chain":
+        """Set ``stages`` wholesale, one stage (``stages__i``), or a nested stage param."""
+        if "stages" in params:
+            self.__init__(params.pop("stages"))  # type: ignore[misc, arg-type]
+        nested: dict[int, dict[str, object]] = {}
+        for key, value in params.items():
+            prefix, _, rest = key.partition("__")
+            idx_text, _, sub = rest.partition("__")
+            if prefix != "stages" or not idx_text.isdigit():
+                raise ValueError(f"invalid parameter {key!r} for Chain")
+            if not sub:
+                self.stages[int(idx_text)] = value
+                self.__init__(self.stages)  # type: ignore[misc] # revalidate types/order
+            else:
+                nested.setdefault(int(idx_text), {})[sub] = value
+        for idx, sub_params in nested.items():
+            self.stages[idx].set_params(**sub_params)  # type: ignore[attr-defined]
+        return self
 
     # ------------------------------------------------------------------ forward
 
     @property
     def delta_(self) -> float:
         """Total log-odds shift of the offset stages."""
+        self._check_fitted()
         return float(sum(off.delta_ for off in self.offsets_))
 
     @property
     def is_monotone_(self) -> bool:
         """True iff the calibrator stage is monotone (offsets always are)."""
+        self._check_fitted()
         return bool(self.calibrator_.is_monotone_)
 
     def predict_proba(self, s: object) -> np.ndarray:
         """The composed calibrated probability, applied stage by stage."""
+        self._check_fitted()
         p = self.calibrator_.predict_proba(s)
         for off in self.offsets_:
             p = off.transform(p)
         return p
 
     def __sklearn_is_fitted__(self) -> bool:
-        """Fitted state for sklearn >= 1.6; a chain is built from fitted stages."""
+        """Fitted state for sklearn >= 1.6 (``True`` iff every stage is fitted)."""
         return bool(self.fitted_)
 
     # ------------------------------------------------------------------ protocol
@@ -97,6 +166,7 @@ class Chain:
     @property
     def affine_logit_coeffs_(self) -> tuple[float, float] | None:
         """``(a, b + sum(delta))`` when the calibrator is affine on the logit scale."""
+        self._check_fitted()
         coeffs = self.calibrator_.affine_logit_coeffs_
         if coeffs is None:
             return None
@@ -147,6 +217,7 @@ class Chain:
             If the buffered interval is empty or does not intersect the
             chain's output range.
         """
+        self._check_fitted()
         from .base import UnattainableTargetError
 
         if not 0.0 <= lo <= hi <= 1.0:
@@ -180,6 +251,7 @@ class Chain:
             calibrator, or the probability-space result is not
             representable.
         """
+        self._check_fitted()
         arr = _validate_point_targets(p)
         shifted_z = logit(arr) - self.delta_
         _check_representable(shifted_z, "probability")  # the intermediate must round-trip
@@ -189,6 +261,7 @@ class Chain:
 
     def interpret(self) -> Interpretation:
         """Concatenated interpretation of every stage."""
+        self._check_fitted()
         parts = [self.calibrator_.interpret()] + [off.interpret() for off in self.offsets_]
         names: tuple[str, ...] = ()
         values: tuple[float, ...] = ()
@@ -208,6 +281,7 @@ class Chain:
 
     def to_dict(self) -> dict[str, object]:
         """Versioned snapshot: the stages' own envelopes, in order."""
+        self._check_fitted()
         from . import __version__
 
         return {

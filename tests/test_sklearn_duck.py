@@ -74,8 +74,8 @@ def test_check_is_fitted_before_and_after_fit() -> None:
 
 def test_chain_and_offset_report_fitted() -> None:
     # Chain and LogitOffset carry the is-fitted hook, but not the tag hook:
-    # a Chain is built from already-fitted stages and has no ``fit`` method,
-    # which sklearn's check_is_fitted requires of an estimator instance.
+    # sklearn's check_is_fitted also requires __sklearn_tags__, which neither
+    # implements.
     s, y = _data()
     cal = BetaCalibrator().fit(s, y)
     offset = LogitOffset(delta=0.2)
@@ -83,6 +83,14 @@ def test_chain_and_offset_report_fitted() -> None:
     offset.fit(cal.predict_proba(s))
     assert offset.__sklearn_is_fitted__() is True
     assert Chain([cal, offset]).__sklearn_is_fitted__() is True
+
+
+def test_clone_of_unfitted_chain_is_unfitted_with_equal_params() -> None:
+    proto = Chain([BetaCalibrator(variant="abm"), LogitOffset(target_mean=0.03)])
+    c = clone(proto)
+    assert c.fitted_ is False
+    assert c.get_params(deep=True)["stages__1__target_mean"] == 0.03
+    assert c.get_params(deep=True)["stages__0__variant"] == "abm"
 
 
 def test_cross_val_score_with_custom_scorer() -> None:

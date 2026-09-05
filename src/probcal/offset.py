@@ -107,7 +107,7 @@ class LogitOffset:
         self.delta = delta
         self.target_mean = target_mean
 
-    def fit(self, p: object, sample_weight: object = None) -> Self:
+    def fit(self, p: object, sample_weight: object = None, *, y: object = None) -> Self:
         """Fix ``delta`` (mode A) or solve it against the target mean (mode B).
 
         Parameters
@@ -116,6 +116,8 @@ class LogitOffset:
             Current calibrated probabilities of the portfolio.
         sample_weight : array_like or None
             Weights for the portfolio mean.
+        y : array_like or None, keyword-only
+            Ignored; accepted for compatibility with the chain fit protocol.
 
         Returns
         -------

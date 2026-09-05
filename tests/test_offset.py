@@ -153,3 +153,12 @@ def test_plug_in_delta_matches_offset_mle() -> None:
     w = rng.uniform(0.5, 2.0, n)
 
     assert plug_in_delta(z, y, w) == _offset_mle(z, y, w)
+
+
+def test_fit_accepts_and_ignores_y() -> None:
+    p = np.array([0.1, 0.2, 0.4])
+    y = np.array([0.0, 1.0, 1.0])
+    a = LogitOffset(delta=0.3).fit(p)
+    b = LogitOffset(delta=0.3).fit(p, y=y)
+    assert a.delta_ == b.delta_
+    np.testing.assert_array_equal(a.transform(p), b.transform(p))

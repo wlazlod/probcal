@@ -5,9 +5,9 @@ title: "probcal: universal post-hoc probability calibration for binary classifie
 authors:
   - family-names: "Wlazło"
     given-names: "Daniel"
-version: 0.3.0
+version: 0.3.1
 doi: 10.5281/zenodo.22069680
-date-released: 2026-08-29
+date-released: 2026-09-05
 license: MIT
 repository-code: "https://github.com/wlazlod/probcal"
 identifiers:

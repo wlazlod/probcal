@@ -81,11 +81,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies with the pinned optbinning
-        run: uv pip install --system -e ".[dev,viz]" "optbinning==0.21.0"
+      - name: Install dependencies with the pinned optbinning and lightgbm
+        run: uv pip install --system -e ".[dev,viz]" "optbinning==0.21.0" "lightgbm>=3.0"
 
       - name: Run the integration suites
-        run: pytest -q tests/test_optbinning.py tests/test_calibrator_protocol.py
+        run: pytest -q tests/test_optbinning.py tests/test_calibrator_protocol.py tests/test_lightgbm.py
 
   notebook:
     name: notebooks execute (walkthrough + end-to-end on the synthetic fallback)

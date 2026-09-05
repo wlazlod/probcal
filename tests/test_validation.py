@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from probcal._validation import EPS, validate_binary_y, validate_scores, validate_weights
 from probcal._registry import SERIALIZABLE
+from probcal._validation import EPS, validate_binary_y, validate_scores, validate_weights
 from probcal.base import BaseCalibrator
 from probcal.datasets import make_pd_portfolio
 from probcal.offset import LogitOffset
@@ -78,7 +78,10 @@ def test_validate_scores_accepts_single_column() -> None:
 
 
 def test_validate_scores_rejects_two_columns_with_new_message() -> None:
-    with pytest.raises(ValueError, match=r"expected 1-D scores, a single column, or a two-column probability matrix"):
+    with pytest.raises(
+        ValueError,
+        match=r"expected 1-D scores, a single column, or a two-column probability matrix",
+    ):
         validate_scores(np.zeros((3, 2)))
 
 
@@ -140,7 +143,9 @@ def test_two_column_fit_predict_matches_column_one(cls) -> None:
     np.testing.assert_array_equal(a.predict_proba(q), b.predict_proba(m_q))
 
 
-@pytest.mark.parametrize("kwargs", [{"delta": 0.3}, {"target_mean": 0.03}], ids=["delta", "target_mean"])
+@pytest.mark.parametrize(
+    "kwargs", [{"delta": 0.3}, {"target_mean": 0.03}], ids=["delta", "target_mean"]
+)
 def test_logit_offset_two_column_fit_matches_column_one(kwargs) -> None:
     p = make_pd_portfolio(n=400, random_state=7).scores
     m = np.column_stack([1.0 - p, p])

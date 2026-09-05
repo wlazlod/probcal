@@ -68,7 +68,7 @@ jobs:
         run: pytest -q tests/test_sklearn.py tests/test_sklearn_offset.py tests/test_sklearn_routing.py tests/test_sklearn_mirror_checks.py tests/test_import_footprint.py tests/test_sklearn_duck.py tests/test_sklearn_guide_snippets.py
 
   integrations:
-    name: optbinning integration on the pinned version
+    name: optbinning + lightgbm integrations on pinned versions
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

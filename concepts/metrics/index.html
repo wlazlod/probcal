@@ -1,0 +1,3114 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Universal post-hoc probability calibration for binary classifiers — numpy-only.">
+      
+      
+      
+        <link rel="canonical" href="https://wlazlod.github.io/probcal/concepts/metrics/">
+      
+      
+        <link rel="prev" href="../segmented/">
+      
+      
+        <link rel="next" href="../corp/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Metrics and tests - probcal</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#metrics-and-tests" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="probcal" class="md-header__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            probcal
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Metrics and tests
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="probcal" class="md-nav__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    probcal
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learn
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Learn
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install and quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-it-works/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/pd_calibration_walkthrough/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Workflows
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/choosing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choose a calibrator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/cutoffs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Set cutoffs and invert maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grouped evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitor and act
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serialize and persist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/report/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a validation report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/auditability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auditability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integrations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/sklearn/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    scikit-learn
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/optbinning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    optbinning scorecards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/treecf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    treecf counterfactuals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_1" id="__nav_4_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Foundations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Foundations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../why-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-splitting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data splitting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methods
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Methods
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-parametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parametric
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-nonparametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nonparametric
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-distribution-free/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distribution-free
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../offset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Offset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../segmented/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Segmented calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation and diagnostics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Evaluation and diagnostics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#proper-scoring-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Proper scoring rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#binned-estimators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Binned estimators
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#binning-free-estimators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Binning-free estimators
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kernel-calibration-error-and-tests-skce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Kernel calibration error and tests (SKCE)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-recalibration-regression-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The recalibration-regression framework
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-grade-backtesting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-grade backtesting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#uncertainty-the-bootstrap-protocol" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Uncertainty: the bootstrap protocol
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-a-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading a report
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-to-select-on-the-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What to select on: the table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-probcal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In probcal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#computational-cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Computational cost
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../corp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CORP and score decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../visualization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auto-selection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automatic selection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Consuming and governing
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Consuming and governing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inverse-maps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shap-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SHAP and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../conservatism/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conservatism and low-default portfolios
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/pd_end_to_end/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration end to end: rare events, audit, recourse, monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Comparison
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/calibrators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calibrators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-stability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API stability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#proper-scoring-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Proper scoring rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#binned-estimators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Binned estimators
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#binning-free-estimators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Binning-free estimators
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kernel-calibration-error-and-tests-skce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Kernel calibration error and tests (SKCE)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-recalibration-regression-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The recalibration-regression framework
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-grade-backtesting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-grade backtesting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#uncertainty-the-bootstrap-protocol" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Uncertainty: the bootstrap protocol
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-a-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading a report
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-to-select-on-the-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What to select on: the table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-probcal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In probcal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#computational-cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Computational cost
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="metrics-and-tests">Metrics and tests<a class="headerlink" href="#metrics-and-tests" title="Permanent link">&para;</a></h1>
+<p>Measuring calibration is harder than fixing it. The quantity of interest,
+<span class="arithmatex">\( \Pr(Y = 1 \mid \hat{p}) \)</span>, is a conditional expectation that no finite sample reveals
+directly, so every metric estimates it through some smoothing device, and every smoothing
+device imports bias, sensitivity, or both. This chapter walks the full catalog implemented in
+<code>probcal.metrics</code>, states each estimator's formula and known pathologies, and ends with the
+table that answers the operational question: <em>which of these may I select a calibrator on, and
+which are for reporting only?</em> The short answer, argued in detail below: select on log loss
+(default) or Brier; report the ECE family and ICI; never select on ECE or Hosmer–Lemeshow.</p>
+<p>All metrics share the signature <code>metric(y, p, *, sample_weight=None, **kw)</code>, and
+<code>evaluate(y, p)</code> assembles everything into a <code>MetricReport</code> with seeded bootstrap percentile
+confidence intervals.</p>
+<h2 id="proper-scoring-rules">Proper scoring rules<a class="headerlink" href="#proper-scoring-rules" title="Permanent link">&para;</a></h2>
+<p>The <strong>log loss</strong> and <strong>Brier score</strong> (Brier, 1950) were defined in
+<a href="../why-calibration/">Why calibration</a>:</p>
+<div class="arithmatex">\[
+\mathrm{LL} = -\frac{1}{n}\sum_i \bigl[y_i \ln p_i + (1-y_i)\ln(1-p_i)\bigr],
+\qquad
+\mathrm{BS} = \frac{1}{n}\sum_i (p_i - y_i)^2 .
+\]</div>
+<p>Both are strictly proper: their expectation is uniquely minimized by the true conditional
+probability, so no calibration map can improve them by lying. Their sample versions are
+unbiased estimators of the expected loss, which is the property none of the direct calibration
+metrics below share, and the reason they anchor selection. Log loss penalizes tail
+overconfidence harshly (a confident wrong prediction costs unboundedly); the Brier score is
+bounded and correspondingly gentler. For a portfolio-level orientation the <strong>Brier skill
+score</strong></p>
+<div class="arithmatex">\[
+\mathrm{BSS} = 1 - \frac{\mathrm{BS}}{\mathrm{BS}_{\text{ref}}},
+\qquad \mathrm{BS}_{\text{ref}} = \bar{y}(1 - \bar{y}),
+\]</div>
+<p>references the climatology forecast <span class="arithmatex">\( p \equiv \bar{y} \)</span>: positive values beat the base
+rate, and on a 3% portfolio the reference is small, so seemingly modest Brier differences are
+large skill differences.</p>
+<p><strong>Murphy decomposition.</strong> The binned estimator of Murphy's (1973) partition,</p>
+<div class="arithmatex">\[
+\mathrm{BS} \approx
+\underbrace{\frac{1}{n}\sum_b n_b\,(\bar{p}_b - \bar{y}_b)^2}_{\text{reliability}}
+\;-\;
+\underbrace{\frac{1}{n}\sum_b n_b\,(\bar{y}_b - \bar{y})^2}_{\text{resolution}}
+\;+\;
+\underbrace{\bar{y}(1-\bar{y})}_{\text{uncertainty}},
+\]</div>
+<p>with <span class="arithmatex">\( \bar p_b, \bar y_b \)</span> the mean prediction and event rate in bin <span class="arithmatex">\( b \)</span>, makes the
+calibration–sharpness trade visible in two numbers. It inherits every bias of its binning:
+the plug-in reliability term is biased upward and resolution downward, exactly the effect
+Bröcker (2009) formalized and Ferro and Fricker (2012) corrected. probcal implements the
+corrected variant alongside the naive one and documents the binning dependence rather than
+hiding it.</p>
+<p><strong>The Murphy diagram.</strong> <code>murphy_curve</code> computes a complementary, binning-free view of the
+same Brier score: the elementary score of the "act if <span class="arithmatex">\( p &gt; \theta \)</span>" decision rule,</p>
+<div class="arithmatex">\[
+S_\theta(p, y) = \theta \cdot \mathbb{1}\{p &gt; \theta,\, y = 0\} + (1 - \theta) \cdot
+\mathbb{1}\{p \le \theta,\, y = 1\},
+\]</div>
+<p>whose weighted mean over <span class="arithmatex">\( \theta \in [0, 1] \)</span> traces the diagram; doubling its integral
+recovers the Brier score exactly (Ehm, Gneiting, Jordan and Krüger, 2016), since a single
+observation's continuous integral is <span class="arithmatex">\( p^2/2 \)</span> (<span class="arithmatex">\( y = 0 \)</span>) or <span class="arithmatex">\( (1-p)^2/2 \)</span>
+(<span class="arithmatex">\( y = 1 \)</span>), exactly half the Brier contribution. Plotting <span class="arithmatex">\( S_\theta(A) - S_\theta(B) \)</span>
+for two forecasts (<code>plots.plot_murphy(..., diff=True)</code>) shows <em>where</em> along the decision
+spectrum one beats the other, rather than collapsing the comparison to a single Brier
+difference that a cancellation across thresholds can mask. <code>murphy_curve</code> defaults
+<code>thresholds=513</code> (<code>numpy.linspace(0, 1, 513)</code>, the package's dense-grid convention), evaluated
+in <span class="arithmatex">\( O(n \log n + T \log n) \)</span> by sorting <span class="arithmatex">\( p \)</span> once; the discrete identity converges to the
+exact one at rate roughly <span class="arithmatex">\( 1/n \)</span>. <span class="arithmatex">\( S_\theta \)</span> is piecewise linear between consecutive
+unique <span class="arithmatex">\( p \)</span> values but jumps exactly there, so a trapezoid over the default grid recovers
+Brier to about <span class="arithmatex">\( 10^{-3} \)</span> on typical portfolios, tightening as <span class="arithmatex">\( n \)</span> grows. Isotonic (PAV)
+recalibration never increases <span class="arithmatex">\( S_\theta \)</span> at any threshold, so a raw forecast plotted
+against its own PAV fit diagnoses the value of recalibration pointwise across the whole
+decision range instead of in one scalar.</p>
+<p>The analogous <strong>calibration–refinement split of the log loss</strong> replaces squared
+gaps with Kullback–Leibler terms: with <span class="arithmatex">\( c(p) = \Pr(Y=1 \mid \hat p = p) \)</span> estimated by a
+recalibration curve, calibration is the mean divergence between <span class="arithmatex">\( \mathrm{Bernoulli}(c(p)) \)</span>
+and <span class="arithmatex">\( \mathrm{Bernoulli}(p) \)</span>, refinement the mean entropy of <span class="arithmatex">\( \mathrm{Bernoulli}(c(p)) \)</span>.
+The split is only as good as the plug-in estimate of <span class="arithmatex">\( c \)</span>; the estimator choice is recorded
+in the changelog when implemented.</p>
+<h2 id="binned-estimators">Binned estimators<a class="headerlink" href="#binned-estimators" title="Permanent link">&para;</a></h2>
+<p>The <strong>expected calibration error</strong> family discretizes the conditional expectation with
+<span class="arithmatex">\( B \)</span> bins:</p>
+<div class="arithmatex">\[
+\mathrm{ECE} = \sum_{b=1}^{B} \frac{n_b}{n}\,\bigl|\bar{p}_b - \bar{y}_b\bigr|,
+\]</div>
+<p>with variants: <code>strategy="mass"</code> (equal-count bins, the recommended default) or <code>"width"</code>;
+<code>norm="l2"</code> squares the gaps; <code>norm="max"</code> takes the worst bin, which is the <strong>maximum
+calibration error</strong> (MCE). Two pathologies are structural, not incidental. First, <strong>binning
+sensitivity</strong>: ECE is a function of <span class="arithmatex">\( B \)</span> and the bin edges, and rankings of models can flip
+under a different, equally defensible binning. Second, <strong>finite-sample bias</strong>: within each bin
+the absolute difference of two noisy means is biased upward, so a <em>perfectly calibrated</em>
+model has positive expected ECE, and the bias grows with <span class="arithmatex">\( B \)</span> and shrinks with portfolio size
+slowly. <code>ece_debiased</code> applies the bias correction in the spirit of Bröcker (2009) and Ferro
+and Fricker (2012); <code>ece_sweep</code> implements the monotonic-sweep calibration error of Roelofs
+et al. (2022), which chooses the largest equal-mass <span class="arithmatex">\( B \)</span> whose bin means remain monotone,
+a principled, data-driven resolution choice that markedly reduces bias. <code>adaptive_ece</code> is an
+explicit alias for equal-mass ECE, provided because the literature uses the name; the
+documentation states the equivalence.</p>
+<p>The <strong>Hosmer–Lemeshow test</strong> (Hosmer and Lemeshow, 1980) groups observations into <span class="arithmatex">\( g \)</span>
+risk deciles and forms</p>
+<div class="arithmatex">\[
+C = \sum_{b=1}^{g} \frac{(O_b - E_b)^2}{E_b\,\bigl(1 - E_b/n_b\bigr)} \;\sim\; \chi^2_{g-2},
+\]</div>
+<p>with <span class="arithmatex">\( O_b \)</span> observed and <span class="arithmatex">\( E_b \)</span> expected events per group. It is the historical
+workhorse of clinical model validation and it carries the same two diseases in sharper form:
+the statistic depends on an essentially arbitrary grouping (changing <span class="arithmatex">\( g \)</span>, or the tie
+handling at decile boundaries, changes the p-value), and its power scales with <span class="arithmatex">\( n \)</span> so that
+on large portfolios it rejects calibration defects of no practical consequence, while on small
+ones it detects almost nothing. probcal ships it because validators expect it, marks it
+report-only, and never lets the <a href="../auto-selection/">selector</a> see it.</p>
+<h2 id="binning-free-estimators">Binning-free estimators<a class="headerlink" href="#binning-free-estimators" title="Permanent link">&para;</a></h2>
+<p>Four estimators avoid the binning choice altogether.</p>
+<p><strong>Smooth ECE</strong> (Błasiok and Nakkiran, 2024) replaces hard bins with kernel smoothing: the
+residuals <span class="arithmatex">\( y_i - p_i \)</span> are smoothed with a reflected Gaussian kernel (probcal applies it on
+the logit scale) and the calibration error is read from the smoothed curve, with the bandwidth
+chosen by the paper's self-consistency principle: the reported error is the fixed point where
+the measurement scale matches the error magnitude. The result is a continuous quantity,
+insensitive to reparametrization, with none of ECE's edge artifacts; any implementation
+simplification is recorded in the changelog.</p>
+<p><strong>ECCE</strong>, the empirical cumulative calibration error (Arrieta-Ibarra, Gujral, Tannen, Tygert
+and Xu, 2022), sorts observations by <span class="arithmatex">\( p \)</span> and tracks the cumulative deviation
+<span class="arithmatex">\( C_k = \sum_{i \le k} (y_{(i)} - p_{(i)}) \)</span>. Under calibration this walk is a martingale
+hovering near zero; systematic over- or under-prediction makes it drift. The Kolmogorov-style
+maximum <span class="arithmatex">\( \max_k |C_k|/n \)</span> and the mean absolute deviation summarize the drift, and the plot
+of <span class="arithmatex">\( C_k \)</span> against sorted <span class="arithmatex">\( p \)</span> localizes <em>where</em> the miscalibration lives without any
+smoothing parameter at all; <code>ecce_curve</code> and <code>plot_ecce</code> render it
+(<a href="../visualization/">Visualization</a>).</p>
+<p><strong>ICI and its quantiles</strong> (Austin and Steyerberg, 2019). Fit a LOESS smoother
+<span class="arithmatex">\( \hat{c}(p) \)</span> of outcome on prediction (Austin and Steyerberg, 2014, established the
+graphical practice) and average the absolute distance to the diagonal:</p>
+<div class="arithmatex">\[
+\mathrm{ICI} = \frac{1}{n} \sum_i \bigl|\hat{c}(p_i) - p_i\bigr| ,
+\]</div>
+<p>with E50, E90 and Emax the median, 90th percentile, and maximum of the same distances. The
+family is smooth, interpretable in probability units, and inherits only the mild
+LOESS-bandwidth dependence (<code>frac=0.75</code> by default, stated openly).</p>
+<p><strong>Spiegelhalter's z</strong> (Spiegelhalter, 1986) is the classical unbiasedness test built directly
+on the Brier score. Its numerator <span class="arithmatex">\( \sum_i (y_i - p_i)(1 - 2p_i) \)</span> has expectation zero
+under calibration, and standardizing by its variance under the null,</p>
+<div class="arithmatex">\[
+z = \frac{\sum_i (y_i - p_i)(1 - 2p_i)}
+         {\sqrt{\sum_i (1 - 2p_i)^2\, p_i (1 - p_i)}} ,
+\]</div>
+<p>gives an asymptotically standard normal statistic with a two-sided p-value. No binning, no
+smoothing; the trade is that it aggregates over the whole range and can miss compensating
+regional errors.</p>
+<h2 id="kernel-calibration-error-and-tests-skce">Kernel calibration error and tests (SKCE)<a class="headerlink" href="#kernel-calibration-error-and-tests-skce" title="Permanent link">&para;</a></h2>
+<p>The squared kernel calibration error (Widmann, Lindsten and Zachariah, 2019) embeds the
+residual measure in a reproducing-kernel Hilbert space: the population SKCE is zero exactly
+when the model is calibrated, for any universal kernel. In probcal's binary specialization
+(the paper's identity-matrix kernel construction with predictions represented as
+<span class="arithmatex">\( (1-p, p) \)</span>), the kernel term reduces to</p>
+<div class="arithmatex">\[
+h_{ij} = 2\, \tilde{k}(s_i, s_j)\, (y_i - p_i)(y_j - p_j) ,
+\]</div>
+<p>where the factor 2 keeps values comparable with the paper's framework. The residuals
+<span class="arithmatex">\( y_i - p_i \)</span> always stay on the probability scale; only the kernel input <span class="arithmatex">\( s \)</span> may be
+logit-transformed (<code>scale="logit"</code>, the low-PD option). Three consistent estimators
+(the paper's Table 1):</p>
+<table>
+<thead>
+<tr>
+<th>Estimator</th>
+<th>Definition</th>
+<th>Properties</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"biased"</code></td>
+<td><span class="arithmatex">\( n^{-2} \sum_{i,j} h_{ij} \)</span> (diagonal included)</td>
+<td>V-statistic; squared RKHS norm, always ≥ 0; biased upward</td>
+</tr>
+<tr>
+<td><code>"uq"</code> (default)</td>
+<td><span class="arithmatex">\( (n(n-1))^{-1} \sum_{i \ne j} h_{ij} \)</span></td>
+<td>unbiased; may be negative</td>
+</tr>
+<tr>
+<td><code>"ul"</code></td>
+<td><span class="arithmatex">\( \lfloor n/2 \rfloor^{-1} \sum_i h_{(2i-1),(2i)} \)</span> over seeded disjoint pairs</td>
+<td>unbiased; O(n); higher variance</td>
+</tr>
+</tbody>
+</table>
+<p>The defaults follow the paper's own experiments: a Laplacian kernel
+<span class="arithmatex">\( \exp(-|d|/\mathrm{bw}) \)</span> with the median-heuristic bandwidth (Gretton et al., 2012),
+implemented deterministically (an evenly strided subsample of at most 4096 points above
+<span class="arithmatex">\( n = 4096 \)</span>, a mean-distance fallback when heavy ties drive the median to zero, and a
+refusal with instructions when all scores are identical). A Gaussian kernel is available.</p>
+<p><code>skce_test</code> turns the estimate into a one-sided test of H0: calibrated. The default
+<code>method="bootstrap"</code> uses the quadratic statistic with the Arcones–Giné (1992) centered
+resampling, the construction the paper itself states in its Appendix G rather than the wild
+bootstrap other implementations substitute, at O(n_boot · n²) cost. <code>method="asymptotic"</code>
+uses the linear estimator with a normal approximation at O(n), the practical choice for
+<span class="arithmatex">\( n \gtrsim 20\,000 \)</span>; the trade, stated openly, is power. A single random pairing can
+miss slope-type miscalibration (residual means that change sign across the score range)
+that the bootstrap test rejects on the same data, the paper's documented power gap. Both
+report <code>p_value_bound</code>, the distribution-free bound
+<span class="arithmatex">\( \min\!\bigl(1, \exp(-\lfloor n/2 \rfloor\, t^2 / 8)\bigr) \)</span>: valid without any
+asymptotics but loose, so treat it as a worst-case check and decide with <code>p_value</code>.</p>
+<p>Against Spiegelhalter's z the contrast is scope: the z tests one global moment condition
+and can miss compensating regional errors, while the SKCE is sensitive to any deviation the
+kernel can resolve at its bandwidth. Neither <code>skce</code> nor <code>skce_test</code> accepts
+<code>sample_weight</code>: the U-statistic theory behind unbiasedness, the bootstrap, and the bounds
+is stated for unweighted i.i.d. samples, and probcal refuses to improvise weighted
+inference the source does not cover. Kumar, Sarawagi and Jain's (2018) MMCE is a special
+case of the SKCE (the paper's Example I.1), so it is not implemented separately.</p>
+<h2 id="the-recalibration-regression-framework">The recalibration-regression framework<a class="headerlink" href="#the-recalibration-regression-framework" title="Permanent link">&para;</a></h2>
+<p>The most decision-relevant diagnostics come from Cox's (1958) idea of regressing the outcome
+on the prediction. Three quantities, all fitted by the shared IRLS core:</p>
+<p>The <strong>calibration intercept</strong> fits <span class="arithmatex">\( \operatorname{logit} \Pr(Y=1) = \alpha +
+\operatorname{logit}(p) \)</span> with the slope fixed at 1 (an offset-term logistic regression):
+<span class="arithmatex">\( \alpha \)</span> is calibration-in-the-large in log-odds. On a PD portfolio,
+<span class="arithmatex">\( \alpha = -0.3 \)</span> says the model overestimates portfolio risk by a factor
+<span class="arithmatex">\( e^{0.3} \approx 1.35 \)</span> in odds.</p>
+<p>The <strong>calibration slope</strong> fits <span class="arithmatex">\( \operatorname{logit} \Pr(Y=1) = \alpha + \beta\,
+\operatorname{logit}(p) \)</span> and reads <span class="arithmatex">\( \beta \)</span>: values below 1 mean predictions are too
+spread out (the signature of overfitting), and values above 1 mean underfitting. These are
+the same parameters a <a href="../methods-parametric/">Platt calibrator</a> would <em>fit as repairs</em>, here
+estimated as <em>diagnoses</em>.</p>
+<p>The <strong>calibration test</strong> is the likelihood-ratio test of <span class="arithmatex">\( (\alpha, \beta) = (0, 1) \)</span>
+jointly, on 2 degrees of freedom: the Cox-framed "weak calibration" test, in the lineage
+running through Miller, Hui and Tierney (1991). Its χ² p-value comes from
+<code>probcal._math.gammainc_lower</code>, keeping the runtime numpy-only.</p>
+<p><strong>Guardrails.</strong> <code>calibration_guardrails(y, p)</code> condenses the framework into three flags used
+across the package and printed in every selection report: slope within <span class="arithmatex">\( [0.9, 1.1] \)</span>,
+intercept within <span class="arithmatex">\( \pm 0.1 \)</span>, Spiegelhalter p-value above 0.05. The thresholds are
+conventions, not theorems; they encode "no deviation a validator would flag" and are
+documented as such.</p>
+<h2 id="per-grade-backtesting">Per-grade backtesting<a class="headerlink" href="#per-grade-backtesting" title="Permanent link">&para;</a></h2>
+<p>Credit-risk validation operates on rating grades, not on continuous scores. Given grade
+assignments and per-grade PDs, <code>binomial_grade_test</code> computes for each grade the exact
+binomial tail probability of observing at least the realized number of defaults under the
+grade's PD (the incomplete-beta representation via <code>probcal._math.betainc</code> keeps it exact at
+any <span class="arithmatex">\( n \)</span>), alongside the normal approximation, in the traffic-light style summary
+supervisors expect (BCBS, 2005). <code>jeffreys_grade_test</code> implements the ECB's preferred
+formulation (ECB, 2019): the posterior for the grade's true default rate under the Jeffreys
+prior is <span class="arithmatex">\( \mathrm{Beta}(k + \tfrac12,\; n - k + \tfrac12) \)</span>, and the reported p-value is
+the posterior probability that the true rate lies at or below the assigned PD. The reading is
+one-sided and conservative by design, so a small value flags a grade whose PD is likely
+understated. The documentation says so explicitly, because two-sided misreadings of the
+Jeffreys test are a recurring validation error. Both results carry 90% display intervals
+(<code>ci_low</code>/<code>ci_high</code>) for <code>plot_grade_backtest</code> (<a href="../visualization/">Visualization</a>); the
+intervals are for reading, the traffic lights carry the verdict.</p>
+<h2 id="uncertainty-the-bootstrap-protocol">Uncertainty: the bootstrap protocol<a class="headerlink" href="#uncertainty-the-bootstrap-protocol" title="Permanent link">&para;</a></h2>
+<p>A metric without an uncertainty statement invites overreading, and calibration metrics on
+percent-level event rates are noisy in ways intuition underestimates. <code>evaluate(y, p)</code>
+therefore attaches confidence intervals to every scalar it reports, by the case-resampling
+bootstrap: draw <span class="arithmatex">\( n \)</span> observations with replacement from the evaluation pairs, recompute
+the metric, repeat <code>n_boot=1000</code> times with a seeded generator, and report the 2.5th and
+97.5th percentiles of the bootstrap distribution. The percentile method is chosen
+because it is simple to implement and easy to state: it makes no normality assumption, which
+matters for bounded and skewed statistics like ECE near zero, and it is reproducible bit for
+bit given the seed.</p>
+<p><strong>Stratification is the default.</strong> Each replicate resamples the negative and positive classes
+separately (case resampling within strata, the pROC-style default), so every replicate
+reproduces the observed class counts exactly. This conditions the CI on the observed class
+balance: it excludes the additional variance a plain i.i.d. bootstrap picks up from the event
+<em>count</em> itself fluctuating replicate to replicate, which on low-event-rate data can be the
+dominant source of resampling noise. Excluding that source of variance can <em>narrow</em> the
+interval relative to i.i.d. resampling on exactly the rare-event, small-<span class="arithmatex">\( n \)</span> data where it
+matters most. That is the opposite of the intuition that stratifying always tightens or
+always widens a CI: the direction depends on which variance source dominates. <code>evaluate(...,
+stratify=False)</code> restores plain i.i.d. resampling, redrawing a degenerate (single-class)
+replicate up to 100 times before raising rather than silently substituting anything. An older
+substitution rule (reusing the point estimate as a zero-variance replicate whenever an i.i.d.
+draw came back single-class) was removed for the same reason: it narrowed the i.i.d. path
+artificially rather than reporting the sampling variance honestly. Neither the stratified
+default nor its removal makes CIs uniformly wider or narrower; both make the reported interval
+mean what it claims to measure.</p>
+<p>Bootstrap intervals for <em>biased</em> estimators still center on the biased value. A bootstrap CI
+around plain ECE quantifies its variance, not its bias, so the interval can exclude zero for a
+perfectly calibrated model. The report pairs ECE with its debiased variant precisely so this
+artifact is visible rather than misread. Bootstrap-heavy computations carry the <code>slow</code> pytest
+marker and a fixed default seed, per the package's reproducibility conventions.</p>
+<p><strong>Grouping (<code>by=</code>).</strong> <code>evaluate(..., by=labels)</code> runs the exact same pooled call above on the
+full data plus one independent call per sorted group, returning a <code>GroupedMetricReport</code>
+instead of a plain <code>MetricReport</code>. Group <code>i</code> (in sorted-label order) uses <code>seed + 1000 * i</code>
+rather than reusing <code>seed</code> for every group. The offset is fixed and label-independent, so
+reproducibility does not depend on how many groups exist or what they are named, and no two
+groups' bootstrap draws can coincide by construction. This is side-by-side reporting, not a
+test: no comparison across groups is computed, and no multiple-comparison correction is
+applied, because none is implied by returning several independent reports. Formal
+group-conditional calibration testing is future work; see <code>docs/guide/groups.md</code>.</p>
+<p><strong>Weighted quantiles.</strong> <code>e50</code>, <code>e90</code>, and the <code>reliability_summary</code> stats box compute their
+quantile step with <code>probcal._math.weighted_quantile</code> (Hazen interpolation positions) whenever
+<code>sample_weight</code> is given and not uniform; unweighted and equal-weight calls short-circuit to
+plain <code>np.quantile</code> so 0.1.2 results stay bit-identical (Hazen differs from numpy's default
+quantile method even at equal weights, so it is the short-circuit, not a numerical
+coincidence, that protects those anchors).</p>
+<h2 id="reading-a-report">Reading a report<a class="headerlink" href="#reading-a-report" title="Permanent link">&para;</a></h2>
+<p>A <code>MetricReport</code> is designed to be read in a fixed order. Start with log loss and Brier
+against their pre-calibration values: did the repair help at all, and is the improvement
+larger than the bootstrap intervals overlap? Then the guardrail triplet of slope, intercept
+and Spiegelhalter, which localizes any remaining defect to spread, level, or neither. Then the
+descriptive family (debiased ECE, smooth ECE, ICI, ECCE), read as a cross-check: these
+should broadly agree, and when they do not, the disagreement itself is diagnostic (a large
+MCE with small ICI means one bad region, not global miscalibration; a large ECCE maximum with
+small mean means a localized drift). Per-grade tests come last, because they answer a
+different question: not "is the map good" but "which grades would a supervisor flag". The
+<a href="../visualization/">visualization chapter</a> pairs each layer of this reading with a plot.</p>
+<h2 id="what-to-select-on-the-table">What to select on: the table<a class="headerlink" href="#what-to-select-on-the-table" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Proper</th>
+<th>Binning-sensitive</th>
+<th>Finite-sample bias</th>
+<th>Formal test</th>
+<th>Selection use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Log loss</td>
+<td>strictly</td>
+<td>no</td>
+<td>unbiased</td>
+<td>no</td>
+<td><strong>default criterion</strong></td>
+</tr>
+<tr>
+<td>Brier score</td>
+<td>strictly</td>
+<td>no</td>
+<td>unbiased</td>
+<td>no</td>
+<td><strong>alternative criterion</strong></td>
+</tr>
+<tr>
+<td>Brier skill score</td>
+<td>derived</td>
+<td>no</td>
+<td>mild (ratio)</td>
+<td>no</td>
+<td>report</td>
+</tr>
+<tr>
+<td>Murphy / LL decompositions</td>
+<td>n/a</td>
+<td>yes</td>
+<td>corrected variant available</td>
+<td>no</td>
+<td>report</td>
+</tr>
+<tr>
+<td>ECE (mass/width, MCE)</td>
+<td>no</td>
+<td><strong>yes</strong></td>
+<td><strong>upward</strong></td>
+<td>no</td>
+<td><strong>never</strong></td>
+</tr>
+<tr>
+<td>Debiased ECE</td>
+<td>no</td>
+<td>yes</td>
+<td>reduced</td>
+<td>no</td>
+<td>report</td>
+</tr>
+<tr>
+<td>ECE sweep (Roelofs)</td>
+<td>no</td>
+<td>reduced</td>
+<td>reduced</td>
+<td>no</td>
+<td>optional, with care</td>
+</tr>
+<tr>
+<td>Smooth ECE</td>
+<td>no</td>
+<td>no</td>
+<td>low</td>
+<td>no</td>
+<td>optional, with care</td>
+</tr>
+<tr>
+<td>ECCE</td>
+<td>no</td>
+<td>no</td>
+<td>low</td>
+<td>max-statistic</td>
+<td>report</td>
+</tr>
+<tr>
+<td>ICI / E50 / E90 / Emax</td>
+<td>no</td>
+<td>no (LOESS frac)</td>
+<td>low</td>
+<td>no</td>
+<td>optional</td>
+</tr>
+<tr>
+<td>Spiegelhalter z</td>
+<td>n/a</td>
+<td>no</td>
+<td>n/a</td>
+<td><strong>yes</strong></td>
+<td>never (it is a test)</td>
+</tr>
+<tr>
+<td>SKCE (skce, skce_test)</td>
+<td>n/a</td>
+<td>no (bandwidth)</td>
+<td>uq/ul unbiased</td>
+<td><strong>yes</strong></td>
+<td>never (it is a test)</td>
+</tr>
+<tr>
+<td>Hosmer–Lemeshow</td>
+<td>no</td>
+<td><strong>yes</strong></td>
+<td>n/a</td>
+<td><strong>yes</strong></td>
+<td><strong>never</strong></td>
+</tr>
+<tr>
+<td>Calibration intercept/slope</td>
+<td>n/a</td>
+<td>no</td>
+<td>n/a</td>
+<td>yes (LR/Wald)</td>
+<td>guardrails</td>
+</tr>
+<tr>
+<td>Binomial / Jeffreys per grade</td>
+<td>n/a</td>
+<td>grades fixed</td>
+<td>n/a</td>
+<td><strong>yes</strong></td>
+<td>never (backtest)</td>
+</tr>
+</tbody>
+</table>
+<p>The logic behind the verdicts compresses to one principle. Selection is optimization, and
+optimizing a biased, binning-dependent, non-proper quantity invites the optimizer to exploit
+the estimator rather than improve the calibration. A calibrator can win an ECE contest by
+emitting values that straddle bin edges favorably, and win a Hosmer–Lemeshow contest by
+blurring predictions until the test loses power. Strictly proper scores close that loophole by
+construction. The <a href="../auto-selection/">selector</a> therefore defaults to out-of-fold log loss,
+accepts Brier, ICI, smooth ECE and ECE-sweep as deliberate alternatives, refuses plain ECE and
+Hosmer–Lemeshow entirely, and prints the guardrail flags next to whatever criterion was used.</p>
+<h2 id="in-probcal">In probcal<a class="headerlink" href="#in-probcal" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="c1"># s_cal, y_cal: held-out calibration scores and outcomes</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">brier_score</span><span class="p">,</span> <span class="n">calibration_guardrails</span><span class="p">,</span> <span class="n">calibration_slope</span><span class="p">,</span> <span class="n">ece</span><span class="p">,</span> <span class="n">ece_debiased</span><span class="p">,</span>
+    <span class="n">evaluate</span><span class="p">,</span> <span class="n">ici</span><span class="p">,</span> <span class="n">jeffreys_grade_test</span><span class="p">,</span> <span class="n">log_loss</span><span class="p">,</span> <span class="n">skce</span><span class="p">,</span> <span class="n">skce_test</span><span class="p">,</span> <span class="n">smooth_ece</span><span class="p">,</span>
+    <span class="n">spiegelhalter_z</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">log_loss</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">),</span> <span class="n">brier_score</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">))</span>  <span class="c1"># proper: safe to select on</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">ece</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">),</span> <span class="n">ece_debiased</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">))</span>      <span class="c1"># report-only; note the bias</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">smooth_ece</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">),</span> <span class="n">ici</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">))</span>        <span class="c1"># binning-free</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">calibration_slope</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">),</span> <span class="n">spiegelhalter_z</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">skce</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">),</span> <span class="n">skce_test</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">)</span><span class="o">.</span><span class="n">p_value</span><span class="p">)</span>  <span class="c1"># kernel calibration error + test</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">calibration_guardrails</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">))</span>               <span class="c1"># the three-flag summary</span>
+
+<span class="n">report</span> <span class="o">=</span> <span class="n">evaluate</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">,</span> <span class="n">n_boot</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>      <span class="c1"># everything + bootstrap CIs</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="p">)</span>
+
+<span class="n">grades</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">"G1"</span><span class="p">,</span> <span class="s2">"G2"</span><span class="p">,</span> <span class="s2">"G3"</span><span class="p">])[</span><span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">([</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">],</span> <span class="n">s_cal</span><span class="p">)]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">jeffreys_grade_test</span><span class="p">(</span><span class="n">y_cal</span><span class="p">,</span> <span class="n">s_cal</span><span class="p">,</span> <span class="n">grades</span><span class="p">))</span>          <span class="c1"># ECB-style backtest, traffic lights</span>
+</code></pre></div>
+<h2 id="computational-cost">Computational cost<a class="headerlink" href="#computational-cost" title="Permanent link">&para;</a></h2>
+<p>Most of the catalog is O(n) or O(n log n) per call: the proper scores, ECCE, Spiegelhalter's
+z, and the recalibration-regression framework are single linear passes; the binned ECE family
+sorts or bins in O(n log n). Two estimators smooth rather than bin, which historically cost
+more, and both gained an anchoring parameter in 0.1.3 to bring their cost down without
+changing what they measure.</p>
+<p><strong>The ICI family</strong> (<code>ici</code>, <code>e50</code>, <code>e90</code>, <code>emax</code>, and the <code>reliability_summary</code> stats box) fits
+a LOESS smoother <span class="arithmatex">\( \hat{c}(p) \)</span> and previously refit it at every one of the <span class="arithmatex">\( n \)</span>
+observations, each fit itself scanning an O(n)-window, effectively O(n²) at portfolio scale.
+<code>grid_size</code> (default 512) fits the smoother at that many equal-mass anchors spanning the
+prediction range and linearly interpolates the rest, the same device R's <code>stats::lowess</code> uses
+via its <code>delta</code> parameter. Windows and bandwidths are computed against the full data, so this
+changes <em>how many points get an exact fit</em>, not what the fit means; measured drift on
+<code>make_pd_portfolio(n=5000)</code> is <code>|Δici| ≈ 1.3e-6</code>, far below bootstrap CI width. <code>grid_size=None</code>
+recovers the exact per-point fit and its pre-0.1.3 cost. On this host, <code>ici</code> at n=50,000 fell
+from 192.2s to 1.2s, and <code>loess(grid_size=512)</code> fits n=1,000,000 points in under 30s.</p>
+<p><strong><code>smooth_ece</code></strong> solves a bandwidth fixed point by bisection, and each step built a kernel
+matrix against every residual. <code>bins</code> (default 8192) pre-aggregates the weighted residual
+measure onto equal-width bins over the logit range once, up front (O(n)); each bisection step
+then evaluates that binned measure directly on its own lattice by truncated-Gaussian
+convolution, independent of n. A small-bandwidth guard retries once on an adaptively refined
+binning (<code>bins &lt;- ceil(range / (sigma/8))</code>) whenever the found bandwidth would be under-resolved
+by the current bins, then falls back to the exact per-observation computation only if that
+refinement is infeasible (above 2^20 bins) or still under-resolved, so accuracy never degrades
+silently, and the binned path no longer reuses the exact
+path's 257-point grid (that reuse aliased against the bin lattice and was a cost-only defect).
+The lattice path engages for every call with a non-degenerate
+logit range (0.1.3 engaged it only for <code>n &gt; bins</code>, leaving typical calibration-set sizes on
+the exact path: the "size cliff", now removed); <code>bins=None</code> or a
+degenerate range is bit-identical to the pre-0.1.3 exact computation. For
+<code>n &lt;= bins</code> the lattice value may differ from the exact grid at the ~1e-4 level on typical
+portfolios (measured ≤ 2.4e-4 on <code>make_pd_portfolio</code>); on wide clipped-logit-range data the
+gap can be much larger, because there the exact path's fixed 257-point grid under-resolves
+small-sigma kernels and the lattice value (≥ 8 samples per sigma) is the better one.</p>
+<p><strong><code>evaluate</code>'s cost is dominated by the bootstrap</strong>, not any single metric: every point
+estimate in the requested catalog is recomputed <code>n_boot</code> times (default 1000). Per replicate,
+scores, ECCE, and the regression framework are O(n); binned ECEs are O(n log n); the ICI
+family shares one LOESS fit at O(grid_size · frac · n); <code>smooth_ece</code> bins once in O(n) and then
+costs O(bins · taps) per bisection step, where taps is the truncated-Gaussian kernel width
+(at most ~161 taps), independent of n, measured at ~ms per call for n up to 10⁵. <code>metrics=</code>
+restricts the catalog to the names actually needed.</p>
+<p>0.3.0 removes the large constant factors <em>inside</em> the loop, in three steps. First, each
+replicate is sorted by prediction once (<code>np.argsort(..., kind="stable")</code>) and that order is
+shared: the LOESS fit and ECCE skip their own sorts, and <code>ece</code>/<code>ece_debiased</code>/<code>mce</code>, which all
+bin at 15 equal-mass bins, share a single binning pass instead of three. Second, <code>ece_sweep</code>'s
+~99-candidate monotonicity scan reads per-bin weighted sums off prefix-sum differences at
+<code>searchsorted</code> cut positions instead of rebuilding a length-n bin index per candidate. Third,
+the LOESS anchor evaluation is vectorized: the 512 anchors' tricube-weighted local fits are
+solved in cache-sized blocks of whole windows rather than one Python iteration each (every
+window holds exactly the same number of points, so the block is rectangular). That third step
+is what actually moves the total, since the anchor fit was 84% of a replicate after the
+first two.</p>
+<p>Reported <strong>point estimates are untouched</strong>: they are still computed on the unsorted, scalar
+path, bit-for-bit. Only the bootstrap replicates take the fast path, and it differs from the
+slow one in two harmless ways. The reordered weighted sums move percentile CI bounds in their
+last bits (measured ≤ 4×10⁻¹¹ relative on a n=10⁴/<code>n_boot</code>=1000 full-catalog run), and the
+vectorized tricube weight cubes by multiplication where the scalar loop writes <code>** 3</code>, a
+sub-ulp difference (≤ 2.3×10⁻¹⁶ relative) worth taking because numpy sends <code>** 3</code> to <code>libm</code>
+<code>pow</code> at ten times the cost of two multiplies. The window selection itself is exact: the
+vectorized search reproduces the scalar two-pointer rule's comparison verbatim and is tested to
+land on the same index, tied scores included.</p>
+<p>The sub-ulp bound holds <strong>on well-conditioned windows only</strong>. If a window is rank-deficient
+(every non-zero tricube weight sitting on one distinct <code>p</code>, which needs the far half of the
+window to lie at exactly the bandwidth), the local-linear determinant is pure cancellation
+(~10⁻²³ rather than 0), and the ulp-level weight difference can put the two paths on opposite
+sides of the <code>abs(det) &lt; _FPMIN</code> guard, giving values that differ by O(1). On such a window the
+<code>swy / sw</code> branch (the weighted mean, what a rank-deficient local <em>linear</em> fit degenerates to)
+is the well-defined answer and either path may be the one that takes it; the other divides by
+cancellation noise and is already arbitrary in the scalar loop, independently of the
+vectorization. Since anchors are data quantiles, this has not been observed to reach a reported
+value: zero end-to-end differences across 1,738 two-distinct-score configurations whose anchor
+grid straddles the gap. The guard is deliberately left as it is, since changing it would move
+the point-estimate path, and the corner is pinned by
+<code>tests/test_math.py::test_loess_vectorized_rank_deficient_window</code>.</p>
+<p>Measured on the dev host at n=10⁴, one full-catalog replicate costs 0.089s: ICI family 0.051s
+(58%), <code>ece_sweep</code>'s scan 0.024s (27%), <code>intercept</code>/<code>slope</code> 0.009s (10%), <code>smooth_ece</code> 0.003s,
+the whole binned ECE family 0.4ms. <code>evaluate(n=10⁴, n_boot=1000)</code> takes 87s, down from 304s in
+0.2.x (3.5x); the intermediate figure after the sort and sweep changes alone was 226s, and the
+vectorized anchor fit (0.186s → 0.046s per call) accounts for the rest. The ICI family is still
+the largest single share, so <code>metrics=</code> excluding it (<code>ici</code>/<code>e50</code>/<code>e90</code>/<code>emax</code>) remains the
+biggest lever. For n above roughly 10⁶, reduce <code>n_boot</code>, pass a <code>metrics=</code> subset, or both.</p>
+<p><code>docs/scripts/benchmarks.py</code> measures these on demand; per-metric rows (<code>ece</code>, <code>ece_sweep</code>,
+<code>ecce</code>, <code>ici</code>, <code>smooth_ece</code>) are 0.3.0 additions. Measured on the dev host:</p>
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>call</th>
+<th>wall time (s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>10,000</td>
+<td><code>ece(d.y, d.scores)</code></td>
+<td>0.009</td>
+</tr>
+<tr>
+<td>10,000</td>
+<td><code>ece_sweep(d.y, d.scores)</code></td>
+<td>0.095</td>
+</tr>
+<tr>
+<td>10,000</td>
+<td><code>ecce(d.y, d.scores)</code></td>
+<td>0.001</td>
+</tr>
+<tr>
+<td>10,000</td>
+<td><code>ici(d.y, d.scores)</code></td>
+<td>0.186</td>
+</tr>
+<tr>
+<td>10,000</td>
+<td><code>smooth_ece(d.y, d.scores)</code></td>
+<td>0.003</td>
+</tr>
+<tr>
+<td>10,000</td>
+<td><code>evaluate(d.y, d.scores, n_boot=100)</code></td>
+<td>9.4</td>
+</tr>
+<tr>
+<td>100,000</td>
+<td><code>ece(d.y, d.scores)</code></td>
+<td>0.015</td>
+</tr>
+<tr>
+<td>100,000</td>
+<td><code>ece_sweep(d.y, d.scores)</code></td>
+<td>0.796</td>
+</tr>
+<tr>
+<td>100,000</td>
+<td><code>ecce(d.y, d.scores)</code></td>
+<td>0.011</td>
+</tr>
+<tr>
+<td>100,000</td>
+<td><code>ici(d.y, d.scores)</code></td>
+<td>1.863</td>
+</tr>
+<tr>
+<td>100,000</td>
+<td><code>smooth_ece(d.y, d.scores)</code></td>
+<td>0.005</td>
+</tr>
+<tr>
+<td>100,000</td>
+<td><code>evaluate(d.y, d.scores, n_boot=100)</code></td>
+<td>93.1</td>
+</tr>
+</tbody>
+</table>
+<p>The single-call <code>ece_sweep</code> and <code>ici</code> rows time the public functions, which keep the original
+scan and the scalar anchor loop; the vectorized versions are bootstrap-internal and cost 0.024s
+and 0.046s respectively at n=10⁴.</p>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Arcones, M. A., Giné, E. (1992). "On the bootstrap of U and V statistics." <em>Annals of Statistics</em> 20(2), 655–674.</li>
+<li>Arrieta-Ibarra, I., Gujral, P., Tannen, J., Tygert, M., Xu, C. (2022). "Metrics of Calibration for Probabilistic Predictions." <em>Journal of Machine Learning Research</em> 23(351), 1–54.</li>
+<li>Austin, P. C., Steyerberg, E. W. (2014). "Graphical assessment of internal and external calibration of logistic regression models by using loess smoothers." <em>Statistics in Medicine</em> 33(3), 517–535.</li>
+<li>Austin, P. C., Steyerberg, E. W. (2019). "The Integrated Calibration Index (ICI) and related metrics for quantifying the calibration of logistic regression models." <em>Statistics in Medicine</em> 38(21), 4051–4065.</li>
+<li>BCBS (2005). <em>Studies on the Validation of Internal Rating Systems.</em> Working Paper No. 14, revised version, May 2005. Bank for International Settlements.</li>
+<li>Błasiok, J., Nakkiran, P. (2024). "Smooth ECE: Principled Reliability Diagrams via Kernel Smoothing." ICLR.</li>
+<li>Brier, G. W. (1950). "Verification of forecasts expressed in terms of probability." <em>Monthly Weather Review</em> 78(1), 1–3.</li>
+<li>Bröcker, J. (2009). "Reliability, sufficiency, and the decomposition of proper scores." <em>Quarterly Journal of the Royal Meteorological Society</em> 135(643), 1512–1519.</li>
+<li>Cox, D. R. (1958). "Two further applications of a model for binary regression." <em>Biometrika</em> 45, 562–565.</li>
+<li>ECB (2019). <em>Instructions for reporting the validation results of internal models: IRB Pillar I models for credit risk.</em> European Central Bank Banking Supervision, February 2019.</li>
+<li>Ehm, W., Gneiting, T., Jordan, A., Krüger, F. (2016). "Of quantiles and expectiles: consistent scoring functions, Choquet representations and forecast rankings." <em>Journal of the Royal Statistical Society: Series B</em> 78(3), 505–562.</li>
+<li>Ferro, C. A. T., Fricker, T. E. (2012). "A bias-corrected decomposition of the Brier score." <em>Quarterly Journal of the Royal Meteorological Society</em> 138(668), 1954–1960.</li>
+<li>Gretton, A., Borgwardt, K. M., Rasch, M. J., Schölkopf, B., Smola, A. (2012). "A Kernel Two-Sample Test." <em>Journal of Machine Learning Research</em> 13, 723–773.</li>
+<li>Hosmer, D. W., Lemeshow, S. (1980). "Goodness of fit tests for the multiple logistic regression model." <em>Communications in Statistics - Theory and Methods</em> 9(10), 1043–1069.</li>
+<li>Kumar, A., Sarawagi, S., Jain, U. (2018). "Trainable Calibration Measures for Neural Networks from Kernel Mean Embeddings." ICML, PMLR 80, 2805–2814.</li>
+<li>Miller, M. E., Hui, S. L., Tierney, W. M. (1991). "Validation techniques for logistic regression models." <em>Statistics in Medicine</em> 10(8), 1213–1226.</li>
+<li>Murphy, A. H. (1973). "A New Vector Partition of the Probability Score." <em>Journal of Applied Meteorology</em> 12(4), 595–600.</li>
+<li>Roelofs, R., Cain, N., Shlens, J., Mozer, M. C. (2022). "Mitigating Bias in Calibration Error Estimation." AISTATS, PMLR 151, 4036–4054.</li>
+<li>Spiegelhalter, D. J. (1986). "Probabilistic prediction in patient management and clinical trials." <em>Statistics in Medicine</em> 5(5), 421–433.</li>
+<li>Widmann, D., Lindsten, F., Zachariah, D. (2019). "Calibration tests in multi-class classification: A unifying framework." NeurIPS 32.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.top", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

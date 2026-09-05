@@ -1,0 +1,2697 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Universal post-hoc probability calibration for binary classifiers — numpy-only.">
+      
+      
+      
+        <link rel="canonical" href="https://wlazlod.github.io/probcal/concepts/conservatism/">
+      
+      
+        <link rel="prev" href="../shap-calibration/">
+      
+      
+        <link rel="next" href="../monitoring/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Conservatism and low-default portfolios - probcal</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#conservatism-most-prudent-pds-and-margins-of-conservatism" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="probcal" class="md-header__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            probcal
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Conservatism and low-default portfolios
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="probcal" class="md-nav__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    probcal
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learn
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Learn
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install and quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-it-works/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/pd_calibration_walkthrough/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Workflows
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/choosing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choose a calibrator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/cutoffs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Set cutoffs and invert maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grouped evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitor and act
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serialize and persist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/report/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a validation report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/auditability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auditability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integrations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/sklearn/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    scikit-learn
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/optbinning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    optbinning scorecards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/treecf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    treecf counterfactuals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_1" id="__nav_4_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Foundations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Foundations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../why-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-splitting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data splitting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methods
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Methods
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-parametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parametric
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-nonparametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nonparametric
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-distribution-free/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distribution-free
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../offset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Offset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../segmented/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Segmented calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation and diagnostics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Evaluation and diagnostics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../corp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CORP and score decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../visualization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auto-selection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automatic selection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Consuming and governing
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Consuming and governing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inverse-maps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shap-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SHAP and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conservatism and low-default portfolios
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conservatism and low-default portfolios
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#when-each-mechanism-applies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When each mechanism applies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-monotonicity-assumption" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The monotonicity assumption
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-bound" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The bound
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monotonicity-of-the-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monotonicity of the output
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-probcal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In probcal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#jeffreys-upper-bands-a-masterscale-band-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Jeffreys upper bands: a masterscale band table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#margin-of-conservatism-composing-with-calibration-not-replacing-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Margin of conservatism: composing with calibration, not replacing it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-one-period-bound-does-not-cover" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the one-period bound does not cover
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#simulation-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Simulation verification
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/pd_end_to_end/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration end to end: rare events, audit, recourse, monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Comparison
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/calibrators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calibrators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-stability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API stability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#when-each-mechanism-applies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When each mechanism applies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-monotonicity-assumption" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The monotonicity assumption
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-bound" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The bound
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monotonicity-of-the-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monotonicity of the output
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-probcal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In probcal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#jeffreys-upper-bands-a-masterscale-band-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Jeffreys upper bands: a masterscale band table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#margin-of-conservatism-composing-with-calibration-not-replacing-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Margin of conservatism: composing with calibration, not replacing it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-one-period-bound-does-not-cover" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the one-period bound does not cover
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#simulation-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Simulation verification
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="conservatism-most-prudent-pds-and-margins-of-conservatism">Conservatism: most-prudent PDs and margins of conservatism<a class="headerlink" href="#conservatism-most-prudent-pds-and-margins-of-conservatism" title="Permanent link">&para;</a></h1>
+<p>The per-grade backtests in <a href="../metrics/">Metrics and tests</a> (<code>binomial_grade_test</code>,
+<code>jeffreys_grade_test</code>) ask whether a grade's <em>assigned</em> PD is consistent with its
+realized defaults. On a low- or zero-default grade (routine for the best few grades of a
+retail or sovereign scorecard) that question is close to unanswerable from the grade's own
+data alone: with zero defaults, every exact tail probability or Jeffreys posterior reading
+is uninformative about the true PD, and a naive point estimate of <code>0/n = 0</code> is not a usable
+PD to assign going forward (regulators do not accept "the PD is exactly zero"). Pluto &amp;
+Tasche (2005) solve a different, decision-relevant problem instead: not "is the assigned PD
+consistent with the data", but "what is the <em>most-prudent</em> (upper-bound) PD I can defend for
+this grade, at a stated confidence, given everything I know about the whole rating scale".
+<code>probcal.metrics.pluto_tasche</code> implements their one-period estimator; <code>jeffreys_upper_bands</code>
+answers the related masterscale-wide question with a different tool; and <code>monitor.moc_offset</code>
+/ <code>monitor.moc_offset_from_counts</code> carry the same most-prudent logic from a rating grade to
+an already-calibrated portfolio, as an offset that stacks on top of calibration rather than
+replacing it.</p>
+<h2 id="when-each-mechanism-applies">When each mechanism applies<a class="headerlink" href="#when-each-mechanism-applies" title="Permanent link">&para;</a></h2>
+<p>Four tools solve four distinct instances of "give me a defensible upper reading, not a point
+estimate", and picking the right one depends on what is available and at what granularity the
+number is needed:</p>
+<table>
+<thead>
+<tr>
+<th>Mechanism</th>
+<th>Applies when</th>
+<th>Granularity</th>
+<th>Needs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>metrics.pluto_tasche(_from_arrays)</code></td>
+<td>A rating scale has zero- or low-default grades and rating-order is trusted</td>
+<td>Per grade</td>
+<td>Ordered grades, own + pooled counts</td>
+</tr>
+<tr>
+<td><code>metrics.jeffreys_upper_bands</code></td>
+<td>Publishing a full, contiguous masterscale band table for <code>thresholds.calibrated_bands_to_raw</code></td>
+<td>Per grade (own counts only, no pooling)</td>
+<td>Ordered grades, own counts</td>
+</tr>
+<tr>
+<td><code>monitor.moc_offset</code></td>
+<td>A <code>CalibrationMonitor</code> is already tracking the portfolio and its confidence sequence is live</td>
+<td>Portfolio-wide</td>
+<td>A live monitor, or its frozen report</td>
+</tr>
+<tr>
+<td><code>monitor.moc_offset_from_counts</code></td>
+<td>No monitor is running; only aggregate outcome counts are on hand</td>
+<td>Portfolio-wide</td>
+<td>Realized <code>(y, p)</code></td>
+</tr>
+</tbody>
+</table>
+<p>Pluto-Tasche and the Jeffreys bands both answer "what PD may I <em>assign</em> to this grade".
+They are inputs to a masterscale, evaluated before or at the point of grading. The two
+<code>monitor.moc_offset*</code> functions answer a different question, downstream of grading: "given
+what I have observed about an <em>already-calibrated</em> portfolio's outcomes, by how much should
+I conservatively shift it". They return a fitted <code>LogitOffset</code> rather than a per-grade
+number, meant to be applied; see <a href="#margin-of-conservatism-composing-with-calibration-not-replacing-it">Margin of conservatism</a>
+below.</p>
+<h2 id="the-monotonicity-assumption">The monotonicity assumption<a class="headerlink" href="#the-monotonicity-assumption" title="Permanent link">&para;</a></h2>
+<p>A rating scale is presumed <em>ordered</em>: the true PD cannot decrease from a better grade to a
+worse one. That assumption is doing the actual work. It licenses pooling a grade's own
+(possibly zero-default) data with every worse grade's data before computing the bound. If
+grade <em>i</em>'s true PD cannot exceed grade <em>i+1</em>'s, then observing few defaults across grades
+<em>i</em> through <em>K</em> combined is still meaningful evidence that grade <em>i</em>'s own PD is low, even
+when grade <em>i</em>'s own sample is too small or too clean to say anything by itself.</p>
+<h2 id="the-bound">The bound<a class="headerlink" href="#the-bound" title="Permanent link">&para;</a></h2>
+<p>For grades ordered best to worst (index 1..K, as given; the order is not inferred from the
+data), pool grade <em>i</em> with every worse grade:</p>
+<div class="arithmatex">\[
+n^*_i = \sum_{j=i}^{K} n_j, \qquad d^*_i = \sum_{j=i}^{K} d_j .
+\]</div>
+<p>The most-prudent PD for grade <em>i</em> is the one-sided Clopper-Pearson upper confidence bound of
+the pooled default rate: the PD <code>p</code> at which observing at most <code>d*_i</code> defaults among <code>n*_i</code>
+obligors has probability exactly <code>1 - confidence</code>,</p>
+<div class="arithmatex">\[
+I_p(d^*_i + 1,\; n^*_i - d^*_i) = \text{confidence} \quad\Longrightarrow\quad
+p = F^{-1}_{\mathrm{Beta}(d^*_i + 1,\; n^*_i - d^*_i)}(\text{confidence}),
+\]</div>
+<p>computed by <code>probcal._math.beta_ppf</code> (the same incomplete-beta quantile machinery
+<code>binomial_grade_test</code>/<code>jeffreys_grade_test</code> use for their display intervals). Two edge cases
+are handled directly rather than through the general solver: <code>d*_i == n*_i</code> (every pooled
+obligor defaulted) gives <code>pd_upper = 1.0</code>, and a pooled set with <code>n*_i == 0</code> obligors raises
+<code>ValueError</code> rather than silently returning a meaningless bound.</p>
+<p><strong>Zero defaults, closed form.</strong> When <code>d*_i = 0</code>, the incomplete-beta identity
+<code>I_p(1, n) = 1 - (1 - p)^n</code> gives an exact closed form,</p>
+<div class="arithmatex">\[
+p = 1 - (1 - \text{confidence})^{1/n^*_i},
+\]</div>
+<p>used in <code>tests/test_conservative.py</code> to pin <code>beta_ppf</code>'s bisection output to <code>1e-12</code>
+independent of the general solver, and to reproduce the worked example from Pluto &amp; Tasche
+(2005): grades A/B/C with <code>n = (100, 400, 300)</code>, all zero-default, at 90% confidence give
+<code>pd_upper ≈ (0.29%, 0.33%, 0.76%)</code>.</p>
+<p><strong>Weighted counts.</strong> <code>pluto_tasche_from_arrays</code> accepts <code>sample_weight</code>; the resulting
+per-grade counts (and their cumulative pools) are weighted sums, which can be non-integer.
+These pass directly into the Beta shape parameters above, a documented convention, not an
+approximation the caller needs to round away.</p>
+<h2 id="monotonicity-of-the-output">Monotonicity of the output<a class="headerlink" href="#monotonicity-of-the-output" title="Permanent link">&para;</a></h2>
+<p>Pooled sets are nested: grade <em>i</em>'s pooled set is grade <em>i</em>'s own data plus grade <em>i+1</em>'s
+entire pooled set. For a portfolio whose observed per-grade default rates already respect
+rating order, this makes <code>pd_upper</code> come out non-decreasing best to worst on its own. It is
+not a guarantee for arbitrary input, though: a single noisy grade whose own rate happens to
+exceed the worse-grade pool it joins can pull that grade's pooled rate, and so its bound,
+above the next grade's. <code>pluto_tasche</code> corrects any such dip by taking the cumulative
+maximum of <code>pd_upper</code> best to worst (a prudent hull: <code>hull[i] = max(pd_upper[0..i])</code>), so a
+worse grade's bound is never below a better grade's. This is the only correction direction
+consistent with a <em>most-prudent</em> estimator (it can only raise a grade's bound up to a
+better grade's, never lower a grade's bound to match a worse one), and it never reduces any
+individual grade's bound. <code>PlutoTascheResult.monotonized</code> reports whether the hull actually
+changed anything. On realistic, already-monotone data it is a no-op (<code>monotonized = False</code>);
+the coverage simulation below never triggers it either, since its true PD is deliberately
+monotone with enough obligors per grade that sampling noise essentially cannot invert the
+pooled-rate ordering.</p>
+<h2 id="in-probcal">In probcal<a class="headerlink" href="#in-probcal" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">pluto_tasche</span><span class="p">,</span> <span class="n">pluto_tasche_from_arrays</span>
+
+<span class="c1"># From per-grade counts directly (Pluto &amp; Tasche 2005 worked example).</span>
+<span class="n">res</span> <span class="o">=</span> <span class="n">pluto_tasche</span><span class="p">(</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">100.0</span><span class="p">,</span> <span class="mf">400.0</span><span class="p">,</span> <span class="mf">300.0</span><span class="p">]),</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>
+    <span class="n">confidence</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+    <span class="n">grades</span><span class="o">=</span><span class="p">(</span><span class="s2">"A"</span><span class="p">,</span> <span class="s2">"B"</span><span class="p">,</span> <span class="s2">"C"</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">pd_upper</span><span class="p">)</span>          <span class="c1"># [0.00287..., 0.00329..., 0.00758...]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">interpret</span><span class="p">())</span>       <span class="c1"># one audit sentence per grade</span>
+
+<span class="c1"># From observation-level grades and outcomes.</span>
+<span class="n">grades</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">"A"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">+</span> <span class="p">[</span><span class="s2">"B"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">400</span> <span class="o">+</span> <span class="p">[</span><span class="s2">"C"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">300</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">800</span><span class="p">)</span>             <span class="c1"># zero defaults observed</span>
+<span class="n">res2</span> <span class="o">=</span> <span class="n">pluto_tasche_from_arrays</span><span class="p">(</span><span class="n">grades</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="p">(</span><span class="s2">"A"</span><span class="p">,</span> <span class="s2">"B"</span><span class="p">,</span> <span class="s2">"C"</span><span class="p">),</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+</code></pre></div>
+<p>Both entry points return the same <code>PlutoTascheResult</code> and are re-exported from
+<code>probcal.metrics.grade</code>, alongside the per-grade backtests they complement.</p>
+<h2 id="jeffreys-upper-bands-a-masterscale-band-table">Jeffreys upper bands: a masterscale band table<a class="headerlink" href="#jeffreys-upper-bands-a-masterscale-band-table" title="Permanent link">&para;</a></h2>
+<p><code>jeffreys_upper_bands(y, p, grades, *, level=0.9, order=None)</code> packages the same per-grade
+Jeffreys posterior upper bound <code>jeffreys_grade_test</code> already reports as its own-grade display
+interval (<code>beta_ppf(level, k_i + 0.5, n_i - k_i + 0.5)</code> under a <code>Beta(k_i + 0.5, n_i - k_i +
+0.5)</code> posterior on grade <em>i</em>'s own default rate, no cross-grade pooling) into the
+<code>{grade: (lo, hi)}</code> masterscale table <code>thresholds.calibrated_bands_to_raw</code> consumes directly.
+<code>lo_i</code> is the previous grade's <code>hi</code> (<code>0.0</code> for the best grade), so the bands are contiguous by
+construction. Because each grade's bound uses only its own counts, a zero-default grade still
+gets a strictly positive <code>hi</code> from the Jeffreys prior alone, unlike <code>pluto_tasche</code>, which
+needs pooling with worse grades to say anything about a zero-default grade at all.</p>
+<p>The own-grade <code>hi</code> sequence need not come out non-decreasing on its own (a noisy grade can post
+a smaller posterior upper bound than a better grade), which would make adjacent bands overlap.
+<code>jeffreys_upper_bands</code> monotonizes it with <code>_math.pava</code> (weighted isotonic regression, weight =
+grade size) in the given <code>order</code>, the minimum-adjustment non-decreasing fit rather than a
+running maximum, and warns (<code>UserWarning</code>) only when that adjustment changed something.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal</span><span class="w"> </span><span class="kn">import</span> <span class="n">BetaCalibrator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">jeffreys_upper_bands</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.thresholds</span><span class="w"> </span><span class="kn">import</span> <span class="n">calibrated_bands_to_raw</span>
+
+<span class="n">grades</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">"A"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">+</span> <span class="p">[</span><span class="s2">"B"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">+</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span> <span class="o">+</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">95</span><span class="p">)</span>
+<span class="n">p</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.01</span><span class="p">]</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">+</span> <span class="p">[</span><span class="mf">0.05</span><span class="p">]</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">bands</span> <span class="o">=</span> <span class="n">jeffreys_upper_bands</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">grades</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+<span class="c1"># {"A": (0.0, 0.0134...), "B": (0.0134..., 0.0846...)}</span>
+
+<span class="n">fitted_calibrator</span> <span class="o">=</span> <span class="n">BetaCalibrator</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">s_cal</span><span class="p">,</span> <span class="n">y_cal</span><span class="p">)</span>  <span class="c1"># s_cal, y_cal: held-out calibration scores and outcomes</span>
+<span class="n">raw_bands</span> <span class="o">=</span> <span class="n">calibrated_bands_to_raw</span><span class="p">(</span><span class="n">fitted_calibrator</span><span class="p">,</span> <span class="n">bands</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="margin-of-conservatism-composing-with-calibration-not-replacing-it">Margin of conservatism: composing with calibration, not replacing it<a class="headerlink" href="#margin-of-conservatism-composing-with-calibration-not-replacing-it" title="Permanent link">&para;</a></h2>
+<p><code>monitor.moc_offset</code> and <code>monitor.moc_offset_from_counts</code> (theory: <a href="../monitoring/#margin-of-conservatism-offsets">Monitoring</a>)
+turn monitoring or outcome evidence into a fitted <code>probcal.LogitOffset</code> that shifts an
+<em>already-calibrated</em> portfolio further, conservatively. <code>moc_offset(mon)</code> reads the upper end
+of a running <code>CalibrationMonitor</code>'s time-uniform confidence sequence for the current offset;
+<code>moc_offset_from_counts(y, p)</code> re-anchors <code>p</code>'s mean at the one-sided Jeffreys posterior upper
+quantile of the realized outcomes when no monitor is running: the same Jeffreys quantile
+<code>jeffreys_upper_bands</code> uses, one level up, on the portfolio mean instead of a per-grade rate.</p>
+<p>Both return a fitted <code>LogitOffset</code>, not a calibrator: they carry no shape correction, only a
+uniform log-odds shift. <strong>The margin of conservatism composes with calibration; it never
+substitutes for it.</strong> A calibrator still does the job of getting the reliability curve right
+in the first place. MoC only adds a defensible margin on top, exactly as <code>probcal.Chain</code>
+composes any calibrator with <code>LogitOffset</code> stages elsewhere in the package (see
+<a href="../offset/#audit-trail-and-composition">Offset</a>):</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal</span><span class="w"> </span><span class="kn">import</span> <span class="n">BetaCalibrator</span><span class="p">,</span> <span class="n">Chain</span><span class="p">,</span> <span class="n">expit</span><span class="p">,</span> <span class="n">logit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_pd_portfolio</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.monitor</span><span class="w"> </span><span class="kn">import</span> <span class="n">CalibrationMonitor</span><span class="p">,</span> <span class="n">moc_offset</span>
+
+<span class="n">train</span> <span class="o">=</span> <span class="n">make_pd_portfolio</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">4000</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">cal</span> <span class="o">=</span> <span class="n">BetaCalibrator</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">train</span><span class="o">.</span><span class="n">scores</span><span class="p">,</span> <span class="n">train</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
+
+<span class="c1"># A monitor observes six batches drawn under an injected +0.3 log-odds drift.</span>
+<span class="n">mon</span> <span class="o">=</span> <span class="n">CalibrationMonitor</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">seed</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">):</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">make_pd_portfolio</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">100</span> <span class="o">+</span> <span class="n">seed</span><span class="p">)</span>
+    <span class="n">p_batch</span> <span class="o">=</span> <span class="n">cal</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">scores</span><span class="p">)</span>
+    <span class="n">y_batch</span> <span class="o">=</span> <span class="p">(</span><span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="mi">500</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">expit</span><span class="p">(</span><span class="n">logit</span><span class="p">(</span><span class="n">p_batch</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.3</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">mon</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">y_batch</span><span class="p">,</span> <span class="n">p_batch</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"m</span><span class="si">{</span><span class="n">seed</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="n">chain</span> <span class="o">=</span> <span class="n">Chain</span><span class="p">([</span><span class="n">cal</span><span class="p">,</span> <span class="n">moc_offset</span><span class="p">(</span><span class="n">mon</span><span class="p">)])</span>  <span class="c1"># calibration first, MoC offset second</span>
+
+<span class="n">test</span> <span class="o">=</span> <span class="n">make_pd_portfolio</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">999</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">cal</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">test</span><span class="o">.</span><span class="n">scores</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>    <span class="c1"># ~0.0265 — calibrated, undercorrected</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">chain</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">test</span><span class="o">.</span><span class="n">scores</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># ~0.0384 — conservatively re-anchored</span>
+</code></pre></div>
+<p><code>Chain</code> enforces the ordering in its constructor (the first stage must be a fitted
+calibrator, every stage after it a fitted <code>LogitOffset</code>), so <code>Chain([moc_offset(mon), cal])</code>
+is not expressible by accident; the calibration step always comes first, the conservatism
+margin is layered on afterward, and both stages stay separately auditable
+(<code>chain.calibrator_</code>, <code>chain.offsets_</code>).</p>
+<h2 id="what-the-one-period-bound-does-not-cover">What the one-period bound does not cover<a class="headerlink" href="#what-the-one-period-bound-does-not-cover" title="Permanent link">&para;</a></h2>
+<p>Every bound on this page (Pluto-Tasche's Clopper-Pearson upper bound, the Jeffreys upper
+bands, and the confidence sequence <code>moc_offset</code> reads from) is a <strong>one-period</strong> estimator:
+it treats each obligor's default as an independent Bernoulli draw within the observation
+window. Real portfolios violate that assumption. Defaults share exposure to common risk
+factors (the same macro cycle, sector, or geography), so the <em>effective</em> variance of the
+portfolio default count is higher than the binomial variance these bounds are built on. Under
+positive cross-obligor correlation, <strong>the one-period most-prudent bound understates the true
+uncertainty</strong>: its nominal coverage overstates the actual coverage the confidence level would
+suggest, because correlated defaults cluster together in the bad states that matter most for
+tail risk exactly where independence assumes they scatter.</p>
+<p>Extending these bounds to a multi-period setting with explicit default correlation (asset
+correlation as in Pluto &amp; Tasche's own follow-on work, or a systematic-factor model as in the
+Basel IRB framework more broadly) is <strong>deliberately out of scope for probcal 0.3</strong>. The
+one-period bound is a defensible, well-understood floor, not a correlation-robust one, and
+should be documented as such wherever it informs a masterscale or a production offset.</p>
+<h2 id="simulation-verification">Simulation verification<a class="headerlink" href="#simulation-verification" title="Permanent link">&para;</a></h2>
+<p>Produced by <code>docs/scripts/conservative_sim.py</code>: a four-grade portfolio
+(<code>n = (2000, 2000, 1000, 500)</code>, true PD <code>(0.5%, 1%, 3%, 8%)</code>, monotone by construction),
+2000 seeded runs per confidence level. Coverage for grade <em>i</em> is the share of runs with
+<code>pd_upper_i &gt;= pd_true_i</code>; the gated quantity is the minimum over grades, since that is the
+weakest guarantee the bound offers across the whole scale. A reduced-size version of the
+same gate (300 runs, widened tolerance) runs in CI (<code>tests/test_conservative_sim.py</code>).</p>
+<table>
+<thead>
+<tr>
+<th>confidence</th>
+<th>runs</th>
+<th>per-grade coverage (min over grades)</th>
+<th>all-grades coverage</th>
+<th>gate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.9</td>
+<td>2000</td>
+<td>0.9225</td>
+<td>0.9225</td>
+<td>&gt;= 0.8866</td>
+</tr>
+<tr>
+<td>0.95</td>
+<td>2000</td>
+<td>0.9610</td>
+<td>0.9610</td>
+<td>&gt;= 0.9403</td>
+</tr>
+</tbody>
+</table>
+<p>Per-grade and all-grades coverage coincide in this run: with a monotone true PD and nested
+pooled sets, a run that fails coverage for any grade also fails it for the binding
+grade, so the joint (all-grades) event and the minimum single-grade event
+happen to line up here. That is not a general identity, just what this configuration
+produces.</p>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Pluto, K., Tasche, D. (2005). "Estimating probabilities of default for low default
+  portfolios." Deutsche Bundesbank Discussion Paper (also in <em>The Basel II Risk Parameters</em>,
+  Springer, 2006).</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.top", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

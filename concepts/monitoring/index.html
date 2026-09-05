@@ -1,0 +1,3071 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Universal post-hoc probability calibration for binary classifiers — numpy-only.">
+      
+      
+      
+        <link rel="canonical" href="https://wlazlod.github.io/probcal/concepts/monitoring/">
+      
+      
+        <link rel="prev" href="../conservatism/">
+      
+      
+        <link rel="next" href="../serialization/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Monitoring - probcal</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#anytime-valid-calibration-monitoring" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="probcal" class="md-header__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            probcal
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Monitoring
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="probcal" class="md-nav__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    probcal
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learn
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Learn
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install and quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-it-works/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/pd_calibration_walkthrough/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Workflows
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/choosing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choose a calibrator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/cutoffs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Set cutoffs and invert maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grouped evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitor and act
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serialize and persist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/report/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a validation report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/auditability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auditability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integrations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/sklearn/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    scikit-learn
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/optbinning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    optbinning scorecards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/treecf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    treecf counterfactuals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_1" id="__nav_4_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Foundations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Foundations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../why-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-splitting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data splitting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methods
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Methods
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-parametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parametric
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-nonparametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nonparametric
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methods-distribution-free/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distribution-free
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../offset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Offset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../segmented/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Segmented calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation and diagnostics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Evaluation and diagnostics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../corp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CORP and score decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../visualization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auto-selection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automatic selection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Consuming and governing
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Consuming and governing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inverse-maps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shap-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SHAP and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../conservatism/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conservatism and low-default portfolios
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-question" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The question
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#e-processes-and-villes-inequality" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        E-processes and Ville's inequality
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-null" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The null
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Components
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-confidence-sequence-for-the-current-offset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A confidence sequence for the current offset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-grade-confidence-sequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-grade confidence sequences
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#drift-onset-estimate-and-the-since-onset-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drift-onset estimate and the since-onset window
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-recommendation-rule-a-diagnostic-not-a-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The recommendation rule: a diagnostic, not a test
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#closing-the-loop-apply_recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Closing the loop: apply_recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#margin-of-conservatism-offsets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Margin-of-conservatism offsets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validity-conditions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validity conditions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relation-to-existing-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relation to existing tools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fixed-sample-audit-the-mixture-lr-grade-e-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed-sample audit: the mixture-LR grade e-test
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#simulation-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Simulation verification
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Simulation verification">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#per-grade-cs-coverage-and-drift-onset-localization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-grade CS coverage and drift-onset localization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hl_e_test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hl_e_test
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/pd_end_to_end/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration end to end: rare events, audit, recourse, monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Comparison
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/calibrators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calibrators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-stability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API stability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-question" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The question
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#e-processes-and-villes-inequality" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        E-processes and Ville's inequality
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-null" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The null
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Components
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-confidence-sequence-for-the-current-offset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A confidence sequence for the current offset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-grade-confidence-sequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-grade confidence sequences
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#drift-onset-estimate-and-the-since-onset-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drift-onset estimate and the since-onset window
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-recommendation-rule-a-diagnostic-not-a-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The recommendation rule: a diagnostic, not a test
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#closing-the-loop-apply_recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Closing the loop: apply_recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#margin-of-conservatism-offsets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Margin-of-conservatism offsets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validity-conditions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validity conditions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relation-to-existing-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relation to existing tools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fixed-sample-audit-the-mixture-lr-grade-e-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed-sample audit: the mixture-LR grade e-test
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#simulation-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Simulation verification
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Simulation verification">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#per-grade-cs-coverage-and-drift-onset-localization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-grade CS coverage and drift-onset localization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hl_e_test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hl_e_test
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="anytime-valid-calibration-monitoring">Anytime-valid calibration monitoring<a class="headerlink" href="#anytime-valid-calibration-monitoring" title="Permanent link">&para;</a></h1>
+<h2 id="the-question">The question<a class="headerlink" href="#the-question" title="Permanent link">&para;</a></h2>
+<p>A calibrated forecast is deployed. Matured outcome batches arrive
+periodically, as monthly cohorts of <code>(p_i, y_i)</code> pairs. Is the forecast <em>still</em>
+calibrated? And if not, is a level shift enough (re-offset with
+<code>LogitOffset</code>) or has the shape changed (re-fit the calibrator)?</p>
+<p>The obvious procedure, running <code>binomial_grade_test</code> or Hosmer–Lemeshow every
+month and acting on the first rejection, is invalid. Fixed-sample tests
+control type-I error only for a pre-specified evaluation window; testing
+<em>every</em> window and stopping at the first rejection inflates the error
+without bound (with enough looks, a true null is rejected almost surely).
+Monitoring is optional stopping by construction, so it needs a guarantee
+that survives optional stopping.</p>
+<h2 id="e-processes-and-villes-inequality">E-processes and Ville's inequality<a class="headerlink" href="#e-processes-and-villes-inequality" title="Permanent link">&para;</a></h2>
+<p>An <strong>e-process</strong> is a non-negative process <code>E_k</code> with <code>E_0 = 1</code> that is a
+supermartingale under the null. Ville's inequality gives, for any <code>alpha</code>:</p>
+<div class="arithmatex">\[
+P_{H_0}\bigl(\exists k:\; E_k \ge 1/\alpha\bigr) \le \alpha .
+\]</div>
+<p>The rule "alarm the first time <code>E_k &gt;= 1/alpha</code>" therefore has type-I error
+at most <code>alpha</code> <em>however long monitoring runs and whenever it stops</em>, the
+property fixed-sample p-values cannot provide. <code>p_anytime = min(1, 1/max_k
+E_k)</code> is a p-value valid at every stopping time.</p>
+<h2 id="the-null">The null<a class="headerlink" href="#the-null" title="Permanent link">&para;</a></h2>
+<p>Observations arrive in a fixed order (arrival order within a batch is
+arbitrary but frozen). The monitored hypothesis is <strong>conditional
+calibration</strong> of the deployed forecast (Henzi &amp; Ziegel 2022; Arnold, Henzi &amp;
+Ziegel 2023):</p>
+<div class="arithmatex">\[
+H_0:\quad \mathbb{E}\left[y_i \mid \mathcal{F}_{i-1},\, p_i\right] = p_i .
+\]</div>
+<p>Every component below multiplies Bernoulli likelihood-ratio factors</p>
+<div class="arithmatex">\[
+\mathrm{LR}_i(q_i) \;=\; \frac{q_i^{\,y_i}(1-q_i)^{1-y_i}}{p_i^{\,y_i}(1-p_i)^{1-y_i}},
+\]</div>
+<p>whose conditional expectation under <code>H_0</code> is exactly 1 for <strong>any
+predictable</strong> alternative <code>q_i</code> (computed from strictly earlier data). The
+running product is then a test martingale. The second tool is that the
+<em>average</em> of e-values is an e-value (Vovk &amp; Wang 2021), which is how
+components and variants combine below.</p>
+<h2 id="components">Components<a class="headerlink" href="#components" title="Permanent link">&para;</a></h2>
+<p><strong>Offset (level) process</strong> <code>E_off</code>. Alternative: the true PD is
+<code>sigma(logit(p_i) + delta)</code>. Two variants, averaged:</p>
+<ul>
+<li>the <strong>predictable plug-in</strong>: before batch <code>k</code>, <code>delta_hat_k</code> is the
+  <code>LogitOffset</code> mode-B solution on batches <code>1..k-1</code> (the shift matching the
+  past outcome rate). It adapts to sustained drift.</li>
+<li>the <strong>mixture</strong> over a fixed grid <code>delta in {+-0.1, +-0.25, +-0.5,
+  +-1.0}</code> with uniform prior. It protects the first batches, when the
+  plug-in is still noise.</li>
+</ul>
+<p><strong>Shape process</strong> <code>E_shape</code>. Alternative: Cox recalibration
+<code>logit(true) = c + a * logit(p_i)</code> with the predictable plug-in
+<code>(c_hat, a_hat)</code> fitted by IRLS on past batches (the same engine as
+<code>probcal.metrics.regression</code>). This detects slope drift that no offset can
+repair.</p>
+<p><strong>Per-grade processes</strong> <code>E_grade[g]</code> (when a <code>grade</code> array is passed): the
+offset process restricted to grade <code>g</code>, combined by averaging into
+<code>E_grades</code>. A single drifting grade can then trip the alarm even when the
+portfolio-level mean is preserved.</p>
+<p><strong>Global alarm</strong> on <code>E = mean(E_off, E_shape[, E_grades])</code> at level
+<code>alpha</code>; component e-values are always reported for diagnosis.</p>
+<p><img alt="E-process trajectory over twelve monthly cohorts: the global wealth curve and its offset, shape and per-grade components stay near 1 for six batches, then climb on a log scale and cross the dashed 1/alpha threshold at the labelled alarm batch m08; the lower panel plots each grade's time-uniform offset confidence sequence tightening from batch to batch, with the two event-rich grades ending clear of zero and the three thinner ones still straddling it" src="../img/e_process.png" /></p>
+<p>The figure is the whole rule in one view: twelve cohorts of a deployed
+beta calibration, the true PD shifted by +0.6 log-odds from month seven
+onward. Wealth hovers around 1 while the forecast is calibrated, the
+alarm fires at the first crossing of <code>1/alpha</code> (batch <code>m08</code>), and the
+components say <em>what</em> moved: offset and shape both climb here.</p>
+<p>The grade panel below shows how unevenly that evidence accrues. Every
+grade's confidence sequence tightens, but by <code>m12</code> only the two
+event-rich grades have moved clear of zero: <code>G4</code> at <code>(+0.25, +0.33)</code> on
+490 events and <code>G5</code> at <code>(+0.10, +0.25)</code> on 559. <code>G1</code>, <code>G2</code> and <code>G3</code>, with
+14, 41 and 155 events, still contain zero, so on their own evidence the
+drift is not yet established, even though the portfolio-level alarm fired
+four batches earlier. That gap is the point of reading both panels: the
+global e-process pools evidence the thin grades cannot supply alone.
+Reproduce the figure with <code>docs/scripts/generate_figures.py</code>; the calling
+code is in <a href="../../guide/monitoring/">Monitor and act</a>.</p>
+<h2 id="a-confidence-sequence-for-the-current-offset">A confidence sequence for the current offset<a class="headerlink" href="#a-confidence-sequence-for-the-current-offset" title="Permanent link">&para;</a></h2>
+<p>Inverting the offset process against a grid of shifted nulls <code>delta_0 in
+[-3, 3]</code> ("the deployed forecast, moved by <code>delta_0</code>, is calibrated")
+yields a <strong>time-uniform</strong> <code>(1 - alpha)</code> confidence sequence for the current
+calibration-in-the-large offset: with 95% <em>anytime</em> confidence, statements
+like "the model is currently 0.15–0.40 log-odds too optimistic". Each null
+keeps its own e-process (plug-in alternative; cost <code>O(grid × n)</code> per
+batch); a <code>delta_0</code> once rejected stays rejected, so the sequence is a
+running intersection. This half-width is also the natural value for a
+recourse engine's <code>buffer_logit</code> (see the treecf guide): a re-offset within
+the sequence cannot invalidate a buffered counterfactual.</p>
+<h2 id="per-grade-confidence-sequences">Per-grade confidence sequences<a class="headerlink" href="#per-grade-confidence-sequences" title="Permanent link">&para;</a></h2>
+<p>When a <code>grade</code> array is passed, each grade also gets its own time-uniform
+confidence sequence for its own offset, built the same way as the
+portfolio-level one above (same <code>delta_ci_grid</code>, same predictable-plug-in
+alternative), restricted to that grade's slice of the batch and using the
+grade's own plug-in <code>d_g</code> in place of the portfolio-level <code>delta_hat</code>. This
+answers a question the portfolio-level CS cannot: a single grade drifting
+while the portfolio average stays put is invisible to <code>delta_ci</code>, but shows
+up in that grade's own <code>MonitorStep.grade_delta_ci[g]</code>. <code>plot_e_process(...,
+grades_panel=True)</code> adds a second axes plotting every grade's CS band
+(lo/hi) across steps, below the main e-process plot; <code>grades_panel=False</code>
+(the default) renders pixel-identically to 0.2.0.</p>
+<h2 id="drift-onset-estimate-and-the-since-onset-window">Drift-onset estimate and the since-onset window<a class="headerlink" href="#drift-onset-estimate-and-the-since-onset-window" title="Permanent link">&para;</a></h2>
+<p>Each step also carries <code>MonitorStep.log_e_increment</code>: the batch's additive plug-in
+log-LR contribution, the offset plug-in's <code>bern_log_lr</code> factor (0 when <code>delta_hat ==
+0</code>) plus the shape plug-in's (0 when its plug-in is the identity). <code>e_global</code> is a
+logsumexp mixture and is <em>not</em> additive across batches, so it cannot be searched for
+where the evidence trail turns; <code>log_e_increment</code> is purely additive and exists for
+exactly that purpose.</p>
+<p><code>monitor._onset.estimate_onset(increments) -&gt; int</code> finds <code>k* = argmax_k sum_{j&gt;=k}
+increments[j]</code>, a backward-CUSUM argmax over that additive series, with ties resolved
+to the latest <code>k</code>. This is an <strong>estimate, not a change-point test</strong>: it carries no
+type-I control and no confidence set, only an answer to "which batch does the
+accumulated evidence point to". <code>report()</code> runs it whenever an alarm has fired and
+exposes the result as <code>MonitorReport.onset_label</code>, and appends a line to <code>reasoning</code> that
+names the estimated onset batch and repeats that the backward-CUSUM argmax of the plug-in
+log-LR increments is an estimate, not a test. Steps loaded from a pre-0.3 payload carry
+<code>log_e_increment = None</code>. That payload records no increments, so a monitor holding any such
+step reports <code>onset_label = None</code>, replaces the onset sentence in <code>reasoning</code> with "drift
+onset unavailable: steps recorded before 0.3.0 carry no log-e increments (trailing window
+used)", and computes its diagnostics on the <code>"trailing"</code> window whatever
+<code>recommendation_window</code> says.</p>
+<p>By default (<code>recommendation_window="since_onset"</code>), <code>report()</code>'s trailing-window
+diagnostics (<code>delta_now</code>, the Cox slope bootstrap CI, the Cox-vs-offset residual LR)
+are computed on batches from the estimated onset onward rather than on the full (or
+<code>plug_in_window</code>-trimmed) history: once an alarm fires, a window anchored where the
+evidence trail actually turns is more informative than one anchored to a config knob
+set before any drift was suspected. When <code>plug_in_window</code> is also set, the window
+starts at the LATER of the two starts, <code>max(onset_idx, n_batches - plug_in_window)</code>,
+so a short <code>plug_in_window</code> still bounds how far back the since-onset window can
+reach; a <code>plug_in_window</code> of 3 with an onset at batch 2 of 10, for example, uses the
+last 3 batches, not the 8 since onset. <strong>Escape hatch:</strong> <code>recommendation_window="trailing"</code>
+restores 0.2.0 behaviour exactly for those diagnostic INPUTS (<code>delta_now</code>, the slope
+CI, the residual LR): it ignores the onset estimate and uses <code>plug_in_window</code> (or all
+past batches) instead, unconditionally. <code>onset_label</code> and the onset sentence in
+<code>reasoning</code> are still populated under <code>"trailing"</code>; only the diagnostic window
+differs between the two modes. <code>tests/test_monitor_sim.py::
+test_recommendation_correct_on_pure_drift</code> re-runs the 90%-correct gate under the new
+default.</p>
+<p>Localization accuracy (batches built like <code>docs/scripts/monitor_sim.py</code>'s, drift
+injected at batch 12 of 24 with <code>shift=0.6</code>, 40 seeded runs, <code>tests/test_monitor_onset.py</code>,
+<code>pytest.mark.slow</code>): median <code>|onset − 12| = 1.0</code> (gate <code>&lt;= 2</code>); error distribution
+<code>[0×4, 1×24, 2×5, 3×3, 4, 6, 8, 9]</code>.</p>
+<h2 id="the-recommendation-rule-a-diagnostic-not-a-test">The recommendation rule: a diagnostic, not a test<a class="headerlink" href="#the-recommendation-rule-a-diagnostic-not-a-test" title="Permanent link">&para;</a></h2>
+<p>After an alarm the monitor reports one of <code>re-offset</code> / <code>re-fit</code>, from two
+trailing-window diagnostics: recommend <strong>re-offset</strong> when the Cox slope
+bootstrap CI contains 1 <em>and</em> the Cox-vs-offset residual likelihood ratio
+(does the 2-parameter correction explain the window materially better than
+the offset-only correction?) stays within the chi-square(1) 5% bound;
+otherwise <strong>re-fit</strong>. The shape <em>e-process</em> is always reported alongside
+but is deliberately not the discriminator: its alternative family contains
+the intercept, so it fires under pure level drift too and cannot separate
+the two failure modes on its own. The rule is a <em>diagnostic summary with no
+error guarantee</em>, and every component process is reported so the reader can
+disagree with it.</p>
+<h2 id="closing-the-loop-apply_recommendation">Closing the loop: <code>apply_recommendation</code><a class="headerlink" href="#closing-the-loop-apply_recommendation" title="Permanent link">&para;</a></h2>
+<p><code>mon.apply_recommendation(target=None)</code> turns <code>report()</code>'s recommendation into an
+action, returning an <code>AppliedAction(kind, offset, composed, monitor, window, audit)</code>:</p>
+<ul>
+<li><code>kind="re-offset"</code>. Estimates the log-odds shift by maximum likelihood
+  (<code>offset.estimate_offset</code>) on the batches from the same window <code>report()</code>'s
+  trailing diagnostics used (<code>CalibrationMonitor._recommendation_window_start</code>,
+  factored out so the two windows can never disagree), and fits a
+  <code>LogitOffset</code> on it. If <code>target</code> is given, the offset is composed onto it:
+  <code>Chain([target.calibrator_, *target.offsets_, offset])</code> for a <code>Chain</code>, or
+  <code>copy.deepcopy(target).offset_to(delta=est.delta)</code> for a <code>CalibratedModel</code>
+  (<code>target</code> itself is never mutated either way; <code>None</code> leaves <code>composed=None</code>).
+  A <strong>fresh</strong> <code>CalibrationMonitor</code> is returned too, built with the same
+  constructor parameters (<code>CalibrationMonitor(**mon._ctor_params())</code>): fresh,
+  not continued, because the e-process is a martingale under the null "the
+  CURRENTLY DEPLOYED forecast is calibrated"; once the pipeline changes, the
+  old accumulated evidence describes a forecast that no longer exists, and
+  continuing to accumulate it would test a null nobody deploys any more (the
+  same reasoning behind "start a new monitor after any re-calibration" in
+  <em>Validity conditions</em> below). Feed the corrected stream
+  (<code>offset.transform(p)</code>) into the fresh monitor going forward.</li>
+<li><code>kind="re-fit"</code> / <code>kind="none"</code>. No offset, composed target, or fresh
+  monitor is produced (<code>window</code> names the suggested re-fit window, or is
+  empty when there is nothing to suggest). <strong>Automatic refits are out of
+  scope by design</strong>: a slope drift needs a human to choose and validate a
+  new calibrator on new data, and a mechanical action here could silently ship
+  a worse model.</li>
+</ul>
+<p><code>AppliedAction.audit</code> records <code>alarm_at</code>, <code>onset_label</code>, fingerprints of the
+old and new monitor/offset/target (<code>None</code> where not applicable), and the
+estimated <code>delta</code>/<code>se</code>. <code>AppliedAction</code> is itself serializable
+(<code>to_dict</code>/<code>from_dict</code>/<code>to_json</code>/<code>from_json</code>/<code>fingerprint</code>), nesting <code>offset</code>,
+<code>composed</code>, and <code>monitor</code> as their own envelopes; a <code>composed</code> <code>CalibratedModel</code>
+stores only a model reference, reattached via <code>AppliedAction.from_dict(d,
+model=...)</code> exactly as <code>CalibratedModel.from_dict</code> itself does. <code>mon</code> is never
+mutated by the call: <code>to_dict()</code> before and after are identical.</p>
+<div class="highlight"><pre><span></span><code><span class="n">action</span> <span class="o">=</span> <span class="n">mon</span><span class="o">.</span><span class="n">apply_recommendation</span><span class="p">()</span>  <span class="c1"># target=None: offset only</span>
+<span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">"re-offset"</span><span class="p">:</span>
+    <span class="n">p_corrected</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">offset</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">p_new</span><span class="p">)</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">monitor</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">y_new</span><span class="p">,</span> <span class="n">p_corrected</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"next"</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="margin-of-conservatism-offsets">Margin-of-conservatism offsets<a class="headerlink" href="#margin-of-conservatism-offsets" title="Permanent link">&para;</a></h2>
+<p><code>monitor.moc_offset(mon, *, level=None)</code> turns that same confidence sequence into an
+actionable, conservative correction: it reads the CS's upper end (<code>steps[-1].delta_ci[1]</code> by
+default, or a level recomputed directly from the monitor's running <code>_cs_grid</code>/<code>_cs_max</code>
+state) and returns a fitted <code>LogitOffset(delta=hi)</code>. Shifting by the CS's <em>upper</em> end rather
+than the point-estimate plug-in (<code>delta_hat</code>) is the conservative choice: the CS covers the
+true offset with <code>1 - alpha</code> confidence at every stopping time, so <code>hi</code> corrects for at least
+as much drift as the evidence plausibly supports. That is a margin of conservatism, not a
+best guess. <code>level</code> requires a live <code>CalibrationMonitor</code> (it reads running arrays a frozen
+<code>MonitorReport</code> does not retain); a report input still works with <code>level=None</code>, fit on a
+placeholder batch since a report keeps no per-batch data.</p>
+<p><code>monitor.moc_offset_from_counts(y, p, *, level=0.9, sample_weight=None)</code> is the count-only
+sibling with no monitor involved: it re-anchors <code>p</code>'s mean at the one-sided Jeffreys
+posterior upper quantile of the observed event rate (the same quantile
+<code>metrics.jeffreys_grade_test</code>/<code>metrics.jeffreys_upper_bands</code> use), via <code>LogitOffset</code>'s
+existing mode B (<code>target_mean</code>).</p>
+<p>This is a different move than <code>apply_recommendation</code>'s re-offset: <code>apply_recommendation</code> acts
+on an <em>alarm</em>, a level shift the evidence says is really there, while <code>moc_offset*</code> can be
+called at any time, alarmed or not, to make an already-calibrated portfolio's reported PDs
+more conservative on purpose. See <a href="../conservatism/#margin-of-conservatism-composing-with-calibration-not-replacing-it">Conservatism: most-prudent PDs and margins of
+conservatism</a>
+for the <code>Chain([calibrator, moc_offset(mon)])</code> composition pattern and the one-period-estimator
+caveat that applies to every bound on that page, this one included.</p>
+<h2 id="validity-conditions">Validity conditions<a class="headerlink" href="#validity-conditions" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Predictability.</strong> Parameters for batch <code>k</code> use only batches <code>&lt; k</code>; the
+  observation order within a batch is fixed and arbitrary; past batches are
+  never re-run or reordered, so persist the monitor state (<code>to_json</code>) between
+  updates rather than recomputing from raw data.</li>
+<li><strong>Within-cohort dependence.</strong> Macro shocks that hit a whole cohort are
+  <em>not</em> covered by the martingale null: the guarantee is conditional
+  calibration given the forecast, and a portfolio-wide shock will trip the
+  alarm, which is the desired behavior, not a false positive to engineer
+  away.</li>
+<li><strong>Delayed labels.</strong> The process advances only when labels mature; batch
+  labels are opaque strings, and batches whose outcomes arrive out of
+  calendar order are simply processed in arrival order.</li>
+<li><strong>After re-calibration</strong>, start a <strong>new</strong> monitor on the new forecasts: the
+  old null no longer describes production.</li>
+<li><strong>Weights.</strong> Sample weights enter as exponents on the Bernoulli factors
+  for reporting parity with the rest of probcal, but non-integer weights
+  break the exact martingale property, and the monitor warns once when it
+  sees them.</li>
+</ul>
+<h2 id="relation-to-existing-tools">Relation to existing tools<a class="headerlink" href="#relation-to-existing-tools" title="Permanent link">&para;</a></h2>
+<p><code>optbinning.ScorecardMonitoring</code> provides PSI and fixed-sample
+characteristic tests for <em>population stability</em>, complementary to sequential
+calibration validity: PSI asks "has the input mix moved", this monitor asks
+"are the probabilities still right, accounting for every look we have
+taken". Fixed-sample e-value tests such as the safe Hosmer–Lemeshow test
+(Henzi, Puke, Dimitriadis &amp; Ziegel 2024) answer a third question, a
+one-shot audit with e-value semantics; <code>metrics.hl_e_test</code> (below) is a
+first step in that direction, built from the pieces already in this module.</p>
+<h2 id="fixed-sample-audit-the-mixture-lr-grade-e-test">Fixed-sample audit: the mixture-LR grade e-test<a class="headerlink" href="#fixed-sample-audit-the-mixture-lr-grade-e-test" title="Permanent link">&para;</a></h2>
+<p><code>metrics.hl_e_test(y, p, grades, *, mixture_grid=(0.1, 0.25, 0.5, 1.0),
+sample_weight=None) -&gt; HlEResult</code> is a <strong>one-shot, fixed-sample</strong> e-value
+audit per rating grade, for the case where there is no sequence of matured
+batches to monitor, just one dataset to check once. It reuses the same
+mixture construction <code>CalibrationMonitor</code>'s offset e-process uses
+(<code>monitor._processes.bern_log_lr</code>, <code>logsumexp</code>, the symmetrized
+<code>mixture_grid</code>), applied once per grade with <strong>no predictable plug-in
+component</strong>: a fixed sample has no strictly-earlier data to learn one
+from, so the honest e-value here is the mixture average alone:</p>
+<div class="arithmatex">\[
+\log E_g = \operatorname{logsumexp}_{\delta \in \pm\,\text{mixture\_grid}}
+\left(\sum_{i \in g} \log \mathrm{LR}_i(\sigma(z_i + \delta) : p_i)\right)
+- \log(2 \cdot |\text{mixture\_grid}|), \qquad z_i = \operatorname{logit}(p_i).
+\]</div>
+<p>Grades partition the sample into disjoint observations, so the product
+across grades, <code>log E = sum_g log E_g</code>, <code>e_value = exp(log E)</code>, is itself a
+valid e-value for the joint null: each <code>E_g</code> is an average of e-values
+(expectation exactly 1 under H0 for every fixed <code>delta</code>), hence itself an
+e-value with expectation 1, and the product of e-values built from
+independent (here, disjoint-observation) factors is an e-value.
+<code>p_value = min(1, 1 / e_value)</code> follows from Markov's inequality.</p>
+<p><strong>Naming.</strong> This is named the "mixture-LR grade e-test (safe
+Hosmer–Lemeshow analogue)", not "the safe Hosmer–Lemeshow test": Henzi,
+Puke, Dimitriadis &amp; Ziegel (2024) is cited as the paper that motivated
+building a fixed-sample e-value analogue of Hosmer–Lemeshow, not as a
+description of what is implemented. Their construction is not reproduced
+here, and no claim is made that this test matches its power or optimality
+properties: it is the monitor's existing mixture machinery, repurposed for
+a one-shot audit rather than sequential monitoring.</p>
+<p>Sample weights, when given, enter as exponents on the Bernoulli factors
+(the same convention as <code>CalibrationMonitor</code>); non-integer weights carry
+the same caveat noted above.</p>
+<h2 id="simulation-verification">Simulation verification<a class="headerlink" href="#simulation-verification" title="Permanent link">&para;</a></h2>
+<p>Produced by <code>docs/scripts/monitor_sim.py</code>: 2000 seeded runs × 24
+monthly batches of n=2000 at a 5% event rate; drift experiments inject the
+shift at batch 12; reduced-size versions of the same gates run in CI
+(<code>tests/test_monitor_sim.py</code>), which also cross-checks the vectorized
+simulator against the shipped <code>CalibrationMonitor</code> class.</p>
+<table>
+<thead>
+<tr>
+<th>experiment</th>
+<th>result</th>
+<th>gate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>type-I offset (alpha=0.05)</td>
+<td>0.0135</td>
+<td>&lt;= 0.0597</td>
+</tr>
+<tr>
+<td>type-I shape (alpha=0.05)</td>
+<td>0.0195</td>
+<td>&lt;= 0.0597</td>
+</tr>
+<tr>
+<td>type-I global (alpha=0.05)</td>
+<td>0.0155</td>
+<td>&lt;= 0.0597</td>
+</tr>
+<tr>
+<td>type-I offset (alpha=0.01)</td>
+<td>0.0025</td>
+<td>&lt;= 0.0144</td>
+</tr>
+<tr>
+<td>type-I shape (alpha=0.01)</td>
+<td>0.0040</td>
+<td>&lt;= 0.0144</td>
+</tr>
+<tr>
+<td>type-I global (alpha=0.01)</td>
+<td>0.0040</td>
+<td>&lt;= 0.0144</td>
+</tr>
+<tr>
+<td>type-I global, per-grade (alpha=0.05)</td>
+<td>0.0155</td>
+<td>&lt;= 0.0597</td>
+</tr>
+<tr>
+<td>type-I global, hetero sizes (alpha=0.05)</td>
+<td>0.0275</td>
+<td>&lt;= 0.0597</td>
+</tr>
+<tr>
+<td>type-I global, per-grade (alpha=0.01)</td>
+<td>0.0020</td>
+<td>&lt;= 0.0144</td>
+</tr>
+<tr>
+<td>type-I global, hetero sizes (alpha=0.01)</td>
+<td>0.0050</td>
+<td>&lt;= 0.0144</td>
+</tr>
+<tr>
+<td>power delta=0.2</td>
+<td>detect 0.94, median delay 6.0</td>
+<td>reported</td>
+</tr>
+<tr>
+<td>power delta=0.4</td>
+<td>detect 0.99, median delay 2.0</td>
+<td>median delay &lt;= 6</td>
+</tr>
+<tr>
+<td>power slope=0.8</td>
+<td>detect 0.99, median delay 2.0</td>
+<td>median delay &lt;= 12</td>
+</tr>
+<tr>
+<td>power slope=1.25</td>
+<td>detect 0.99, median delay 3.0</td>
+<td>reported</td>
+</tr>
+<tr>
+<td>CS time-uniform coverage (delta=0)</td>
+<td>0.9920</td>
+<td>&gt;= 0.95</td>
+</tr>
+<tr>
+<td>CS time-uniform coverage (delta=0.4)</td>
+<td>1.0000</td>
+<td>&gt;= 0.95</td>
+</tr>
+</tbody>
+</table>
+<p>The recommendation gate (correct call in ≥ 90% of pure-offset and
+pure-slope runs) is enforced through the real <code>CalibrationMonitor</code> in the
+same CI suite, under the default <code>recommendation_window="since_onset"</code>:
+18/20 pure-offset runs correctly called <code>re-offset</code>, 20/20 pure-slope runs
+correctly called <code>re-fit</code>.</p>
+<h3 id="per-grade-cs-coverage-and-drift-onset-localization">Per-grade CS coverage and drift-onset localization<a class="headerlink" href="#per-grade-cs-coverage-and-drift-onset-localization" title="Permanent link">&para;</a></h3>
+<p>Produced by <code>docs/scripts/monitor_grade_onset_sim.py</code> (100 seeded runs): a full-size rerun of
+the two constructions that already gate in CI at reduced run counts,
+<code>tests/test_monitor_grades.py::test_two_grade_drift_confidence_sequence_coverage</code> (per-grade
+CS coverage, 20 runs) and <code>tests/test_monitor_onset.py::test_onset_localizes_injected_drift</code>
+(onset localization, 40 runs), read at the documented, larger size. The <code>shift=0.4</code> onset row
+is a weaker drift than the CI gate's <code>shift=0.6</code> and is reported, not gated.</p>
+<table>
+<thead>
+<tr>
+<th>experiment</th>
+<th>result</th>
+<th>gate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>per-grade CS coverage, drifted grade (shift=0.6, n=100)</td>
+<td>1.0000</td>
+<td>&gt;= 0.9</td>
+</tr>
+<tr>
+<td>per-grade CS coverage, stable grade (shift=0.0, n=100)</td>
+<td>1.0000</td>
+<td>&gt;= 0.9</td>
+</tr>
+<tr>
+<td>onset |onset-12| (shift=0.6, n=100)</td>
+<td>median 1.0, IQR [1.0, 2.0]</td>
+<td>&lt;= 2 (median)</td>
+</tr>
+<tr>
+<td>onset |onset-12| (shift=0.4, n=100)</td>
+<td>median 1.0, IQR [1.0, 2.0]</td>
+<td>reported</td>
+</tr>
+</tbody>
+</table>
+<h3 id="hl_e_test"><code>hl_e_test</code><a class="headerlink" href="#hl_e_test" title="Permanent link">&para;</a></h3>
+<p>Produced by <code>docs/scripts/hl_e_sim.py</code> (2000 seeded runs, n=2000, 5
+equal-mass grades; wall time ≈ 19s): under H0 (<code>y ~ Bernoulli(p)</code>, the
+assigned <code>p</code>), the e-value's Ville/Markov tail bounds and its expectation-1
+property hold; power is reported (not gated) for a level shift and a slope
+change at n=2000. Reduced-size versions of the type-I gates run in CI
+(<code>tests/test_hl_e_sim.py</code>).</p>
+<table>
+<thead>
+<tr>
+<th>experiment</th>
+<th>result</th>
+<th>gate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>type-I P(e &gt;= 20) [alpha=0.05]</td>
+<td>0.0025</td>
+<td>&lt;= 0.0597</td>
+</tr>
+<tr>
+<td>type-I P(e &gt;= 100) [alpha=0.01]</td>
+<td>0.0005</td>
+<td>&lt;= 0.0144</td>
+</tr>
+<tr>
+<td>type-I mean(e)</td>
+<td>0.4334 (se=0.1518)</td>
+<td>&lt;= 1.4555</td>
+</tr>
+<tr>
+<td>power shift=0.4 (n=2000)</td>
+<td>detect 0.7455</td>
+<td>reported</td>
+</tr>
+<tr>
+<td>power slope=0.8 (n=2000)</td>
+<td>detect 0.9765</td>
+<td>reported</td>
+</tr>
+</tbody>
+</table>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Henzi, A., Ziegel, J. F. (2022). "Valid sequential inference on
+  probability forecast performance." <em>Biometrika</em> 109(3), 647–663.</li>
+<li>Arnold, S., Henzi, A., Ziegel, J. F. (2023). "Sequentially valid tests
+  for forecast calibration." <em>Annals of Applied Statistics</em> 17(3),
+  1909–1935.</li>
+<li>Vovk, V., Wang, R. (2021). "E-values: Calibration, combination and
+  applications." <em>Annals of Statistics</em> 49(3), 1736–1754.</li>
+<li>Ville, J. (1939). <em>Étude critique de la notion de collectif.</em>
+  Gauthier-Villars. (Ville's inequality.)</li>
+<li>Henzi, A., Puke, M., Dimitriadis, T., Ziegel, J. (2024). "A safe
+  Hosmer–Lemeshow test." <em>The New England Journal of Statistics in Data
+  Science</em> 2(2), 175–189.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.top", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

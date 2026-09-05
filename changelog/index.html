@@ -1,0 +1,3169 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Universal post-hoc probability calibration for binary classifiers — numpy-only.">
+      
+      
+      
+        <link rel="canonical" href="https://wlazlod.github.io/probcal/changelog/">
+      
+      
+        <link rel="prev" href="../faq/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Changelog - probcal</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="probcal" class="md-header__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            probcal
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Changelog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="probcal" class="md-nav__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    probcal
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learn
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Learn
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install and quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../how-it-works/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/pd_calibration_walkthrough/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Workflows
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/choosing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choose a calibrator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/cutoffs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Set cutoffs and invert maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grouped evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitor and act
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serialize and persist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/report/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a validation report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/auditability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auditability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integrations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/sklearn/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    scikit-learn
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/optbinning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    optbinning scorecards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/treecf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    treecf counterfactuals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_1" id="__nav_4_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Foundations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Foundations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/why-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/data-splitting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data splitting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methods
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Methods
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/methods-parametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parametric
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/methods-nonparametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nonparametric
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/methods-distribution-free/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distribution-free
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/offset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Offset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/segmented/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Segmented calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation and diagnostics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Evaluation and diagnostics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/corp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CORP and score decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/visualization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/auto-selection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automatic selection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Consuming and governing
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Consuming and governing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/inverse-maps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/shap-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SHAP and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/conservatism/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conservatism and low-default portfolios
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/pd_end_to_end/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration end to end: rare events, audit, recourse, monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarks/comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Comparison
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/calibrators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calibrators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-stability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API stability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#031-2026-09-05" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.3.1] - 2026-09-05
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.3.1] - 2026-09-05">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#030-2026-08-29" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.3.0] - 2026-08-29
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.3.0] - 2026-08-29">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020-2026-08-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.2.0] - 2026-08-23
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.2.0] - 2026-08-23">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#013-2026-08-16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.3 - 2026-08-16
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.3 - 2026-08-16">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#012-2026-08-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.2 - 2026-08-12
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.2 - 2026-08-12">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#011-2026-08-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.1 - 2026-08-08
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.1 - 2026-08-08">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#010-2026-08-07" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.0 - 2026-08-07
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.0 - 2026-08-07">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#031-2026-09-05" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.3.1] - 2026-09-05
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.3.1] - 2026-09-05">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#030-2026-08-29" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.3.0] - 2026-08-29
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.3.0] - 2026-08-29">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020-2026-08-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.2.0] - 2026-08-23
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.2.0] - 2026-08-23">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#013-2026-08-16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.3 - 2026-08-16
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.3 - 2026-08-16">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#012-2026-08-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.2 - 2026-08-12
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.2 - 2026-08-12">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#011-2026-08-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.1 - 2026-08-08
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.1 - 2026-08-08">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#010-2026-08-07" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1.0 - 2026-08-07
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.1.0 - 2026-08-07">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<p>All notable changes to this project will be documented in this file.</p>
+<p>Format: <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>; versioning: <a href="https://semver.org/spec/v2.0.0.html">SemVer</a>.</p>
+<h2 id="unreleased"><a href="https://github.com/wlazlod/probcal/compare/v0.1.3...HEAD">Unreleased</a><a class="headerlink" href="#unreleased" title="Permanent link">&para;</a></h2>
+<h2 id="031-2026-09-05">[0.3.1] - 2026-09-05<a class="headerlink" href="#031-2026-09-05" title="Permanent link">&para;</a></h2>
+<p>No breaking changes: every previously accepted input and object behaves identically.</p>
+<h3 id="added">Added<a class="headerlink" href="#added" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Two-column probability-matrix input, core-wide.</strong> <code>_validation.validate_scores</code> now accepts an <code>(n, 2)</code> array whose entries lie in <code>[0, 1]</code> and whose rows sum to 1 within <code>1e-6</code> absolute tolerance, returning column 1 — the exact shape every <code>predict_proba</code> call in the ecosystem hands back. Every calibrator's <code>fit</code>/<code>predict_proba</code>/<code>point_inverse</code>, <code>LogitOffset</code>, <code>Chain</code>, the whole metric catalog, and <code>probcal.sklearn</code>'s probability-input mode inherit the rule from this one shared validator, with a single unified rejection message replacing the old one. Pinned bit-for-bit by <code>tests/test_validation.py</code> (all 14 registered calibrators plus both <code>LogitOffset</code> modes) and by the two-column kinds added to the mirror-check suite.</li>
+<li><strong>Fittable <code>Chain</code></strong> (supersedes the 0.3.0 note that a chain composes only fitted stages). <code>Chain(stages)</code> now accepts unfitted stages — construction validates only their types and order — and gains <code>Chain.fit(s, y, sample_weight=None)</code>, which fits the head calibrator and then each offset in turn on the running calibrated probabilities; every stage is always refit, so composing already-fitted objects is how a stage stays frozen. <code>stages</code> is stored verbatim; <code>calibrator_</code>/<code>offsets_</code> are now read-only properties, and every reading method raises the standard not-fitted <code>RuntimeError</code> before a fit. <code>get_params</code>/<code>set_params</code> gain <code>stages__i__param</code> nesting (<code>LogitOffset</code> also gained <code>get_params</code>/<code>set_params</code> to support it), and the serialization payload is unchanged — goldens are byte-identical. Both sklearn adapters clone the calibrator prototype via <code>sklearn.base.clone</code>, so <code>SklearnCalibrator(calibrator=Chain([...]))</code> and <code>CalibratedClassifier(calibrator=Chain([...]))</code> now work with an unfitted chain. Tests: <code>tests/test_chain.py</code>, <code>tests/test_sklearn_duck.py</code>, <code>tests/test_sklearn_offset.py</code>.</li>
+<li><strong><code>SklearnOffset</code>.</strong> <code>probcal.sklearn.SklearnOffset(delta=None, target_mean=None, *, positive_column=1)</code> (<code>TransformerMixin</code>/<code>BaseEstimator</code>): <code>fit(X, y=None, sample_weight=None)</code> fits an inner <code>offset_</code> (<code>LogitOffset</code>); <code>transform</code> returns the shifted <code>(n, 1)</code> column, <code>predict_proba</code> the <code>(n, 2)</code> matrix, and <code>to_dict</code> delegates to the fitted <code>LogitOffset</code>'s payload. Runs the sklearn estimator checks against its own <code>OFFSET_XFAIL_CHECKS</code> inapplicability table, mirrored in the mirror-check suite. Tests: <code>tests/test_sklearn_offset.py</code>. Docs: <code>guide/sklearn.md</code>'s new "Stacking an offset" section.</li>
+<li><strong><code>positive_column</code>.</strong> A keyword-only parameter on <code>SklearnCalibrator</code> and <code>SklearnOffset</code> naming which column of a two-column input is the positive class. At fit, when the estimator also has <code>y</code> (the calibrator, not the offset), a one-shot <code>UserWarning</code> fires if the selected column's event mean is below the non-event mean, naming the flip as the likely fix — probcal warns, it never auto-flips; <code>input="logit"</code> stays single-column, since a logit matrix has no sum rule to check orientation against. <code>n_features_in_</code> (1 or 2) is recorded at fit and enforced at predict.</li>
+<li><strong><code>LogitOffset.fit(y=)</code>.</strong> <code>fit</code> gains an optional keyword-only <code>y=None</code>, accepted and ignored in both explicit-delta and target-mean modes, giving <code>Chain.fit</code>'s sequential fit protocol one call shape across calibrator and offset stages.</li>
+</ul>
+<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Calibrators and offsets were unusable directly after a <code>predict_proba</code>-shaped pipeline step — a bare <code>(n, 2)</code> matrix from <code>model.predict_proba(X)</code> raised in every <code>fit</code>/<code>predict_proba</code> call across the package, forcing a manual column slice before every calibration call. The two-column input rule above removes that friction end to end; new <code>tests/test_lightgbm.py</code> (<code>importorskip</code>-gated on <code>sklearn</code>/<code>lightgbm</code>; the CI <code>integrations</code> job now installs <code>lightgbm</code>) pins the fix against a real <code>LGBMClassifier.predict_proba</code> matrix flowing through <code>SklearnCalibrator</code> and <code>SklearnOffset</code> in one <code>Pipeline</code>.</li>
+</ul>
+<h3 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Reader-oriented documentation reorganization.</strong> The nav now answers "who is arriving" — <em>Learn</em> (install, how it works, the 20-minute walkthrough), <em>Guide</em> (task-ordered along the calibrate → evaluate → invert/decide → monitor → act → report lifecycle, with the integrations beside it), <em>Concepts</em> (regrouped theory) — and the front page states that lifecycle once, linking each stage to its guide page. No page changed URL. Three assembled guide pages are new: <code>guide/choosing.md</code> (the calibrator catalog, every factual column naming the test that pins it), <code>guide/cutoffs.md</code> (policy PD → raw cutoff → masterscale → recourse), and <code>guide/auditability.md</code> (artifact → what it proves → how to verify it, plus a worked reviewer session). Every Python block in the docs is now executed page by page against a fixed data vocabulary (<code>tests/test_docs_snippets.py</code>, convention in <code>docs/README.md</code>), so snippets rot loudly rather than silently. Figure coverage is complete: every function in <code>probcal.plots</code> has a committed, alt-texted figure on a prose page — the e-process trajectory with its per-grade panel in <code>concepts/monitoring.md</code> and the faceted reliability grid in <code>guide/groups.md</code> were the two gaps. <code>guide/report.md</code> links and shows a full sample validation report (<code>docs/assets/sample_validation_report.html</code>, regenerated by <code>docs/scripts/generate_sample_report.py</code>). <code>tests/test_docs_structure.py</code> holds the structure to all of it: the 0.3.0 sitemap stays a subset of the new one, the front page keeps naming every capability, no plot function loses its figure.</li>
+<li><code>guide/sklearn.md</code>: each tier now states its input shape (scores <code>(n,)</code>, <code>(n, 1)</code>, or a <code>predict_proba</code> matrix <code>(n, 2)</code>), the single-column contract sentence is extended to cover the two-column case, <code>positive_column</code>, and the orientation warning, and a new "Stacking an offset" section covers the two ways to compose an offset — a single <code>Chain</code> step, or a separate <code>SklearnOffset</code> step with its own governance lifecycle (swapped in from <code>apply_recommendation</code>'s output without touching the calibrator). <code>guide/monitoring.md</code> gains a "Re-offsetting inside a pipeline" subsection with the matching <code>SklearnOffset</code> replacement snippet. <code>concepts/offset.md</code> gains a paragraph on <code>Chain.fit</code>'s sequential fitting: stages fit on the same calibration data, the offset anchoring the calibrator's in-sample output exactly as <code>CalibratedModel.offset_to</code> does — no cross-fitting, no automatic MLE offset.</li>
+</ul>
+<h2 id="030-2026-08-29">[0.3.0] - 2026-08-29<a class="headerlink" href="#030-2026-08-29" title="Permanent link">&para;</a></h2>
+<p>No breaking API changes — the second stability minor on the road to 1.0: every 0.2.0 call and serialized file keeps working, the 0.2.0 goldens are verified unchanged in CI, the one default-behaviour change (<code>CalibrationMonitor.report()</code>'s post-alarm window, see <em>Changed</em>) has the <code>recommendation_window="trailing"</code> escape hatch, and a weighted <code>PlattCalibrator</code> fit — the one case that was ever wrong — now differs from 0.2.0 (see <em>Fixed</em>); every unweighted fit, and hence every default and golden file, is unchanged.</p>
+<h3 id="added_1">Added<a class="headerlink" href="#added_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Grouped evaluation.</strong> <code>metrics.evaluate(..., by=None)</code> (metric catalog 46 → 47 symbols, count updated in <code>docs/api-stability.md</code>) and new <code>GroupedMetricReport(pooled, groups, reports, counts)</code> (<code>_results.py</code>, re-exported from <code>probcal.metrics</code>): grouping labels one per observation, <code>by=None</code> (default) is the existing report, byte-identical to 0.2.0 (pinned by a hard-coded fixture in <code>tests/test_evaluate_groups.py</code>); given <code>by</code>, each sorted label gets its own report — group <code>i</code> (sorted order) computed with <code>seed + 1000 * i</code>, a fixed label-independent offset, via a plain recursive <code>evaluate()</code> call on that group's slice, so grouped results are always identical to calling <code>evaluate()</code> by hand on the same slice — plus a <code>pooled</code> report on the full data using <code>seed</code> unchanged. A single-outcome-class group re-raises <code>_prep</code>'s <code>ValueError</code> naming the group (<code>f"group {g!r}: {msg}"</code>). <code>GroupedMetricReport.to_frame()</code> follows the <code>MonitorReport.to_frame</code> pattern: a list of <code>{group, metric, value, ci_low, ci_high}</code> dicts, or a pandas DataFrame when pandas is importable. This is side-by-side reporting only — no cross-group comparison or multiplicity correction is computed; group-conditional calibration <em>testing</em> is explicitly out of scope and left as future work (<code>docs/guide/groups.md</code>). <code>plots.plot_reliability(..., by=None)</code> gains the matching faceted view: given <code>by</code> (<code>y</code>/<code>p</code> then required), it draws a <code>min(3, G+1)</code>-column grid of <code>reliability_binned</code> panels — one per sorted group plus a leading "pooled" panel, each rebuilt fresh from that group's data (<code>curve</code> is ignored for the panels) — on shared x/y axes via recursive light-panel calls (<code>rug=False, annotate=False</code>), and returns the <strong>Figure</strong> rather than an <code>Axes</code> (like <code>plot_comparison</code>); the <code>by=None</code> default path is untouched, pinned by <code>tests/test_plots_regression.py</code>. New guide chapter <code>guide/groups.md</code> (nav'd under Guide) and a paragraph in <code>concepts/metrics.md</code>'s bootstrap-protocol section</li>
+<li><strong>Validation reports.</strong> <code>probcal.report.validation_report(y, p, *, calibrator=None, monitor=None, grades=None, by=None, title=None, path=None, format="html", n_boot=200, seed=42) -&gt; str</code> (new <code>src/probcal/report.py</code>): a self-contained validation document assembled entirely from the existing public API — no new statistics are computed here. <code>format="html"</code> (default) is a single file with every figure embedded as a base64 PNG data URI (no <code>&lt;script&gt;</code>, no <code>http(s)://</code> links); <code>format="markdown"</code> writes GFM tables and PNG figure files to <code>&lt;path stem&gt;_figures/</code> next to <code>path</code> (required in this mode), referenced with relative image links. Sections are omitted, not left blank, when their input is absent: reliability (<code>curves.corp_reliability</code> + <code>plots.plot_corp</code>, and <code>curves.reliability_smooth</code> + <code>plots.plot_reliability(smooth=..., stats=True)</code>), the <code>metrics.evaluate</code> table, and the CORP Brier/log-loss decomposition always render (they need only <code>y</code>/<code>p</code>); the rating-grades section (Jeffreys per-grade backtest and chart, Pluto-Tasche most-prudent PD, Jeffreys upper masterscale bands — all three ordered best to worst by mean predicted probability, stated in the section) renders when <code>grades</code> is given; the grouped-evaluation section (<code>plots.plot_reliability(by=)</code> panel plus the pooled-and-per-group metric table) when <code>by</code> is given; the monitoring section (<code>plots.plot_e_process</code> plus <code>report().recommendation</code>/<code>reasoning</code>/<code>onset_label</code>) when <code>monitor</code> is given; and the calibrator appendix (a collapsible <code>&lt;details&gt;</code> with <code>calibrator.to_json()</code> plus <code>calibrator.interpret()</code> messages) when <code>calibrator</code> is given. <code>n_boot</code>/<code>seed</code> are keyword-only and drive every resampling site in the report (<code>metrics.evaluate</code>, <code>curves.corp_reliability</code>, <code>curves.reliability_smooth</code>) from one shared knob, making the whole document one deterministic, reproducibly-costed call: two builds from the same inputs and <code>seed</code> are byte-identical apart from the single <code>Generated ... UTC</code> timestamp line. Import cost is the same discipline as the rest of the package: <code>import probcal.report</code> is stdlib + numpy + probcal only (matplotlib is imported lazily, only inside the figure-rendering path, the first time a figure actually renders — pinned by a subprocess test importing the module and asserting <code>matplotlib</code> is absent from <code>sys.modules</code>); calling <code>validation_report</code> itself still needs the <code>[viz]</code> extra (every report renders at least one figure), and its <code>ImportError</code> without it names <code>probcal[viz]</code>. Every caller-supplied label (group/grade names, monitor recommendation/onset strings, the title) is HTML-escaped, or GFM-cell-escaped in <code>format="markdown"</code> tables, before interpolation. Deliberately not re-exported from top-level <code>probcal</code> — reachable only as <code>probcal.report.validation_report</code> — so <code>import probcal</code> stays exactly as matplotlib-free as before. New guide chapter <code>guide/report.md</code> (nav'd under Guide)</li>
+<li><strong>Segmented calibration.</strong> <code>probcal.SegmentedCalibrator(base=None, *, unseen="global")</code> (new <code>src/probcal/segmented.py</code>, registered and re-exported from <code>probcal</code>): empirical-Bayes shrunken per-segment logit offsets on top of a shared base map. Fits <code>base</code> (default <code>BetaCalibrator()</code>, cloned via the <code>wrapper.py</code> <code>type(base)(**base.get_params())</code> pattern) on all data as <code>base_</code>, then per segment <code>g</code> an offset-only logistic MLE against <code>base_</code>'s predictions (<code>offset.estimate_offset</code>, catching the single-outcome-class <code>ValueError</code> as <code>delta_hat=0.0, se=inf</code> — fully shrunk); the between-segment heterogeneity variance <code>tau2</code> is the DerSimonian &amp; Laird (1986) method-of-moments estimator (<code>tau2=0</code> when fewer than two segments have a finite <code>se</code>), and each segment's shrunk offset is <code>delta_tilde = delta_hat * tau2/(tau2+se**2)</code> — a noisy small segment shrinks toward the base map, a large precise one keeps most of its own estimate, and <code>tau2=0</code> recovers complete pooling exactly. <code>fit(s, y, sample_weight=None, *, segments=None)</code> and <code>predict_proba(s, *, segments=None)</code> add a keyword-only <code>segments</code> argument on top of the base signature (<code>segments=None</code> is a single segment <code>"__all__"</code> at fit time and the plain base map, <code>delta=0</code>, at predict time — no signature break for the zero-argument protocol calls); an unseen segment label at predict/inverse time is <code>delta=0</code> (<code>unseen="global"</code>, default) or a <code>ValueError</code> (<code>unseen="raise"</code>). <code>interval_inverse</code>/<code>point_inverse</code> gain a keyword-only <code>segment=None</code> and build <code>Chain([base_, LogitOffset(delta=delta_tilde_g)])</code> for the requested segment; <code>affine_logit_coeffs_</code> is <code>(a, b+delta_tilde)</code> only for a single fitted segment, else <code>None</code> (no single affine map across segments). <code>Chain</code> has no <code>segments=</code> slot, so <code>Chain([seg, ...])</code> always predicts through <code>seg</code>'s global map — documented as a limitation, not a bug. Fully serializable (<code>_STATE_ATTRS</code>/<code>_state</code>/<code>_set_state</code>, <code>_params_for_dict</code>/<code>_params_from_dict</code> storing an unfitted <code>base</code> as a <code>{class, params}</code> spec since an unfitted calibrator has no <code>to_dict</code>); new golden <code>tests/golden/SegmentedCalibrator.json</code>. Verified by simulation (<code>docs/scripts/segmented_sim.py::recovery</code>, full-size table in <code>concepts/segmented.md</code>, 2000 runs): on a 6-segment scenario with true offsets spread -0.6..+0.6 and sizes 30..3000, mean MSE 0.1242 for empirical Bayes versus 0.2354 (no pooling) and 0.1680 (complete pooling); on an all-zero-spread scenario at n=3000, <code>max|mean delta_tilde| = 0.0003</code>, i.e. shrinkage degrades gracefully to complete pooling. A reduced-size gate runs in CI (<code>tests/test_segmented_sim.py</code>, <code>pytest.mark.slow</code>). New chapter <code>concepts/segmented.md</code></li>
+<li><strong>Closing the monitoring loop.</strong> <code>CalibrationMonitor.apply_recommendation(target=None) -&gt; AppliedAction</code> (new <code>monitor.AppliedAction</code>, re-exported from <code>probcal.monitor</code>): closes the report-to-action loop for <code>kind="re-offset"</code> — estimates the log-odds shift by maximum likelihood (<code>offset.estimate_offset</code>) on the same window <code>report()</code>'s trailing diagnostics use (<code>_recommendation_window_start</code>, factored out of <code>report()</code> so the two windows can never disagree), composes the fitted <code>LogitOffset</code> onto <code>target</code> (<code>Chain([target.calibrator_, *target.offsets_, offset])</code> for a <code>Chain</code>, <code>copy.deepcopy(target).offset_to(delta=est.delta)</code> for a <code>CalibratedModel</code>, <code>None</code> for no target — <code>target</code> itself is never mutated), and returns a <strong>fresh</strong> <code>CalibrationMonitor</code> with the same constructor parameters (new <code>_ctor_params()</code> helper, also used by <code>to_dict</code>) to watch the corrected pipeline — fresh rather than continued because the old e-process is a martingale under the null that the <em>old</em> forecast is calibrated, which no longer holds once the pipeline changes. <code>kind="re-fit"</code>/<code>"none"</code> return no offset, composed target, or fresh monitor — automatic re-fitting stays out of scope by design. <code>AppliedAction</code> carries <code>kind</code>, <code>offset</code>, <code>composed</code>, <code>monitor</code>, the <code>window</code> of batch labels used, and an <code>audit</code> dict of fingerprints and the estimated <code>delta</code>/<code>se</code>; it is itself serializable (<code>to_dict</code>/<code>from_dict</code>/<code>to_json</code>/<code>from_json</code>/<code>fingerprint</code>, nesting <code>offset</code>/<code>composed</code>/<code>monitor</code> as their own envelopes, with a composed <code>CalibratedModel</code> reattached via <code>AppliedAction.from_dict(d, model=...)</code> exactly as <code>CalibratedModel.from_dict</code> itself). <code>mon</code> is never mutated by the call. New section in <code>concepts/monitoring.md</code></li>
+<li><strong>Drift-onset localization.</strong> <code>CalibrationMonitor</code> drift-onset estimate: each <code>MonitorStep</code> now records <code>log_e_increment</code>, the batch's additive plug-in log-LR contribution (the offset plug-in's <code>bern_log_lr</code> factor plus the shape plug-in's, each 0.0 when its plug-in is the identity) — unlike <code>e_global</code>, a logsumexp mixture that is not additive across batches, this series is purely additive and exists so drift onset can be localized. New <code>monitor._onset.estimate_onset(increments) -&gt; int</code> is a backward-CUSUM argmax (<code>k* = argmax_k sum_{j&gt;=k} increments[j]</code>, ties resolving to the latest <code>k</code>) — an estimate, not a change-point test: no type-I control, no confidence set. <code>report()</code> runs it whenever an alarm has fired and exposes the result as the new <code>MonitorReport.onset_label: str | None</code> field, with a matching sentence appended to <code>reasoning</code>; steps loaded from a pre-0.3 payload carry <code>log_e_increment = None</code> (that payload records no increments), and a monitor holding any such step reports <code>onset_label = None</code>, says so in <code>reasoning</code>, and falls back to the <code>"trailing"</code> diagnostic window. Localization accuracy (batches built like <code>docs/scripts/monitor_sim.py</code>'s, drift injected at batch 12 of 24 with <code>shift=0.6</code>, 40 seeded runs, <code>tests/test_monitor_onset.py</code>, <code>pytest.mark.slow</code>): median <code>|onset - 12| = 1.0</code> (gate <code>&lt;= 2</code>). New section in <code>concepts/monitoring.md</code></li>
+<li><strong>Per-grade confidence sequences.</strong> <code>CalibrationMonitor</code>: each grade in a <code>grade</code> array now also gets its own time-uniform confidence sequence for its own offset — same construction and <code>delta_ci_grid</code> as the portfolio-level <code>delta_ci</code>, restricted to that grade's batch slice with the grade's own predictable plug-in as the alternative — surfaced as the new <code>MonitorStep.grade_delta_ci: dict[str, tuple[float, float] | None]</code> field (empty when no grades are given, and absent on steps loaded from a pre-0.3 payload, since it defaults to <code>{}</code>). This catches a single grade drifting while the portfolio-level offset CS stays put. <code>plots.plot_e_process(report, *, grades_panel=False, ax=None)</code> gains the keyword-only <code>grades_panel</code>: <code>True</code> adds a second axes (<code>ax.figure.add_axes</code>) plotting every grade's CS band across steps below the main plot; the default <code>False</code> call renders pixel-identically to 0.2.0 (<code>tests/test_plots_regression.py</code>). Serialization is additive and backward compatible: <code>to_dict</code> adds <code>state["grade_cs_log"]</code>/<code>state["grade_cs_max"]</code>, <code>from_dict</code> reads them with <code>.get(..., {})</code>, and <code>tests/test_monitor_grades.py::test_0_2_0_monitor_file_loads_and_continues</code> pins that a 0.2.0 monitor payload still loads, its old steps carry an empty <code>grade_delta_ci</code>, and new batches with <code>grade=</code> populate it going forward. New section in <code>concepts/monitoring.md</code></li>
+<li><strong>Per-grade e-test audit.</strong> <code>metrics.hl_e_test(y, p, grades, *, mixture_grid=(0.1, 0.25, 0.5, 1.0), sample_weight=None) -&gt; HlEResult</code> (metric catalog 44 → 46 symbols, count updated in <code>docs/api-stability.md</code>): a fixed-sample, one-shot mixture-LR e-value audit per rating grade — for grade <code>g</code>, <code>log E_g = logsumexp</code> over the symmetrized <code>mixture_grid</code> (the same construction <code>CalibrationMonitor</code>'s offset e-process uses, <code>monitor._processes.bern_log_lr</code>/<code>logsumexp</code>, with no predictable plug-in since a fixed sample has no strictly-earlier data to learn one from) of <code>Σ_i log LR_i(sigma(logit(p_i) + delta) : p_i)</code>, minus <code>log(2 * len(mixture_grid))</code>; the test statistic is the product across grades, <code>e_value = exp(Σ_g log E_g)</code> (a valid e-value: each grade's mixture average has expectation 1 under H0 and grades are disjoint), <code>p_value = min(1, 1 / e_value)</code> by Markov's inequality. Named "mixture-LR grade e-test (safe Hosmer–Lemeshow analogue)": Henzi, Puke, Dimitriadis &amp; Ziegel (2024) is cited in the docstring and <code>concepts/monitoring.md</code> as the paper that motivated a fixed-sample e-value analogue of Hosmer–Lemeshow, explicitly not as the implemented construction. Sample weights enter as exponents on the Bernoulli factors, same convention as the monitor. Verified by simulation (<code>docs/scripts/hl_e_sim.py</code>, full-size table in <code>concepts/monitoring.md</code>, wall time ≈ 19s for 2000 runs): type-I <code>P(e &gt;= 20) = 0.0025</code> (gate <code>&lt;= 0.0597</code>), <code>P(e &gt;= 100) = 0.0005</code> (gate <code>&lt;= 0.0144</code>), <code>mean(e) = 0.4334</code> (gate <code>&lt;= 1 + 3*se</code>); a reduced-size gate runs in CI (<code>tests/test_hl_e_sim.py</code>, <code>pytest.mark.slow</code>). Re-exported from <code>probcal.metrics.grade</code>.</li>
+<li><strong>Audited offset MLE.</strong> <code>probcal.offset.estimate_offset(y, p, *, sample_weight=None) -&gt; OffsetEstimate</code> and <code>probcal.offset.offset_from_estimate(est, p) -&gt; LogitOffset</code> (re-exported from top-level <code>probcal</code>): the offset-only logistic MLE of <code>delta</code> given realized outcomes, with a Fisher-information standard error, as the companion to <code>LogitOffset</code>'s policy-driven mode B. The score equation <code>sum(w * (y - sigma(logit(p) + delta))) = 0</code> is exactly <code>LogitOffset(target_mean=mean_w(y))</code>'s mean-matching condition, so <code>estimate_offset</code> shares its bisection root-finder (new <code>_offset_mle</code> helper) with <code>probcal.monitor._processes.plug_in_delta</code> — the two agree bit-for-bit on the same data; the standard error is <code>1 / sqrt(sum(w * q * (1 - q)))</code> at the fitted <code>q = sigma(logit(p) + delta)</code>. <code>offset_from_estimate</code> builds the same fitted <code>LogitOffset</code> mode A would give for <code>delta=est.delta</code>, so the audited MLE plugs directly into <code>Chain</code>, serialization, and the inverse maps. New section in <code>concepts/offset.md</code></li>
+<li><strong>Margin-of-conservatism offsets.</strong> <code>probcal.monitor.moc_offset(monitor_or_report, *, level=None) -&gt; LogitOffset</code> and <code>probcal.monitor.moc_offset_from_counts(y, p, *, level=0.9, sample_weight=None) -&gt; LogitOffset</code> (new <code>monitor/_actions.py</code>; re-exported from <code>probcal.monitor</code> and top-level <code>probcal</code>): margin-of-conservatism offsets that turn monitoring evidence into an applied correction. <code>moc_offset</code> reads the upper end of <code>CalibrationMonitor</code>'s time-uniform confidence sequence for the current offset (<code>steps[-1].delta_ci[1]</code> by default, or a level recomputed from the monitor's own running <code>_cs_grid</code>/<code>_cs_max</code> state) and returns a fitted <code>LogitOffset(delta=hi)</code> on the last monitored batch — a <code>level</code> requires the live monitor (<code>TypeError</code> for a frozen <code>MonitorReport</code>, which does not retain the running arrays), and an all-nulls-rejected <code>delta_ci</code>/surviving set raises <code>ValueError</code> pointing at <code>delta_ci_grid</code>. <code>moc_offset_from_counts</code> re-anchors <code>p</code>'s mean at the one-sided Jeffreys posterior upper quantile of the observed event rate (<code>beta_ppf(level, k + 0.5, n - k + 0.5)</code>, the same quantile <code>jeffreys_grade_test</code>/<code>jeffreys_upper_bands</code> use) via <code>LogitOffset</code>'s existing mode B — no new numerics. New section in <code>concepts/monitoring.md</code>; <code>monitor.__all__</code> gains both symbols.</li>
+<li><strong>Jeffreys masterscale bands.</strong> <code>metrics.jeffreys_upper_bands(y, p, grades, *, level=0.9, order=None) -&gt; dict[str, tuple[float, float]]</code> (metric catalog 43 → 44 symbols, count updated in <code>docs/api-stability.md</code>): the per-grade Jeffreys posterior upper bound <code>jeffreys_grade_test</code> already reports as its own-grade display interval (<code>beta_ppf(level, k_i + 0.5, n_i - k_i + 0.5)</code>, no cross-grade pooling), packaged as the <code>{grade: (lo, hi)}</code> masterscale band table <code>thresholds.calibrated_bands_to_raw</code> consumes directly — <code>lo_i</code> is the previous grade's <code>hi</code> (<code>0.0</code> for the best grade), so the bands are contiguous by construction, and a zero-default grade still gets a strictly positive <code>hi</code> from the Jeffreys prior alone. The raw <code>hi</code> sequence is monotonized with <code>_math.pava</code> (weighted isotonic regression, weight = grade size) in the given <code>order</code> (default: grades sorted by mean <code>p</code>, best first), with a <code>UserWarning</code> fired only when PAVA actually changed something. Re-exported from <code>probcal.metrics.grade</code>; new section in <code>concepts/conservatism.md</code></li>
+<li><strong>Pluto-Tasche most-prudent PDs.</strong> <code>metrics.pluto_tasche(grade_n, grade_d, *, confidence=0.9, grades=None) -&gt; PlutoTascheResult</code> and <code>metrics.pluto_tasche_from_arrays(grades, y, *, order, confidence=0.9, sample_weight=None)</code> (metric catalog 40 → 43 symbols, count updated in <code>docs/api-stability.md</code>): the Pluto &amp; Tasche (2005) one-period most-prudent PD for ordered rating grades — for grade <em>i</em> (best to worst, in the given order), pool its own obligors/defaults with every worse grade's (<code>n*_i = sum(n[i:])</code>, <code>d*_i = sum(d[i:])</code>, the rating-monotonicity assumption doing the work) and take the one-sided Clopper-Pearson upper bound of the pooled rate (<code>_math.beta_ppf(confidence, d*_i + 1, n*_i - d*_i)</code>; <code>d* == n*</code> gives 1.0, a pooled <code>n* == 0</code> raises); <code>pluto_tasche_from_arrays</code> aggregates observation-level <code>(grades, y)</code> into the same counts, weighted when <code>sample_weight</code> is given, and accepts an all-zero <code>y</code> (unlike most probcal metrics) since that is Pluto-Tasche's central use case. <code>pd_upper</code> is replaced by its cumulative maximum best to worst (<code>np.maximum.accumulate</code>, a prudent hull that can only raise a bound, never lower one) to guarantee it stays non-decreasing — a no-op on realistic, already rating-monotone data, <code>PlutoTascheResult.monotonized</code> reports whether it fired. Both functions are re-exported from <code>probcal.metrics.grade</code>, alongside the per-grade backtests they complement. Verified by simulation (<code>docs/scripts/conservative_sim.py</code>, full-size table in the new <code>concepts/conservatism.md</code>): minimum per-grade coverage 0.9225 at confidence 0.9 (gate 0.8866) and 0.9610 at 0.95 (gate 0.9403), 2000 runs; a reduced-size gate runs in CI (<code>tests/test_conservative_sim.py</code>, <code>pytest.mark.slow</code>)</li>
+<li><strong>CORP reliability diagrams.</strong> <code>curves.corp_reliability(y, p, *, sample_weight=None, bands="consistency", level=0.9, n_resamples=200, random_state=42) -&gt; CorpResult</code>: the CORP (consistent, optimally binned, reproducible) reliability diagram of Dimitriadis, Gneiting &amp; Jordan (2021) — the PAV (pool-adjacent-violators) recalibration map of <code>y</code> on <code>p</code>, weighted throughout (<code>isotonic._aggregate_ties</code> pools tied scores, <code>_math.pava</code> runs the weighted merge sweep, so an unweighted call is the <code>w=1</code> special case of the same code path) — plus the exact <code>score == mcb - dsc + unc</code> decomposition of both the Brier score and log loss into uncertainty (the constant-forecast ceiling), discrimination (the PAV fit's improvement on it), and miscalibration (the raw score's shortfall against the PAV fit); log loss clips predictions and PAV levels to <code>[1e-12, 1 - 1e-12]</code> (<code>_corp._CLIP</code>, matching <code>_math.logit</code>'s clip) so degenerate 0/1 blocks stay finite. <code>bands="consistency"</code> (default) resamples <code>y ~ Bernoulli(p)</code> under the calibration null, <code>"confidence"</code> bootstraps <code>(y, p, sample_weight)</code> triples, <code>None</code> skips bands; both are pointwise, not simultaneous — <code>docs/scripts/corp_sim.py</code>'s full-size coverage table (pasted into the new <code>concepts/corp.md</code>) reports the pointwise-vs-uniform gap directly, and <code>tests/test_corp_sim.py</code> (<code>pytest.mark.slow</code>) gates pointwise coverage <code>&gt;= 0.85</code> at level 0.9, reduced size, in CI. <code>plots.plot_corp(result, *, scale="probability", show_decomposition=True, ax=None)</code> draws the PAV step against the identity with the resampled band shaded and a Brier/MCB/DSC/UNC stats box; new docs figure <code>corp.png</code> and chapter <code>concepts/corp.md</code></li>
+<li><strong>MCB-DSC plane.</strong> <code>plots.plot_mcb_dsc(candidates, *, score="brier", ax=None)</code>: the MCB-DSC plane — each candidate plotted at <code>(DSC, MCB)</code> from its CORP decomposition, with dashed iso-score diagonals <code>MCB = DSC + (S̄ - UNC)</code> so candidates tying on the aggregate score but splitting differently between discrimination and miscalibration are visually distinguishable (lower-right is better). Accepts a <code>{name: (y, p)}</code> mapping (candidates must share a weighted mean <code>y</code>, so UNC and the diagonals are comparable) or, directly, a fitted <code>CalibratorSelector</code>'s <code>report_</code>: <code>SelectionReport</code> gains <code>mcb</code>, <code>dsc</code>, and <code>unc</code> columns (<code>None</code> on reports predating probcal 0.3, e.g. old goldens) computed from one <code>corp_fit</code>/<code>decompose</code> call per candidate on its own out-of-fold predictions, decomposing whichever score (Brier or log loss) drove the selection criterion. New docs figure <code>mcb_dsc.png</code> and section in <code>concepts/corp.md</code></li>
+<li><strong>Kernel reliability curves.</strong> <code>curves.reliability_smooth</code> (<code>KernelReliabilityCurve</code>): a fourth reliability construction whose bandwidth is not a free parameter — it shares <code>metrics.smooth_ece</code>'s fixed-point <code>sigma_star</code> and equal-width logit lattice (factored into <code>metrics.smooth._lattice</code>/<code>_smece_solve</code>, reused by both so the two cannot drift), so <code>curve.smooth_ece</code> reproduces the metric bit-for-bit rather than merely tracking it; <code>event_rate</code> and <code>density</code> are Nadaraya-Watson kernel estimates at that one <code>sigma_star</code> (falling back to direct O(n · grid) smoothing when <code>smooth_ece</code>'s own path selection takes its exact, non-lattice route), and the seeded bootstrap ribbon (<code>n_boot</code>, default 100; <code>n_boot=0</code> disables it) conditions on that fixed bandwidth rather than resampling it</li>
+<li><strong>Reliability plot upgrades.</strong> <code>plots.plot_reliability</code>: renders a <code>KernelReliabilityCurve</code> passed as <code>smooth</code> as a density-weighted variable-width curve (a <code>LineCollection</code> whose width tracks local prediction density) with the miscalibration area shaded against the identity, its bootstrap ribbon, and an <code>smECE = ...</code> readout; a new keyword-only <code>stats</code> (<code>bool | MetricReport</code>, default <code>False</code>) swaps the classic <code>annotate</code> box for one reporting <code>n, events, intercept, slope, ICI, smECE, Brier</code>, or — given a <code>MetricReport</code> — <code>name = value [ci_low, ci_high]</code> for whichever of those names the report carries; and a new keyword-only <code>risk_dist</code> (<code>"rug" | "split" | None</code>, default <code>"rug"</code>) selects between the existing event/non-event rug and a 30-equal-mass-bin spike histogram of <code>p</code> (events up, non-events down, from a shared axis-fraction baseline), with <code>rug=False</code> disabling the density layer regardless of <code>risk_dist</code>. All three are additive: the pre-existing default call (<code>annotate=True</code>, <code>rug=True</code>, <code>risk_dist="rug"</code>, <code>smooth</code> a <code>SmoothReliabilityCurve</code>) renders pixel-identically to 0.2.0, pinned by <code>tests/test_plots_regression.py</code></li>
+<li><strong>Attributes diagram.</strong> <code>plots.plot_attributes(y, p, *, method="binned", n_bins=10, scale="probability", sample_weight=None, ax=None)</code>: the Hsu &amp; Murphy (1986) attributes diagram — identity, the climatology references (horizontal and vertical lines at the weighted base rate), the no-skill line <code>y = (x + ybar) / 2</code>, and a shaded positive-Brier-skill region <code>(y - x)^2 &lt;= (x - ybar)^2</code> (closer to the identity than to the no-resolution line), all drawn on a 400-point grid and all transformed through the package's clipped logit when <code>scale="logit"</code>; <code>method="binned"</code> overlays <code>curves.reliability_binned</code> as count-sized markers, <code>method="corp"</code> overlays the CORP PAV step fit (<code>curves.corp_reliability(bands=None)</code>) instead. New docs figure <code>attributes.png</code> (<code>docs/scripts/generate_figures.py</code>) and section in <code>concepts/visualization.md</code></li>
+<li><strong>Murphy diagrams.</strong> <code>metrics.murphy_curve(y, p, *, thresholds=513, sample_weight=None) -&gt; MurphyCurve</code> (metric catalog 38 → 40 symbols; count updated in <code>docs/api-stability.md</code>): the Ehm, Gneiting, Jordan &amp; Krüger (2016) elementary score <code>S_theta(p, y) = theta * 1{p &gt; theta, y = 0} + (1 - theta) * 1{p &lt;= theta, y = 1}</code> of the "act if p &gt; theta" decision rule, whose weighted mean across a threshold grid (<code>thresholds</code>: an int for <code>linspace(0, 1, thresholds)</code>, or an explicit array) is the Murphy diagram; <code>2 * integral(S_theta)</code> equals the Brier score exactly in the continuum and to within the default grid's 1e-3 budget at realistic n, computed in <code>O(n log n + T log n)</code> by sorting p once. <code>plots.plot_murphy(curves, *, diff=False, n_boot=200, random_state=42, ax=None)</code> renders a <code>MurphyCurve</code> or a <code>{name: MurphyCurve}</code> mapping as labelled lines, or — <code>diff=True</code>, given a <code>{name: (y, p)}</code> mapping of exactly two raw-data pairs (a <code>MurphyCurve</code> does not retain its data) — the pointwise score difference with a seeded paired-bootstrap band and a zero reference line. New docs figure <code>murphy.png</code> and sections in <code>concepts/metrics.md</code> and <code>concepts/visualization.md</code></li>
+<li><strong>sklearn duck typing on the bare core.</strong> <code>BaseCalibrator</code> gains <code>__sklearn_is_fitted__</code> and <code>__sklearn_tags__</code>, and <code>Chain</code>, <code>LogitOffset</code> and <code>CalibratedModel</code> gain <code>__sklearn_is_fitted__</code>. On <strong>sklearn &gt;= 1.6</strong> (the dunder-protocol versions) a bare probcal calibrator is therefore usable directly in every sklearn context that needs no shape translation — <code>sklearn.base.clone</code>, <code>sklearn.utils.get_tags</code>, <code>sklearn.utils.validation.check_is_fitted</code>, and CV loops such as <code>cross_val_score(BetaCalibrator(), s.reshape(-1, 1), y, cv=3, scoring=&lt;custom scorer&gt;)</code> — with no adapter import; contexts that need the <code>(n, 2)</code>/<code>classes_</code> probability-matrix convention still go through <code>probcal.sklearn</code>, and so does older sklearn. The tags are built from sklearn's public <code>Tags</code>/<code>TargetTags</code>/<code>InputTags</code> constructors and state only what is true of a calibrator (<code>estimator_type=None</code>, <code>requires_fit=True</code>, target required, <code>two_d_array=False</code>); no <code>_more_tags</code>, since the pre-1.6 MRO-walking mechanism assumes <code>BaseEstimator</code>. The sklearn import lives <strong>inside</strong> <code>__sklearn_tags__</code>, so <code>import probcal</code> and a full fit/predict round trip stay numpy + stdlib only — pinned by a fresh-interpreter subprocess test (<code>tests/test_import_footprint.py</code>). New <code>tests/test_sklearn_duck.py</code> (skipped below sklearn 1.6) covers the tags, <code>clone</code> of every registered calibrator class, <code>check_is_fitted</code> before and after <code>fit</code>, and the <code>cross_val_score</code> claim verbatim; <code>check_is_fitted</code> itself applies to <code>BaseCalibrator</code> subclasses — it requires a <code>fit</code> method and the tag hook, which <code>Chain</code> (composed of already-fitted stages) does not have</li>
+<li><strong>Mirror conformance suite for the sklearn adapter.</strong> New <code>tests/test_sklearn_mirror_checks.py</code> re-implements, on valid <code>(n,)</code> probability data, every generic estimator check that is declared inapplicable to a score-level estimator but has a score-level analogue: fit idempotence, no mutation of the passed arrays (<code>X</code>, <code>y</code>, <code>sample_weight</code> and the query array), <code>__dict__</code> unchanged by <code>predict</code>/<code>predict_proba</code>/<code>transform</code> (deep-copied snapshot, so an in-place mutation is caught too), pickle round trip for <code>SklearnCalibrator</code> and <code>to_json</code>/<code>from_json</code> round trip for every registered calibrator class, clone-then-fit equal to a fresh fit, subset and sample-order invariance, and integer <code>sample_weight</code> equal to row duplication — the last one over all 14 <code>BaseCalibrator</code> subclasses in the registry. Five of them (<code>CenteredIsotonicCalibrator</code>, <code>ENIRCalibrator</code>, <code>IsotonicCalibrator</code>, <code>TemperatureCalibrator</code>, <code>VennAbersCalibrator</code>) satisfy weighting ≡ duplication bit-for-bit; the rest are listed in a module-level <code>_WEIGHT_DUPLICATION_TOLERANCE</code> table with the measured deviation and the structural reason — unweighted <code>np.quantile</code> equal-mass edges in <code>HistogramBinningCalibrator</code> (1.1e-1; <code>strategy="width"</code> is exact) and on the Platt stage's output in <code>ScalingBinningCalibrator</code> (8.5e-2), <code>SplineCalibrator</code>'s <code>n</code>-dependent knot count and inner-CV penalty search (1.9e-1), <code>BBQCalibrator</code>'s equal-mass bin grids (2.8e-2), <code>CrossVennAbersCalibrator</code>'s fold assignment (8.8e-3), <code>CalibratorSelector</code>'s inner-CV selection (exact on this fixture, but not structurally so — held at the CV-level tolerance), and IRLS floating point for <code>PlattCalibrator</code> (2.5e-16), <code>BetaCalibrator</code> and <code>SegmentedCalibrator</code> (1.3e-14) — each asserted at its own tolerance, which is a measured value plus headroom rather than an error budget. The cheap conventions are mirrored too: fit returns self, fit does not overwrite <code>__init__</code> parameters, <code>check_is_fitted</code> before and after fit, non-finite scores refused in fit and predict, float32 input giving float64 probabilities, list-valued and wrong-shaped <code>sample_weight</code>, the one-class-after-zero-weight-trimming refusal, <code>Pipeline</code> consistency, and <code>fit_transform</code> equal to <code>fit().transform()</code>. <code>_MIRRORED_BY</code> maps every mirrored check to its stand-in test and <code>_NO_ANALOGUE</code> names the rest (multiclass, container and dtype-object handling, memory layout, <code>n_features_in_</code> bookkeeping, the 1-D-raises pair, the 2-D-<code>y</code> conversion warning, the positive-only tag), each spelled out in the module docstring; a guard test asserts the two together cover <code>CALIBRATOR_XFAIL_CHECKS ∪ CLASSIFIER_XFAIL_CHECKS</code> exactly, so the accounting cannot drift</li>
+</ul>
+<h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
+<ul>
+<li>treecf guide: the cross-repo work list is now documented as implemented in treecf 0.2.4 (provenance, <code>score_calibrated</code> read-out, plateau suite, matrix, docs), and the <code>probcal[treecf]</code>/<code>all</code> optional-dependency floor is raised to <code>treecf&gt;=0.2.4</code>; the joint smoke tests additionally pin the read-out and the certificate provenance loop</li>
+<li><code>CalibrationMonitor.report()</code> now computes its post-alarm trailing-window diagnostics (<code>delta_now</code>, the Cox slope bootstrap CI, the Cox-vs-offset residual LR) on batches from the estimated drift onset onward instead of the full (or <code>plug_in_window</code>-trimmed) history — a window anchored where the evidence trail turns is more informative once an alarm has fired; when <code>plug_in_window</code> is also set, the window starts at the LATER of the onset and the <code>plug_in_window</code> trailing start, so a short <code>plug_in_window</code> still bounds how far back it can reach. This is the new default (<code>recommendation_window="since_onset"</code>); the keyword-only ctor parameter <code>recommendation_window="trailing"</code> is the escape hatch restoring 0.2.0 behaviour exactly for those diagnostic INPUTS — <code>onset_label</code> and the onset sentence in <code>reasoning</code> are populated under both modes, only the diagnostic window differs. The recommendation gate (<code>tests/test_monitor_sim.py::test_recommendation_correct_on_pure_drift</code>, ≥ 90% correct) stays green under the new default: 18/20 pure-offset runs correctly called <code>re-offset</code>, 20/20 pure-slope runs correctly called <code>re-fit</code>. New section in <code>concepts/monitoring.md</code></li>
+<li><strong>Single-column score input.</strong> <code>_validation.validate_scores</code> now ravels a <code>(n, 1)</code> input before its existing checks, so a column vector — what an sklearn cross-validation loop hands an estimator — is accepted everywhere scores enter the package: every calibrator's <code>fit</code>/<code>predict_proba</code>, <code>LogitOffset.fit</code>, and the whole metric catalog. Strictly more inputs are accepted and none that worked before are rejected; results are bit-identical to passing the ravelled array. Every other 2-D shape still raises, now phrased "expected 1-D scores (or a single column); got shape ..."; <code>validate_binary_y</code> stays 1-D only</li>
+<li><strong>Per-check applicability reasons for the sklearn estimator checks.</strong> <code>sklearn/_compat.py</code>'s blanket score-level reason is split: each of the 36 declared checks now carries its own reason naming the data that check generates ("2 standardized blob columns", "10 columns of U(0, 1) noise", "the 4 mean-centred iris columns", ...) and which part of the score-level contract it violates — the column count alone, or the value range as well. The declaration mechanism is unchanged (<code>expected_failed_checks</code> on sklearn &gt;= 1.6, <code>_more_tags()["_xfail_checks"]</code> below it) and the set of declared checks is identical, so <code>tests/test_sklearn.py</code> still reports the same 40 xfails and no xpass; only the reasons read differently — "inapplicable", not "failing". <code>docs/api-stability.md</code> gains a "scikit-learn estimator checks" section stating the position (the generic checks' data model contains no score-level estimator, imbalanced-learn's resamplers being the precedent), and <code>guide/sklearn.md</code>'s compliance paragraph points at it and at the mirror suite</li>
+<li><strong><code>guide/sklearn.md</code> rewritten around three tiers.</strong> The chapter now leads with bare duck typing (sklearn &gt;= 1.6, no adapter import), then <code>SklearnCalibrator</code> (the <code>(n, 2)</code>/<code>classes_</code> shape convention: pipelines, <code>VotingClassifier</code>, stacking), then <code>CalibratedClassifier</code> (out-of-fold orchestration as one auditable object), plus the prefit recipe — <code>CalibratedClassifierCV(FrozenEstimator(model))</code> and the three-line <code>FrozenEstimator</code> + <code>SklearnCalibrator</code> composition as the primitives-first alternative to <code>CalibratedClassifier(cv="prefit")</code>. One paragraph states the design position: the core is duck-typed to sklearn's semantic contract by design, the adapter translates shape conventions, and duck typing cannot dissolve conventions about array shapes. Every fenced code block in the chapter (9 of 9) is an <code>--8&lt;--</code> include from <code>tests/test_sklearn_guide_snippets.py</code> (<code>pymdownx.snippets</code>, with <code>dedent_subsections: true</code> for copy-pasteable output and <code>check_paths: true</code> so <code>mkdocs build --strict</code> fails if a snippet ever goes missing) rather than pasted, so the guide cannot drift from what is actually run — including the grid-search and metadata-routing examples, one of which previously passed <code>calibrator=None</code> to a <code>GridSearchCV</code> grid searching <code>calibrator__variant</code> and would have raised <code>AttributeError</code> on first use; the sample-weight/routing section and the compliance pointer are otherwise unchanged. <code>CalibratedClassifier.to_json(path=None, *, indent=2)</code> now delegates to <code>calibrator_.to_json(...)</code> like its other protocol methods (previously only <code>to_dict</code> was delegated; the guide's tier-3 example calls it directly)</li>
+</ul>
+<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>PlattCalibrator</code>'s smoothing prior now reads weighted class mass.</strong> The Lin–Lin–Weng targets <code>(N+ + 1)/(N+ + 2)</code> and <code>1/(N- + 2)</code> took <code>N+</code>/<code>N-</code> as raw row counts while the IRLS around them was weighted, so a weighted fit used a prior built for a different sample size: integer weights did not equal row duplication (2.0e-2 apart on the mirror-suite fixture). <code>N+</code>/<code>N-</code> are now the weighted class totals, which are the row counts under unit weights — so every unweighted fit, every default, and every golden file is bit-identical (pinned by a new <code>tests/test_parametric.py::test_platt_unit_weights_equal_no_weights</code>), while weighting a row now matches repeating it to 2.5e-16 (<code>test_platt_integer_weights_equal_row_duplication</code>, and <code>PlattCalibrator</code> moves to the floating-point tier of the mirror suite's tolerance table). <code>ScalingBinningCalibrator</code>, whose first stage is a Platt fit, keeps its 8.5e-2 deviation: after this fix that is entirely the equal-mass bins on the Platt output, and its documented reason says so</li>
+<li><strong>Sample-weight delivery into <code>CalibratedClassifier</code>'s inner fits.</strong> <code>CalibratedClassifier.fit(X, y, sample_weight=w)</code> raised <code>TypeError</code> whenever the base estimator's <code>fit</code> had no <code>sample_weight</code> parameter (<code>KNeighborsClassifier</code>, a <code>Pipeline</code> without metadata routing, ...): the weights were passed to <code>cross_val_predict</code> unconditionally, and the full-data refit only recovered through a bare <code>except TypeError</code>. It now checks first — <code>has_fit_parameter</code>, sklearn's own precedent in <code>CalibratedClassifierCV</code>, widened under metadata routing so that a router base (which takes weights through <code>**params</code>, not a named argument) still counts as weight-capable — and, when the base cannot take weights, warns once (<code>UserWarning</code> naming the class), runs the fold fits and the refit unweighted, and fits the calibrator with the weights. The silent <code>except TypeError</code> refit fallback is gone. Everything else was already correct and is now pinned rather than changed: with routing off, <code>cross_val_predict(params=...)</code> hands the weights straight to the base estimator's <code>fit</code> (all 3 fold fits plus the refit, verified with a spy estimator); with routing on, a <code>Pipeline</code> ending in <code>SklearnCalibrator().set_fit_request(sample_weight=True)</code> reproduces a hand-weighted <code>BetaCalibrator</code> fit bit-for-bit, and an undeclared request raises sklearn's <code>UnsetMetadataPassedError</code> instead of dropping the weights silently. New <code>tests/test_sklearn_routing.py</code> (9 tests, both routing modes) and a "Sample weights and metadata routing" section in <code>guide/sklearn.md</code>; behaviour verified identical on scikit-learn 1.4.2, 1.6.1 and 1.9.0</li>
+</ul>
+<h3 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>metrics.evaluate</code>'s bootstrap loop now sorts each replicate by prediction once (<code>np.argsort(..., kind="stable")</code>) and shares that order across every metric that would otherwise sort or re-bin on its own: <code>_math.loess</code> and <code>metrics.ecce</code> gain a keyword-only <code>presorted</code> flag that skips their internal <code>argsort</code> (default <code>False</code>, so every direct call is byte-identical to before); <code>ece</code>, <code>ece_debiased</code>, and <code>mce</code> — which all bin at 15 equal-mass bins — share one <code>_bin_gaps</code> pass instead of three identical ones; and <code>ece_sweep</code>'s ~99-candidate monotonicity scan reads per-bin weighted sums off prefix-sum differences at <code>np.searchsorted(ps, edges, side="left")</code> cut positions instead of rebuilding a length-n bin index per candidate (the quantile edges, their <code>np.unique</code> collapse, and the non-empty-bin filter are the originals; only <code>best_b</code> is decided there, and the returned value still comes from the unchanged <code>ece(...)</code> call at that bin count). <strong>Point estimates are unchanged bit-for-bit</strong>: they are still computed on the untouched unsorted path, pinned by <code>tests/test_metrics_evaluate.py::test_evaluate_point_estimates_unchanged_by_e3</code> against a verbatim copy of the pre-change body, and by <code>tests/test_metrics_binned.py</code> for <code>ece_sweep</code>'s value and its chosen <code>best_b</code> (portfolio sizes 500/5000, a tied-score fixture, and a non-uniform-weight fixture). <strong>Bootstrap percentile CI bounds may move in their last bits</strong> — reordering a replicate's rows reorders every weighted sum inside it — measured at most 3.9e-11 relative on a <code>n=10,000</code>/<code>n_boot=1000</code> full-catalog run; <code>tests/test_evaluate_groups.py</code>'s hard-coded fixture consequently pins its CI bounds at <code>rtol=1e-9</code> instead of <code>atol=1e-12</code> (its point values stay at <code>atol=1e-12</code>). Third, the LOESS anchor evaluation is vectorized on that same bootstrap path: new <code>_math._loess_fit_sorted_vec</code> solves the 512 anchors' tricube-weighted local fits in cache-sized blocks of whole windows (every window holds exactly <code>r</code> points, so the block is rectangular) instead of one Python iteration per anchor, and <code>_math._loess_window_starts</code> replaces the scalar two-pointer window walk with a <code>searchsorted</code> plus two exact-comparison sweeps that reproduce the loop's <code>xs[i + r] - x0 &lt; x0 - xs[i]</code> rule verbatim — the window index is identical, tied scores included. It is wired in behind <code>loess(..., presorted=True)</code>'s <code>grid_size</code> anchor branch only: the per-observation path would gather O(n·r) and stays on the scalar loop, as does every <code>presorted=False</code> call. Its one intended numeric difference from the loop is that the tricube weight cubes by multiplication where the loop writes <code>** 3</code> (numpy sends <code>** 3</code> to <code>libm</code> <code>pow</code> at ten times the cost of two multiplies), which moves anchor values by at most 2.3e-16 relative <strong>on a well-conditioned window</strong> — pinned at <code>rtol=1e-9</code> against the scalar loop on <code>make_pd_portfolio</code> n=1,000 and n=10,000 and a tied-score fixture, at both degree 0 and 1, in <code>tests/test_math.py</code>. That bound does not extend to a <em>rank-deficient</em> window (every non-zero tricube weight on one distinct score, which needs the far half of the window to sit at exactly the bandwidth): there the local-linear determinant is pure cancellation, ~1e-23 rather than 0, so the ulp-level weight difference can put the two paths on opposite sides of the <code>abs(det) &lt; _FPMIN</code> guard and the values differ by O(1). The <code>swy / sw</code> branch — the weighted mean, what a rank-deficient local linear fit degenerates to — is the well-defined answer there, and either path may be the one that lands on it; the other divides by cancellation noise and is already arbitrary in the scalar loop, independently of this change. The guard is deliberately unchanged (touching it would move the point-estimate path), and because anchors are data quantiles the corner has not been observed to reach a reported value — zero end-to-end differences across 1,738 two-distinct-score configurations whose anchor grid straddles the gap, pinned by <code>tests/test_math.py::test_loess_vectorized_rank_deficient_window</code> and <code>..._do_not_reach_reported_values</code>. Measured on the dev host, <code>evaluate(n=10,000, n_boot=1000)</code> over the full catalog fell from <strong>304.2s to 86.9s</strong> (3.5x; 226.1s after the first two changes alone, the anchor fit accounting for the rest — 0.186s to 0.046s per call at n=10,000). A full-catalog replicate now costs 0.089s: ICI family 0.051s (58%), <code>ece_sweep</code> scan 0.024s (27%), <code>intercept</code>/<code>slope</code> 0.009s (10%), the whole binned ECE family 0.4ms — so <code>metrics=</code> excluding <code>ici</code>/<code>e50</code>/<code>e90</code>/<code>emax</code> remains the largest single lever on <code>evaluate</code>'s cost. <code>docs/scripts/benchmarks.py</code> gains per-metric rows (<code>ece</code>, <code>ece_sweep</code>, <code>ecce</code>, <code>ici</code>, <code>smooth_ece</code>) at each size; the measured table, the <code>evaluate</code> docstring's Notes, <code>concepts/metrics.md</code>'s "Computational cost" section, and <code>tests/test_perf_smoke.py</code>'s docstring all carry the same numbers, and a new slow test <code>test_evaluate_n10k_boot1000_under_150s</code> pins the acceptance scale</li>
+</ul>
+<h3 id="documentation_1">Documentation<a class="headerlink" href="#documentation_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>concepts/conservatism.md</code> consolidated into one chapter covering all four conservatism mechanisms — retitled "Conservatism: most-prudent PDs and margins of conservatism", with a new "When each mechanism applies" table (<code>pluto_tasche</code>/<code>jeffreys_upper_bands</code> per grade vs. <code>monitor.moc_offset</code>/<code>moc_offset_from_counts</code> portfolio-wide), a "Margin of conservatism" section with a runnable <code>Chain([calibrator, moc_offset(mon)])</code> example showing MoC composes with calibration rather than replacing it, and an explicit warning that every bound on the page is a one-period estimator that understates uncertainty under cross-obligor correlation — the multi-period/correlated extension is out of scope for 0.3. Its <code>mkdocs.yml</code> nav entry moved to the end of Concepts, after CORP. <code>concepts/offset.md</code> gains an "Estimating delta with a standard error" section for <code>estimate_offset</code>/<code>offset_from_estimate</code>, noting they share <code>_offset_mle</code> with <code>monitor._processes.plug_in_delta</code> bit-for-bit. <code>docs/notebooks/pd_end_to_end.ipynb</code> (via <code>docs/scripts/build_notebook.py</code>) gains a "Conservative margins" section running <code>pluto_tasche_from_arrays</code> on the notebook's own grades and <code>Chain([cal, moc_offset_from_counts(...)])</code>. <code>docs/api-stability.md</code> gains an "Added in 0.3.0" running list of new public symbols and names <code>estimate_offset</code>/<code>offset_from_estimate</code>/<code>OffsetEstimate</code> in the <code>probcal.__all__</code> bullet</li>
+<li><code>concepts/monitoring.md</code> reorganized so the recent additions read as one coherent chapter in build order: the e-process/CS theory, per-grade CS, the drift-onset estimate and its since-onset window, <code>apply_recommendation</code>'s closed loop, margin-of-conservatism offsets (moved after the closed loop, with a new cross-link to <code>concepts/conservatism.md</code>'s composition example), the fixed-sample <code>hl_e_test</code> audit, and the simulation tables — previously margin-of-conservatism sat between the per-grade CS and the onset estimate, out of build order. New <code>### Per-grade CS coverage and drift-onset localization</code> table (<code>docs/scripts/monitor_grade_onset_sim.py</code>, 100 seeded runs, a full-size rerun of the constructions <code>tests/test_monitor_grades.py</code>/<code>tests/test_monitor_onset.py</code> already gate at reduced size): per-grade CS coverage 1.0000 for both the drifted and the stable grade (gate <code>&gt;= 0.9</code>), onset localization median <code>|onset-12| = 1.0</code> at both <code>shift=0.6</code> (gated <code>&lt;= 2</code>) and <code>shift=0.4</code> (reported). The <code>monitor_sim.py</code>/<code>hl_e_sim.py</code> full-size tables were rerun and confirmed unchanged (the FleetReplay simulator path is untouched by these additions). <code>docs/api-stability.md</code>'s "Added in 0.3.0" list gains <code>MonitorStep.grade_delta_ci</code>, <code>MonitorReport.onset_label</code>, and <code>CalibrationMonitor(recommendation_window=)</code>. <code>docs/notebooks/pd_end_to_end.ipynb</code> (via <code>docs/scripts/build_notebook.py</code>) gains a "Monitoring closed loop" section: the alarmed monitor from the existing monitoring section calls <code>apply_recommendation()</code>, and a fresh monitor fed the offset-corrected forecasts for a further stretch of the same drift stays quiet</li>
+</ul>
+<h2 id="020-2026-08-23">[0.2.0] - 2026-08-23<a class="headerlink" href="#020-2026-08-23" title="Permanent link">&para;</a></h2>
+<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Step calibrators' right generalized inverse (<code>IsotonicCalibrator</code>, <code>HistogramBinningCalibrator</code>) returned the next block's left edge — a supremum <em>not in the preimage</em>, so a consumer treating bounds as closed (treecf) landed one block too high; the right inverse now returns the largest float below the boundary, which is attained (caught by the joint treecf smoke test)</li>
+<li><code>point_inverse</code> honoured neither end of the no-silent-clamp doctrine at the probability boundary: <code>p ∈ {0, 1}</code> was clipped to <code>[1e-12, 1 − 1e-12]</code> before inversion (a finite "inverse" for an unattainable target), and a certified root with <code>|z| &gt; logit(1 − 1e-12) ≈ 27.63</code> was returned as <code>σ(z)</code>, which rounds to 0.0/1.0 and cannot round-trip through <code>predict_proba</code> (target 0.998 → raw 1.0 → forward 0.17, no warning). Both now raise <code>UnattainableTargetError</code>: boundary targets all-or-nothing with the offending values named; over-range roots only for <code>space="probability"</code>, with the error pointing at <code>space="logit"</code>, where the answer is exact</li>
+<li><code>LogitOffset.interval_inverse</code> returned raw bounds below the <code>1e-12</code> clip (e.g. <code>raw_lo = 4.5e-14</code> for target <code>1e-9</code> at <code>delta = 10</code>) that <code>transform</code> cannot round-trip; bounds beyond the representable output range <code>[σ(δ − logit(1−1e-12)), σ(δ + logit(1−1e-12))]</code> now collapse to the full-range sentinels (0/1, ±inf) exactly as in <code>BaseCalibrator.interval_inverse</code>, and an interval entirely outside that range raises <code>UnattainableTargetError</code></li>
+</ul>
+<h3 id="changed_1">Changed<a class="headerlink" href="#changed_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>smooth_ece</code>'s lattice path now engages for every call with a non-degenerate logit range instead of only <code>n &gt; bins</code>, removing the size cliff at typical calibration-set sizes (0.1.3: exact path at n=4000 cost ~1s/call on the benchmark host and made <code>evaluate(n=6000)</code> bootstrap runs smECE-bound; n=8193 took ~2ms). Path selection is decoupled from n: bin at <code>bins</code> (default 8192), accept when the fixed point satisfies <code>sigma* &gt;= 8·width</code>, refine adaptively once, fall back to exact only when refinement is infeasible or still under-resolved. Values for <code>n &lt;= bins</code> may differ from the 0.1.2/0.1.3 exact grid at the ~1e-4 level on typical portfolios (measured ≤ 2.4e-4 on <code>make_pd_portfolio</code>; larger on wide clipped-logit-range data, where the exact path's fixed 257-point grid under-resolves small-sigma kernels and the lattice value — ≥ 8 samples per sigma — is the better one); <code>bins=None</code> recovers old values bit-for-bit</li>
+</ul>
+<h3 id="added_2">Added<a class="headerlink" href="#added_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Versioned JSON serialization on every fitted object: <code>to_dict</code>/<code>from_dict</code>/<code>to_json</code>/<code>from_json</code> with a schema-checked envelope (<code>probcal_schema</code> 1, <code>probcal_version</code>, class name, params, state, fit metadata) and a class registry for <code>from_dict</code> dispatch; <code>fingerprint()</code> (SHA-256, version- and timestamp-blind — identical fits fingerprint identically) plus <code>fit_meta["data_fingerprint"]</code> (permutation-invariant SHA-256 of the sorted training triple). Covers all 12 calibrators, <code>LogitOffset</code>, <code>CalibratorSelector</code>, and <code>CalibratedModel</code> (which stores a model <em>reference</em> — class name, <code>model_id</code>, <code>get_params()</code> — never the model object; reattach via <code>from_dict(d, model=...)</code>; the ensemble flow refuses serialization). JSON only, no pickle anywhere. Compatibility promise — every 0.x release reads schema 1 — enforced by committed golden files verified in CI (<code>tests/golden/</code>); new docs chapter <code>concepts/serialization.md</code></li>
+<li><code>CalibratedModel(model_id=...)</code> keyword-only constructor parameter naming the wrapped model in the serialized reference</li>
+<li><code>probcal.monitor</code> (numpy + stdlib): <code>CalibrationMonitor</code> — anytime-valid calibration monitoring by e-processes (alarm at <code>E &gt;= 1/alpha</code> has type-I error <code>&lt;= alpha</code> at every stopping time, Ville's inequality). Components: offset (predictable <code>LogitOffset</code> plug-in averaged with a <code>±{0.1, 0.25, 0.5, 1.0}</code> uniform mixture), Cox shape plug-in, per-grade offset processes; time-uniform confidence sequence for the current offset by inverting shifted nulls; sticky alarm, anytime p-value, <code>MonitorStep</code>/<code>MonitorReport</code>, diagnostic re-offset/re-fit recommendation (trailing-window slope CI + Cox-vs-offset residual LR, a deliberate deviation from the literal design), JSON serialization with bit-exact resume, and <code>plots.plot_e_process</code>. Verified by simulation at full spec size (2000 runs × 24 batches × n=2000; table in <code>concepts/monitoring.md</code>): worst type-I 0.0275 vs gate 0.0597, <code>delta=0.4</code> median detection delay 2 batches (gate 6), slope 0.8 delay 2 (gate 12), CS time-uniform coverage 0.992+ (gate 0.95); reduced-size gates + a simulator-vs-class cross-check run in CI. New concepts chapter <code>concepts/monitoring.md</code></li>
+<li><code>probcal.sklearn</code> (extra <code>probcal[sklearn]</code>, scikit-learn ≥ 1.4; <code>import probcal</code> stays numpy-only): <code>SklearnCalibrator</code> — a probcal calibrator as an sklearn estimator over a single score column (<code>transform</code> ends a <code>Pipeline</code>; <code>input="logit"</code> accepts raw margins exactly; the fitted probcal object is <code>calibrator_</code>), and <code>CalibratedClassifier</code> — the <code>CalibratedClassifierCV(ensemble=False)</code> drop-in on probcal calibrators (OOF via <code>cross_val_predict</code> or <code>cv="prefit"</code>, one map, full refit; <code>method="decision_function"</code> maps through <code>expit</code>; binary only) which also exposes the probcal calibrator protocol by delegation so it can be handed straight to recourse engines. Estimator checks run in CI on sklearn 1.4 and latest, with structurally-inapplicable checks declared through sklearn's <code>expected_failed_checks</code>/<code>_xfail_checks</code> mechanisms and the reasons stated. New guide chapter <code>guide/sklearn.md</code></li>
+<li><code>probcal.Chain</code> — model-free composition of a fitted calibrator with <code>LogitOffset</code> stages, exposing the full calibrator protocol (exact inverses through every stage, composed affine coefficients, concatenated <code>interpret()</code>, JSON serialization, fingerprints); <code>CalibratedModel.chain_</code> returns the equivalent chain for handing to a recourse engine without the model</li>
+<li><code>probcal.integrations.optbinning</code> (extra <code>probcal[optbinning]</code>, ≥ 0.21): <code>calibrate_scorecard</code> → <code>CalibratedScorecard</code> — calibrated PD over an untouched scorecard, <code>points_affine_coeffs_</code> recovered and verified to machine precision (<code>rounding=True</code> warns and falls back to <code>interval_inverse</code>), exact <code>masterscale</code> from calibrated PD bands to point cut-offs, and provenance JSON binding the calibration layer to the scorecard table by fingerprint. New guide chapters <code>guide/optbinning.md</code> and <code>guide/treecf.md</code> (three recourse focus cases; treecf-side work list); <code>probcal[treecf]</code> extra with a joint smoke test</li>
+<li>Protocol conformance suite (<code>tests/test_calibrator_protocol.py</code>): every inverse-capable object accepts <code>interval_inverse(lo, hi, space="logit", buffer_logit=...)</code> by keyword with <code>lo=0</code>/<code>hi=1</code> → ∓inf and buffered-empty refusal; the step-calibrator generalized-inverse contract is spelled out in the inverse-maps chapter and pinned by tests</li>
+<li><code>CalibratorSelector</code> is now a <code>BaseCalibrator</code> subclass: same <code>fit</code>/<code>predict_proba</code>/<code>interpret</code> surface, plus inherited <code>get_params</code>/<code>set_params</code>, serialization, and the inverse-map machinery delegating to the refitted winner; <code>is_monotone_</code> mirrors the winner</li>
+<li><code>ENIRCalibrator.fit</code> emits a single <code>UserWarning</code> above 50,000 unique scores stating the expected fit minutes — the path solver is quadratic in unique scores</li>
+<li>README "Calibrators at a glance" table: one-line scaling note per method</li>
+</ul>
+<h3 id="documentation_2">Documentation<a class="headerlink" href="#documentation_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>End-to-end notebook on a rare-event portfolio (<code>docs/notebooks/pd_end_to_end.ipynb</code>): GBM baseline → logit-scale reliability → selection with bootstrap CIs → Jeffreys per-grade backtests → auditable offset → policy-to-raw translation and a treecf counterfactual → anytime-valid monitoring with an injected drift → JSON round-trips. Home Credit via <code>kagglehub</code> under the user's credentials with a documented synthetic fallback; the fallback executes in CI via a new <code>nbmake</code> job</li>
+<li>Comparison benchmark (<code>docs/benchmarks/comparison.md</code>, reproducible via <code>docs/scripts/comparison.py</code> under <code>probcal[bench]</code>): probcal (beta abm, spline, IVAP, selector) vs <code>sklearn</code> sigmoid/isotonic, <code>netcal</code> BBQ/ENIR/beta, and <code>betacal</code>, on five OpenML datasets spanning ~1.5–30% event rates, with <code>evaluate</code> bootstrap CIs, Jeffreys grade pass rates, and fit times — including where probcal loses</li>
+<li>Docs restructured: Guide (install/quickstart, sklearn, optbinning, treecf, monitoring, serialization), Concepts, Tutorials, Benchmarks, API reference + <code>docs/api-stability.md</code> (public surface, deprecation policy, support matrix). The "Decisions" nav section is not restored — commit 77018f2 removed the internal decision log from published docs</li>
+<li>README front page rewritten around the wedge (regulated PD, audit trail, exact inverses, anytime-valid monitoring, numpy-only core) with the end-to-end notebook above the fold and the pypistats badge</li>
+<li>Removed conversation-context phrasing from the <code>_beta_point_inverse_z</code> docstring; internal decision log entry 67 rephrased to match</li>
+</ul>
+<h3 id="performance_1">Performance<a class="headerlink" href="#performance_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>smooth_ece</code> measures 1.0–3.6ms for n ∈ [64, 8192] on <code>make_pd_portfolio</code> (0.1.3: exact path, ~1s at n=4000 on the benchmark host), 3–6ms at n=10⁴–10⁵ and ~43ms at n=10⁶ (the O(n) pre-binning, unchanged from 0.1.3); observed lattice-vs-exact deviation ≤ 6.1e-5 across the swept sizes. <code>evaluate(n=6000, n_boot=1000)</code> measures 198.9s on the benchmark host (0.1.3: ≈10min, extrapolated from the 60s <code>n_boot=100</code> measurement)</li>
+</ul>
+<h2 id="013-2026-08-16"><a href="https://github.com/wlazlod/probcal/compare/v0.1.2...v0.1.3">0.1.3</a> - 2026-08-16<a class="headerlink" href="#013-2026-08-16" title="Permanent link">&para;</a></h2>
+<h3 id="fixed_3">Fixed<a class="headerlink" href="#fixed_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>ENIR (<code>ENIRCalibrator</code>) could exhaust memory well before m=50,000 because <code>path_solutions_</code> retained every breakpoint's full-length solution (<code>O(m^2)</code> memory); the path solver now retains only the lowest-BIC <code>max_solutions</code> (default 256) breakpoints, bounding memory at any m; a pruning bound that skips provably negligible breakpoints previously crashed on sub-unit total <code>sample_weight</code> (<code>log(total weight) &lt;= 0</code>) — the bound is now disabled in that case instead of raising, regression-tested against a sum-to-1.0 and a sum-below-1.0 case</li>
+<li><code>sample_weight</code> was accepted but silently had no effect on <code>e50</code>/<code>e90</code> and on <code>reliability_summary</code>'s internal <code>e90</code> call — both now honor weights via the new Hazen-position <code>weighted_quantile</code></li>
+<li><code>evaluate</code>'s bootstrap silently substituted the point estimate for degenerate single-class i.i.d. resamples, artificially narrowing the reported CI; a degenerate draw is now redrawn (up to 100 times, then <code>RuntimeError</code>) instead of faked</li>
+<li><code>CalibratorSelector</code>'s name-keyed parsimony table ranked every user-supplied candidate last on a tie regardless of actual complexity; parsimony now reads <code>complexity_rank</code> off the candidate instance, so a user override can win a tie against a built-in method</li>
+<li><code>smooth_ece</code>'s binned path (default <code>bins=8192</code>) evaluated the smoothed measure on the exact path's 257-point grid, which aliases against the bin lattice: at small bandwidths the probe landed almost entirely between grid nodes, reporting ~1.7e-7 mass against a true total variation of 0.0749 (<code>n=10⁴</code>) — a spurious near-zero reading that always tripped the small-bandwidth guard and fell back to the exact O(n)-per-step computation, so <strong>every reported value stayed correct</strong>, but at a cost of ~5.7-6.1s/call regardless of <code>n</code>, roughly 3-6x slower than <code>bins=None</code> for <code>8192 &lt; n ≲ 6×10⁴</code>. The binned path now evaluates the measure natively on its own lattice by direct Gaussian convolution (closed-form total variation when the kernel is isolated, which also makes the early-exit test non-spurious by construction) with one adaptively sized refinement instead of a blind 8x retry; measured <code>n=10⁴</code>: ~5.7s → ~3ms; <code>n=10⁵</code>: 19.7s (exact) → ~10ms (default), same fixed point as exact</li>
+</ul>
+<h3 id="changed_2">Changed<a class="headerlink" href="#changed_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>ici</code>/<code>e50</code>/<code>e90</code>/<code>emax</code> and <code>reliability_summary</code> fit their LOESS smoother at 512 equal-mass anchors by default instead of at every observation (<code>loess</code>'s new <code>grid_size</code> argument, interpolated between anchors, precedent R <code>stats::lowess</code>'s <code>delta</code>); measured <code>|Δici| ≈ 1.3e-6</code> on <code>make_pd_portfolio(n=5000)</code>, far below bootstrap CI width; the underlying <code>_loess_fit_sorted</code> core was rewritten from an <code>argpartition</code> r-nearest-neighbor search to a sorted two-pointer window walk, differing from the old core only at exact distance ties (leftmost minimal-width window)</li>
+<li><code>smooth_ece</code> smooths a pre-binned (default <code>bins=8192</code> equal-width logit bins) residual measure instead of the raw per-observation one, cutting each bisection step from 257 x n to a lattice-native evaluation independent of n, with a small-bandwidth guard (<code>sigma* &lt; 8 * bin_width</code> triggers one adaptively sized refinement, <code>bins &lt;- ceil(range / (sigma*/8))</code>, then a silent exact fallback if the guard still trips)</li>
+<li><code>ENIRCalibrator.path_solutions_</code> is now shaped <code>(K, m)</code> over <code>kept_breakpoints_</code> rather than every breakpoint; <code>path_lambdas_</code> still records every breakpoint (pre-1.0 attribute-shape change)</li>
+<li><code>evaluate</code>'s bootstrap resamples negative and positive classes separately by default (<code>stratify=True</code>), conditioning the CI on the observed class balance instead of also capturing base-rate sampling variability; <code>stratify=False</code> restores i.i.d. resampling</li>
+<li><code>VennAbersCalibrator</code> predicts from precomputed <code>F0_</code>/<code>F1_</code> cumulative-sum-diagram sweeps fit once in <code>fit()</code> instead of refitting two PAVA passes per query</li>
+</ul>
+<h3 id="added_3">Added<a class="headerlink" href="#added_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>grid_size=</code> on <code>loess</code>/<code>ici</code>/<code>e50</code>/<code>e90</code>/<code>emax</code>/<code>reliability_summary</code> and <code>bins=</code> on <code>smooth_ece</code>, both defaulting to the new fast paths; <code>grid_size=None</code>/<code>bins=None</code> recover the exact pre-0.1.3 values and cost bit-for-bit</li>
+<li><code>evaluate</code> keyword-only <code>metrics=</code> subset of the catalog — computes and bootstraps only the requested metrics instead of the full catalog, with unknown names raising <code>ValueError</code></li>
+<li><code>docs/scripts/benchmarks.py</code>: deterministic wall-time benchmarks for <code>ici</code>, <code>smooth_ece</code>, and <code>evaluate</code> at several portfolio sizes; <code>tests/test_perf_smoke.py</code>: <code>slow</code>-marked regression ceilings for the grid-anchored LOESS and binned smECE fast paths</li>
+<li><code>ENIRCalibrator(max_solutions=)</code> (default 256) bounding retained path solutions, plus <code>dropped_weight_</code> (retention loss, pruned breakpoints excluded) and <code>kept_breakpoints_</code></li>
+<li><code>VennAbersCalibrator</code> fitted attributes <code>F0_</code>/<code>F1_</code></li>
+<li><code>evaluate(stratify=)</code> keyword (default <code>True</code>)</li>
+<li><code>probcal._math.weighted_quantile</code> (Hazen positions)</li>
+<li><code>BaseCalibrator.complexity_rank</code> property (default 100.0), overridden by every built-in calibrator</li>
+<li>ENIR/IVAP/selector rows and matching <code>slow</code>-marked ceilings added to the same benchmark and perf-smoke suites</li>
+<li><code>point_inverse(p, *, space)</code>: an exact single-point preimage (calibrated probability -&gt; raw score/logit) alongside <code>interval_inverse</code>'s generalized-inverse interval. On <code>BaseCalibrator</code>, covers any affine-logit map (<code>PlattCalibrator</code>, <code>TemperatureCalibrator</code>, <code>BetaCalibrator</code>'s tied <code>"a"</code>/<code>"ab"</code> variants) in closed form; <code>BetaCalibrator</code> overrides it for all three variants, including the non-affine <code>"abm"</code> map, via a minimax-hyperbola seed refined by up to 4 certified Halley steps; <code>LogitOffset</code> gets the same closed form as its <code>interval_inverse</code>. Non-affine monotone and step calibrators still raise <code>NotImplementedError</code> naming <code>interval_inverse</code></li>
+</ul>
+<h3 id="performance_2">Performance<a class="headerlink" href="#performance_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>ici</code> at n=50,000: 192.2s (v0.1.2) to 1.2s, single-core, measured on the benchmark host</li>
+<li><code>loess(grid_size=512)</code> fits n=1,000,000 points in under 30s</li>
+<li>ENIR fit at m=10,000: 68.6s / 783MB (v0.1.2) to 1.6s / 40.8MB tracemalloc peak, memory now bounded at any m; IVAP fit at n=100,000: 0.91s (v0.1.2 needed 188s for a fit of only 2,000 plus a predict of 10,000), <code>predict_interval</code> at m=100,000: 0.016s; <code>CalibratorSelector()</code>'s default menu: 34.5s at n=4,000 (v0.1.2) to 7.9s at n=100,000</li>
+<li><code>evaluate</code>'s full-catalog cost at n=10⁴ was previously misattributed here to <code>ece_sweep</code> (~0.15s/call); the actual dominant cost pre-fix was the <code>smooth_ece</code> binned-path aliasing defect above (~5.7-6.1s/call, guard-triggered on every call once <code>n &gt; 8192</code>). Post-fix, <code>smooth_ece</code>'s per-call cost is negligible (a few ms up to n=10⁵); measured single-call costs at n=10⁴ / n=5×10⁴: <code>ici</code> 0.24s / 1.09s, <code>ece_sweep</code> 0.12s / 0.49s — <code>ici</code>, not <code>ece_sweep</code>, is now the largest single per-call contributor to the full-catalog cost, though neither dominates outright (together with the rest of the catalog they roughly account for the measured totals). Corrected wall times: <code>evaluate(n_boot=100)</code> at n=10⁴ measures ~44s, <code>evaluate(n_boot=50)</code> at n=5×10⁴ measures ~88s, both post-fix, driven by the catalog's ordinary O(n)-ish metrics, not by this defect; <code>metrics=</code> subsetting (e.g. <code>metrics=("ici", "log_loss")</code>) is the lever for either</li>
+</ul>
+<h2 id="012-2026-08-12"><a href="https://github.com/wlazlod/probcal/compare/v0.1.1...v0.1.2">0.1.2</a> - 2026-08-12<a class="headerlink" href="#012-2026-08-12" title="Permanent link">&para;</a></h2>
+<h3 id="fixed_4">Fixed<a class="headerlink" href="#fixed_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>irls_logistic</code> no longer aborts at <code>max|eta| &gt; 30</code> — a false "separation" that biased Platt/beta fits on wide-score data (z ~ N(0, 8) with true slope 1.5: v0.1.1 returned a ≈ 1.18 plus a spurious separation warning); Newton now step-halves on an overflow-safe softplus objective, separation is detected only for effectively binary targets (all-correct-by-10-log-odds by the design's own contribution <code>eta - offset</code> with non-vanishing gradient, singular Hessian, or unconverged divergence — the quasi-separation signature), and the ridge-1e-6 fallback converges instead of hitting the same abort; note <code>calibration_belt</code> may now select higher polynomial degrees on wide-score data where the old cap silently truncated the forward search</li>
+<li><code>PlattCalibrator</code> and <code>BetaCalibrator</code> no longer swallow IRLS convergence status: an unconverged fit raises a distinct <code>UserWarning</code> (never the separation message) and is recorded by <code>interpret()</code>; <code>calibration_belt</code> stops forward degree extension at a separated fit instead of consuming its ridge-fallback coefficients</li>
+</ul>
+<h3 id="added_4">Added<a class="headerlink" href="#added_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>IrlsResult.nll</code> — final penalized objective value (backward-compatible field append)</li>
+<li><code>converged_</code> on <code>PlattCalibrator</code>/<code>BetaCalibrator</code> and <code>separation_fallback_</code> on <code>BetaCalibrator</code>, with matching <code>interpret()</code> audit lines; docs section "Separation, steep maps, and convergence" in the parametric-methods chapter</li>
+</ul>
+<h2 id="011-2026-08-08"><a href="https://github.com/wlazlod/probcal/compare/v0.1.0...v0.1.1">0.1.1</a> - 2026-08-08<a class="headerlink" href="#011-2026-08-08" title="Permanent link">&para;</a></h2>
+<h3 id="added_5">Added<a class="headerlink" href="#added_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>probcal.metrics.kernel</code>: squared kernel calibration error <code>skce</code> (estimators <code>uq</code>/<code>ul</code>/<code>biased</code>, Laplacian/Gaussian kernels, deterministic median-heuristic bandwidth with strided-subsample and tie fallbacks, probability/logit kernel scale, seeded <code>ul</code> pairing) and <code>skce_test</code> (Arcones–Giné centered bootstrap per the paper's Appendix G and the O(n) asymptotic-normal linear method, one-sided, with the distribution-free <code>p_value_bound</code>), after Widmann et al. (2019); report-only — deliberately excluded from <code>evaluate()</code> and the selector; 21 tests incl. hand-computed anchors, brute-force references, bootstrap-identity check, and level/power studies</li>
+<li>Documentation: SKCE section and selection-table row in the metrics chapter, <code>probcal.metrics.kernel</code> API page, namesake-disambiguation FAQ entry (the unaffiliated R package <code>probcal</code> and the ECAI 2025 research codebase), and a README feature-matrix column for the R package</li>
+<li>Tooling: mypy targets Python 3.12 in config and CI (numpy ≥ 2 stubs use PEP 695 <code>type</code> statements that mypy only parses for target ≥ 3.12); runtime 3.11 support unchanged</li>
+<li>Visualization: annotated <code>plot_reliability</code> (stats box via the new <code>probcal.metrics.reliability_summary</code> aggregate, deterministic event/non-event rug thinned to ≤ 1000 marks per class), <code>plot_ecce</code> cumulative-drift walks with the pointwise ±2 SD envelope (on the new <code>probcal.curves.ecce_curve</code>, whose <code>stat_max</code> agrees exactly with <code>metrics.ecce</code>), <code>plot_grade_backtest</code> traffic-light chart with 90% display intervals (new <code>ci_low</code>/<code>ci_high</code> fields on both grade results, Jeffreys central / Clopper–Pearson, powered by the new numpy-only <code>probcal._math.beta_ppf</code>), and <code>plot_offset_audit</code> for fitted <code>LogitOffset</code> stages; seeded <code>docs/scripts/generate_figures.py</code> regenerates every documentation figure deterministically; 16 tests incl. hand anchors, a scipy <code>beta.ppf</code> reference, and rug/annotation determinism checks</li>
+</ul>
+<h3 id="changed_3">Changed<a class="headerlink" href="#changed_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>All plots now style themselves via a per-call <code>rc_context</code> house style (muted palette, no top/right spines, light grid) — global matplotlib <code>rcParams</code> are never touched, verified by test</li>
+<li><code>plot_reliability</code>: the twin-axis count-bar margin is now opt-in (<code>counts=False</code> default) — the rug replaces it as the density view</li>
+<li>All documentation figures regenerated under the house style by the new figure script (the logit-scale reliability figure is now the annotated variant)</li>
+</ul>
+<h2 id="010-2026-08-07"><a href="https://github.com/wlazlod/probcal/releases/tag/v0.1.0">0.1.0</a> - 2026-08-07<a class="headerlink" href="#010-2026-08-07" title="Permanent link">&para;</a></h2>
+<p>First public release on PyPI.</p>
+<h3 id="fixed_5">Fixed<a class="headerlink" href="#fixed_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>reliability_binned</code>: Wilson interval bounds are now forced to contain the point estimate (floating-point noise at zero-event bins could push <code>ci_low</code> above a 0.0 event rate, breaking error-bar rendering)</li>
+<li><code>plot_reliability(scale="logit")</code>: bins with an event rate of exactly 0 or 1 (no finite logit) are omitted from the point layer instead of rendering at the clipping floor and crushing the axis; they remain visible in the count margin</li>
+</ul>
+<h3 id="added_6">Added<a class="headerlink" href="#added_6" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Packaging and CI: PEP 639 license metadata (SPDX <code>license = "MIT"</code> plus <code>license-files</code>, replacing the deprecated table form), Python 3.13 classifier, <code>Development Status :: 4 - Beta</code>, a tag-vs-version consistency check in the publish workflow, and a <code>ci.yml</code> matrix running lint, type-check, and the test suite on Python 3.11/3.12/3.13</li>
+<li>
+<p>Documentation: generated example figures in the visualization chapter, "In probcal" code snippets in every concept chapter, and a probcal-vs-netcal guidance note in the FAQ</p>
+</li>
+<li>
+<p>Polish: README quickstart with real printed output, feature matrix vs scikit-learn/netcal/single-method packages, performance note on the deliberate absence of Rust acceleration, docs cross-linking pass</p>
+</li>
+<li>Datasets, tutorial, and user docs: <code>make_pd_portfolio</code> (beta-family generative miscalibration with exact event-rate anchoring), executed tutorial notebook <code>pd_calibration_walkthrough.ipynb</code> (diagnose → select → fit → re-anchor → backtest → threshold translation, incl. the counterfactual-engine interop recipe), <code>getting-started.md</code> with a runnable quickstart and its printed output, <code>how-it-works.md</code> pipeline walkthrough with schema, three-page mkdocstrings API reference, and the FAQ (inverse-map protocol, <code>Target.probability</code> trap, selection rules)</li>
+<li>Automatic selection: <code>CalibratorSelector</code> — default 8-candidate menu per spec, inner stratified seeded K-fold with structurally out-of-fold-only scoring, criteria log_loss/brier/ici/smooth_ece/ece_sweep (plain ECE and Hosmer–Lemeshow refused), guardrail flags on pooled out-of-fold predictions, one-standard-error parsimony tie-break, winner refit on the full set, ranked <code>SelectionReport</code>; 9 tests incl. a spy-calibrator structural no-leakage check and the parsimony-on-calibrated-data behavior</li>
+<li>Wrapper flows: <code>CalibratedModel</code> — prefit flow (score + calibrate, the credit-risk canon), cv flow with duck-typed cloning (sklearn <code>clone</code> if installed, else deepcopy) and stratified seeded folds, <code>ensemble=False</code> pooled default (one calibrator on out-of-fold scores, final model refit) vs <code>ensemble=True</code> fold averaging; <code>offset_to</code> appending inspectable <code>LogitOffset</code> stages; composed <code>interval_inverse</code> and <code>affine_logit_coeffs_</code>; <code>predict_proba</code>/<code>predict_proba_2d</code>; structural no-leakage tests with a clone-surviving spy model (out-of-fold scoring disjoint from training rows, each row scored exactly once)</li>
+<li>Inverse maps and thresholds: <code>interval_inverse(lo, hi, *, space, buffer_logit)</code> implemented across the catalog — closed forms (Platt, temperature, <code>LogitOffset</code>), block-structure searchsorted (isotonic, CIR, histogram, scaling-binning), monotone bisection (beta, spline, Venn–Abers); <code>UnattainableTargetError</code> instead of silent clamping; non-monotone calibrators refuse with an explanatory <code>NotImplementedError</code>; <code>thresholds.py</code> with <code>calibrated_interval_to_raw</code> and the masterscale <code>calibrated_bands_to_raw</code>; 16 tests covering the full inverse-map contract (round-trips, block-edge semantics, offset −δ shift, buffer monotonicity, space consistency)</li>
+<li>Attribution adjustment: <code>adjust_attributions</code> → <code>AdjustedAttribution</code> — affine-exact mode (exact composed Shapley values for Platt/temperature/offset via <code>affine_logit_coeffs_</code>) and Aumann–Shapley mode (exact additivity for any calibrator, central-difference fallback on degenerate rows); logit and probability scales; shap.Explanation duck-typing without a shap import; 10 tests incl. affine/AS 1e-12 equivalence and sign/rank invariance</li>
+<li>Logit offset: <code>LogitOffset</code> — explicit-delta and target-mean modes (unique bisection root, unit-tested against a brute-force grid), audit trail (<code>delta_</code>, <code>pre_mean_</code>, <code>post_mean_</code>, timestamp), <code>audit_report()</code> with pre/post guardrails, <code>interpret()</code> with odds-factor and central-tendency readings, affine logit coefficients for attribution composition</li>
+<li>Curves, belt, and plots: <code>curves.py</code> — <code>reliability_binned</code> (Wilson CIs, both scales), <code>reliability_loess</code>, <code>reliability_spline</code>, <code>calibration_belt</code> (GiViTI-style: forward LR degree selection ≤4, information-matrix pointwise bands, identity-test p-value; reimplemented from the Nattino papers); <code>plots.py</code> ([viz]-guarded) — <code>plot_reliability</code> with logit-scale probability-labeled ticks and count margin, <code>plot_belt</code>, <code>plot_comparison</code>, <code>plot_interval</code>, <code>plot_selection</code>; <code>SmoothReliabilityCurve</code> result dataclass; 11 tests incl. a hand-checked Wilson interval and belt null/alternative behavior</li>
+<li>Metrics catalog: <code>probcal.metrics</code> complete — proper scores (<code>log_loss</code>, <code>brier_score</code>, <code>brier_skill_score</code>, Murphy decomposition with optional bias correction, log-loss calibration/refinement split), binned estimators (<code>ece</code> l1/l2/max, <code>ece_debiased</code>, <code>ece_sweep</code>, <code>adaptive_ece</code>, <code>hosmer_lemeshow</code>), binning-free estimators (<code>smooth_ece</code> with self-consistent bandwidth, <code>ecce</code>, <code>ici</code>/<code>e50</code>/<code>e90</code>/<code>emax</code>, <code>spiegelhalter_z</code>), the recalibration-regression framework (<code>calibration_intercept</code>/<code>_slope</code>/<code>_test</code>, <code>calibration_guardrails</code>), per-grade backtests (<code>binomial_grade_test</code>, <code>jeffreys_grade_test</code> with traffic lights), and <code>evaluate()</code> with seeded bootstrap percentile CIs; 38 tests incl. hand-computed cases and sklearn/scipy references</li>
+<li>Spline calibrator: <code>SplineCalibrator</code> — natural cubic basis on the logit scale, penalized IRLS with second-difference roughness penalty, λ by stratified K-fold CV on log loss, effective degrees of freedom reported, post-fit monotonicity check with warning; completes the calibrator catalog (11 of 11)</li>
+<li>Binning + Bayesian calibrators: <code>HistogramBinningCalibrator</code> (equal-mass/equal-width, Jeffreys shrinkage, empty-bin fallback, post-fit monotonicity flag), <code>ScalingBinningCalibrator</code> (Platt stage + equal-mass binning of fitted values), <code>BBQCalibrator</code> (Beta–Binomial marginal likelihood over a B-grid, Jeffreys prior, top-3 reporting), <code>ENIRCalibrator</code> (nearly-isotonic mPAVA path from raw data to the isotonic fit, BIC-weighted ensemble, <code>is_monotone_ = False</code>); 20 tests incl. hand-computed bin rates and the path-endpoint-equals-PAVA anchor</li>
+<li>Isotonic family + Venn–Abers: <code>IsotonicCalibrator</code> (PAVA step map, tie pooling, clamping, optional linear interpolation, block-structure attributes), <code>CenteredIsotonicCalibrator</code> (CIR through weight-centered block points), <code>VennAbersCalibrator</code> (IVAP with <code>predict_interval()</code>, log-loss-minimax scalarization, width reporting in <code>interpret()</code>), <code>CrossVennAbersCalibrator</code> (stratified seeded folds, geometric-mean merge, conservative envelope interval); 19 tests incl. direct-refit agreement and width-shrinkage checks</li>
+<li>Base API + parametric calibrators: <code>BaseCalibrator</code> (fit/predict_proba/predict_proba_2d/interpret, manual get_params/set_params, <code>is_monotone_</code>, <code>affine_logit_coeffs_</code>, <code>interval_inverse</code> contract stub), <code>PlattCalibrator</code> (Lin–Lin–Weng target smoothing), <code>TemperatureCalibrator</code> (safeguarded 1-D NLL solve), <code>BetaCalibrator</code> (variants abm/ab/a, betacal negative-coefficient refit, <code>constraint_active_</code>); public exports incl. <code>logit</code>/<code>expit</code>; 30 tests (identity/distortion recovery, monotonicity, small-sample stability, interpret contract)</li>
+<li>Numerical core: <code>_math.py</code> (overflow-safe logit/expit, weighted PAVA with block structure, IRLS logistic regression with ridge stabilization and separation detection, safeguarded 1-D Newton and bisection, vectorized lgamma/erf, regularized incomplete beta and lower incomplete gamma, chi-square and normal quantiles, tricube LOESS, natural cubic spline basis), <code>_validation.py</code> (score/target/weight validation with 1e-12 clipping), <code>_results.py</code> (frozen result dataclasses with <code>as_dict()</code> and aligned-table reprs); 49 unit tests plus 9 reference tests against scipy/scikit-learn/statsmodels (betainc and gammainc within 1e-12, IRLS within rtol 1e-8)</li>
+<li>Repository scaffold: src layout with docstring-only modules, tooling (uv, ruff, black, mypy, pytest), CI workflows (docs deploy, PyPI publish — tag-gated), documentation skeleton (mkdocs-material + MathJax), MIT license, citation metadata</li>
+<li>Reference verification: all 12 ⚠ references of the spec verified against primary sources</li>
+<li>Theory guidebook, chunk 1: <code>concepts/why-calibration.md</code> (definitions, sources of miscalibration, decisioning and regulatory consequences, proper-scoring-rule lens) and <code>concepts/methods-parametric.md</code> (Platt, temperature, beta: derivations, parameter interpretation, worked reading)</li>
+<li>Theory guidebook, chunk 4 (completes the guidebook — ~16,400 words total): <code>concepts/shap-calibration.md</code> (identifiability obstacle, affine-exact class, Aumann–Shapley mode, invariance properties), <code>concepts/inverse-maps.md</code> (preimage identity, generalized inverses, attainability, buffer_logit drift robustness, masterscale workflow), <code>concepts/auto-selection.md</code> (selector protocol, structural no-leakage, report reading), <code>concepts/visualization.md</code> (reliability constructions, logit-scale rationale, calibration belt)</li>
+<li>Theory guidebook, chunk 3: <code>concepts/metrics.md</code> (full metric catalog with formulas and pathologies, bootstrap-CI protocol, report-reading order, selection-suitability table), <code>concepts/data-splitting.md</code> (prefit vs cv flows, ensemble vs pooled, calibration-set sizing, nested selection), <code>concepts/offset.md</code> (uniqueness of the bisection root, King–Zeng/Elkan/Tasche equivalences, worked re-anchoring, audit practice)</li>
+<li>Theory guidebook, chunk 2: <code>concepts/methods-nonparametric.md</code> (PAVA with worked micro-example, CIR, histogram binning, scaling-binning sample-complexity argument, BBQ, ENIR, spline calibration, properties table) and <code>concepts/methods-distribution-free.md</code> (IVAP construction, validity guarantee scope, scalarization caveat, exchangeability limits, CVAP geometric-mean merge)</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

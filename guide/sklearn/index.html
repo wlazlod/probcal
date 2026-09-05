@@ -1,0 +1,2827 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Universal post-hoc probability calibration for binary classifiers — numpy-only.">
+      
+      
+      
+        <link rel="canonical" href="https://wlazlod.github.io/probcal/guide/sklearn/">
+      
+      
+        <link rel="prev" href="../auditability/">
+      
+      
+        <link rel="next" href="../optbinning/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>scikit-learn - probcal</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#scikit-learn-adapter" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="probcal" class="md-header__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            probcal
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              scikit-learn
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="probcal" class="md-nav__button md-logo" aria-label="probcal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    probcal
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/wlazlod/probcal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wlazlod/probcal
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learn
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Learn
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install and quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-it-works/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/pd_calibration_walkthrough/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Workflows
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../choosing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choose a calibrator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cutoffs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Set cutoffs and invert maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grouped evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitor and act
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serialize and persist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../report/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a validation report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auditability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auditability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integrations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    scikit-learn
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    scikit-learn
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tier-1-bare-duck-sklearn-16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 1: bare duck (sklearn ≥ 1.6)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tier-2-sklearncalibrator-ending-a-pipeline-with-a-calibrated-column" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 2, SklearnCalibrator: ending a pipeline with a calibrated column
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tier-3-calibratedclassifier-cross-validated-calibration-as-one-object" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 3, CalibratedClassifier: cross-validated calibration as one object
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tier 3, CalibratedClassifier: cross-validated calibration as one object">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#grid-search-over-the-calibration-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Grid search over the calibration map
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stacking-an-offset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stacking an offset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-prefit-recipe-calibrating-an-already-fitted-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The prefit recipe: calibrating an already-fitted model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sample-weights-and-metadata-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sample weights and metadata routing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#against-calibratedclassifiercv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Against CalibratedClassifierCV
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#estimator-check-compliance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Estimator-check compliance
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../optbinning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    optbinning scorecards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../treecf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    treecf counterfactuals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_1" id="__nav_4_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Foundations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Foundations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/why-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/data-splitting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data splitting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methods
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Methods
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/methods-parametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parametric
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/methods-nonparametric/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nonparametric
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/methods-distribution-free/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distribution-free
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/offset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Offset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/segmented/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Segmented calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation and diagnostics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Evaluation and diagnostics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/corp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CORP and score decomposition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/visualization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/auto-selection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automatic selection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Consuming and governing
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Consuming and governing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/inverse-maps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/shap-calibration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SHAP and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/conservatism/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conservatism and low-default portfolios
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/serialization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/pd_end_to_end/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PD calibration end to end: rare events, audit, recourse, monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Comparison
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/calibrators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calibrators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics and tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-stability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API stability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tier-1-bare-duck-sklearn-16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 1: bare duck (sklearn ≥ 1.6)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tier-2-sklearncalibrator-ending-a-pipeline-with-a-calibrated-column" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 2, SklearnCalibrator: ending a pipeline with a calibrated column
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tier-3-calibratedclassifier-cross-validated-calibration-as-one-object" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 3, CalibratedClassifier: cross-validated calibration as one object
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tier 3, CalibratedClassifier: cross-validated calibration as one object">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#grid-search-over-the-calibration-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Grid search over the calibration map
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stacking-an-offset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stacking an offset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-prefit-recipe-calibrating-an-already-fitted-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The prefit recipe: calibrating an already-fitted model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sample-weights-and-metadata-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sample weights and metadata routing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#against-calibratedclassifiercv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Against CalibratedClassifierCV
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#estimator-check-compliance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Estimator-check compliance
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="scikit-learn-adapter">scikit-learn adapter<a class="headerlink" href="#scikit-learn-adapter" title="Permanent link">&para;</a></h1>
+<p>probcal meets sklearn at three depths, from lightest to heaviest:</p>
+<ol>
+<li><strong>Bare duck.</strong> Scores <code>(n,)</code>, <code>(n, 1)</code>, or a <code>predict_proba</code> matrix
+   <code>(n, 2)</code>. On sklearn ≥ 1.6, a plain probcal calibrator satisfies
+   sklearn's estimator protocol directly, with no import from
+   <code>probcal.sklearn</code> at all.</li>
+<li><strong><code>SklearnCalibrator</code>.</strong> Scores <code>(n,)</code>, <code>(n, 1)</code>, or a <code>predict_proba</code>
+   matrix <code>(n, 2)</code>. You need the <code>(n, 2)</code>/<code>classes_</code> probability-matrix
+   convention on the way out too: pipelines, <code>VotingClassifier</code>, stacking.</li>
+<li><strong><code>CalibratedClassifier</code>.</strong> Feature-level <code>X</code>, whatever shape the
+   wrapped estimator's own <code>fit</code>/<code>predict_proba</code> expects. You want the
+   whole out-of-fold calibration protocol as one auditable object.</li>
+</ol>
+<p><code>probcal.sklearn</code> (extra: <code>pip install "probcal[sklearn]"</code>, scikit-learn ≥ 1.4)
+holds tiers 2 and 3. Neither is imported by <code>import probcal</code>, so the core
+stays numpy-only regardless of which tier you use.</p>
+<p><strong>Design position.</strong> The core is duck-typed to sklearn's <em>semantic</em> contract
+by design: <code>fit</code>/<code>predict_proba</code>, <code>get_params</code>/<code>set_params</code>,
+<code>__sklearn_is_fitted__</code>, <code>__sklearn_tags__</code>. That is genuinely enough for
+<code>clone</code>, <code>check_is_fitted</code>, <code>get_tags</code>, and CV loops with a custom scorer:
+contexts that only ever call methods, never inspect array shape. What duck
+typing cannot do is dissolve sklearn's <em>shape</em> conventions: a classifier's
+<code>predict_proba</code> returns <code>(n, 2)</code> and carries <code>classes_</code>, and a probcal
+calibrator's <code>predict_proba</code> returns <code>(n,)</code> because there is only one class's
+probability to report. <code>SklearnCalibrator</code> and <code>CalibratedClassifier</code> exist
+to translate that convention where something in the ecosystem
+(<code>Pipeline</code>, <code>VotingClassifier</code>, <code>GridSearchCV</code> scoring on
+<code>"neg_log_loss"</code>) actually requires it. Bare duckness targets
+<strong>sklearn ≥ 1.6</strong> (the versions that define the
+<code>__sklearn_is_fitted__</code>/<code>__sklearn_tags__</code> protocol); on older sklearn, use
+the adapter.</p>
+<h2 id="tier-1-bare-duck-sklearn-16">Tier 1: bare duck (sklearn ≥ 1.6)<a class="headerlink" href="#tier-1-bare-duck-sklearn-16" title="Permanent link">&para;</a></h2>
+<p>No <code>probcal.sklearn</code> import. A bare calibrator clones, reports its tags,
+passes <code>check_is_fitted</code>, and scores under <code>cross_val_score</code> with a scorer
+that calls its native 1-D <code>predict_proba</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">clone</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">log_loss</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.model_selection</span><span class="w"> </span><span class="kn">import</span> <span class="n">cross_val_score</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_tags</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.utils.validation</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_is_fitted</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal</span><span class="w"> </span><span class="kn">import</span> <span class="n">BetaCalibrator</span>  <span class="c1"># no probcal.sklearn import</span>
+
+<span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">s</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">0.05</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">,</span> <span class="mi">300</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+
+<span class="n">cal</span> <span class="o">=</span> <span class="n">BetaCalibrator</span><span class="p">()</span>
+<span class="k">assert</span> <span class="n">get_tags</span><span class="p">(</span><span class="n">cal</span><span class="p">)</span><span class="o">.</span><span class="n">requires_fit</span>  <span class="c1"># true of every probcal calibrator</span>
+<span class="n">cal</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<span class="n">check_is_fitted</span><span class="p">(</span><span class="n">cal</span><span class="p">)</span>  <span class="c1"># would raise NotFittedError had fit not run</span>
+<span class="n">unfitted_copy</span> <span class="o">=</span> <span class="n">clone</span><span class="p">(</span><span class="n">cal</span><span class="p">)</span>  <span class="c1"># same params, fitted_ is False</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">neg_log_loss</span><span class="p">(</span><span class="n">est</span><span class="p">:</span> <span class="n">BetaCalibrator</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">y_true</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">est</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>  <span class="c1"># 1-D, not the (n, 2) adapter convention</span>
+    <span class="k">return</span> <span class="o">-</span><span class="n">log_loss</span><span class="p">(</span><span class="n">y_true</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+
+<span class="n">scores</span> <span class="o">=</span> <span class="n">cross_val_score</span><span class="p">(</span><span class="n">BetaCalibrator</span><span class="p">(),</span> <span class="n">s</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">y</span><span class="p">,</span> <span class="n">cv</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">scoring</span><span class="o">=</span><span class="n">neg_log_loss</span><span class="p">)</span>
+</code></pre></div>
+<p><code>s.reshape(-1, 1)</code> works because the core accepts a single-column <code>(n, 1)</code>
+score array everywhere it accepts <code>(n,)</code>, ravelling it before any check.
+sklearn's CV plumbing always hands an estimator a 2-D <code>X</code>, and this leniency
+is what lets a bare calibrator sit directly in <code>cross_val_score</code> with no
+reshaping on the calibrator's side.</p>
+<p>This is genuinely useful whenever the surrounding code only calls methods
+and never asks for a <code>(n, 2)</code> matrix or <code>classes_</code>: a custom CV loop, a
+hyperparameter search with a hand-written scorer, anything that treats the
+calibrator as "an object with <code>fit</code>/<code>predict_proba</code>" rather than
+"a classifier".</p>
+<h2 id="tier-2-sklearncalibrator-ending-a-pipeline-with-a-calibrated-column">Tier 2, <code>SklearnCalibrator</code>: ending a pipeline with a calibrated column<a class="headerlink" href="#tier-2-sklearncalibrator-ending-a-pipeline-with-a-calibrated-column" title="Permanent link">&para;</a></h2>
+<p><code>SklearnCalibrator</code> is <em>score-level</em>: its <code>X</code> is the score itself. In
+probability mode (<code>input="probability"</code>, the default) that is one column
+(<code>(n,)</code> or <code>(n, 1)</code>) or a two-column <code>predict_proba</code>-style matrix <code>(n, 2)</code>;
+<code>input="logit"</code> stays single-column, because a logit matrix has no
+sum-to-one rule to validate an orientation against. More columns than that
+raise. Use it wherever sklearn expects an estimator, or let <code>transform</code> end
+a <code>Pipeline</code>: <code>transform</code> returns the calibrated-probability column,
+<code>(n, 1)</code>, where <code>predict_proba</code> returns the full <code>(n, 2)</code> matrix. A
+<code>FunctionTransformer</code> ahead of it selects the score column out of a wider
+feature table:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pipeline</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.preprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">FunctionTransformer</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal</span><span class="w"> </span><span class="kn">import</span> <span class="n">BetaCalibrator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">SklearnCalibrator</span>
+
+<span class="c1"># X's column 0 is the model's score; the rest are context columns the</span>
+<span class="c1"># calibrator does not use.</span>
+<span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">s</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">0.05</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">,</span> <span class="mi">300</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">s</span><span class="p">,</span> <span class="n">rng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">300</span><span class="p">)])</span>
+
+<span class="n">pipe</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span><span class="s2">"select_score"</span><span class="p">,</span> <span class="n">FunctionTransformer</span><span class="p">(</span><span class="k">lambda</span> <span class="n">a</span><span class="p">:</span> <span class="n">a</span><span class="p">[:,</span> <span class="p">[</span><span class="mi">0</span><span class="p">]])),</span>
+        <span class="p">(</span><span class="s2">"cal"</span><span class="p">,</span> <span class="n">SklearnCalibrator</span><span class="p">(</span><span class="n">BetaCalibrator</span><span class="p">())),</span>
+    <span class="p">]</span>
+<span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<span class="n">pipe</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>  <span class="c1"># (n, 2)</span>
+<span class="n">pipe</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>  <span class="c1"># (n, 1) calibrated column</span>
+</code></pre></div>
+<p><code>pipe.named_steps["cal"].calibrator_</code> is the full probcal audit surface
+(<code>interpret()</code>, <code>interval_inverse</code>, <code>to_json()</code>), one attribute away from
+the sklearn object.</p>
+<p>A two-column matrix follows the <code>predict_proba</code> convention: <code>positive_column</code>
+(default <code>1</code>) says which column holds <code>P(y=1)</code>. <code>SklearnCalibrator</code> never
+guesses a flipped matrix and corrects it for you — at fit time it checks
+whether the chosen column's mean is actually higher among events than among
+non-events and, if it is not, warns once (<code>UserWarning</code>) naming the likely
+fix, without changing which column it calibrates:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">probcal.sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">SklearnCalibrator</span>
+
+<span class="n">cal</span> <span class="o">=</span> <span class="n">SklearnCalibrator</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">proba_matrix</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>  <span class="c1"># positive_column=1 (default)</span>
+<span class="n">cal</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">proba_matrix</span><span class="p">)</span>  <span class="c1"># (n, 2) in, (n, 2) out</span>
+
+<span class="c1"># A reversed matrix needs positive_column=0 to match:</span>
+<span class="n">cal_reversed</span> <span class="o">=</span> <span class="n">SklearnCalibrator</span><span class="p">(</span><span class="n">positive_column</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">reversed_matrix</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+</code></pre></div>
+<p>Score columns on the margin scale are declared, not guessed:
+<code>SklearnCalibrator(input="logit")</code> maps them through <code>expit</code> exactly first.</p>
+<p>Because it is an ordinary sklearn classifier over its one score column, it
+composes into ensembles that mix estimator types over the same <code>X</code>, each
+branch selecting what it needs. Here a <code>VotingClassifier</code> pairs the
+calibrated score against a feature-based classifier:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.ensemble</span><span class="w"> </span><span class="kn">import</span> <span class="n">VotingClassifier</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.linear_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogisticRegression</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pipeline</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.preprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">FunctionTransformer</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">SklearnCalibrator</span>
+
+<span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">s</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">0.05</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">,</span> <span class="mi">300</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">s</span><span class="p">,</span> <span class="n">rng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">300</span><span class="p">,</span> <span class="mi">3</span><span class="p">))])</span>
+
+<span class="n">score_branch</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span><span class="s2">"select_score"</span><span class="p">,</span> <span class="n">FunctionTransformer</span><span class="p">(</span><span class="k">lambda</span> <span class="n">a</span><span class="p">:</span> <span class="n">a</span><span class="p">[:,</span> <span class="p">[</span><span class="mi">0</span><span class="p">]])),</span>
+        <span class="p">(</span><span class="s2">"cal"</span><span class="p">,</span> <span class="n">SklearnCalibrator</span><span class="p">()),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+<span class="n">vote</span> <span class="o">=</span> <span class="n">VotingClassifier</span><span class="p">(</span>
+    <span class="p">[(</span><span class="s2">"calibrated_score"</span><span class="p">,</span> <span class="n">score_branch</span><span class="p">),</span> <span class="p">(</span><span class="s2">"lr"</span><span class="p">,</span> <span class="n">LogisticRegression</span><span class="p">())],</span>
+    <span class="n">voting</span><span class="o">=</span><span class="s2">"soft"</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<span class="n">vote</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="tier-3-calibratedclassifier-cross-validated-calibration-as-one-object">Tier 3, <code>CalibratedClassifier</code>: cross-validated calibration as one object<a class="headerlink" href="#tier-3-calibratedclassifier-cross-validated-calibration-as-one-object" title="Permanent link">&para;</a></h2>
+<p><code>CalibratedClassifier</code> is the drop-in for
+<code>sklearn.calibration.CalibratedClassifierCV(ensemble=False)</code>: out-of-fold
+scores via <code>cross_val_predict</code>, one probcal calibrator fitted on the pooled
+OOF scores, and the estimator refit on all data. What it adds is the whole
+probcal calibrator protocol on the result (<code>interpret()</code>, <code>to_json()</code>,
+<code>interval_inverse</code>) instead of an opaque fitted map:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.linear_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogisticRegression</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">CalibratedClassifier</span>
+
+<span class="n">clf</span> <span class="o">=</span> <span class="n">CalibratedClassifier</span><span class="p">(</span><span class="n">LogisticRegression</span><span class="p">(),</span> <span class="n">cv</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
+<span class="n">clf</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">X_new</span><span class="p">)</span>  <span class="c1"># (n, 2)</span>
+
+<span class="c1"># probcal calibrator protocol, delegated to calibrator_:</span>
+<span class="n">clf</span><span class="o">.</span><span class="n">interpret</span><span class="p">()</span>
+<span class="n">clf</span><span class="o">.</span><span class="n">to_json</span><span class="p">()</span>
+<span class="n">clf</span><span class="o">.</span><span class="n">interval_inverse</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="s2">"logit"</span><span class="p">)</span>
+</code></pre></div>
+<p><code>cv="prefit"</code> scores the calibration set with the already-fitted estimator;
+<code>method="decision_function"</code> maps margins through <code>expit</code> before calibration
+(the calibrator absorbs the monotone distortion this introduces). The
+probcal calibrator protocol is delegated straight through: hand a fitted
+<code>clf</code> to treecf's <code>Target.calibrated</code> the same way you would a bare
+calibrator.</p>
+<h3 id="grid-search-over-the-calibration-map">Grid search over the calibration map<a class="headerlink" href="#grid-search-over-the-calibration-map" title="Permanent link">&para;</a></h3>
+<p>The probcal calibrator is a nested estimator, so its parameters are
+grid-searchable. <code>calibrator=BetaCalibrator()</code> (or any instance) must be
+given explicitly, since the default <code>calibrator=None</code> has no <code>variant</code> to
+set:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.linear_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogisticRegression</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.model_selection</span><span class="w"> </span><span class="kn">import</span> <span class="n">GridSearchCV</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal</span><span class="w"> </span><span class="kn">import</span> <span class="n">BetaCalibrator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">CalibratedClassifier</span>
+
+<span class="n">gs</span> <span class="o">=</span> <span class="n">GridSearchCV</span><span class="p">(</span>
+    <span class="n">CalibratedClassifier</span><span class="p">(</span><span class="n">LogisticRegression</span><span class="p">(</span><span class="n">max_iter</span><span class="o">=</span><span class="mi">200</span><span class="p">),</span> <span class="n">calibrator</span><span class="o">=</span><span class="n">BetaCalibrator</span><span class="p">()),</span>
+    <span class="p">{</span><span class="s2">"calibrator__variant"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"ab"</span><span class="p">,</span> <span class="s2">"abm"</span><span class="p">]},</span>
+    <span class="n">scoring</span><span class="o">=</span><span class="s2">"neg_log_loss"</span><span class="p">,</span>
+    <span class="n">cv</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="stacking-an-offset">Stacking an offset<a class="headerlink" href="#stacking-an-offset" title="Permanent link">&para;</a></h2>
+<p>A calibrator often needs a level correction on top of it: production
+drifted, or a <code>CalibrationMonitor.apply_recommendation</code> call produced a
+fresh <code>delta</code>. Two patterns compose that into an sklearn pipeline, and both
+end in the same <code>LogitOffset</code> object the rest of the package already
+understands.</p>
+<p><strong>One auditable object.</strong> Give <code>SklearnCalibrator</code> a <code>Chain</code> prototype
+instead of a bare calibrator. <code>Chain.fit</code> refits both stages in sequence —
+the calibrator first, then the offset on the calibrator's own output — so
+the whole map stays behind one attribute, <code>calibrator_</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pipeline</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal</span><span class="w"> </span><span class="kn">import</span> <span class="n">BetaCalibrator</span><span class="p">,</span> <span class="n">Chain</span><span class="p">,</span> <span class="n">LogitOffset</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">SklearnCalibrator</span>
+
+<span class="n">est</span> <span class="o">=</span> <span class="n">SklearnCalibrator</span><span class="p">(</span><span class="n">calibrator</span><span class="o">=</span><span class="n">Chain</span><span class="p">([</span><span class="n">BetaCalibrator</span><span class="p">(),</span> <span class="n">LogitOffset</span><span class="p">(</span><span class="n">target_mean</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)]))</span>
+<span class="n">pipe</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">([(</span><span class="s2">"cal"</span><span class="p">,</span> <span class="n">est</span><span class="p">)])</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">y</span><span class="p">)</span>
+<span class="n">pipe</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>  <span class="c1"># (n, 2), through calibrator then offset</span>
+
+<span class="n">fitted_chain</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">named_steps</span><span class="p">[</span><span class="s2">"cal"</span><span class="p">]</span><span class="o">.</span><span class="n">calibrator_</span>
+<span class="n">fitted_chain</span><span class="o">.</span><span class="n">interpret</span><span class="p">()</span>  <span class="c1"># both stages, concatenated</span>
+</code></pre></div>
+<p>Reach for this when nothing downstream needs the offset to have a lifecycle
+of its own: one <code>fit</code> call, one fingerprint, one thing to serialize.</p>
+<p><strong>A separate, swappable step.</strong> When the offset does have its own
+governance lifecycle — a monitor alarms, <code>apply_recommendation</code> returns a
+new <code>delta</code>, and only the offset should change — keep <code>SklearnCalibrator</code>
+and <code>SklearnOffset</code> as two pipeline steps and replace the second one:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pipeline</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">SklearnCalibrator</span><span class="p">,</span> <span class="n">SklearnOffset</span>
+
+<span class="n">pipe</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">([(</span><span class="s2">"cal"</span><span class="p">,</span> <span class="n">SklearnCalibrator</span><span class="p">()),</span> <span class="p">(</span><span class="s2">"off"</span><span class="p">,</span> <span class="n">SklearnOffset</span><span class="p">(</span><span class="n">target_mean</span><span class="o">=</span><span class="mf">0.2</span><span class="p">))])</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span>
+    <span class="n">s</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">y</span>
+<span class="p">)</span>
+<span class="n">fp_before</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">named_steps</span><span class="p">[</span><span class="s2">"cal"</span><span class="p">]</span><span class="o">.</span><span class="n">calibrator_</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">()</span>
+
+<span class="c1"># Governance produced a new delta (e.g. from mon.apply_recommendation()).</span>
+<span class="c1"># Swap only the offset step and refit it alone, on the calibrator's output:</span>
+<span class="n">new_delta</span> <span class="o">=</span> <span class="mf">0.05</span>
+<span class="n">pipe</span><span class="o">.</span><span class="n">set_params</span><span class="p">(</span><span class="n">off</span><span class="o">=</span><span class="n">SklearnOffset</span><span class="p">(</span><span class="n">delta</span><span class="o">=</span><span class="n">new_delta</span><span class="p">))</span>
+<span class="n">p_cal</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">named_steps</span><span class="p">[</span><span class="s2">"cal"</span><span class="p">]</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">pipe</span><span class="o">.</span><span class="n">named_steps</span><span class="p">[</span><span class="s2">"off"</span><span class="p">]</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">p_cal</span><span class="p">)</span>
+</code></pre></div>
+<p><code>set_params</code> plus refitting that one step replaces the offset artifact
+without touching the calibrator: its fingerprint is unchanged, because
+nothing there called its <code>fit</code> again.</p>
+<p>Both routes end in a <code>LogitOffset</code> object underneath — <code>Chain.offsets_[-1]</code>
+in the first case, <code>SklearnOffset.offset_</code> in the second — so either one
+composes, interprets, and serializes exactly like any other <code>LogitOffset</code>:
+<code>interpret()</code>, <code>to_dict()</code>, the
+<a href="../../concepts/offset/#audit-trail-and-composition">audit trail</a>.</p>
+<p><code>SklearnOffset</code>'s column-1 convention for two-column input mirrors
+<code>SklearnCalibrator</code>'s (<code>positive_column</code> says which column holds <code>P(y=1)</code>),
+but it is documented, not checked: <code>SklearnOffset.fit</code> takes no <code>y</code>, so
+there is nothing to compare a guessed orientation against. That is
+acceptable because an offset step sits downstream of a checked calibrator
+step — by the time a probability reaches the offset, its column convention
+was already validated once, by whatever produced it.</p>
+<h2 id="the-prefit-recipe-calibrating-an-already-fitted-model">The prefit recipe: calibrating an already-fitted model<a class="headerlink" href="#the-prefit-recipe-calibrating-an-already-fitted-model" title="Permanent link">&para;</a></h2>
+<p>Sometimes the model is already trained and you only have a held-out
+calibration set. On sklearn ≥ 1.6, <code>sklearn.frozen.FrozenEstimator</code> wraps a
+fitted estimator so <code>clone</code>-based tools (<code>CalibratedClassifierCV</code>, a CV
+search) leave it untouched instead of refitting it:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.calibration</span><span class="w"> </span><span class="kn">import</span> <span class="n">CalibratedClassifierCV</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.frozen</span><span class="w"> </span><span class="kn">import</span> <span class="n">FrozenEstimator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.linear_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogisticRegression</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">LogisticRegression</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
+<span class="n">cccv</span> <span class="o">=</span> <span class="n">CalibratedClassifierCV</span><span class="p">(</span><span class="n">FrozenEstimator</span><span class="p">(</span><span class="n">model</span><span class="p">))</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_calib</span><span class="p">,</span> <span class="n">y_calib</span><span class="p">)</span>
+<span class="n">cccv</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">X_new</span><span class="p">)</span>
+</code></pre></div>
+<p>That is sklearn's own meta-estimator route, and it is a fine default. The
+primitives-first alternative composes <code>FrozenEstimator</code> with the bare
+<code>SklearnCalibrator</code>: the same idea with no meta-estimator in between, in
+three lines:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.frozen</span><span class="w"> </span><span class="kn">import</span> <span class="n">FrozenEstimator</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">SklearnCalibrator</span>
+
+<span class="n">frozen</span> <span class="o">=</span> <span class="n">FrozenEstimator</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>  <span class="c1"># a fitted estimator that clone()/fit() cannot touch</span>
+<span class="n">cal</span> <span class="o">=</span> <span class="n">SklearnCalibrator</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">frozen</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">X_calib</span><span class="p">)[:,</span> <span class="p">[</span><span class="mi">1</span><span class="p">]],</span> <span class="n">y_calib</span><span class="p">)</span>
+<span class="n">cal</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">frozen</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">X_new</span><span class="p">)[:,</span> <span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+</code></pre></div>
+<p>Both recipes are alternatives to <code>CalibratedClassifier(cv="prefit")</code>, not
+replacements for it: some teams prefer composing sklearn primitives to
+adopting a probcal meta-estimator, and both routes above serve that
+preference. Reach for probcal's own meta-estimator (<code>CalibratedClassifier</code>,
+any <code>cv</code>, including <code>"prefit"</code>) when you want <code>interpret()</code>, JSON
+serialization and a fingerprint, or the exact inverse maps
+(<code>interval_inverse</code>/<code>point_inverse</code>). A <code>FrozenEstimator</code> composition still
+gets you the fitted <code>SklearnCalibrator.calibrator_</code>'s full audit surface via
+that one attribute, so the difference is packaging (one call vs. three
+lines), not capability.</p>
+<h2 id="sample-weights-and-metadata-routing">Sample weights and metadata routing<a class="headerlink" href="#sample-weights-and-metadata-routing" title="Permanent link">&para;</a></h2>
+<p>Both estimators declare <code>sample_weight</code> in <code>fit</code>, so the weights always reach
+the probcal calibrator. What depends on <code>enable_metadata_routing</code> is how they
+reach the <em>wrapped</em> classifier.</p>
+<p><strong>Routing off (sklearn's default).</strong> Weights are handed down directly:
+<code>CalibratedClassifier</code> forwards them to <code>cross_val_predict</code>'s fold fits and to
+the full-data refit whenever the base estimator's <code>fit</code> takes a
+<code>sample_weight</code> argument.</p>
+<p><strong>Routing on.</strong> Every consumer must ask for the metadata, ours included:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">sklearn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pipeline</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">SklearnCalibrator</span>
+
+<span class="k">with</span> <span class="n">sklearn</span><span class="o">.</span><span class="n">config_context</span><span class="p">(</span><span class="n">enable_metadata_routing</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">([(</span><span class="s2">"cal"</span><span class="p">,</span> <span class="n">SklearnCalibrator</span><span class="p">()</span><span class="o">.</span><span class="n">set_fit_request</span><span class="p">(</span><span class="n">sample_weight</span><span class="o">=</span><span class="kc">True</span><span class="p">))])</span>
+    <span class="n">pipe</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">scores</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">y</span><span class="p">,</span> <span class="n">sample_weight</span><span class="o">=</span><span class="n">w</span><span class="p">)</span>
+</code></pre></div>
+<p>Inside a search, the base estimator declares its own request and the wrapper
+declares one per method the search calls. Again, <code>calibrator=BetaCalibrator()</code>
+is required since the grid searches <code>calibrator__variant</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">sklearn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.linear_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogisticRegression</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.model_selection</span><span class="w"> </span><span class="kn">import</span> <span class="n">GridSearchCV</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal</span><span class="w"> </span><span class="kn">import</span> <span class="n">BetaCalibrator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">probcal.sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">CalibratedClassifier</span>
+
+<span class="k">with</span> <span class="n">sklearn</span><span class="o">.</span><span class="n">config_context</span><span class="p">(</span><span class="n">enable_metadata_routing</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">clf</span> <span class="o">=</span> <span class="n">CalibratedClassifier</span><span class="p">(</span>
+        <span class="n">LogisticRegression</span><span class="p">()</span><span class="o">.</span><span class="n">set_fit_request</span><span class="p">(</span><span class="n">sample_weight</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="n">calibrator</span><span class="o">=</span><span class="n">BetaCalibrator</span><span class="p">(),</span>
+        <span class="n">cv</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">gs</span> <span class="o">=</span> <span class="n">GridSearchCV</span><span class="p">(</span>
+        <span class="n">clf</span><span class="o">.</span><span class="n">set_fit_request</span><span class="p">(</span><span class="n">sample_weight</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">set_score_request</span><span class="p">(</span><span class="n">sample_weight</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="p">{</span><span class="s2">"calibrator__variant"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"ab"</span><span class="p">,</span> <span class="s2">"abm"</span><span class="p">]},</span>
+        <span class="n">cv</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">sample_weight</span><span class="o">=</span><span class="n">w</span><span class="p">)</span>
+</code></pre></div>
+<p>An undeclared request raises sklearn's <code>UnsetMetadataPassedError</code>; the adapter
+does not soften that into a silent drop.</p>
+<p><strong>Base estimators that cannot take weights.</strong> If the base estimator's <code>fit</code> has
+no <code>sample_weight</code> parameter (<code>KNeighborsClassifier</code>, for instance),
+<code>CalibratedClassifier.fit</code> warns once (<code>UserWarning</code>, naming the class), runs
+the fold fits and the refit unweighted, and still fits the calibrator with the
+weights: the calibration map is weighted, the scores it calibrates are not.
+Under routing, a router base (a <code>Pipeline</code>, say) counts as weight-capable: it
+takes weights through <code>**params</code>, and sklearn's routing has the final word.</p>
+<p>This behaviour is pinned by <code>tests/test_sklearn_routing.py</code>, which CI runs
+at 1.4.2 (<code>sklearn-min</code>) and at whatever resolves as latest (currently
+1.9.0); a local run additionally confirmed it identical on 1.6.1, the
+first version with the dunder-protocol tags this guide's bare-duck tier
+depends on.</p>
+<h2 id="against-calibratedclassifiercv">Against <code>CalibratedClassifierCV</code><a class="headerlink" href="#against-calibratedclassifiercv" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>CalibratedClassifierCV(ensemble=False)</code></th>
+<th><code>probcal.sklearn.CalibratedClassifier</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OOF protocol, one map, full refit</td>
+<td>yes</td>
+<td>yes (verified equivalent)</td>
+</tr>
+<tr>
+<td>Calibration methods</td>
+<td>sigmoid, isotonic</td>
+<td>all 12 probcal calibrators + <code>CalibratorSelector</code></td>
+</tr>
+<tr>
+<td>Parameter interpretation</td>
+<td>no</td>
+<td><code>interpret()</code> on the fitted map</td>
+</tr>
+<tr>
+<td>Metric CIs</td>
+<td>no</td>
+<td><code>probcal.metrics.evaluate</code> bootstrap</td>
+</tr>
+<tr>
+<td>Exact inverse maps (policy → raw threshold)</td>
+<td>no</td>
+<td><code>interval_inverse</code> / <code>point_inverse</code>, delegated</td>
+</tr>
+<tr>
+<td>Serialization</td>
+<td>pickle</td>
+<td>versioned JSON + <code>fingerprint()</code> (and pickle)</td>
+</tr>
+<tr>
+<td>Multiclass</td>
+<td>yes</td>
+<td>binary only, by design</td>
+</tr>
+<tr>
+<td>Prefit route</td>
+<td><code>CalibratedClassifierCV(FrozenEstimator(m))</code></td>
+<td><code>cv="prefit"</code>, or <code>FrozenEstimator(m)</code> + bare <code>SklearnCalibrator</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="estimator-check-compliance">Estimator-check compliance<a class="headerlink" href="#estimator-check-compliance" title="Permanent link">&para;</a></h2>
+<p>Both estimators run <code>sklearn.utils.estimator_checks.parametrize_with_checks</code>
+in CI on the pinned minimum (1.4) and the latest release.
+<code>CalibratedClassifier</code> passes the full corpus except the sample-weight ≡
+duplication equivalence, which cannot hold through a CV split whose fold
+assignment depends on n (sklearn's own CV wrappers share this; declared via
+<code>expected_failed_checks</code>). <code>SklearnCalibrator</code>'s one-column contract is
+inapplicable to the generic multi-feature checks. Those are declared through
+sklearn's <code>expected_failed_checks</code>, each entry naming the data that check
+generates and the part of the score-level contract it violates, the same
+domain-restriction sklearn special-cases its own <code>IsotonicRegression</code> for; the
+remaining convention checks run live. The inapplicable checks that do have a
+score-level analogue are re-implemented on valid probability data in
+<code>tests/test_sklearn_mirror_checks.py</code>; see <em>API stability</em> for the full
+account.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.top", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

@@ -119,6 +119,32 @@ def test_sklearn_calibrator_voting() -> None:
     assert np.all(np.isfinite(proba))
 
 
+def test_sklearn_calibrator_two_column() -> None:
+    import numpy as np
+
+    rng = np.random.default_rng(9)
+    s = rng.uniform(0.05, 0.95, 300)
+    y = rng.binomial(1, s).astype(float)
+    proba_matrix = np.column_stack([1.0 - s, s])  # column 1 holds P(y=1)
+    reversed_matrix = proba_matrix[:, ::-1]  # column 0 holds P(y=1) here
+    # --8<-- [start:sklearn_calibrator_two_column]
+    from probcal.sklearn import SklearnCalibrator
+
+    cal = SklearnCalibrator().fit(proba_matrix, y)  # positive_column=1 (default)
+    cal.predict_proba(proba_matrix)  # (n, 2) in, (n, 2) out
+
+    # A reversed matrix needs positive_column=0 to match:
+    cal_reversed = SklearnCalibrator(positive_column=0).fit(reversed_matrix, y)
+    # --8<-- [end:sklearn_calibrator_two_column]
+    proba = cal.predict_proba(proba_matrix)
+    assert proba.shape == (300, 2)
+    np.testing.assert_array_equal(proba, cal_reversed.predict_proba(reversed_matrix))
+    # Omitting positive_column on a reversed matrix warns once, rather than
+    # silently flipping the column it calibrates:
+    with pytest.warns(UserWarning, match="positive_column=0"):
+        SklearnCalibrator().fit(reversed_matrix, y)
+
+
 def test_calibrated_classifier() -> None:
     X, y = make_classification(n_samples=600, n_features=8, weights=[0.85, 0.15], random_state=3)
     X_train, y_train, X_new = X[:400], y[:400], X[400:]
@@ -196,6 +222,59 @@ def test_grid_search_calibrator_variant() -> None:
     ).fit(X, y)
     # --8<-- [end:grid_search_calibrator]
     assert gs.best_params_["calibrator__variant"] in ("a", "ab", "abm")
+
+
+def test_sklearn_offset_chain() -> None:
+    import numpy as np
+
+    rng = np.random.default_rng(10)
+    s = rng.uniform(0.05, 0.95, 400)
+    y = rng.binomial(1, s).astype(float)
+    # --8<-- [start:sklearn_offset_chain]
+    from sklearn.pipeline import Pipeline
+
+    from probcal import BetaCalibrator, Chain, LogitOffset
+    from probcal.sklearn import SklearnCalibrator
+
+    est = SklearnCalibrator(calibrator=Chain([BetaCalibrator(), LogitOffset(target_mean=0.2)]))
+    pipe = Pipeline([("cal", est)]).fit(s.reshape(-1, 1), y)
+    pipe.predict_proba(s.reshape(-1, 1))  # (n, 2), through calibrator then offset
+
+    fitted_chain = pipe.named_steps["cal"].calibrator_
+    fitted_chain.interpret()  # both stages, concatenated
+    # --8<-- [end:sklearn_offset_chain]
+    assert isinstance(fitted_chain, Chain) and fitted_chain.fitted_
+    proba = pipe.predict_proba(s.reshape(-1, 1))
+    assert proba.shape == (400, 2)
+    np.testing.assert_allclose(proba.sum(axis=1), 1.0)
+    assert est.calibrator.fitted_ is False  # the prototype itself was not mutated
+
+
+def test_sklearn_offset_replace_step() -> None:
+    import numpy as np
+
+    rng = np.random.default_rng(11)
+    s = rng.uniform(0.05, 0.95, 400)
+    y = rng.binomial(1, s).astype(float)
+    # --8<-- [start:sklearn_offset_replace_step]
+    from sklearn.pipeline import Pipeline
+
+    from probcal.sklearn import SklearnCalibrator, SklearnOffset
+
+    pipe = Pipeline(
+        [("cal", SklearnCalibrator()), ("off", SklearnOffset(target_mean=0.2))]
+    ).fit(s.reshape(-1, 1), y)
+    fp_before = pipe.named_steps["cal"].calibrator_.fingerprint()
+
+    # Governance produced a new delta (e.g. from mon.apply_recommendation()).
+    # Swap only the offset step and refit it alone, on the calibrator's output:
+    new_delta = 0.05
+    pipe.set_params(off=SklearnOffset(delta=new_delta))
+    p_cal = pipe.named_steps["cal"].transform(s.reshape(-1, 1))
+    pipe.named_steps["off"].fit(p_cal)
+    # --8<-- [end:sklearn_offset_replace_step]
+    assert pipe.named_steps["cal"].calibrator_.fingerprint() == fp_before
+    assert pipe.named_steps["off"].offset_.delta_ == new_delta
 
 
 def test_routing_pipeline_sample_weight() -> None:

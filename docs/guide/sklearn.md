@@ -2,13 +2,16 @@
 
 probcal meets sklearn at three depths, from lightest to heaviest:
 
-1. **Bare duck.** On sklearn ≥ 1.6, a plain probcal calibrator satisfies
+1. **Bare duck.** Scores `(n,)`, `(n, 1)`, or a `predict_proba` matrix
+   `(n, 2)`. On sklearn ≥ 1.6, a plain probcal calibrator satisfies
    sklearn's estimator protocol directly, with no import from
    `probcal.sklearn` at all.
-2. **`SklearnCalibrator`.** You need the `(n, 2)`/`classes_` probability-matrix
-   convention: pipelines, `VotingClassifier`, stacking.
-3. **`CalibratedClassifier`.** You want the whole out-of-fold calibration
-   protocol as one auditable object.
+2. **`SklearnCalibrator`.** Scores `(n,)`, `(n, 1)`, or a `predict_proba`
+   matrix `(n, 2)`. You need the `(n, 2)`/`classes_` probability-matrix
+   convention on the way out too: pipelines, `VotingClassifier`, stacking.
+3. **`CalibratedClassifier`.** Feature-level `X`, whatever shape the
+   wrapped estimator's own `fit`/`predict_proba` expects. You want the
+   whole out-of-fold calibration protocol as one auditable object.
 
 `probcal.sklearn` (extra: `pip install "probcal[sklearn]"`, scikit-learn ≥ 1.4)
 holds tiers 2 and 3. Neither is imported by `import probcal`, so the core
@@ -54,12 +57,16 @@ calibrator as "an object with `fit`/`predict_proba`" rather than
 
 ## Tier 2, `SklearnCalibrator`: ending a pipeline with a calibrated column
 
-`SklearnCalibrator` is *score-level*: its `X` is the score itself, one column
-(`(n,)` or `(n, 1)`; more columns raise). Use it wherever sklearn expects an
-estimator, or let `transform` end a `Pipeline`: `transform` returns the
-calibrated-probability column, `(n, 1)`, where `predict_proba` returns the
-full `(n, 2)` matrix. A `FunctionTransformer` ahead of it selects the score
-column out of a wider feature table:
+`SklearnCalibrator` is *score-level*: its `X` is the score itself. In
+probability mode (`input="probability"`, the default) that is one column
+(`(n,)` or `(n, 1)`) or a two-column `predict_proba`-style matrix `(n, 2)`;
+`input="logit"` stays single-column, because a logit matrix has no
+sum-to-one rule to validate an orientation against. More columns than that
+raise. Use it wherever sklearn expects an estimator, or let `transform` end
+a `Pipeline`: `transform` returns the calibrated-probability column,
+`(n, 1)`, where `predict_proba` returns the full `(n, 2)` matrix. A
+`FunctionTransformer` ahead of it selects the score column out of a wider
+feature table:
 
 ```python
 --8<-- "tests/test_sklearn_guide_snippets.py:sklearn_calibrator_pipeline"
@@ -68,6 +75,17 @@ column out of a wider feature table:
 `pipe.named_steps["cal"].calibrator_` is the full probcal audit surface
 (`interpret()`, `interval_inverse`, `to_json()`), one attribute away from
 the sklearn object.
+
+A two-column matrix follows the `predict_proba` convention: `positive_column`
+(default `1`) says which column holds `P(y=1)`. `SklearnCalibrator` never
+guesses a flipped matrix and corrects it for you — at fit time it checks
+whether the chosen column's mean is actually higher among events than among
+non-events and, if it is not, warns once (`UserWarning`) naming the likely
+fix, without changing which column it calibrates:
+
+```python
+--8<-- "tests/test_sklearn_guide_snippets.py:sklearn_calibrator_two_column"
+```
 
 Score columns on the margin scale are declared, not guessed:
 `SklearnCalibrator(input="logit")` maps them through `expit` exactly first.
@@ -111,6 +129,53 @@ set:
 ```python
 --8<-- "tests/test_sklearn_guide_snippets.py:grid_search_calibrator"
 ```
+
+## Stacking an offset
+
+A calibrator often needs a level correction on top of it: production
+drifted, or a `CalibrationMonitor.apply_recommendation` call produced a
+fresh `delta`. Two patterns compose that into an sklearn pipeline, and both
+end in the same `LogitOffset` object the rest of the package already
+understands.
+
+**One auditable object.** Give `SklearnCalibrator` a `Chain` prototype
+instead of a bare calibrator. `Chain.fit` refits both stages in sequence —
+the calibrator first, then the offset on the calibrator's own output — so
+the whole map stays behind one attribute, `calibrator_`:
+
+```python
+--8<-- "tests/test_sklearn_guide_snippets.py:sklearn_offset_chain"
+```
+
+Reach for this when nothing downstream needs the offset to have a lifecycle
+of its own: one `fit` call, one fingerprint, one thing to serialize.
+
+**A separate, swappable step.** When the offset does have its own
+governance lifecycle — a monitor alarms, `apply_recommendation` returns a
+new `delta`, and only the offset should change — keep `SklearnCalibrator`
+and `SklearnOffset` as two pipeline steps and replace the second one:
+
+```python
+--8<-- "tests/test_sklearn_guide_snippets.py:sklearn_offset_replace_step"
+```
+
+`set_params` plus refitting that one step replaces the offset artifact
+without touching the calibrator: its fingerprint is unchanged, because
+nothing there called its `fit` again.
+
+Both routes end in a `LogitOffset` object underneath — `Chain.offsets_[-1]`
+in the first case, `SklearnOffset.offset_` in the second — so either one
+composes, interprets, and serializes exactly like any other `LogitOffset`:
+`interpret()`, `to_dict()`, the
+[audit trail](../concepts/offset.md#audit-trail-and-composition).
+
+`SklearnOffset`'s column-1 convention for two-column input mirrors
+`SklearnCalibrator`'s (`positive_column` says which column holds `P(y=1)`),
+but it is documented, not checked: `SklearnOffset.fit` takes no `y`, so
+there is nothing to compare a guessed orientation against. That is
+acceptable because an offset step sits downstream of a checked calibrator
+step — by the time a probability reaches the offset, its column convention
+was already validated once, by whatever produced it.
 
 ## The prefit recipe: calibrating an already-fitted model
 

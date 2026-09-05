@@ -111,8 +111,8 @@ _MIRRORED_BY: dict[str, str] = {
     "check_sample_weights_shape": "test_wrong_shape_sample_weight_raises",
     "check_transformer_general": "test_fit_transform_equals_fit_then_transform",
     "check_transformer_preserve_dtypes": "test_fit_transform_equals_fit_then_transform",
-    "check_fit2d_1sample": "test_offset_rejects_a_ten_column_matrix_with_an_informative_message",
-    "check_fit2d_1feature": "test_offset_domain_check_rejects_an_out_of_range_single_column",
+    "check_fit2d_1sample": "test_offset_fits_a_single_sample",
+    "check_fit2d_1feature": "test_offset_fits_a_single_feature_column",
 }
 
 # Declared-inapplicable checks with no score-level analogue at all; each is
@@ -488,25 +488,40 @@ def test_adapter_zero_weight_equals_dropping_the_row() -> None:
 
 # --------------------------------------------------- SklearnOffset-only mirrors
 # check_fit2d_1sample and check_fit2d_1feature are declared inapplicable only
-# for SklearnOffset (see OFFSET_XFAIL_CHECKS): the calibrator's own binary-class
-# check happens to raise a matching message first on the same generated data,
-# so these two never reach the calibrator's own validation and are not
-# declared there. For the offset (no y validation to short-circuit first) they
-# reach SklearnOffset's own column-count/domain checks directly.
+# for SklearnOffset (see OFFSET_XFAIL_CHECKS), for two different reasons:
+#
+# * check_fit2d_1sample generates a single sample. The calibrator's own
+#   y-driven binary-class check happens to raise a message matching this
+#   check's expected pattern first (one sample means one class), so the
+#   check passes there without exercising anything offset-specific.
+#   SklearnOffset has no y validation, so nothing short-circuits — fitting a
+#   single sample is expected to genuinely work, which is what is mirrored
+#   below.
+# * check_fit2d_1feature generates one column of out-of-range values. The
+#   calibrator's logit mode accepts arbitrary reals and raises nothing at
+#   all (the same mechanism already excluded for check_fit1d), so the check
+#   passes there too, again without exercising anything offset-specific. A
+#   single *valid* probability column is expected to genuinely work for the
+#   offset, which is what is mirrored below — the out-of-range values in
+#   sklearn's generated data are a coincidental wording mismatch, not the
+#   behaviour under test.
 
 
-def test_offset_rejects_a_ten_column_matrix_with_an_informative_message() -> None:
-    """check_fit2d_1sample: an oversized column count is refused, informatively."""
-    X = 3.0 * np.random.default_rng(0).uniform(size=(20, 10))
-    with pytest.raises(ValueError, match="columns"):
-        SklearnOffset(delta=0.1).fit(X)
+def test_offset_fits_a_single_sample() -> None:
+    """check_fit2d_1sample: fitting a single row works (delta mode needs no solving)."""
+    from probcal._math import expit, logit
+
+    est = SklearnOffset(delta=0.2).fit(np.array([[0.3]]))
+    expected = expit(logit(np.array([0.3])) + 0.2)
+    np.testing.assert_allclose(est.transform(np.array([[0.3]]))[:, 0], expected)
 
 
-def test_offset_domain_check_rejects_an_out_of_range_single_column() -> None:
-    """check_fit2d_1feature: a single column outside [0, 1] is refused, informatively."""
-    X = 3.0 * np.random.default_rng(0).uniform(size=(20, 1))
-    with pytest.raises(ValueError, match=r"\[0, 1\]"):
-        SklearnOffset(delta=0.1).fit(X)
+def test_offset_fits_a_single_feature_column() -> None:
+    """check_fit2d_1feature: a single valid probability column fits and predicts fine."""
+    est = SklearnOffset(delta=0.2).fit(_S.reshape(-1, 1))
+    np.testing.assert_array_equal(
+        est.predict_proba(_Q.reshape(-1, 1))[:, 1], est.offset_.transform(_Q)
+    )
 
 
 # ------------------------------------------------------------ table guards

@@ -143,10 +143,16 @@ OFFSET_XFAIL_CHECKS: dict[str, str] = {
     for name, reason in CALIBRATOR_XFAIL_CHECKS.items()
     if name not in _OFFSET_NOT_APPLICABLE
 }
-# Without a y-driven classification check to short-circuit first (as the
-# calibrator's binary-class check happens to for these two), these two
-# checks reach SklearnOffset's own column/domain validation directly, whose
-# message wording does not match sklearn's expected patterns.
+# check_fit2d_1sample: the calibrator's own y-driven binary-class check
+# happens to raise a message matching this check's expected pattern first (a
+# single sample yields a single class); SklearnOffset has no y validation at
+# all, so this reaches its own column-count check directly, whose message
+# wording does not match the check's expected patterns.
+# check_fit2d_1feature: the calibrator's logit mode accepts arbitrary reals
+# outside [0, 1] without raising anything (the same mechanism already
+# excluded above for check_fit1d); SklearnOffset's own [0, 1] domain check
+# does raise here, but again with wording that does not match the check's
+# expected patterns.
 OFFSET_XFAIL_CHECKS["check_fit2d_1sample"] = (
     "inapplicable: the check generates 10 columns of 3 * U(0, 1) noise, and "
     "this estimator takes one probability column or a two-column probability "

@@ -4,6 +4,10 @@ import numpy as np
 import pytest
 
 from probcal._validation import EPS, validate_binary_y, validate_scores, validate_weights
+from probcal._registry import SERIALIZABLE
+from probcal.base import BaseCalibrator
+from probcal.datasets import make_pd_portfolio
+from probcal.offset import LogitOffset
 
 
 def test_validate_scores_clips_to_eps() -> None:
@@ -117,3 +121,30 @@ def test_validate_scores_rejects_non_simplex_matrices(bad) -> None:
 def test_validate_scores_single_column_behaviour_unchanged() -> None:
     s = np.array([[0.2], [0.7]])
     np.testing.assert_array_equal(validate_scores(s), validate_scores(s.ravel()))
+
+
+CALIBRATOR_CLASSES = sorted(
+    (c for c in SERIALIZABLE.values() if isinstance(c, type) and issubclass(c, BaseCalibrator)),
+    key=lambda c: c.__name__,
+)
+
+
+@pytest.mark.parametrize("cls", CALIBRATOR_CLASSES, ids=lambda c: c.__name__)
+def test_two_column_fit_predict_matches_column_one(cls) -> None:
+    d = make_pd_portfolio(n=400, random_state=7)
+    q = make_pd_portfolio(n=150, random_state=8).scores
+    m_fit = np.column_stack([1.0 - d.scores, d.scores])
+    m_q = np.column_stack([1.0 - q, q])
+    a = cls().fit(d.scores, d.y)
+    b = cls().fit(m_fit, d.y)
+    np.testing.assert_array_equal(a.predict_proba(q), b.predict_proba(m_q))
+
+
+@pytest.mark.parametrize("kwargs", [{"delta": 0.3}, {"target_mean": 0.03}], ids=["delta", "target_mean"])
+def test_logit_offset_two_column_fit_matches_column_one(kwargs) -> None:
+    p = make_pd_portfolio(n=400, random_state=7).scores
+    m = np.column_stack([1.0 - p, p])
+    a = LogitOffset(**kwargs).fit(p)
+    b = LogitOffset(**kwargs).fit(m)
+    assert a.delta_ == b.delta_
+    np.testing.assert_array_equal(a.transform(p), b.transform(m))

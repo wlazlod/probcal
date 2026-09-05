@@ -5,7 +5,9 @@ arbitrary reals, which no score-level estimator can accept — those checks are
 declared inapplicable in `probcal.sklearn._compat`, each with its own reason.
 This module re-implements the ones that *do* have a score-level analogue, on
 valid `(n,)` probability data, against the adapter (`SklearnCalibrator`) and
-the bare core (`BetaCalibrator`). Most mirrored checks also run on two-column
+the bare core (`BetaCalibrator`); `SklearnOffset` has its own mirrors for the
+offset-only declarations (`test_offset_fits_a_single_sample`,
+`test_offset_fits_a_single_feature_column`). Most mirrored checks also run on two-column
 `(n, 2)` probability-matrix input (`_as_X`'s `"adapter-2col"`/`"core-2col"`
 kinds), since `validate_scores` accepts that shape core-wide. `_MIRRORED_BY`
 maps every mirrored check to the test that stands in for it, `_NO_ANALOGUE`

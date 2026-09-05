@@ -160,11 +160,29 @@ _OFFSET_CLASSIFIER_ONLY: frozenset[str] = frozenset(
 # and so does not raise there), this check genuinely passes for SklearnOffset
 # and is dropped rather than declared.
 _OFFSET_NOT_APPLICABLE: frozenset[str] = _OFFSET_CLASSIFIER_ONLY | {"check_fit1d"}
+# The offset's reasons are its own, not the calibrator's: SklearnOffset does
+# accept a two-column matrix, so the operative refusal for the generated data
+# is the column count (three or more) or the probability-simplex rule, never
+# a one-column contract.
 OFFSET_XFAIL_CHECKS: dict[str, str] = {
-    name: reason
-    for name, reason in CALIBRATOR_XFAIL_CHECKS.items()
+    name: (
+        f"inapplicable: the check generates {data}, and this estimator takes one "
+        "probability column or a two-column probability matrix (rows summing "
+        "to 1) — the generated data is neither"
+    )
+    for name, data in _MULTI_COLUMN_DATA.items()
     if name not in _OFFSET_NOT_APPLICABLE
 }
+OFFSET_XFAIL_CHECKS.update(
+    {
+        name: (
+            f"inapplicable: the check generates {data} — arbitrary reals outside "
+            "[0, 1], never a probability column or simplex matrix"
+        )
+        for name, data in _ARBITRARY_REAL_DATA.items()
+        if name not in _OFFSET_NOT_APPLICABLE
+    }
+)
 # check_fit2d_1sample: the calibrator's own y-driven binary-class check
 # happens to raise a message matching this check's expected pattern first (a
 # single sample yields a single class); SklearnOffset has no y validation at

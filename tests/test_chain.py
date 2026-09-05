@@ -154,3 +154,41 @@ def test_calibrated_model_chain_property() -> None:
         wrapped.interval_inverse(0.0, 0.05, space="logit"),
         atol=1e-9,
     )
+
+
+def test_set_params_all_three_forms() -> None:
+    chain = Chain([BetaCalibrator(), LogitOffset(target_mean=0.03)]).fit(_D.scores, _D.y)
+    chain.set_params(stages__1__target_mean=0.05)
+    assert chain.get_params(deep=True)["stages__1__target_mean"] == 0.05
+    assert chain.fitted_ is True  # nested set_params leaves fitted_ alone; refit to apply
+    chain.set_params(stages__1=LogitOffset(delta=0.2))
+    assert chain.get_params(deep=True)["stages__1__delta"] == 0.2
+    chain.set_params(stages=[PlattCalibrator(), LogitOffset(delta=-0.1)])
+    assert isinstance(chain.calibrator_, PlattCalibrator)
+    assert chain.fitted_ is False
+
+
+def test_set_params_rejects_bad_keys_and_indices_without_mutating() -> None:
+    chain = Chain([BetaCalibrator(), LogitOffset(delta=0.1)])
+    before = chain.stages
+    with pytest.raises(ValueError, match="invalid parameter"):
+        chain.set_params(nope=1)
+    with pytest.raises(ValueError, match="out of range"):
+        chain.set_params(stages__5=LogitOffset(delta=0.2))
+    with pytest.raises(ValueError, match="first stage must be a calibrator"):
+        chain.set_params(stages__0=LogitOffset(delta=0.2))
+    assert chain.stages is before  # a rejected replacement leaves the chain untouched
+    assert isinstance(chain.calibrator_, BetaCalibrator)
+
+
+def test_fit_propagates_sample_weight_to_every_stage() -> None:
+    rng = np.random.default_rng(3)
+    w = rng.uniform(0.5, 2.0, size=len(_D.scores))
+    chain = Chain([BetaCalibrator(), LogitOffset(target_mean=0.03)]).fit(
+        _D.scores, _D.y, sample_weight=w
+    )
+    cal = BetaCalibrator().fit(_D.scores, _D.y, sample_weight=w)
+    off = LogitOffset(target_mean=0.03).fit(cal.predict_proba(_D.scores), sample_weight=w)
+    manual = Chain([cal, off])
+    np.testing.assert_array_equal(chain.predict_proba(_Q), manual.predict_proba(_Q))
+    assert chain.offsets_[0].delta_ == off.delta_

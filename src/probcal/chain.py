@@ -117,20 +117,40 @@ class Chain:
         return params
 
     def set_params(self, **params: object) -> "Chain":
-        """Set ``stages`` wholesale, one stage (``stages__i``), or a nested stage param."""
+        """Set ``stages`` wholesale, one stage (``stages__i``), or a nested stage param.
+
+        Stage replacements (``stages__i``) validate the whole candidate
+        list before anything on the chain changes, so a rejected
+        replacement leaves the chain as it was; a wholesale ``stages=``
+        key is applied first and independently of the indexed keys in the
+        same call. Like the stages' own ``set_params``, setting a nested
+        parameter (``stages__i__param``) does not clear ``fitted_``; call
+        ``fit`` again for the new value to take effect.
+        """
         if "stages" in params:
             self.__init__(params.pop("stages"))  # type: ignore[misc, arg-type]
         nested: dict[int, dict[str, object]] = {}
+        replacements: dict[int, object] = {}
         for key, value in params.items():
             prefix, _, rest = key.partition("__")
             idx_text, _, sub = rest.partition("__")
             if prefix != "stages" or not idx_text.isdigit():
                 raise ValueError(f"invalid parameter {key!r} for Chain")
+            idx = int(idx_text)
+            if idx >= len(self.stages):
+                raise ValueError(
+                    f"invalid parameter {key!r} for Chain: stage index {idx} is out "
+                    f"of range for {len(self.stages)} stages"
+                )
             if not sub:
-                self.stages[int(idx_text)] = value
-                self.__init__(self.stages)  # type: ignore[misc] # revalidate types/order
+                replacements[idx] = value
             else:
-                nested.setdefault(int(idx_text), {})[sub] = value
+                nested.setdefault(idx, {})[sub] = value
+        if replacements:
+            candidate = list(self.stages)
+            for idx, stage in replacements.items():
+                candidate[idx] = stage
+            self.__init__(candidate)  # type: ignore[misc] # validates before mutating
         for idx, sub_params in nested.items():
             self.stages[idx].set_params(**sub_params)  # type: ignore[attr-defined]
         return self

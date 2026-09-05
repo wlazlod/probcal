@@ -88,3 +88,24 @@ def test_to_dict_delegates_to_the_inner_offset():
     d = step.to_dict()
     assert d["class"] == "LogitOffset"
     assert probcal._registry.load(d).delta_ == step.offset_.delta_
+
+
+def test_sample_weight_matches_the_weighted_core_offset():
+    p = make_pd_portfolio(n=400, random_state=7).scores
+    rng = np.random.default_rng(5)
+    w = rng.uniform(0.5, 2.0, size=len(p))
+    core = LogitOffset(target_mean=0.03).fit(p, sample_weight=w)
+    step = SklearnOffset(target_mean=0.03).fit(p.reshape(-1, 1), sample_weight=w)
+    assert step.offset_.delta_ == core.delta_
+
+
+def test_zero_sample_weight_equals_dropping_the_rows():
+    p = make_pd_portfolio(n=400, random_state=7).scores
+    w = np.ones_like(p)
+    w[::10] = 0.0
+    kept = p[w > 0.0]
+    dropped = SklearnOffset(target_mean=0.03).fit(
+        kept.reshape(-1, 1), sample_weight=np.ones_like(kept)
+    )
+    zeroed = SklearnOffset(target_mean=0.03).fit(p.reshape(-1, 1), sample_weight=w)
+    assert zeroed.offset_.delta_ == dropped.offset_.delta_

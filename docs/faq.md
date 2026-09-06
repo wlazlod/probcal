@@ -79,7 +79,9 @@ per-grade binomial/Jeffreys backtests, calibrated→raw
 
 Rule of thumb: neural networks, multi-class, detection, or regression → netcal. Binary
 scores feeding cutoffs, pricing, capital, or reason codes, especially under validation or
-supervisory review → probcal.
+supervisory review → probcal. Where the two overlap, the maps produce the same numbers: the
+[measured comparison](benchmarks/comparison.md) shows probcal's beta and netcal's beta
+agreeing to four decimals on every dataset, with the differences elsewhere.
 
 ## Are there other packages called "probcal"?
 

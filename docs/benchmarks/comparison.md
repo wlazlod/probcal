@@ -264,7 +264,7 @@ base: hgb, test AUC 0.739; scores: 250 distinct on n_cal=250 (100.0%); largest t
 - **What the ties did (credit-card).** 161 distinct scorecard points on
   7,500 calibration obligors, largest block 164. Every method fit; no IRLS
   separation fallback fired. The step methods collapse the 161 inputs
-  further: isotonic to 29 output levels, ENIR to 26, BBQ to 47, IVAP to 45.
+  further: isotonic to about 30 output levels (probcal 29, sklearn 30; the two maps differ on one boundary row), ENIR to 26, BBQ to 47, IVAP to 45.
   `SplineCalibrator` warned that its fitted curve is not monotone (a
   refusal it makes in the open, and the reason it is not on the README's
   production path). Log loss is a dead heat across all twelve rows; the

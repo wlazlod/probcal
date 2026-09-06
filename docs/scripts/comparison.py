@@ -101,7 +101,7 @@ def _fit_base(X_tr, y_tr, base: str):
         from sklearn.preprocessing import KBinsDiscretizer
 
         pipe = make_pipeline(
-            KBinsDiscretizer(n_bins=5, encode="onehot", strategy="quantile"),
+            KBinsDiscretizer(n_bins=5, encode="onehot", strategy="quantile", subsample=None),
             LogisticRegression(max_iter=2000),
         )
         with warnings.catch_warnings():
@@ -140,7 +140,6 @@ def _grade_stats(y, p, edges, labels) -> dict:
         "sizes": sizes,
         "n_small": int(np.sum(np.asarray(res.n) < 30)),
         "n_zero": int(np.sum(np.asarray(res.k) == 0)),
-        "pass_rate": passed / len(res.grades),
     }
 
 
@@ -245,7 +244,6 @@ def run_dataset(name: str, version: int, pos: str, base: str, seed: int = 0):
         "base": base,
         "auc": float(roc_auc_score(y_test, s_test)),
         "ties_cal": _tie_stats(s_cal),
-        "ties_test": _tie_stats(s_test),
         "labels": labels,
         "edges": edges,
     }
@@ -255,12 +253,13 @@ def run_dataset(name: str, version: int, pos: str, base: str, seed: int = 0):
         t0 = time.perf_counter()
         try:
             predict = fit(np.clip(s_cal, 1e-12, 1 - 1e-12), y_cal)
+            fit_s = time.perf_counter() - t0
+            p = np.clip(np.asarray(predict(np.clip(s_test, 1e-12, 1 - 1e-12)), float), 0.0, 1.0)
+            rep = evaluate(y_test, p, n_boot=N_BOOT, metrics=("log_loss", "ece_sweep", "ici"))
+            grades = _grade_stats(y_test, p, edges, labels)
         except Exception as exc:
             rows.append({"method": method, "error": f"{type(exc).__name__}"})
             continue
-        fit_s = time.perf_counter() - t0
-        p = np.clip(np.asarray(predict(np.clip(s_test, 1e-12, 1 - 1e-12)), float), 0.0, 1.0)
-        rep = evaluate(y_test, p, n_boot=N_BOOT, metrics=("log_loss", "ece_sweep", "ici"))
         vals = dict(zip(rep.names, rep.values, strict=True))
         los = dict(zip(rep.names, rep.ci_low, strict=True))
         his = dict(zip(rep.names, rep.ci_high, strict=True))
@@ -270,7 +269,7 @@ def run_dataset(name: str, version: int, pos: str, base: str, seed: int = 0):
                 "log_loss": (vals["log_loss"], los["log_loss"], his["log_loss"]),
                 "ece_sweep": (vals["ece_sweep"], los["ece_sweep"], his["ece_sweep"]),
                 "ici": (vals["ici"], los["ici"], his["ici"]),
-                "grades": _grade_stats(y_test, p, edges, labels),
+                "grades": grades,
                 "levels": int(len(np.unique(p))),
                 "fit_s": fit_s,
             }
@@ -328,25 +327,25 @@ def _print_readme(rows: list[dict], diag: dict) -> None:
         f"{t['largest_block']}; test AUC {diag['auc']:.3f}; n_test={diag['n_test']:,}"
     )
     by_name = {r["method"]: r for r in rows}
-    sizes_a = [
-        by_name[m]["grades"]["sizes"][0]
+    sizes_a = {
+        m: by_name[m]["grades"]["sizes"][0]
         for m in README_METHODS
         if m in by_name and "error" not in by_name[m]
-    ]
-    print(f"grade A sizes across README methods: {sizes_a}\n")
-    print("| method | log loss | ICI | grade pass | fit s |")
-    print("|---|---|---|---|---|")
+    }
+    print(f"grade A size per README method: {sizes_a}\n")
+    print("| method | log loss | ICI | grade pass | n<30 | zero-default | fit s |")
+    print("|---|---|---|---|---|---|---|")
     for m in README_METHODS:
         r = by_name.get(m)
         if r is None:
             continue
         if "error" in r:
-            print(f"| {m} | fit failed: {r['error']} | | | |")
+            print(f"| {m} | fit failed: {r['error']} | | | | | |")
             continue
         g = r["grades"]
         print(
-            f"| {m} | {_ci(r['log_loss'])} | {_ci(r['ici'])} | "
-            f"{g['passed']}/{g['total']} | {r['fit_s']:.2f} |"
+            f"| {m} | {_ci(r['log_loss'])} | {_ci(r['ici'])} | {g['passed']}/{g['total']} | "
+            f"{g['n_small']} | {g['n_zero']} | {r['fit_s']:.2f} |"
         )
 
 
@@ -363,6 +362,7 @@ def main() -> None:
     )
     datasets = [d for d in DATASETS if d[0] == CREDIT] if README else DATASETS
     for name, version, pos, base in datasets:
+        print(f"(running {name})", file=sys.stderr, flush=True)
         try:
             rows, diag = run_dataset(name, version, pos, base)
         except Exception as exc:

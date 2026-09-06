@@ -6,45 +6,21 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
-Probability calibration you can put in front of a validator: **numpy-only**
-methods, metrics, and diagnostics for binary classifiers — built for
-regulated PD models, fully general in practice.
+Probability calibration for binary classifiers, built for regulated PD models.
+The runtime is numpy only. The calibration maps are the standard ones; what
+probcal adds is the evidence a validator asks for next, which scikit-learn does
+not produce:
 
-What the wedge is, concretely:
-
-- **Regulated-PD first.** Logit-scale diagnostics that keep 1% readable,
-  per-grade regulatory backtests (binomial, Jeffreys), and a central-tendency
-  adjustment that ships as an auditable `LogitOffset` stage — never a silent
-  refit.
-- **Audit trail everywhere.** Every method explains its own parameters
-  (`interpret()`); every fitted object serializes to versioned JSON (never
-  pickle) with provenance fingerprints; every refusal names the reason and
-  the alternative — no silent clamps, no silent approximations.
-- **Exact inverse maps.** "PD ≤ 2%" translates to a raw-score threshold,
-  scorecard point cut-offs, or a counterfactual target, exactly
-  (`interval_inverse` / `point_inverse` / `Chain`) — the contract recourse
-  engines like [treecf](https://github.com/wlazlod/treecf) build on.
-- **Anytime-valid monitoring.** `probcal.monitor` watches deployed
-  calibration with e-processes: the alarm keeps its type-I guarantee at
-  *every* look, and reports whether a re-offset is enough or a re-fit is due.
-- **numpy-only core.** `import probcal` pulls numpy and nothing else —
-  enforced by a test. scikit-learn/optbinning/treecf adapters are opt-in
-  extras.
-
-**Start here:** the executed
-[end-to-end notebook](https://wlazlod.github.io/probcal/notebooks/pd_end_to_end/)
-takes one rare-event portfolio from GBM baseline to reliability diagnosis,
-selection with CIs, per-grade backtests, offsetting, threshold translation,
-a counterfactual, monitoring, and JSON round-trips.
-
-`probcal` covers the binary calibration literature (Platt, temperature, beta,
-isotonic, centered isotonic, histogram binning, scaling-binning, BBQ, ENIR,
-Venn–Abers, spline), an extensive metric catalog with bootstrap CIs,
-automatic method selection under nested validation, and prefit/cv data flows.
-
-**Status:** released on PyPI, beta. The API is stable enough to build on; breaking changes
-bump the minor version until 1.0 (see *API stability* in the docs). Serialized artifacts
-have a stronger promise: every 0.x release reads schema 1, enforced by golden files in CI.
+- **Logit-scale diagnostics that keep 1% readable.** `calibration_guardrails`
+  reports slope, intercept, and Spiegelhalter's test in log-odds, and every
+  reliability curve draws on the logit axis, so a 3% portfolio is not crushed
+  into the bottom-left corner.
+- **An auditable offset stage.** A central-tendency adjustment is a
+  `LogitOffset` object, not a refit: `audit_report()` records the mean before
+  and after, the guardrails before and after, a timestamp, and a fingerprint.
+- **Per-grade regulatory backtests.** `binomial_grade_test` and
+  `jeffreys_grade_test` give the traffic-light table per rating grade, and
+  `jeffreys_upper_bands` turns the same posteriors into a masterscale.
 
 ## Installation
 
@@ -54,7 +30,9 @@ pip install "probcal[viz]"     # + matplotlib for probcal.plots
 pip install "probcal[sklearn]" # + scikit-learn for probcal.sklearn adapters
 ```
 
-Development setup (tests, lint, type-check):
+Beta on PyPI. Breaking changes bump the minor version until 1.0 (see *API
+stability* in the docs); serialized artifacts have a stronger promise, every
+0.x release reads schema 1. Development setup:
 
 ```bash
 git clone https://github.com/wlazlod/probcal && cd probcal
@@ -63,79 +41,108 @@ uv sync --extra dev
 
 ## Quickstart
 
+The three things above, in one run on a synthetic 3% portfolio:
+
 ```python
-from probcal import BetaCalibrator, make_pd_portfolio
-from probcal.metrics import calibration_guardrails
+import numpy as np
+from probcal import BetaCalibrator, LogitOffset, make_pd_portfolio
+from probcal.metrics import calibration_guardrails, jeffreys_grade_test
 
 port = make_pd_portfolio(n=8000, random_state=42)   # synthetic 3% PD portfolio
 
-g_before = calibration_guardrails(port.y, port.scores)
-print(f"before: slope={g_before.slope:.3f}  intercept={g_before.intercept:+.3f}  ok={g_before.all_ok}")
-
+# 1. Logit-scale diagnostics: slope, intercept, Spiegelhalter, before and after
+g0 = calibration_guardrails(port.y, port.scores)
+print(f"before: slope={g0.slope:.3f}  intercept={g0.intercept:+.3f}  ok={g0.all_ok}")
 cal = BetaCalibrator().fit(port.scores, port.y)
 p = cal.predict_proba(port.scores)
+g1 = calibration_guardrails(port.y, p)
+print(f"after:  slope={g1.slope:.3f}  intercept={g1.intercept:+.3f}  ok={g1.all_ok}")
 
-g_after = calibration_guardrails(port.y, p)
-print(f"after:  slope={g_after.slope:.3f}  intercept={g_after.intercept:+.3f}  ok={g_after.all_ok}")
-print()
-print(cal.interpret())
+# 2. An auditable offset: re-anchor to a 3.5% policy PD and record what it cost
+off = LogitOffset(target_mean=0.035).fit(p)
+print(off.audit_report(port.y, p))
+p_final = off.transform(p)
+
+# 3. Per-grade regulatory backtest on a fixed PD masterscale
+edges, labels = np.array([0, 0.01, 0.02, 0.05, 0.10, 1.0]), np.array(list("ABCDE"))
+grades = labels[np.searchsorted(edges, p_final, side="right") - 1]
+res = jeffreys_grade_test(port.y, p_final, grades)
+for g, n, k, pd_, light in zip(res.grades, res.n, res.k, res.pd, res.light):
+    print(f"grade {g}: n={n:5d}  defaults={k:3d}  PD={pd_:.4f}  {light}")
 ```
 
 Output:
 
 ```text
 before: slope=0.968  intercept=-0.765  ok=False
-after:  slope=1.000  intercept=+0.000  ok=True
-
-Interpretation[BetaCalibrator]
-parameter  value
----------  --------
-a          0.875054
-b          1.58922
-c          -1.15227
-- a = 0.875: sensitivity near s -> 0; a < 1 raises the smallest probabilities (model was overconfident in the low tail), a > 1 deepens them
-- b = 1.589: sensitivity near s -> 1; the mirrored reading for the high tail
-- c = -1.152: base-rate shift of -1.152 log-odds, odds factor 0.316
-- identity map corresponds to (a, b, c) = (1, 1, 0)
-- a != b (gap -0.714): asymmetric tail distortion that no symmetric (Platt/temperature) map could express
+after:  slope=1.000  intercept=-0.000  ok=True
+AuditReport(delta=+0.1195, odds factor 1.1269, fitted 2026-09-06T15:23:19+00:00)
+  portfolio mean: 0.03138 -> 0.03500
+  slope:          +1.000 -> +1.000
+  intercept:      -0.000 -> -0.119
+  spiegelhalter p 0.995 -> 0.076
+  guardrails ok:  True -> False
+grade A: n= 1697  defaults= 10  PD=0.0063  green
+grade B: n= 2038  defaults= 28  PD=0.0147  green
+grade C: n= 2736  defaults= 70  PD=0.0317  green
+grade D: n= 1044  defaults= 68  PD=0.0692  green
+grade E: n=  485  defaults= 75  PD=0.1656  green
 ```
 
-Automatic selection, model wrapping, offsetting, and threshold translation:
+The audit report says what the policy offset cost: the intercept guardrail
+now fails by exactly the applied shift, on the record. The executed
+[end-to-end notebook](https://wlazlod.github.io/probcal/notebooks/pd_end_to_end/)
+takes a rare-event portfolio through selection, backtests, offsetting,
+threshold translation, and monitoring.
 
-```python
-from probcal import CalibratedModel, CalibratorSelector, PlattCalibrator
+## Measured against scikit-learn and netcal
 
-sel = CalibratorSelector().fit(s_cal, y_cal)             # nested CV, log-loss criterion
-wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
-wrapped.offset_to(target_mean=0.031)                     # auditable central-tendency stage
-lo_z, hi_z = wrapped.interval_inverse(0.0, 0.02, space="logit")   # "PD <= 2%" in raw margins
-```
+Taiwan credit-card default (OpenML `default-of-credit-card-clients`,
+n=30,000, 22.1% default rate). A scorecard base model with integer points
+gives the scores a deployed scorecard has: **161 distinct values across
+7,500 calibration obligors, largest tie block 164**. Grades come from an
+8-band PD masterscale applied to each method's own calibrated PD; grade A
+(PD under 3%) holds **12 to 46 obligors** depending on the calibrator, and
+netcal BBQ never reaches it. Evaluation on 7,500 held-out obligors with
+bootstrap CIs; the grade column is the number of grades passing the
+Jeffreys backtest at the 5% level.
 
-## Why probcal
+| method | log loss | ICI | grades passing | fit s |
+|---|---|---|---|---|
+| probcal Platt | 0.4527 [0.4428, 0.4617] | 0.0056 [0.0041, 0.0122] | 7/8 | 0.00 |
+| probcal beta (abm) | 0.4527 [0.4426, 0.4617] | 0.0074 [0.0041, 0.0146] | 6/8 | 0.01 |
+| probcal isotonic | 0.4524 [0.4418, 0.4616] | 0.0086 [0.0036, 0.0166] | 6/8 | 0.00 |
+| sklearn sigmoid | 0.4527 [0.4428, 0.4617] | 0.0056 [0.0041, 0.0122] | 7/8 | 0.00 |
+| sklearn isotonic | 0.4524 [0.4418, 0.4616] | 0.0086 [0.0036, 0.0166] | 6/8 | 0.00 |
+| netcal beta | 0.4527 [0.4426, 0.4617] | 0.0074 [0.0041, 0.0146] | 6/8 | 0.03 |
+| netcal BBQ | 0.4545 [0.4446, 0.4632] | 0.0089 [0.0044, 0.0169] | 5/6 | 0.26 |
 
-| Capability | probcal | scikit-learn | netcal | probcal (R)² | single-method packages¹ |
-|---|---|---|---|---|---|
-| Calibration methods | 11 | 2 | many | 5 binary³ | 1 each |
-| Runtime dependencies | numpy | scipy stack | torch stack | native R | varies |
-| Logit-scale diagnostics (low-PD readable) | yes | — | — | — | — |
-| First-class auditable offset (central tendency) | yes | — | — | — | — |
-| Automatic selection under nested validation | yes | — | — | — | — |
-| Venn–Abers intervals | yes | — | — | — | venn-abers |
-| Metric catalog with selection-suitability guidance | yes | partial | partial | partial | — |
-| Per-grade regulatory backtests (binomial, Jeffreys) | yes | — | — | — | — |
-| Kernel calibration error and test (SKCE, Widmann et al.) | yes | — | — | **yes** | — |
-| Calibrated→raw threshold translation (`interval_inverse`) | yes | — | — | — | — |
-| SHAP additivity repair on the calibrated scale | yes | — | — | — | — |
-| Parameter interpretation (`interpret()`) on every method | yes | — | — | partial | — |
+The calibration maps agree: probcal's Platt equals sklearn's sigmoid and
+probcal's isotonic equals sklearn's isotonic to four decimals, and the beta
+row matches netcal and betacal. On a plain scorecard the map is not where
+the libraries differ; the diagnostics, the offset audit, and the per-grade
+table above are. NaN scores are rejected with a named error, never imputed.
+Full method list, five more datasets from 1.5% to 30% event rate, and the
+reproducible script:
+[Benchmarks](https://wlazlod.github.io/probcal/benchmarks/comparison/).
 
-¹ betacal, venn-abers, ml-insights.
-² prdm0/probcal (P. R. Diniz Marinho), unaffiliated — see the FAQ. Verified against v0.2.0, 2026-08-08.
-³ Platt, temperature, beta, isotonic, histogram binning; its multiclass methods (Dirichlet, vector scaling, one-vs-rest) are out of probcal's binary scope.
+## Three calibrators, and the rest
 
-### Serialization
+`PlattCalibrator`, `BetaCalibrator`, and `IsotonicCalibrator` are the
+production path: the quickstart and the benchmark use them, each has exact
+inverse maps, `interpret()`, and JSON serialization pinned by golden files.
+Ten more (temperature, centered isotonic, histogram binning, scaling-binning,
+BBQ, ENIR, Venn–Abers IVAP and CVAP, spline, segmented) and the nested-CV
+`CalibratorSelector` are in the
+[calibrator catalog](https://wlazlod.github.io/probcal/guide/choosing/),
+with monotonicity, inverses, data appetite, and fit cost per row. The
+47-symbol metric catalog, with which metrics are safe to select on, is in
+[Metrics and tests](https://wlazlod.github.io/probcal/concepts/metrics/).
 
-Every fitted object round-trips through versioned, human-readable JSON — never pickle
-(auditable; loading executes no code):
+## Serialization
+
+Every fitted object round-trips through versioned, human-readable JSON, never
+pickle (auditable; loading executes no code):
 
 ```python
 cal.to_json("beta.json")
@@ -146,35 +153,6 @@ cal.fingerprint()                                # sha-256 provenance id
 Compatibility promise: every 0.x release reads schema 1, enforced by committed golden
 files in CI; schema bumps ship only with a converter. Details: the *Serialization*
 concepts chapter.
-
-### Calibrators at a glance
-
-| Method | Class | Scaling |
-|---|---|---|
-| Platt scaling | `PlattCalibrator` | O(n) per IRLS iteration |
-| Temperature scaling | `TemperatureCalibrator` | O(n) per IRLS iteration |
-| Beta calibration | `BetaCalibrator` | O(n) per IRLS iteration |
-| Isotonic regression | `IsotonicCalibrator` | O(n log n) fit (sort + PAVA) |
-| Centered isotonic (CIR) | `CenteredIsotonicCalibrator` | O(n log n) fit |
-| Histogram binning | `HistogramBinningCalibrator` | O(n log n) fit |
-| Scaling-binning | `ScalingBinningCalibrator` | O(n log n) fit |
-| BBQ | `BBQCalibrator` | O(n log n) fit per candidate binning |
-| ENIR | `ENIRCalibrator` | quadratic in unique scores; intended for m ≲ 50,000 (`fit` warns above) |
-| Venn–Abers (IVAP) | `VennAbersCalibrator` | O(n log n) fit, O(log n) per prediction |
-| Spline calibration | `SplineCalibrator` | O(n · k) per IRLS iteration (k knots) |
-| Segmented calibration | `SegmentedCalibrator` | base cost, plus O(n) for the per-segment offsets |
-
-Performance note: the ICI family (`ici`/`e50`/`e90`/`emax`) shares one LOESS fit anchored
-to `grid_size=512` quantile points instead of refitting at every observation — the same
-device R's `stats::lowess` uses via its `delta` parameter (fit at spaced points, interpolate
-the rest) — and `smooth_ece` pre-aggregates its residual measure onto `bins=8192` cells
-before the bandwidth bisection — for every n as of this release (0.1.3 ran the exact
-path for n ≤ 8192: ~1s at n=4000 on this host; now 1–6ms for all n up to 10⁵ and ~43ms at
-n=10⁶, where the O(n) pre-binning dominates). Measured on this host: `ici` at n=50,000 dropped from 192.2s
-(v0.1.2) to 1.2s, and `loess(grid_size=512)` now fits n=1,000,000 points in under 30s.
-`grid_size=None` and `bins=None` recover the exact pre-0.1.3 values and cost, so nothing is
-lost for portfolios small enough to afford it. Still numpy-only; Rust acceleration remains
-out of scope unless a future workload demands it.
 
 ## Documentation
 

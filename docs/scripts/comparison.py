@@ -1,17 +1,25 @@
 """Comparison benchmark: probcal vs sklearn / netcal / betacal.
 
-Usage: ``uv run python docs/scripts/comparison.py [--fast]``
+Usage: ``uv run python docs/scripts/comparison.py [--fast] [--readme]``
 Requires ``probcal[bench]`` (pins recorded in the output header). Datasets
 download from OpenML through scikit-learn's ``fetch_openml`` cache.
 
-Protocol per dataset: 50/25/25 train/calibration/test split (seeded);
-HistGradientBoostingClassifier base model trained once; every calibrator
-fits on the calibration split's scores and is evaluated on the test split
-with ``probcal.metrics.evaluate`` bootstrap CIs (log loss, ECE-sweep, ICI),
-the Jeffreys per-grade backtest pass rate (six fixed PD bands), and wall
-fit time. The output table is pasted into ``docs/benchmarks/comparison.md``.
+Protocol per dataset: 50/25/25 train/calibration/test split (seeded); one
+base model trained once on the train split. The five general datasets use
+``HistGradientBoostingClassifier``; the credit-card dataset uses a scorecard
+(quantile-binned one-hot features, logistic regression, logit rounded to
+integer points at PDO=20), so its scores carry the ties a deployed scorecard
+has. Every calibrator fits on the calibration split's scores and is evaluated
+on the test split with ``probcal.metrics.evaluate`` bootstrap CIs (log loss,
+ECE-sweep, ICI), the Jeffreys per-grade backtest over a fixed PD-band
+masterscale (grades assigned from each method's own calibrated PD), and wall
+fit time. Score ties and grade sizes are reported per dataset. ``--readme``
+runs the credit-card dataset only and appends the README-sized table. The
+output is pasted into ``docs/benchmarks/comparison.md``.
 """
 
+import contextlib
+import io
 import sys
 import time
 import warnings
@@ -21,26 +29,47 @@ import numpy as np
 from probcal import (
     BetaCalibrator,
     CalibratorSelector,
+    IsotonicCalibrator,
+    PlattCalibrator,
     SplineCalibrator,
     VennAbersCalibrator,
 )
 from probcal.metrics import evaluate, jeffreys_grade_test
 
 FAST = "--fast" in sys.argv
+README = "--readme" in sys.argv
 N_BOOT = 100 if FAST else 200
 TEST_CAP = 8000 if FAST else 20000
 
+CREDIT = "default-of-credit-card-clients"
+
 DATASETS = [
-    # (openml name, version, positive label) — event rates ~1.5% to 30%
-    ("Satellite", 1, "Anomaly"),
-    ("mammography", 1, "1"),
-    ("bank-marketing", 1, "2"),
-    ("adult", 2, ">50K"),
-    ("credit-g", 1, "bad"),
+    # (openml name, version, positive label, base model) — event rates ~1.5% to 30%
+    (CREDIT, 1, "1", "scorecard"),
+    ("Satellite", 1, "Anomaly", "hgb"),
+    ("mammography", 1, "1", "hgb"),
+    ("bank-marketing", 1, "2", "hgb"),
+    ("adult", 2, ">50K", "hgb"),
+    ("credit-g", 1, "bad", "hgb"),
 ]
 
-_GRADE_EDGES = np.array([0.0, 0.005, 0.01, 0.02, 0.05, 0.15, 1.0])
-_GRADE_LABELS = np.array(["A", "B", "C", "D", "E", "F"])
+_DEFAULT_SCALE = (np.array([0.0, 0.005, 0.01, 0.02, 0.05, 0.15, 1.0]), list("ABCDEF"))
+_MASTERSCALES = {
+    CREDIT: (np.array([0.0, 0.03, 0.06, 0.10, 0.15, 0.25, 0.40, 0.60, 1.0]), list("ABCDEFGH")),
+}
+
+_PDO = 20.0  # scorecard points to double the odds
+_PDO_FACTOR = _PDO / np.log(2.0)
+
+README_METHODS = (
+    "probcal Platt",
+    "probcal beta (abm)",
+    "probcal isotonic",
+    "sklearn sigmoid",
+    "sklearn isotonic",
+    "netcal beta",
+    "netcal BBQ",
+)
 
 
 def _load(name: str, version: int, pos: str):
@@ -59,14 +88,63 @@ def _load(name: str, version: int, pos: str):
     return np.hstack(parts), y
 
 
-def _grade_pass_rate(y, p) -> float:
-    grades = _GRADE_LABELS[np.clip(np.searchsorted(_GRADE_EDGES, p, side="right") - 1, 0, 5)]
+def _fit_base(X_tr, y_tr, base: str):
+    """Train the base model once; return ``score(X) -> s in (0, 1)``."""
+    if base == "hgb":
+        from sklearn.ensemble import HistGradientBoostingClassifier
+
+        model = HistGradientBoostingClassifier(random_state=0).fit(X_tr, y_tr)
+        return lambda X: model.predict_proba(X)[:, 1]
+    if base == "scorecard":
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.pipeline import make_pipeline
+        from sklearn.preprocessing import KBinsDiscretizer
+
+        pipe = make_pipeline(
+            KBinsDiscretizer(n_bins=5, encode="onehot", strategy="quantile"),
+            LogisticRegression(max_iter=2000),
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # degenerate bins on low-cardinality columns
+            pipe.fit(X_tr, y_tr)
+
+        def score(X):
+            points = np.round(_PDO_FACTOR * pipe.decision_function(X))
+            return 1.0 / (1.0 + np.exp(-points / _PDO_FACTOR))
+
+        return score
+    raise ValueError(f"unknown base model {base!r}")
+
+
+def _tie_stats(s) -> dict:
+    _, counts = np.unique(s, return_counts=True)
+    return {
+        "n": int(len(s)),
+        "distinct": int(len(counts)),
+        "largest_block": int(counts.max()),
+        "median_block": float(np.median(counts)),
+    }
+
+
+def _grade_stats(y, p, edges, labels) -> dict:
+    """Jeffreys backtest over the masterscale; grades from the calibrated PD itself."""
+    idx = np.clip(np.searchsorted(edges, p, side="right") - 1, 0, len(labels) - 1)
+    grades = np.asarray(labels)[idx]
     res = jeffreys_grade_test(y, p, grades)
-    lights = np.asarray(res.p_value) > 0.05
-    return float(np.mean(lights))
+    pos = {g: i for i, g in enumerate(res.grades)}
+    sizes = [int(res.n[pos[g]]) if g in pos else None for g in labels]
+    passed = int(np.sum(np.asarray(res.p_value) > 0.05))
+    return {
+        "passed": passed,
+        "total": len(res.grades),
+        "sizes": sizes,
+        "n_small": int(np.sum(np.asarray(res.n) < 30)),
+        "n_zero": int(np.sum(np.asarray(res.k) == 0)),
+        "pass_rate": passed / len(res.grades),
+    }
 
 
-def _methods(seed: int):
+def _methods():
     """name -> fit(s, y) returning predict(s_new) -> calibrated p."""
     out: dict[str, object] = {}
 
@@ -77,7 +155,9 @@ def _methods(seed: int):
 
         return fit
 
+    out["probcal Platt"] = probcal_method(PlattCalibrator())
     out["probcal beta (abm)"] = probcal_method(BetaCalibrator())
+    out["probcal isotonic"] = probcal_method(IsotonicCalibrator())
     out["probcal spline"] = probcal_method(SplineCalibrator())
     out["probcal IVAP"] = probcal_method(VennAbersCalibrator())
     out["probcal selector"] = probcal_method(CalibratorSelector())
@@ -108,7 +188,11 @@ def _methods(seed: int):
         def netcal_method(ctor):
             def fit(s, y):
                 m = ctor()
-                with warnings.catch_warnings():
+                with (
+                    warnings.catch_warnings(),
+                    contextlib.redirect_stdout(io.StringIO()),
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
                     warnings.simplefilter("ignore")
                     m.fit(s.astype(np.float64), y.astype(int))
                 return lambda s_new: np.clip(
@@ -138,8 +222,8 @@ def _methods(seed: int):
     return out
 
 
-def run_dataset(name: str, version: int, pos: str, seed: int = 0) -> list[dict]:
-    from sklearn.ensemble import HistGradientBoostingClassifier
+def run_dataset(name: str, version: int, pos: str, base: str, seed: int = 0):
+    from sklearn.metrics import roc_auc_score
 
     X, y = _load(name, version, pos)
     rng = np.random.default_rng(seed)
@@ -147,19 +231,32 @@ def run_dataset(name: str, version: int, pos: str, seed: int = 0) -> list[dict]:
     X, y = X[order], y[order]
     n = len(y)
     i_tr, i_ca = int(0.5 * n), int(0.75 * n)
-    model = HistGradientBoostingClassifier(random_state=0).fit(X[:i_tr], y[:i_tr])
-    s_cal, y_cal = model.predict_proba(X[i_tr:i_ca])[:, 1], y[i_tr:i_ca]
-    s_test, y_test = model.predict_proba(X[i_ca:])[:, 1], y[i_ca:]
+    score = _fit_base(X[:i_tr], y[:i_tr], base)
+    s_cal, y_cal = score(X[i_tr:i_ca]), y[i_tr:i_ca]
+    s_test, y_test = score(X[i_ca:]), y[i_ca:]
     if len(y_test) > TEST_CAP:
         s_test, y_test = s_test[:TEST_CAP], y_test[:TEST_CAP]
+    edges, labels = _MASTERSCALES.get(name, _DEFAULT_SCALE)
+
+    diag = {
+        "event_rate": float(y.mean()),
+        "n": n,
+        "n_test": int(len(y_test)),
+        "base": base,
+        "auc": float(roc_auc_score(y_test, s_test)),
+        "ties_cal": _tie_stats(s_cal),
+        "ties_test": _tie_stats(s_test),
+        "labels": labels,
+        "edges": edges,
+    }
 
     rows = []
-    for method, fit in _methods(seed).items():
+    for method, fit in _methods().items():
         t0 = time.perf_counter()
         try:
             predict = fit(np.clip(s_cal, 1e-12, 1 - 1e-12), y_cal)
         except Exception as exc:
-            rows.append({"dataset": name, "method": method, "error": f"{type(exc).__name__}"})
+            rows.append({"method": method, "error": f"{type(exc).__name__}"})
             continue
         fit_s = time.perf_counter() - t0
         p = np.clip(np.asarray(predict(np.clip(s_test, 1e-12, 1 - 1e-12)), float), 0.0, 1.0)
@@ -169,50 +266,111 @@ def run_dataset(name: str, version: int, pos: str, seed: int = 0) -> list[dict]:
         his = dict(zip(rep.names, rep.ci_high, strict=True))
         rows.append(
             {
-                "dataset": f"{name} ({y.mean():.1%})",
                 "method": method,
                 "log_loss": (vals["log_loss"], los["log_loss"], his["log_loss"]),
                 "ece_sweep": (vals["ece_sweep"], los["ece_sweep"], his["ece_sweep"]),
                 "ici": (vals["ici"], los["ici"], his["ici"]),
-                "grade_pass": _grade_pass_rate(y_test, p),
+                "grades": _grade_stats(y_test, p, edges, labels),
+                "levels": int(len(np.unique(p))),
                 "fit_s": fit_s,
             }
         )
-    return rows
+    return rows, diag
+
+
+def _ci(t) -> str:
+    if not (np.isfinite(t[1]) and np.isfinite(t[2])):
+        return f"{t[0]:.4f} (CI undefined)"
+    return f"{t[0]:.4f} [{t[1]:.4f}, {t[2]:.4f}]"
+
+
+def _sizes(g: dict) -> str:
+    return "/".join("–" if s is None else str(s) for s in g["sizes"])
+
+
+def _print_dataset(name: str, rows: list[dict], diag: dict) -> None:
+    t = diag["ties_cal"]
+    print(f"\n### {name} ({diag['event_rate']:.1%} event rate, n={diag['n']:,})\n")
+    print(
+        f"base: {diag['base']}, test AUC {diag['auc']:.3f}; scores: {t['distinct']:,} distinct "
+        f"on n_cal={t['n']:,} ({t['distinct'] / t['n']:.1%}); largest tie block "
+        f"{t['largest_block']}, median block {t['median_block']:.0f}; n_test={diag['n_test']:,}\n"
+    )
+    print("| method | log loss | ECE-sweep | ICI | grade pass | fit s |")
+    print("|---|---|---|---|---|---|")
+    for r in rows:
+        if "error" in r:
+            print(f"| {r['method']} | fit failed: {r['error']} | | | | |")
+            continue
+        g = r["grades"]
+        print(
+            f"| {r['method']} | {_ci(r['log_loss'])} | {_ci(r['ece_sweep'])} | "
+            f"{_ci(r['ici'])} | {g['passed']}/{g['total']} | {r['fit_s']:.2f} |"
+        )
+    labels = "/".join(diag["labels"])
+    print(f"\n| method | output levels | grade sizes ({labels}) | n<30 | zero-default | pass |")
+    print("|---|---|---|---|---|---|")
+    for r in rows:
+        if "error" in r:
+            continue
+        g = r["grades"]
+        print(
+            f"| {r['method']} | {r['levels']} | {_sizes(g)} | {g['n_small']} | "
+            f"{g['n_zero']} | {g['passed']}/{g['total']} |"
+        )
+
+
+def _print_readme(rows: list[dict], diag: dict) -> None:
+    t = diag["ties_cal"]
+    print("\n### README block\n")
+    print(
+        f"scores: {t['distinct']:,} distinct on n_cal={t['n']:,}; largest tie block "
+        f"{t['largest_block']}; test AUC {diag['auc']:.3f}; n_test={diag['n_test']:,}"
+    )
+    by_name = {r["method"]: r for r in rows}
+    sizes_a = [
+        by_name[m]["grades"]["sizes"][0]
+        for m in README_METHODS
+        if m in by_name and "error" not in by_name[m]
+    ]
+    print(f"grade A sizes across README methods: {sizes_a}\n")
+    print("| method | log loss | ICI | grade pass | fit s |")
+    print("|---|---|---|---|---|")
+    for m in README_METHODS:
+        r = by_name.get(m)
+        if r is None:
+            continue
+        if "error" in r:
+            print(f"| {m} | fit failed: {r['error']} | | | |")
+            continue
+        g = r["grades"]
+        print(
+            f"| {m} | {_ci(r['log_loss'])} | {_ci(r['ici'])} | "
+            f"{g['passed']}/{g['total']} | {r['fit_s']:.2f} |"
+        )
 
 
 def main() -> None:
     import betacal as _bc  # noqa: F401 - version pins recorded below
     import netcal as _nc
+    import pandas as _pd
     import sklearn as _sk
 
     print(
         f"pins: scikit-learn {_sk.__version__}, netcal {_nc.__version__}, "
-        f"betacal {getattr(_bc, '__version__', 'unknown')}, n_boot={N_BOOT}"
+        f"betacal {getattr(_bc, '__version__', 'unknown')}, pandas {_pd.__version__}, "
+        f"n_boot={N_BOOT}"
     )
-    all_rows: list[dict] = []
-    for name, version, pos in DATASETS:
-        print(f"\n### {name}", flush=True)
+    datasets = [d for d in DATASETS if d[0] == CREDIT] if README else DATASETS
+    for name, version, pos, base in datasets:
         try:
-            rows = run_dataset(name, version, pos)
+            rows, diag = run_dataset(name, version, pos, base)
         except Exception as exc:
-            print(f"| (dataset unavailable: {type(exc).__name__}: {exc}) |")
+            print(f"\n### {name}\n| (dataset unavailable: {type(exc).__name__}: {exc}) |")
             continue
-        all_rows.extend(rows)
-        print("| method | log loss | ECE-sweep | ICI | grade pass | fit s |")
-        print("|---|---|---|---|---|---|")
-        for r in rows:
-            if "error" in r:
-                print(f"| {r['method']} | fit failed: {r['error']} | | | | |")
-                continue
-
-            def ci(t):
-                return f"{t[0]:.4f} [{t[1]:.4f}, {t[2]:.4f}]"
-
-            print(
-                f"| {r['method']} | {ci(r['log_loss'])} | {ci(r['ece_sweep'])} | "
-                f"{ci(r['ici'])} | {r['grade_pass']:.0%} | {r['fit_s']:.2f} |"
-            )
+        _print_dataset(name, rows, diag)
+        if README and name == CREDIT:
+            _print_readme(rows, diag)
 
 
 if __name__ == "__main__":

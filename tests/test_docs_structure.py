@@ -13,6 +13,7 @@ that pins them: those node ids have to resolve; and one for the API reference,
 which has to render every public symbol of every public module.
 """
 
+import ast
 import pathlib
 import re
 import shutil
@@ -174,27 +175,34 @@ def test_choosing_page_pinning_ids_resolve() -> None:
     assert not missing, f"guide/choosing.md cites tests that no longer exist: {missing}"
 
 
-def _public_names(module) -> list[str]:
-    """`__all__` when declared, else the public names defined in the module itself."""
-    declared = getattr(module, "__all__", None)
-    if declared is not None:
-        return list(declared)
+def _public_names(module_name: str) -> list[str]:
+    """Public names of a module, read from its source without importing it.
+
+    `__all__` when declared, else every public top-level class and function. Static
+    on purpose: `probcal.sklearn` and `probcal.integrations.optbinning` raise
+    ImportError without their extra, and the docs job does not install those.
+    """
+    path = _ROOT / "src" / pathlib.Path(*module_name.split("."))
+    source = (path / "__init__.py") if path.is_dir() else path.with_suffix(".py")
+    tree = ast.parse(source.read_text())
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
+        ):
+            return list(ast.literal_eval(node.value))
     return [
-        name
-        for name, obj in vars(module).items()
-        if not name.startswith("_") and getattr(obj, "__module__", None) == module.__name__
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef)) and not node.name.startswith("_")
     ]
 
 
 def test_api_reference_renders_every_public_symbol(built_site: pathlib.Path) -> None:
-    import importlib
-
     rendered = "".join(p.read_text() for p in (built_site / "api").rglob("index.html"))
     anchors = set(re.findall(r'id="(probcal(?:\.\w+)+)"', rendered))
     missing = []
     for module_name in _API_MODULES:
-        module = importlib.import_module(module_name)
-        for name in _public_names(module):
+        for name in _public_names(module_name):
             # Re-exports (e.g. probcal.metrics.<name> defined in a submodule) render
             # under their defining module, so any probcal.* path ending in the name counts.
             if not any(anchor.rsplit(".", 1)[-1] == name for anchor in anchors):

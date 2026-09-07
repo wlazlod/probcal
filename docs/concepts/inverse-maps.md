@@ -1,5 +1,7 @@
 # Inverse maps
 
+--8<-- "docs/_snippets/vocab.md"
+
 Once decisions are made on calibrated probabilities, every consumer that lives on the raw
 score needs a translation service. A credit policy says "approve below 2% PD"; the deployed
 model emits raw margins; the cutoff engine, the masterscale, and the counterfactual generator

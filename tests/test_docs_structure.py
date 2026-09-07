@@ -56,6 +56,11 @@ _API_MODULES = (
 )
 _API_EXTRA_SYMBOLS = ("probcal._math.expit", "probcal._math.logit")
 
+# The snippet vocabulary (docs/README.md, mirrored by tests/test_docs_snippets.py).
+_VOCABULARY = frozenset({"s_cal", "y_cal", "w_cal", "model", "s_new", "mon", "grades", "segments"})
+_VOCAB_INCLUDE = '--8<-- "docs/_snippets/vocab.md"'
+_CODE_BLOCK_RE = re.compile(r"```python\n(.*?)```", re.S)
+
 # Figure coverage: the noun each plot function's figure must be identifiable by,
 # in the embed's filename stem or (as a whole word) in its alt text.
 _PLOT_NOUNS = {
@@ -209,3 +214,69 @@ def test_api_reference_renders_every_public_symbol(built_site: pathlib.Path) -> 
                 missing.append(f"{module_name}.{name}")
     missing += [s for s in _API_EXTRA_SYMBOLS if s not in anchors]
     assert not missing, f"public symbols absent from the rendered API reference: {missing}"
+
+
+def _vocabulary_names_read_first(block: str) -> set[str]:
+    """Vocabulary names the block reads before it assigns them (if it assigns them at all)."""
+    try:
+        tree = ast.parse(block)
+    except SyntaxError:
+        return set()
+    first: dict[str, tuple[tuple[int, int], bool]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id in _VOCABULARY:
+            key = (node.lineno, node.col_offset)
+            if node.id not in first or key < first[node.id][0]:
+                first[node.id] = (key, isinstance(node.ctx, ast.Load))
+    return {name for name, (_, is_load) in first.items() if is_load}
+
+
+def _names_assigned(block: str) -> set[str]:
+    try:
+        tree = ast.parse(block)
+    except SyntaxError:
+        return set()
+    names = {
+        n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+    }
+    names |= {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
+    return names
+
+
+def _leading_comment(block: str) -> str:
+    head = []
+    for line in block.strip().splitlines():
+        if not line.lstrip().startswith("#"):
+            break
+        head.append(line)
+    return "\n".join(head)
+
+
+@pytest.mark.parametrize(
+    "page",
+    [p for p in _prose_pages() if p.parent.name != "_snippets"],
+    ids=lambda p: str(p.relative_to(_DOCS)),
+)
+def test_vocabulary_names_are_declared(page: pathlib.Path) -> None:
+    """Rule 2 of docs/README.md: a block that reads a vocabulary name it did not define
+    names it in its leading comment lines, and the page carries the vocabulary include."""
+    if page.name == "changelog.md":
+        pytest.skip("not a snippet page")
+    text = page.read_text()
+    defined: set[str] = set()
+    problems: list[str] = []
+    needs_include = False
+    for i, block in enumerate(_CODE_BLOCK_RE.findall(text)):
+        skipped = "# docs: no-run" in block or "--8<--" in block or block.strip().startswith(">>>")
+        needed = _vocabulary_names_read_first(block) - defined
+        defined |= _names_assigned(block)
+        if skipped or not needed:
+            continue
+        needs_include = True
+        head = _leading_comment(block)
+        unnamed = sorted(n for n in needed if not re.search(rf"\b{n}\b", head))
+        if unnamed:
+            problems.append(f"block {i} reads {unnamed} without naming them in its leading comment")
+    if needs_include and page.name != "getting-started.md" and _VOCAB_INCLUDE not in text:
+        problems.append(f"page uses the vocabulary but lacks {_VOCAB_INCLUDE}")
+    assert not problems, f"{page.relative_to(_DOCS)}: " + "; ".join(problems)

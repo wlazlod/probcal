@@ -33,7 +33,9 @@ a whole masterscale, refusing unattainable targets instead of clamping.
 [Set cutoffs and invert maps](guide/cutoffs.md).
 
 **Monitor and act.** Anytime-valid **monitoring** runs on an e-process whose alarm keeps
-its type-I guarantee at every look. It localizes the onset of drift and issues a
+its type-I guarantee at every look, under
+[stated assumptions](guide/monitoring.md#assumptions-and-scope). It localizes the onset
+of drift and issues a
 recommendation that can be applied as a new offset, on the record.
 [Monitor and act](guide/monitoring.md).
 
@@ -42,7 +44,8 @@ compatibility promise, self-contained HTML **reports**, and one page tying the a
 to what each of them actually proves: [Auditability](guide/auditability.md).
 
 **Integrate.** **scikit-learn** (on ≥ 1.6 a bare calibrator is accepted as an estimator
-without any adapter; the adapter covers the probability-matrix API), **optbinning**
+without any adapter; the adapter covers the probability-matrix API from 1.4, see the
+[support matrix](api-stability.md#support-matrix)), **optbinning**
 scorecards (calibrated PDs carried back to the points scale), and **treecf**
 counterfactuals bound to a named calibrator.
 
@@ -62,10 +65,7 @@ Where to start, by what you are doing:
 - **Coming from scikit-learn** → the three-tier [sklearn guide](guide/sklearn.md).
 - **Unsure what a word means** → the [glossary](glossary.md).
 
-**Status:** released on PyPI, beta. Until 1.0, breaking changes bump the minor version,
-are listed in the changelog with the reasoning, and keep an explicit escape hatch where
-the old behavior had legitimate uses; a deprecated symbol warns with a
-`DeprecationWarning` for at least one minor release before removal, naming its
-replacement. Serialized artifacts carry a stronger promise: every 0.x release reads
-schema 1, pinned by golden files in CI. The full surface and its conventions:
+--8<-- "docs/_snippets/status.md"
+
+The full policy, the public surface, and the support matrix:
 [API stability](api-stability.md).

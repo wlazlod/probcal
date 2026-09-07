@@ -1,5 +1,7 @@
 # Set cutoffs and invert maps
 
+--8<-- "docs/_snippets/vocab.md"
+
 Policies are written on calibrated probabilities ("approve below 2% PD",
 "grade B is 0.5% to 2%"), and every consumer downstream of the calibrator
 lives on the raw score: the decision engine, the masterscale, the
@@ -46,6 +48,7 @@ A cutoff that the calibrator's output range does not contain is a policy
 error, and probcal refuses to hide it behind a clamped number:
 
 ```python
+# s_cal, y_cal: held-out calibration scores, outcomes
 from probcal import IsotonicCalibrator, UnattainableTargetError
 
 iso = IsotonicCalibrator().fit(s_cal, y_cal)

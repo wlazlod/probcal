@@ -1,5 +1,7 @@
 # Auditability
 
+--8<-- "docs/_snippets/vocab.md"
+
 What a validator, an internal auditor, or a supervisor can check without
 trusting you, and the call that checks it. Nothing on this page is a new
 feature; it is the existing surface arranged around one question: *given

@@ -1,5 +1,7 @@
 # Offset
 
+--8<-- "docs/_snippets/vocab.md"
+
 Sometimes the entire calibration problem is one number. The model ranks well, its spread is
 right, but the portfolio-level probability sits at the wrong height: the training sample was
 rebalanced, the economy moved, or the long-run anchor changed. The repair is a uniform shift
@@ -195,6 +197,7 @@ construction, keeping one stage frozen means composing already-fitted objects an
 ## In probcal
 
 ```python
+# model: a fitted scoring model
 # s_cal, y_cal: held-out calibration scores and outcomes
 from probcal import LogitOffset
 

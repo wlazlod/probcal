@@ -30,9 +30,9 @@ pip install "probcal[viz]"     # + matplotlib for probcal.plots
 pip install "probcal[sklearn]" # + scikit-learn for probcal.sklearn adapters
 ```
 
-Beta on PyPI. Breaking changes bump the minor version until 1.0 (see *API
-stability* in the docs); serialized artifacts have a stronger promise, every
-0.x release reads schema 1. Development setup:
+Beta on PyPI. The change policy, public surface, and support matrix are on
+the *API stability* page of the docs; serialized artifacts carry the stronger
+promise that every 0.x release reads schema 1. Development setup:
 
 ```bash
 git clone https://github.com/wlazlod/probcal && cd probcal

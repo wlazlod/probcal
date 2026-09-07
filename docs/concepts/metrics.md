@@ -1,5 +1,7 @@
 # Metrics and tests
 
+--8<-- "docs/_snippets/vocab.md"
+
 Measuring calibration is harder than fixing it. The quantity of interest,
 \( \Pr(Y = 1 \mid \hat{p}) \), is a conditional expectation that no finite sample reveals
 directly, so every metric estimates it through some smoothing device, and every smoothing

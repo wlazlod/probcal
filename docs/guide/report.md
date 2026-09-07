@@ -1,5 +1,7 @@
 # Validation report
 
+--8<-- "docs/_snippets/vocab.md"
+
 How-to; every number and figure in the validation document comes from the
 APIs documented in their own chapters (*Metrics and tests*,
 *Visualization*, *CORP and score decomposition*, *Conservatism*,
@@ -16,6 +18,7 @@ Regenerate it deliberately, not on every build:
 `uv run python docs/scripts/generate_sample_report.py`.
 
 ```python
+# mon, grades, segments: a CalibrationMonitor with earlier batches applied, rating labels, segment labels
 # s_cal, y_cal: held-out calibration scores and outcomes
 from probcal import BetaCalibrator
 from probcal.report import validation_report   # probcal[viz]
@@ -56,6 +59,7 @@ delimiter renders as literal text, never as injected HTML or a corrupted
 table row.
 
 ```python
+# s_cal, y_cal, grades: held-out calibration scores, outcomes, rating labels
 validation_report(
     y_cal, s_cal, grades=grades,
     format="markdown", path="validation.md",

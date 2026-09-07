@@ -52,6 +52,14 @@ time) from a rot risk into a tested contract. Two rules keep it that way:
    vocabulary should grow, extends the table above in this one place; it
    never invents a page-local convention.
 
+   Both halves of the rule are enforced. Every page whose blocks draw on
+   the vocabulary includes `docs/_snippets/vocab.md` (a collapsed box
+   that shows the reader the definitions) right under its title, and
+   `tests/test_docs_structure.py::test_vocabulary_names_are_declared`
+   fails when a block reads a vocabulary name it did not define without
+   naming it in its leading comment lines, or when a page that needs the
+   vocabulary lacks the include.
+
 The harness skips a block that is not meant to run: REPL transcripts
 (first non-blank line starting with `>>>`), `--8<--` includes, and genuine
 pseudo-code that cannot be made to run without a heavier fixture than the

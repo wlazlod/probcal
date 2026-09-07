@@ -1,5 +1,7 @@
 # Grouped evaluation
 
+--8<-- "docs/_snippets/vocab.md"
+
 How-to; the bootstrap protocol itself is documented in the *Metrics and
 tests* concepts chapter. This page covers only what `by=` adds on top of
 it.

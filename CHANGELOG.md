@@ -7,6 +7,10 @@ Each release opens with a short summary; the itemized entries sit under *Details
 
 ## [Unreleased]
 
+### Documentation
+
+- Every page whose snippets draw on the held-out data vocabulary (`s_cal`, `y_cal`, ...) now opens with a collapsed box defining those names, each block names the ones it reads in its first comment, and a docs test enforces both. The monitoring guide states the assumptions behind the anytime-valid guarantee; the serialization chapter states what "bit-identical" covers and that metric estimates are not promised across releases. *API stability* states the two-tier change policy (API-breaking versus numerically visible) up front and drops the per-release symbol lists, which the changelog already carries; the status paragraph is one shared snippet. The calibrator catalog is split into a properties table and a guidance table. Every scikit-learn version floor links to the support matrix.
+
 ## [0.3.2] - 2026-09-07
 
 Documentation only; no code changes. The README on PyPI now matches the docs site.

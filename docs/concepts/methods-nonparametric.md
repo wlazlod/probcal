@@ -1,5 +1,7 @@
 # Nonparametric methods
 
+--8<-- "docs/_snippets/vocab.md"
+
 The parametric families of the [previous chapter](methods-parametric.md) assume the distortion
 has a known shape: a line in logit space, give or take a tail exponent. When the reliability
 curve shows genuine curvature, the honest move is to stop assuming a shape and estimate the
@@ -224,6 +226,7 @@ less, because flexible maps are precisely the ones that overfit a reused calibra
 ## In probcal
 
 ```python
+# s_cal, y_cal: held-out calibration scores, outcomes
 from probcal import (
     BBQCalibrator,
     CenteredIsotonicCalibrator,

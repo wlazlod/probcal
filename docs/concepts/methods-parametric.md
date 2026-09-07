@@ -1,5 +1,7 @@
 # Parametric methods
 
+--8<-- "docs/_snippets/vocab.md"
+
 Parametric calibrators repair miscalibration with a map chosen from a small, named family:
 two or three interpretable parameters fitted by maximum likelihood. On the small calibration
 sets typical of credit risk they are usually the right first choice: few parameters mean low
@@ -246,6 +248,7 @@ coefficients. `interpret()` states both, so the audit trail is complete.
 ## In probcal
 
 ```python
+# s_cal, y_cal, s_new: held-out calibration scores, outcomes, scores of new obligors
 from probcal import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
 
 platt = PlattCalibrator().fit(s_cal, y_cal)

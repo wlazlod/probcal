@@ -1,5 +1,7 @@
 # Anytime-valid calibration monitoring
 
+--8<-- "docs/_snippets/vocab.md"
+
 ## The question
 
 A calibrated forecast is deployed. Matured outcome batches arrive
@@ -223,6 +225,7 @@ model=...)` exactly as `CalibratedModel.from_dict` itself does. `mon` is never
 mutated by the call: `to_dict()` before and after are identical.
 
 ```python
+# mon: a CalibrationMonitor with earlier batches applied
 action = mon.apply_recommendation()  # target=None: offset only
 if action.kind == "re-offset":
     p_corrected = action.offset.transform(p_new)

@@ -2,9 +2,8 @@
 
 The catalog, as a table you can decide from. Every column that is a
 property of the code (monotonicity, which inverse exists, what serializes)
-is read off the fitted object and pinned by a test; the source of this page
-carries the test name next to each row, so a column that stops being true
-breaks a build rather than misleading a reader.
+is read off the fitted object and pinned by a test, so a column that stops
+being true breaks a build rather than misleading a reader.
 
 Fit cost is the last column. Two entries there change decisions rather
 than schedules: ENIR is quadratic in unique scores (its `fit` warns above
@@ -44,7 +43,7 @@ onto any of the above through `Chain`, which is not a row either, having
 no fit of its own to choose: it inherits every column from the stages you
 put in it.
 
-Event counts are the honest unit: "hundreds of events" means events, not
+Count events, not rows: "hundreds of events" means events, not
 rows, and 500 observations at a 3% base rate is fifteen. The reasoning is
 in [Data splitting](../concepts/data-splitting.md#how-large-must-a-calibration-set-be);
 head-to-head evidence at event rates from 1.5% to 30% is in

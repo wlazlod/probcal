@@ -9,7 +9,8 @@ Five properties the reader-oriented structure has to keep:
 5. the three workflow pages added by the reorganization are in nav and cross-link.
 
 Plus one guard for `guide/choosing.md`, whose factual columns each name the test
-that pins them: those node ids have to resolve.
+that pins them: those node ids have to resolve; and one for the API reference,
+which has to render every public symbol of every public module.
 """
 
 import pathlib
@@ -26,6 +27,33 @@ _INDEX = _DOCS / "index.md"
 _SAMPLE_HTML = _DOCS / "assets" / "sample_validation_report.html"
 _SAMPLE_PNG = _DOCS / "assets" / "sample_validation_report.png"
 _NEW_PAGES = ("guide/choosing.md", "guide/cutoffs.md", "guide/auditability.md")
+
+# Public modules the API reference must render in full (their `__all__`), plus the
+# two `probcal._math` helpers exported flat from `probcal`.
+_API_MODULES = (
+    "probcal.base",
+    "probcal.parametric",
+    "probcal.isotonic",
+    "probcal.binning",
+    "probcal.bayesian",
+    "probcal.vennabers",
+    "probcal.spline",
+    "probcal.segmented",
+    "probcal.metrics",
+    "probcal.offset",
+    "probcal.wrapper",
+    "probcal.selection",
+    "probcal.curves",
+    "probcal.report",
+    "probcal.attribution",
+    "probcal.thresholds",
+    "probcal.datasets",
+    "probcal.chain",
+    "probcal.monitor",
+    "probcal.sklearn",
+    "probcal.integrations.optbinning",
+)
+_API_EXTRA_SYMBOLS = ("probcal._math.expit", "probcal._math.logit")
 
 # Figure coverage: the noun each plot function's figure must be identifiable by,
 # in the embed's filename stem or (as a whole word) in its alt text.
@@ -144,3 +172,32 @@ def test_choosing_page_pinning_ids_resolve() -> None:
     ).stdout
     missing = [node_id for node_id in node_ids if node_id not in collected]
     assert not missing, f"guide/choosing.md cites tests that no longer exist: {missing}"
+
+
+def _public_names(module) -> list[str]:
+    """`__all__` when declared, else the public names defined in the module itself."""
+    declared = getattr(module, "__all__", None)
+    if declared is not None:
+        return list(declared)
+    return [
+        name
+        for name, obj in vars(module).items()
+        if not name.startswith("_") and getattr(obj, "__module__", None) == module.__name__
+    ]
+
+
+def test_api_reference_renders_every_public_symbol(built_site: pathlib.Path) -> None:
+    import importlib
+
+    rendered = "".join(p.read_text() for p in (built_site / "api").rglob("index.html"))
+    anchors = set(re.findall(r'id="(probcal(?:\.\w+)+)"', rendered))
+    missing = []
+    for module_name in _API_MODULES:
+        module = importlib.import_module(module_name)
+        for name in _public_names(module):
+            # Re-exports (e.g. probcal.metrics.<name> defined in a submodule) render
+            # under their defining module, so any probcal.* path ending in the name counts.
+            if not any(anchor.rsplit(".", 1)[-1] == name for anchor in anchors):
+                missing.append(f"{module_name}.{name}")
+    missing += [s for s in _API_EXTRA_SYMBOLS if s not in anchors]
+    assert not missing, f"public symbols absent from the rendered API reference: {missing}"

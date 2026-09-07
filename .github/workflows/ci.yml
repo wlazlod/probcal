@@ -8,8 +8,76 @@ on:
   workflow_dispatch:
 
 jobs:
+  changes:
+    name: Classify the change
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      notebooks: ${{ steps.classify.outputs.notebooks }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed files
+        id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: |
+          # Docs-only changes (docs/, mkdocs.yml, README, CHANGELOG, CITATION) skip the
+          # test matrix and the pinned-dependency jobs; the docs job covers them instead.
+          # Anything else, an unknown base, or a manual run counts as a code change.
+          code=true
+          notebooks=false
+          if [ "$EVENT" != "workflow_dispatch" ] && [ -n "$BASE" ] && ! echo "$BASE" | grep -q '^0*$' && git cat-file -e "$BASE" 2>/dev/null; then
+            git diff --name-only "$BASE" "$HEAD" > changed.txt
+            echo "changed files:"; cat changed.txt
+            non_docs=$(grep -vE '^(docs/|mkdocs\.yml$|README\.md$|CHANGELOG\.md$|CITATION\.cff$)' changed.txt || true)
+            if [ -z "$non_docs" ]; then
+              code=false
+            fi
+            if [ -n "$(grep -E '^docs/notebooks/.*\.ipynb$' changed.txt || true)" ]; then
+              notebooks=true
+            fi
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "notebooks=$notebooks" >> "$GITHUB_OUTPUT"
+          echo "code=$code notebooks=$notebooks"
+
+  docs:
+    name: Docs-only change (strict build + docs tests)
+    needs: changes
+    if: needs.changes.outputs.code == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev,viz,docs]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Build docs
+        run: mkdocs build --strict
+
+      - name: Run the docs tests
+        run: pytest -q tests/test_docs_structure.py tests/test_docs_snippets.py tests/test_sklearn_guide_snippets.py tests/test_package.py
+
   test:
     name: Test on Python ${{ matrix.python-version }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -49,6 +117,8 @@ jobs:
 
   sklearn-min:
     name: sklearn adapter on the pinned minimum (1.4)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -69,6 +139,8 @@ jobs:
 
   integrations:
     name: optbinning + lightgbm integrations on pinned versions
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -89,6 +161,8 @@ jobs:
 
   notebook:
     name: notebooks execute (walkthrough + end-to-end on the synthetic fallback)
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.notebooks == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

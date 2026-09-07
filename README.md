@@ -41,32 +41,36 @@ uv sync --extra dev
 
 ## Quickstart
 
-The three things above, in one run on a synthetic 3% portfolio:
+The three things above, in one run. The calibrator is fitted on one synthetic
+3% portfolio and every number below is measured on a second, held-out draw;
+fitting and scoring the same rows would make the "after" line an identity
+(see *Data splitting* in the docs):
 
 ```python
 import numpy as np
 from probcal import BetaCalibrator, LogitOffset, make_pd_portfolio
 from probcal.metrics import calibration_guardrails, jeffreys_grade_test
 
-port = make_pd_portfolio(n=8000, random_state=42)   # synthetic 3% PD portfolio
+cal_set = make_pd_portfolio(n=8000, random_state=42)   # synthetic 3% PD portfolio
+test = make_pd_portfolio(n=8000, random_state=1)       # held-out draw, same distortion
 
 # 1. Logit-scale diagnostics: slope, intercept, Spiegelhalter, before and after
-g0 = calibration_guardrails(port.y, port.scores)
+g0 = calibration_guardrails(test.y, test.scores)
 print(f"before: slope={g0.slope:.3f}  intercept={g0.intercept:+.3f}  ok={g0.all_ok}")
-cal = BetaCalibrator().fit(port.scores, port.y)
-p = cal.predict_proba(port.scores)
-g1 = calibration_guardrails(port.y, p)
+cal = BetaCalibrator().fit(cal_set.scores, cal_set.y)
+p = cal.predict_proba(test.scores)                    # evaluated on the held-out set
+g1 = calibration_guardrails(test.y, p)
 print(f"after:  slope={g1.slope:.3f}  intercept={g1.intercept:+.3f}  ok={g1.all_ok}")
 
 # 2. An auditable offset: re-anchor to a 3.5% policy PD and record what it cost
 off = LogitOffset(target_mean=0.035).fit(p)
-print(off.audit_report(port.y, p))
+print(off.audit_report(test.y, p))
 p_final = off.transform(p)
 
 # 3. Per-grade regulatory backtest on a fixed PD masterscale
 edges, labels = np.array([0, 0.01, 0.02, 0.05, 0.10, 1.0]), np.array(list("ABCDE"))
 grades = labels[np.searchsorted(edges, p_final, side="right") - 1]
-res = jeffreys_grade_test(port.y, p_final, grades)
+res = jeffreys_grade_test(test.y, p_final, grades)
 for g, n, k, pd_, light in zip(res.grades, res.n, res.k, res.pd, res.light):
     print(f"grade {g}: n={n:5d}  defaults={k:3d}  PD={pd_:.4f}  {light}")
 ```
@@ -74,19 +78,19 @@ for g, n, k, pd_, light in zip(res.grades, res.n, res.k, res.pd, res.light):
 Output:
 
 ```text
-before: slope=0.968  intercept=-0.765  ok=False
-after:  slope=1.000  intercept=-0.000  ok=True
-AuditReport(delta=+0.1195, odds factor 1.1269, fitted 2026-09-06T15:23:19+00:00)
-  portfolio mean: 0.03138 -> 0.03500
-  slope:          +1.000 -> +1.000
-  intercept:      -0.000 -> -0.119
-  spiegelhalter p 0.995 -> 0.076
+before: slope=0.901  intercept=-0.743  ok=False
+after:  slope=0.922  intercept=+0.021  ok=True
+AuditReport(delta=+0.1238, odds factor 1.1317, fitted <timestamp>)
+  portfolio mean: 0.03126 -> 0.03500
+  slope:          +0.922 -> +0.922
+  intercept:      +0.021 -> -0.103
+  spiegelhalter p 0.460 -> 0.271
   guardrails ok:  True -> False
-grade A: n= 1697  defaults= 10  PD=0.0063  green
-grade B: n= 2038  defaults= 28  PD=0.0147  green
-grade C: n= 2736  defaults= 70  PD=0.0317  green
-grade D: n= 1044  defaults= 68  PD=0.0692  green
-grade E: n=  485  defaults= 75  PD=0.1656  green
+grade A: n= 1696  defaults=  7  PD=0.0063  green
+grade B: n= 2043  defaults= 22  PD=0.0146  green
+grade C: n= 2684  defaults= 97  PD=0.0319  green
+grade D: n= 1114  defaults= 70  PD=0.0681  green
+grade E: n=  463  defaults= 59  PD=0.1685  green
 ```
 
 The audit report says what the policy offset cost: the intercept guardrail
@@ -157,8 +161,8 @@ concepts chapter.
 ## Documentation
 
 Built with mkdocs-material; run locally with `uv run mkdocs serve`. Start with
-*Getting started*, then the *Concepts* chapters — the package's theoretical foundation —
-and the executed *PD calibration walkthrough* notebook. The *Visualization* chapter is a
+*Getting started*, then the *Concepts* chapters — the package's theoretical foundation.
+The *Visualization* chapter is a
 gallery of every plot, regenerated deterministically by `docs/scripts/generate_figures.py`;
 the CORP reliability diagram, MCB-DSC plane, and score decomposition have their own
 *CORP and score decomposition* chapter.

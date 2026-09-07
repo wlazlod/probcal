@@ -144,9 +144,8 @@ and the changelog. Behavioral changes that alter numbers ship with a
 detailed changelog entry and, where feasible, a parameter that
 recovers the old values.
 
-0.3.0 deprecated nothing: every new symbol above is additive, and no
-existing symbol carries a `DeprecationWarning`; the policy stood unused
-this release.
+No symbol currently carries a `DeprecationWarning`; the changelog lists
+any release in which one does.
 
 ## scikit-learn estimator checks
 

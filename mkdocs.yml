@@ -81,7 +81,7 @@ nav:
   - Learn:
       - Install and quickstart: getting-started.md
       - How it works: how-it-works.md
-      - "Tutorial: PD calibration walkthrough": notebooks/pd_calibration_walkthrough.ipynb
+      - Glossary: glossary.md
   - Guide:
       - Workflows:
           - Choose a calibrator: guide/choosing.md
@@ -117,6 +117,7 @@ nav:
           - Monitoring: concepts/monitoring.md
           - Serialization: concepts/serialization.md
   - Tutorials:
+      - PD calibration walkthrough: notebooks/pd_calibration_walkthrough.ipynb
       - Full lifecycle on a rare-event portfolio: notebooks/pd_end_to_end.ipynb
   - Benchmarks:
       - Comparison: benchmarks/comparison.md
@@ -125,6 +126,7 @@ nav:
       - Calibrators: api/calibrators.md
       - Metrics and tests: api/metrics.md
       - Tools: api/tools.md
+      - Integrations: api/integrations.md
       - API stability: api-stability.md
   - FAQ: faq.md
   - Changelog: changelog.md

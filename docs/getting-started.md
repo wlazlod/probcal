@@ -21,21 +21,24 @@ standard library: scipy, scikit-learn, pandas, and matplotlib are never imported
 ## Score-level quickstart
 
 Calibrators work directly on scores; no model object is required. The example uses the
-built-in synthetic PD portfolio (3% event rate, asymmetric tail distortion):
+built-in synthetic PD portfolio (3% event rate, asymmetric tail distortion), fitted on
+one draw and measured on another: a calibrator scored on its own fitting rows reports
+slope 1 and intercept 0 by construction, which is no evidence at all.
 
 ```python
 from probcal import BetaCalibrator, make_pd_portfolio
 from probcal.metrics import calibration_guardrails
 
-port = make_pd_portfolio(n=8000, random_state=42)
+cal_set = make_pd_portfolio(n=8000, random_state=42)   # calibration set
+test = make_pd_portfolio(n=8000, random_state=1)       # held-out set, same distortion
 
-g_before = calibration_guardrails(port.y, port.scores)
+g_before = calibration_guardrails(test.y, test.scores)
 print(f"before: slope={g_before.slope:.3f}  intercept={g_before.intercept:+.3f}  ok={g_before.all_ok}")
 
-cal = BetaCalibrator().fit(port.scores, port.y)
-p = cal.predict_proba(port.scores)
+cal = BetaCalibrator().fit(cal_set.scores, cal_set.y)
+p = cal.predict_proba(test.scores)                    # never the rows it was fitted on
 
-g_after = calibration_guardrails(port.y, p)
+g_after = calibration_guardrails(test.y, p)
 print(f"after:  slope={g_after.slope:.3f}  intercept={g_after.intercept:+.3f}  ok={g_after.all_ok}")
 print()
 print(cal.interpret())
@@ -44,8 +47,8 @@ print(cal.interpret())
 Output:
 
 ```text
-before: slope=0.968  intercept=-0.765  ok=False
-after:  slope=1.000  intercept=+0.000  ok=True
+before: slope=0.901  intercept=-0.743  ok=False
+after:  slope=0.922  intercept=+0.021  ok=True
 
 Interpretation[BetaCalibrator]
 parameter  value
@@ -69,16 +72,30 @@ emits raw logits, convert first with the exported `probcal.expit`.
 `CalibratedModel` wraps any object with `predict_proba(X)` or `decision_function(X)`:
 
 ```python
+import numpy as np
 from probcal import CalibratedModel, PlattCalibrator
 
-# X_cal, X_train, X_new: feature matrices for the model — here, s_cal/s_new
-# reshaped, since the stub model reads the score off X[:, 0].
-X_cal = s_cal.reshape(-1, 1)
-X_train, y_train = X_cal, y_cal
-X_new = s_new.reshape(-1, 1)
+
+class ScoreModel:
+    """Stand-in for a trained classifier: reads the score off column 0."""
+
+    def fit(self, X, y):
+        return self
+
+    def predict_proba(self, X):
+        s = np.asarray(X)[:, 0]
+        return np.column_stack([1.0 - s, s])
+
+    def get_params(self):
+        return {}
+
+
+model = ScoreModel()
+X_cal, X_new = cal_set.scores.reshape(-1, 1), test.scores.reshape(-1, 1)  # from above
+X_train, y_train = X_cal, cal_set.y
 
 # Prefit flow: the model is already trained, a separate calibration set exists.
-wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
+wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, cal_set.y)
 p = wrapped.predict_proba(X_new)
 
 # CV flow: no calibration set to spare — clone/retrain per fold, pool out-of-fold scores.
@@ -94,6 +111,7 @@ print(wrapped.offsets_[0].interpret())
 ```python
 from probcal import CalibratorSelector
 
+s_cal, y_cal, s_new = cal_set.scores, cal_set.y, test.scores   # from the quickstart
 sel = CalibratorSelector().fit(s_cal, y_cal)   # nested CV, log-loss criterion
 print(sel.report_)                             # ranked table with guardrail flags
 p = sel.predict_proba(s_new)                   # the refitted winner

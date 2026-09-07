@@ -2,6 +2,9 @@
 
 Post-hoc probability calibration **and calibration governance** for binary
 classifiers: the evidence a regulated PD model needs alongside the map itself.
+If you have binary scores that feed a threshold, a price, or a report, this
+applies to you; PD models are the archetype because they are the most audited,
+and the [glossary](glossary.md) maps their vocabulary to the generic one.
 The core is numpy-only; everything else is an optional extra.
 
 One deployed calibration runs a loop, and probcal covers all of it:
@@ -38,21 +41,26 @@ recommendation that can be applied as a new offset, on the record.
 compatibility promise, self-contained HTML **reports**, and one page tying the artifacts
 to what each of them actually proves: [Auditability](guide/auditability.md).
 
-**Integrate.** **scikit-learn** (the bare core is a duck on ≥ 1.6; an adapter covers the
-probability-matrix world), **optbinning** scorecards (calibrated PDs carried back to the
-points scale), and **treecf** counterfactuals bound to a named calibrator.
+**Integrate.** **scikit-learn** (on ≥ 1.6 a bare calibrator is accepted as an estimator
+without any adapter; the adapter covers the probability-matrix API), **optbinning**
+scorecards (calibrated PDs carried back to the points scale), and **treecf**
+counterfactuals bound to a named calibrator.
 
 ```bash
 pip install probcal
 ```
 
-Three doors, by who is arriving:
+Where to start, by what you are doing:
 
 - **New to calibration** → [Install and quickstart](getting-started.md), then the
-  20-minute [PD calibration walkthrough](notebooks/pd_calibration_walkthrough.ipynb).
+  20-minute [PD calibration walkthrough](notebooks/pd_calibration_walkthrough.ipynb)
+  (diagnose, select, fit, backtest). The longer
+  [full lifecycle notebook](notebooks/pd_end_to_end.ipynb) adds offsetting, treecf
+  recourse, monitoring, and JSON round-trips on a rare-event portfolio.
 - **Validating someone's model** → [Auditability](guide/auditability.md) and
   [Build a validation report](guide/report.md).
 - **Coming from scikit-learn** → the three-tier [sklearn guide](guide/sklearn.md).
+- **Unsure what a word means** → the [glossary](glossary.md).
 
 **Status:** released on PyPI, beta. Until 1.0, breaking changes bump the minor version,
 are listed in the changelog with the reasoning, and keep an explicit escape hatch where

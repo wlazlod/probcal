@@ -60,7 +60,7 @@ system is documentable in a way an ensemble of \( K \) maps is not.
 
 ## How large must a calibration set be?
 
-The honest unit of calibration sample size is the **event count**, not the row count, and a
+The unit of calibration sample size is the **event count**, not the row count, and a
 serviceable rule of thumb allocates a handful of events per parameter to be estimated. A
 temperature or offset (one parameter) becomes estimable with a dozen events; Platt (two) and
 beta (three) want a few dozen for their standard errors to stop dominating the fit; isotonic

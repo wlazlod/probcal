@@ -5,6 +5,13 @@ built site (mkdocs never lists it in `nav`); it is here for the same reason
 a package keeps a `CONTRIBUTING.md`: instructions for the people editing
 the source, not for the reader of the output.
 
+## The catalog page
+
+`guide/choosing.md` pins every factual column of its table to a test: the
+page source carries a `<!-- pinned: ... -->` comment with the test node id
+next to each row, and `tests/test_docs_structure.py` checks that those ids
+still collect. Keep the comments when editing rows.
+
 ## The snippet convention
 
 Every fenced ` ```python ` block on a docs page is executed by

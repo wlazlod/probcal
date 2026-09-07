@@ -9,15 +9,19 @@ Each release opens with a short summary; the itemized entries sit under *Details
 
 ## [0.3.2] - 2026-09-07
 
-A documentation release; no code changes. The README leads with the three things scikit-learn does not produce and carries a measured comparison on a scorecard credit dataset, both quickstarts report on a held-out draw, the API reference covers every public module, a glossary defines the vocabulary, and this changelog reads as summaries. The README on PyPI now matches the docs site.
+Documentation only; no code changes. The README on PyPI now matches the docs site.
 
 <details markdown="1">
 <summary>Details</summary>
 
 ### Documentation
 
-- README refocused on the three things scikit-learn does not produce (logit-scale diagnostics, the auditable offset stage, per-grade backtests), with a measured table against scikit-learn and netcal on the Taiwan credit-card default dataset replacing the capability checklist; the calibrator table and fit-cost notes moved into `guide/choosing.md`. The comparison benchmark gains that dataset (scorecard base model with integer points, so scores carry real ties; an 8-band masterscale with tiny tail grades) plus `PlattCalibrator` and `IsotonicCalibrator` rows and per-method grade-size tables. This changelog now opens each release with a summary and collapses the itemized entries.
-- Both quickstarts (README and *Getting started*) now fit the calibrator on one synthetic portfolio and report every number on a second, held-out draw; the previous versions scored the fitting rows, which makes the "after" guardrails an identity. The *Getting started* page defines every name its blocks use. The API reference gains `Chain`, `probcal.monitor`, `expit`/`logit`, and a new *Integrations* page for `probcal.sklearn` and `probcal.integrations.optbinning`; a docs test now fails if any public symbol is missing from the rendered reference. Both notebooks sit under one *Tutorials* section with a one-line differentiator on the front page; contributor-only remarks and figurative phrasing were removed from reader pages; the README's audit-report timestamp is masked. A *Glossary* page defines the credit-risk vocabulary (PD, obligor, grade, masterscale, central tendency, LDP, MoC, Pluto–Tasche, scorecard points) next to the package's own terms (guardrails, offset, inverse map, e-process, fingerprint, golden file), and the front page states who the package is for beyond PD models.
+- README leads with what scikit-learn does not produce (logit-scale guardrails, the auditable offset stage, per-grade backtests) and carries a measured table against scikit-learn and netcal on the Taiwan credit-card default dataset; the calibrator table moved to `guide/choosing.md`.
+- The comparison benchmark gains that dataset (scorecard base model with integer points, an 8-band masterscale), `PlattCalibrator` and `IsotonicCalibrator` rows, and per-method grade-size tables.
+- Both quickstarts fit on one synthetic portfolio and report on a held-out draw; the previous versions scored the fitting rows. *Getting started* defines every name its blocks use.
+- API reference adds `Chain`, `probcal.monitor`, `expit`/`logit`, and an *Integrations* page (`probcal.sklearn`, `probcal.integrations.optbinning`); a docs test fails if a public symbol is missing from the rendered reference.
+- New *Glossary* page; one *Tutorials* section for both notebooks; plain phrasing on reader pages.
+- This changelog opens each release with a summary and collapses the itemized entries.
 
 </details>
 

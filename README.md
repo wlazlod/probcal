@@ -99,37 +99,6 @@ now fails by exactly the applied shift, on the record. The executed
 takes a rare-event portfolio through selection, backtests, offsetting,
 threshold translation, and monitoring.
 
-## Measured against scikit-learn and netcal
-
-Taiwan credit-card default (OpenML `default-of-credit-card-clients`,
-n=30,000, 22.1% default rate). A scorecard base model with integer points
-gives the scores a deployed scorecard has: **161 distinct values across
-7,500 calibration obligors, largest tie block 164**. Grades come from an
-8-band PD masterscale applied to each method's own calibrated PD; grade A
-(PD under 3%) holds **12 to 46 obligors** depending on the calibrator, and
-netcal BBQ never reaches it. Evaluation on 7,500 held-out obligors with
-bootstrap CIs; the grade column is the number of grades passing the
-Jeffreys backtest at the 5% level.
-
-| method | log loss | ICI | grades passing | fit s |
-|---|---|---|---|---|
-| probcal Platt | 0.4527 [0.4428, 0.4617] | 0.0056 [0.0041, 0.0122] | 7/8 | 0.00 |
-| probcal beta (abm) | 0.4527 [0.4426, 0.4617] | 0.0074 [0.0041, 0.0146] | 6/8 | 0.01 |
-| probcal isotonic | 0.4524 [0.4418, 0.4616] | 0.0086 [0.0036, 0.0166] | 6/8 | 0.00 |
-| sklearn sigmoid | 0.4527 [0.4428, 0.4617] | 0.0056 [0.0041, 0.0122] | 7/8 | 0.00 |
-| sklearn isotonic | 0.4524 [0.4418, 0.4616] | 0.0086 [0.0036, 0.0166] | 6/8 | 0.00 |
-| netcal beta | 0.4527 [0.4426, 0.4617] | 0.0074 [0.0041, 0.0146] | 6/8 | 0.03 |
-| netcal BBQ | 0.4545 [0.4446, 0.4632] | 0.0089 [0.0044, 0.0169] | 5/6 | 0.26 |
-
-The calibration maps agree: probcal's Platt equals sklearn's sigmoid and
-probcal's isotonic equals sklearn's isotonic to four decimals, and the beta
-row matches netcal and betacal. On a plain scorecard the map is not where
-the libraries differ; the diagnostics, the offset audit, and the per-grade
-table above are. NaN scores are rejected with a named error, never imputed.
-Full method list, five more datasets from 1.5% to 30% event rate, and the
-reproducible script:
-[Benchmarks](https://wlazlod.github.io/probcal/benchmarks/comparison/).
-
 ## Three calibrators, and the rest
 
 `PlattCalibrator`, `BetaCalibrator`, and `IsotonicCalibrator` are the

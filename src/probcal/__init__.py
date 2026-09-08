@@ -27,7 +27,7 @@ from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
 from .segmented import SegmentedCalibrator
 from .selection import CalibratorSelector
 from .spline import SplineCalibrator
-from .thresholds import calibrated_bands_to_raw, calibrated_interval_to_raw
+from .thresholds import build_masterscale, calibrated_bands_to_raw, calibrated_interval_to_raw
 from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
 from .wrapper import CalibratedModel
 
@@ -58,6 +58,7 @@ __all__: list[str] = [
     "UnattainableTargetError",
     "VennAbersCalibrator",
     "adjust_attributions",
+    "build_masterscale",
     "calibrated_bands_to_raw",
     "calibrated_interval_to_raw",
     "calibration_belt",

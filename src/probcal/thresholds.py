@@ -42,7 +42,7 @@ def calibrated_interval_to_raw(
 
 def calibrated_bands_to_raw(
     calibrator: object,
-    bands: dict,
+    bands: object,
     *,
     space: str = "probability",
     buffer_logit: float = 0.0,
@@ -58,8 +58,11 @@ def calibrated_bands_to_raw(
         Any object implementing the duck-typed protocol
         ``interval_inverse(lo, hi, *, space, buffer_logit)`` with
         ``is_monotone_``.
-    bands : dict
-        Mapping of grade label to ``(lo, hi)`` calibrated-probability bounds.
+    bands : dict or Masterscale
+        Mapping of grade label to ``(lo, hi)`` calibrated-probability bounds,
+        or a :class:`probcal.Masterscale` (its ``bands`` are read). Bands are
+        inverted as closed intervals; the scale's own ``assign`` is half-open
+        (``lo <= p < hi``), which differs only at a shared edge.
     space : {"probability", "logit"}, keyword-only
         Scale of the returned bounds.
     buffer_logit : float, keyword-only
@@ -71,9 +74,11 @@ def calibrated_bands_to_raw(
         Mapping of grade label to ``(raw_lo, raw_hi)`` bounds, on the scale
         requested by ``space``.
     """
+    if hasattr(bands, "bands"):  # a Masterscale
+        bands = bands.bands  # type: ignore[attr-defined]
     return {
         grade: calibrated_interval_to_raw(
             calibrator, lo, hi, space=space, buffer_logit=buffer_logit
         )
-        for grade, (lo, hi) in bands.items()
+        for grade, (lo, hi) in bands.items()  # type: ignore[attr-defined]
     }

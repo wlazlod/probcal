@@ -119,3 +119,11 @@ def test_custom_calibrator_prototype(fitted) -> None:
     cs = calibrate_scorecard(sc, X_cal, y_cal, calibrator=PlattCalibrator())
     assert isinstance(cs.calibrator_, PlattCalibrator)
     assert cs.affine_logit_coeffs_ is not None
+
+
+def test_masterscale_method_accepts_masterscale_object(fitted) -> None:
+    from probcal import Masterscale
+
+    cs, _, _, _ = fitted
+    ms = Masterscale({"A": (0.0, 0.01), "B": (0.01, 0.05), "C": (0.05, 1.0)})
+    assert cs.masterscale(ms) == cs.masterscale(ms.bands)

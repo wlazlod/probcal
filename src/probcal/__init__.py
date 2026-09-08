@@ -20,17 +20,18 @@ from .curves import (
 )
 from .datasets import make_pd_portfolio
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
+from .masterscale import GradeTable, Masterscale
 from .monitor import moc_offset, moc_offset_from_counts
 from .offset import LogitOffset, OffsetEstimate, estimate_offset, offset_from_estimate
 from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
 from .segmented import SegmentedCalibrator
 from .selection import CalibratorSelector
 from .spline import SplineCalibrator
-from .thresholds import calibrated_bands_to_raw, calibrated_interval_to_raw
+from .thresholds import build_masterscale, calibrated_bands_to_raw, calibrated_interval_to_raw
 from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
 from .wrapper import CalibratedModel
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 __all__: list[str] = [
     "AdjustedAttribution",
@@ -43,9 +44,11 @@ __all__: list[str] = [
     "Chain",
     "CrossVennAbersCalibrator",
     "ENIRCalibrator",
+    "GradeTable",
     "HistogramBinningCalibrator",
     "IsotonicCalibrator",
     "LogitOffset",
+    "Masterscale",
     "OffsetEstimate",
     "PlattCalibrator",
     "ScalingBinningCalibrator",
@@ -55,6 +58,7 @@ __all__: list[str] = [
     "UnattainableTargetError",
     "VennAbersCalibrator",
     "adjust_attributions",
+    "build_masterscale",
     "calibrated_bands_to_raw",
     "calibrated_interval_to_raw",
     "calibration_belt",

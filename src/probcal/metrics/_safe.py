@@ -163,8 +163,9 @@ def hl_e_test(
         (grade-level all-zero/all-one subsets are fine).
     p : array_like
         Assigned probabilities (the null) in ``[0, 1]``.
-    grades : array_like
-        Rating grade label per observation.
+    grades : array_like or Masterscale
+        Rating grade label per observation, or a :class:`probcal.Masterscale`
+        that assigns them from ``p`` (grades then come out best to worst).
     mixture_grid : tuple of float, keyword-only
         Positive logit-scale offsets; symmetrized to ``+/-`` before
         averaging (matching ``CalibrationMonitor(mixture_grid=...)``).
@@ -199,7 +200,9 @@ def hl_e_test(
     True
     """
     y_arr, p_arr, w_arr = _prep(y, p, sample_weight)
-    g_arr = np.asarray(grades)
+    from .grade import _resolve_grades
+
+    g_arr, order = _resolve_grades(grades, p_arr)
     if g_arr.ndim != 1 or len(g_arr) != len(y_arr):
         raise ValueError("grades must be a 1-D array matching y and p in length")
     grid = np.asarray(mixture_grid, dtype=np.float64)
@@ -212,8 +215,11 @@ def hl_e_test(
     log_norm = float(np.log(2.0 * grid.size))
     z_arr = logit(p_arr)
 
-    g_str = np.array([str(g) for g in g_arr])
-    labels = tuple(str(label) for label in sorted(np.unique(g_str)))
+    g_str = g_arr
+    if order is not None:
+        labels = order
+    else:
+        labels = tuple(str(label) for label in sorted(np.unique(g_str)))
     log_e_grade = np.empty(len(labels))
     for i, label in enumerate(labels):
         mask = g_str == label

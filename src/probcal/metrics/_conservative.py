@@ -254,7 +254,8 @@ def pluto_tasche_from_arrays(
     grades: object,
     y: object,
     *,
-    order: object,
+    order: object = None,
+    p: object = None,
     confidence: float = 0.9,
     sample_weight: object = None,
 ) -> PlutoTascheResult:
@@ -267,16 +268,21 @@ def pluto_tasche_from_arrays(
 
     Parameters
     ----------
-    grades : array_like
-        Rating grade label per observation.
+    grades : array_like or Masterscale
+        Rating grade label per observation, or a :class:`probcal.Masterscale`
+        that assigns them from ``p``.
     y : array_like
         Binary outcomes in ``{0, 1}``. Unlike most probcal metrics, an
         all-zero ``y`` is accepted -- Pluto-Tasche is built for exactly that
         case.
-    order : sequence of str, keyword-only
+    order : sequence of str or None, keyword-only
         Explicit best-to-worst grade order; must match the unique labels in
         ``grades`` exactly (same set, same count, any order raises if it
-        does not correspond to a permutation of the unique labels).
+        does not correspond to a permutation of the unique labels). Required
+        for a label array; defaults to the masterscale's own order otherwise.
+    p : array_like or None, keyword-only
+        Predicted probabilities, required when ``grades`` is a
+        ``Masterscale`` (labels are assigned from it); ignored otherwise.
     confidence : float, keyword-only
         Confidence level in ``(0, 1)`` for every grade's upper bound.
     sample_weight : array_like or None, keyword-only
@@ -305,17 +311,35 @@ def pluto_tasche_from_arrays(
     >>> res.n
     array([100., 400., 300.])
     """
+    from .grade import _resolve_grades
+
     y_arr = _validate_binary_y(y)
-    g_arr = np.asarray(grades)
-    if g_arr.ndim != 1 or len(g_arr) != len(y_arr):
+    if hasattr(grades, "assign") and hasattr(grades, "names"):
+        if p is None:
+            raise ValueError(
+                "p is required when grades is a Masterscale (labels are assigned from p)"
+            )
+        p_arr = validate_scores(p, name="p")
+        if len(p_arr) != len(y_arr):
+            raise ValueError("y and p must have equal length")
+        g_str, default_order = _resolve_grades(grades, p_arr)
+    else:
+        if order is None:
+            raise ValueError("order is required when grades is a label array")
+        g_str, default_order = _resolve_grades(grades, np.empty(0))
+    if g_str.ndim != 1 or len(g_str) != len(y_arr):
         raise ValueError("grades and y must be 1-D arrays of equal length")
     w_arr = validate_weights(sample_weight, len(y_arr))
 
-    order_t = tuple(str(g) for g in np.asarray(order).reshape(-1))
-    g_str = np.array([str(g) for g in g_arr])
     unique_labels = tuple(sorted(np.unique(g_str)))
-    if tuple(sorted(order_t)) != unique_labels:
-        raise ValueError(f"order {order_t} does not match the unique grade labels {unique_labels}")
+    if order is None:
+        order_t = default_order if default_order is not None else ()
+    else:
+        order_t = tuple(str(g) for g in np.asarray(order).reshape(-1))
+        if tuple(sorted(order_t)) != unique_labels:
+            raise ValueError(
+                f"order {order_t} does not match the unique grade labels {unique_labels}"
+            )
 
     n = np.empty(len(order_t), dtype=np.float64)
     d = np.empty(len(order_t), dtype=np.float64)
@@ -371,8 +395,9 @@ def jeffreys_upper_bands(
         Predicted probabilities in ``[0, 1]`` (only used, alongside
         ``grades``, to determine the default best-to-worst ``order`` when
         ``order`` is not given).
-    grades : array_like
-        Rating grade label per observation.
+    grades : array_like or Masterscale
+        Rating grade label per observation, or a :class:`probcal.Masterscale`
+        that assigns them from ``p`` and supplies the default ``order``.
     level : float, keyword-only
         Confidence level in ``(0, 1)`` for every grade's Jeffreys upper
         bound.
@@ -411,7 +436,9 @@ def jeffreys_upper_bands(
     p_arr = validate_scores(p, name="p")
     if len(p_arr) != len(y_arr):
         raise ValueError("y and p must have equal length")
-    g_arr = np.asarray(grades)
+    from .grade import _resolve_grades
+
+    g_arr, default_order = _resolve_grades(grades, p_arr)
     if g_arr.ndim != 1 or len(g_arr) != len(y_arr):
         raise ValueError("grades must be a 1-D array matching y and p in length")
     if not 0.0 < level < 1.0:
@@ -420,7 +447,9 @@ def jeffreys_upper_bands(
     g_str = np.array([str(g) for g in g_arr])
     unique_labels = tuple(sorted(str(u) for u in np.unique(g_str)))
 
-    if order is None:
+    if order is None and default_order is not None:
+        order_t = default_order
+    elif order is None:
         mean_p = {lab: float(np.mean(p_arr[g_str == lab])) for lab in unique_labels}
         order_t = tuple(sorted(unique_labels, key=lambda lab: mean_p[lab]))
     else:

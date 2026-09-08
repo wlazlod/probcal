@@ -102,7 +102,7 @@ class CalibratedScorecard:
         """Exact preimage of calibrated PDs on the model-probability scale."""
         return self.calibrator_.point_inverse(p, space=space)
 
-    def masterscale(self, bands: dict[str, tuple[float, float]]) -> dict[str, tuple[float, float]]:
+    def masterscale(self, bands: object) -> dict[str, tuple[float, float]]:
         """Calibrated PD bands -> scorecard point cut-offs, exactly.
 
         Composes :func:`probcal.thresholds.calibrated_bands_to_raw` (bands on
@@ -114,8 +114,9 @@ class CalibratedScorecard:
 
         Parameters
         ----------
-        bands : dict[str, tuple(lo, hi)]
-            Calibrated PD bands, e.g. ``{"A": (0.0, 0.01), "B": (0.01, 0.05)}``.
+        bands : dict[str, tuple(lo, hi)] or Masterscale
+            Calibrated PD bands, e.g. ``{"A": (0.0, 0.01), "B": (0.01, 0.05)}``,
+            or a :class:`probcal.Masterscale` (its ``bands`` are read).
 
         Returns
         -------
@@ -136,7 +137,10 @@ class CalibratedScorecard:
                 "probability instead"
             )
         a_pts, b_pts = self.points_affine_coeffs_
-        raw = calibrated_bands_to_raw(self.calibrator_, bands, space="logit")
+        bands_d: dict[str, tuple[float, float]] = (
+            bands.bands if hasattr(bands, "bands") else bands  # type: ignore[attr-defined,assignment]
+        )
+        raw = calibrated_bands_to_raw(self.calibrator_, bands_d, space="logit")
         out: dict[str, tuple[float, float]] = {}
         for name, (z_lo, z_hi) in raw.items():
             p_lo = a_pts + b_pts * z_lo if np.isfinite(z_lo) else np.inf * -np.sign(b_pts)
@@ -144,7 +148,7 @@ class CalibratedScorecard:
             out[name] = (min(p_lo, p_hi), max(p_lo, p_hi))
         # Bands ordered by rising calibrated PD must map to monotone point
         # ranges (falling when B < 0, i.e. higher points = safer).
-        order = sorted(out, key=lambda k: bands[k][0])
+        order = sorted(out, key=lambda k: bands_d[k][0])
         cuts = [out[k] for k in order]
         if b_pts < 0:
             mono = all(cuts[i][1] >= cuts[i + 1][1] - 1e-9 for i in range(len(cuts) - 1))

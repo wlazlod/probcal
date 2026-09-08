@@ -44,7 +44,8 @@ time) from a rot risk into a tested contract. Two rules keep it that way:
    | `model` | A sklearn-free stub with `predict_proba(X)` returning the score in column 0 |
    | `s_new` | Another portfolio's scores, for `predict_proba`/`point_inverse` calls on "new" data |
    | `mon` | A `CalibrationMonitor` with three seeded batches already applied |
-   | `grades` | Rating labels derived from `s_cal` (`G1`/`G2`/`G3` by score band) |
+   | `ms` | The three-grade masterscale, `Masterscale.from_edges([0.01, 0.05], names=["G1", "G2", "G3"])` |
+   | `grades` | Rating labels, `ms.assign(p_cal)` where `p_cal` is the beta-calibrated `s_cal` |
    | `segments` | Three segment labels cycling over `s_cal`'s length |
 
    A page that needs a name outside this set either defines it locally in

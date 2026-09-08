@@ -35,10 +35,26 @@ def _traffic_light(p_value: float) -> str:
     return "green"
 
 
+def _resolve_grades(grades: object, p_arr: np.ndarray) -> tuple[np.ndarray, tuple[str, ...] | None]:
+    """Labels plus grade order from either a label array or a ``Masterscale``.
+
+    An object exposing ``assign`` and ``names`` (a :class:`probcal.Masterscale`)
+    assigns the labels from ``p_arr`` and supplies its best-to-worst order,
+    restricted to the grades actually present; a plain array is returned as
+    strings with ``order=None`` (callers keep their current ordering rule).
+    """
+    if hasattr(grades, "assign") and hasattr(grades, "names"):
+        labels = np.asarray(grades.assign(p_arr)).astype(str)  # type: ignore[attr-defined]
+        present = set(labels.tolist())
+        order = tuple(str(g) for g in grades.names if str(g) in present)  # type: ignore[attr-defined]
+        return labels, order
+    return np.asarray(grades).astype(str), None
+
+
 def _per_grade(
-    y: np.ndarray, p: np.ndarray, grades: np.ndarray
+    y: np.ndarray, p: np.ndarray, grades: np.ndarray, order: tuple[str, ...] | None = None
 ) -> tuple[tuple, np.ndarray, np.ndarray, np.ndarray]:
-    labels = np.unique(grades)
+    labels = np.asarray(order) if order is not None else np.unique(grades)
     n = np.empty(len(labels), dtype=np.int64)
     k = np.empty(len(labels), dtype=np.int64)
     pd = np.empty(len(labels))
@@ -68,7 +84,8 @@ class BinomialGradeResult:
     Attributes
     ----------
     grades : tuple of str
-        Sorted grade labels.
+        Grade labels: sorted when a label array was given, best to worst when
+        a ``Masterscale`` was given.
     n : numpy.ndarray
         Observation count per grade.
     k : numpy.ndarray
@@ -116,8 +133,9 @@ def binomial_grade_test(
         Binary outcomes in ``{0, 1}``.
     p : array_like
         Predicted probabilities (assigned PDs) in ``[0, 1]``.
-    grades : array_like
-        Rating grade label per observation.
+    grades : array_like or Masterscale
+        Rating grade label per observation, or a :class:`probcal.Masterscale`
+        that assigns them from ``p`` (results then come out best to worst).
     sample_weight : array_like or None, keyword-only
         Not used: grade tests use raw integer counts. A ``UserWarning`` is
         emitted if the weights are non-uniform.
@@ -129,8 +147,8 @@ def binomial_grade_test(
     """
     y_arr, p_arr, _ = _prep(y, p, None)
     _check_weights(sample_weight, len(y_arr))
-    g_arr = np.asarray(grades)
-    labels, n, k, pd = _per_grade(y_arr, p_arr, g_arr)
+    g_arr, order = _resolve_grades(grades, p_arr)
+    labels, n, k, pd = _per_grade(y_arr, p_arr, g_arr, order)
     p_exact = np.empty(len(labels))
     p_normal = np.empty(len(labels))
     for i in range(len(labels)):
@@ -168,7 +186,8 @@ class JeffreysGradeResult:
     Attributes
     ----------
     grades : tuple of str
-        Sorted grade labels.
+        Grade labels: sorted when a label array was given, best to worst when
+        a ``Masterscale`` was given.
     n : numpy.ndarray
         Observation count per grade.
     k : numpy.ndarray
@@ -211,8 +230,9 @@ def jeffreys_grade_test(
         Binary outcomes in ``{0, 1}``.
     p : array_like
         Predicted probabilities (assigned PDs) in ``[0, 1]``.
-    grades : array_like
-        Rating grade label per observation.
+    grades : array_like or Masterscale
+        Rating grade label per observation, or a :class:`probcal.Masterscale`
+        that assigns them from ``p`` (results then come out best to worst).
     sample_weight : array_like or None, keyword-only
         Not used: grade tests use raw integer counts. A ``UserWarning`` is
         emitted if the weights are non-uniform.
@@ -224,8 +244,8 @@ def jeffreys_grade_test(
     """
     y_arr, p_arr, _ = _prep(y, p, None)
     _check_weights(sample_weight, len(y_arr))
-    g_arr = np.asarray(grades)
-    labels, n, k, pd = _per_grade(y_arr, p_arr, g_arr)
+    g_arr, order = _resolve_grades(grades, p_arr)
+    labels, n, k, pd = _per_grade(y_arr, p_arr, g_arr, order)
     p_value = np.empty(len(labels))
     for i in range(len(labels)):
         p_value[i] = float(betainc(k[i] + 0.5, n[i] - k[i] + 0.5, pd[i]))

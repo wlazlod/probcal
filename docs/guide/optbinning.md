@@ -19,6 +19,7 @@ import pandas as pd
 from optbinning import BinningProcess, Scorecard
 from sklearn.linear_model import LogisticRegression
 
+from probcal import Masterscale
 from probcal._math import logit
 from probcal.integrations.optbinning import calibrate_scorecard
 from probcal.monitor import CalibrationMonitor
@@ -48,8 +49,8 @@ pd_cal = cs.predict_proba(X_new)          # calibrated PD
 points = cs.score(X_new)                  # unchanged deployed points
 
 # 3. Masterscale: calibrated PD bands -> exact point cut-offs.
-bands = {"A": (0.0, 0.005), "B": (0.005, 0.02), "C": (0.02, 0.08), "D": (0.08, 1.0)}
-print(cs.masterscale(bands))
+ms = Masterscale.from_edges([0.005, 0.02, 0.08], names=list("ABCD"))
+print(cs.masterscale(ms))
 # {'A': (662.3, inf), 'B': (614.9, 662.3), ...}  — cut-offs on the points scale
 
 # 4. Provenance: the JSON names both layers.

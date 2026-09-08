@@ -138,6 +138,8 @@ def _fitted(name: str):
         )
         wrapped.offset_to(delta=0.15)
         return wrapped
+    if name == "Masterscale":
+        return cls.from_edges([0.01, 0.02, 0.05, 0.10], names=["A", "B", "C", "D", "E"])
     return cls().fit(_D.scores, _D.y)
 
 
@@ -150,6 +152,8 @@ def _predict(obj, q):
         return obj.predict_proba(q.reshape(-1, 1))
     if type(obj).__name__ == "AppliedAction":
         return np.asarray([obj.offset.delta_] if obj.offset is not None else [0.0])
+    if type(obj).__name__ == "Masterscale":
+        return obj.index(q).astype(float)
     return obj.predict_proba(q)
 
 
@@ -197,6 +201,10 @@ def test_fingerprint_stable_and_data_sensitive(fitted) -> None:
         return
     if name == "AppliedAction":
         alt = _applied_action(seed0=77)
+        assert obj.fingerprint() != alt.fingerprint()
+        return
+    if name == "Masterscale":  # a value object: sensitive to its bands, not to data
+        alt = SERIALIZABLE[name].from_edges([0.01, 0.02, 0.05, 0.11], names=list("ABCDE"))
         assert obj.fingerprint() != alt.fingerprint()
         return
     if name == "Chain":

@@ -265,7 +265,11 @@ def _grade_order(p_arr: np.ndarray, grades: object) -> "tuple[str, ...]":
 def _section_grades(
     fmt: str, y_arr: np.ndarray, p_arr: np.ndarray, grades: object, *, sink: _FigureSink
 ) -> str:
-    order = _grade_order(p_arr, grades)
+    from .metrics.grade import _resolve_grades
+
+    is_scale = hasattr(grades, "assign") and hasattr(grades, "table")
+    labels, scale_order = _resolve_grades(grades, p_arr)
+    order = scale_order if scale_order is not None else _grade_order(p_arr, labels)
     backtest = jeffreys_grade_test(y_arr, p_arr, grades)
 
     def draw() -> Any:
@@ -288,27 +292,44 @@ def _section_grades(
         )
     )
 
-    pt = pluto_tasche_from_arrays(grades, y_arr, order=order)
+    pt = pluto_tasche_from_arrays(labels, y_arr, order=order)
     pt_headers = ("grade", "n", "d", "n_pooled", "d_pooled", "pd_upper")
     pt_rows = list(zip(pt.grades, pt.n, pt.d, pt.n_pooled, pt.d_pooled, pt.pd_upper, strict=True))
 
-    bands = jeffreys_upper_bands(y_arr, p_arr, grades, order=order)
+    bands = jeffreys_upper_bands(y_arr, p_arr, labels, order=order)
     band_headers = ("grade", "lo", "hi")
     band_rows = [(g, lo, hi) for g, (lo, hi) in bands.items()]
 
     order_label = ", ".join(order)
+    how = "by the masterscale" if is_scale else "by mean predicted probability"
     if fmt == "html":
-        order_note = (
-            f"Grades ordered best to worst by mean predicted probability: "
-            f"{_escape_html(order_label)}."
-        )
+        order_note = f"Grades ordered best to worst {how}: {_escape_html(order_label)}."
         order_note_block = f"<p>{order_note}</p>"
     else:
-        order_note = f"Grades ordered best to worst by mean predicted probability: {order_label}."
+        order_note = f"Grades ordered best to worst {how}: {order_label}."
         order_note_block = f"\n{order_note}\n"
+
+    table_block = ""
+    if is_scale:
+        tab = grades.table(y_arr, p_arr)  # type: ignore[attr-defined]
+        t_headers = ("grade", "lo", "hi", "n", "events", "mean_pd", "observed_rate")
+        t_rows = list(
+            zip(
+                tab.grades,
+                tab.lo,
+                tab.hi,
+                tab.n,
+                tab.events,
+                tab.mean_pd,
+                tab.observed_rate,
+                strict=True,
+            )
+        )
+        table_block = _subheading(fmt, "Grade table") + _table(fmt, t_headers, t_rows)
 
     body = (
         order_note_block
+        + table_block
         + _subheading(fmt, "Per-grade backtest (Jeffreys)")
         + sink.figure(draw, "grade_backtest")
         + _table(fmt, headers, rows)
@@ -422,12 +443,14 @@ def validation_report(
         Adds its fingerprint to the header and a monitoring section with the
         e-process trajectory (:func:`probcal.plots.plot_e_process`) and its
         report's ``recommendation``/``reasoning``/``onset_label``.
-    grades : array_like or None, keyword-only
-        Rating grade label per observation. Adds a rating-grades section:
-        the Jeffreys per-grade backtest and chart, the Pluto-Tasche
-        most-prudent PD table, and the Jeffreys upper masterscale bands —
-        all three ordered best to worst by mean predicted probability
-        (ascending), stated explicitly in the section.
+    grades : array_like, Masterscale, or None, keyword-only
+        Rating grade label per observation, or a :class:`probcal.Masterscale`.
+        Adds a rating-grades section: the Jeffreys per-grade backtest and
+        chart, the Pluto-Tasche most-prudent PD table, and the Jeffreys upper
+        masterscale bands, all ordered best to worst (by mean predicted
+        probability for a label array, by the scale for a masterscale, stated
+        in the section). With a masterscale the section opens with its grade
+        table and the scale's fingerprint joins the header.
     by : array_like or None, keyword-only
         Group labels, one per observation. Adds a grouped-evaluation
         section: the faceted reliability panel
@@ -496,6 +519,8 @@ def validation_report(
         fp_pairs.append(("calibrator", calibrator.fingerprint()))
     if monitor is not None:
         fp_pairs.append(("monitor", monitor.fingerprint()))
+    if grades is not None and hasattr(grades, "fingerprint") and hasattr(grades, "assign"):
+        fp_pairs.append(("masterscale", grades.fingerprint()))  # type: ignore[attr-defined]
     fingerprints = _kv(format, fp_pairs)
 
     corp = corp_reliability(y_arr, p_arr, n_resamples=n_boot, random_state=seed)

@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from probcal import BetaCalibrator
+from probcal import BetaCalibrator, Masterscale
 from probcal.datasets import make_pd_portfolio
 from probcal.monitor import CalibrationMonitor
 
@@ -52,12 +52,13 @@ def _make_vocabulary() -> dict:
     s_cal = cal_portfolio.scores
     y_cal = cal_portfolio.y
     w_cal = np.ones_like(y_cal)
-    grades = np.array(["G1", "G2", "G3"])[np.searchsorted([0.01, 0.05], s_cal)]
     segments = np.array(["seg-a", "seg-b", "seg-c"])[np.arange(len(s_cal)) % 3]
 
     # The monitor watches a *calibrated* forecast, never the raw score —
     # feeding it uncalibrated s_cal would trip the alarm on batch one.
     p_cal = BetaCalibrator().fit(s_cal, y_cal).predict_proba(s_cal)
+    ms = Masterscale.from_edges([0.01, 0.05], names=["G1", "G2", "G3"])
+    grades = ms.assign(p_cal)
     mon = CalibrationMonitor(alpha=0.05)
     for k in range(3):
         idx = slice(k * 300, (k + 1) * 300)
@@ -70,6 +71,7 @@ def _make_vocabulary() -> dict:
         "model": _StubModel(),
         "s_new": new_portfolio.scores,
         "mon": mon,
+        "ms": ms,
         "grades": grades,
         "segments": segments,
     }

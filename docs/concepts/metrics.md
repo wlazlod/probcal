@@ -367,8 +367,7 @@ Hosmer–Lemeshow entirely, and prints the guardrail flags next to whatever crit
 ## In probcal
 
 ```python
-# s_cal, y_cal: held-out calibration scores and outcomes
-import numpy as np
+# s_cal, y_cal, ms: held-out calibration scores, outcomes, the masterscale
 from probcal.metrics import (
     brier_score, calibration_guardrails, calibration_slope, ece, ece_debiased,
     evaluate, ici, jeffreys_grade_test, log_loss, skce, skce_test, smooth_ece,
@@ -385,8 +384,7 @@ print(calibration_guardrails(y_cal, s_cal))               # the three-flag summa
 report = evaluate(y_cal, s_cal, n_boot=100, seed=42)      # everything + bootstrap CIs
 print(report)
 
-grades = np.array(["G1", "G2", "G3"])[np.searchsorted([0.01, 0.05], s_cal)]
-print(jeffreys_grade_test(y_cal, s_cal, grades))          # ECB-style backtest, traffic lights
+print(jeffreys_grade_test(y_cal, s_cal, ms))              # ECB-style backtest, best to worst
 ```
 
 ## Computational cost

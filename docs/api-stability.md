@@ -36,9 +36,10 @@ The public API is exactly the export lists below; anything prefixed with
   `SegmentedCalibrator`),
   `BaseCalibrator`, `UnattainableTargetError`, `CalibratorSelector`,
   `CalibratedModel`, `LogitOffset`, `OffsetEstimate`, `estimate_offset`,
-  `offset_from_estimate`, `Chain`, the reliability curves and
-  `calibration_belt`, threshold translation (`calibrated_interval_to_raw`,
-  `calibrated_bands_to_raw`), attribution repair, `make_pd_portfolio`,
+  `offset_from_estimate`, `Chain`, `Masterscale`, `GradeTable`, the
+  reliability curves and `calibration_belt`, threshold translation
+  (`calibrated_interval_to_raw`, `calibrated_bands_to_raw`,
+  `build_masterscale`), attribution repair, `make_pd_portfolio`,
   `expit`/`logit`, and the `metrics`/`monitor` submodules.
 - `probcal.metrics.__all__`: the 47-symbol metric catalog (proper
   scores, binned and binning-free calibration errors, per-grade backtests,

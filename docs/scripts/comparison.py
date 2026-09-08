@@ -30,6 +30,7 @@ from probcal import (
     BetaCalibrator,
     CalibratorSelector,
     IsotonicCalibrator,
+    Masterscale,
     PlattCalibrator,
     SplineCalibrator,
     VennAbersCalibrator,
@@ -128,11 +129,10 @@ def _tie_stats(s) -> dict:
 
 def _grade_stats(y, p, edges, labels) -> dict:
     """Jeffreys backtest over the masterscale; grades from the calibrated PD itself."""
-    idx = np.clip(np.searchsorted(edges, p, side="right") - 1, 0, len(labels) - 1)
-    grades = np.asarray(labels)[idx]
-    res = jeffreys_grade_test(y, p, grades)
-    pos = {g: i for i, g in enumerate(res.grades)}
-    sizes = [int(res.n[pos[g]]) if g in pos else None for g in labels]
+    ms = Masterscale({lab: (float(edges[i]), float(edges[i + 1])) for i, lab in enumerate(labels)})
+    res = jeffreys_grade_test(y, p, ms)
+    tab = ms.table(y, p)
+    sizes = [int(n) if n > 0 else None for n in tab.n]
     passed = int(np.sum(np.asarray(res.p_value) > 0.05))
     return {
         "passed": passed,

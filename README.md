@@ -47,8 +47,7 @@ fitting and scoring the same rows would make the "after" line an identity
 (see *Data splitting* in the docs):
 
 ```python
-import numpy as np
-from probcal import BetaCalibrator, LogitOffset, make_pd_portfolio
+from probcal import BetaCalibrator, LogitOffset, Masterscale, make_pd_portfolio
 from probcal.metrics import calibration_guardrails, jeffreys_grade_test
 
 cal_set = make_pd_portfolio(n=8000, random_state=42)   # synthetic 3% PD portfolio
@@ -68,9 +67,8 @@ print(off.audit_report(test.y, p))
 p_final = off.transform(p)
 
 # 3. Per-grade regulatory backtest on a fixed PD masterscale
-edges, labels = np.array([0, 0.01, 0.02, 0.05, 0.10, 1.0]), np.array(list("ABCDE"))
-grades = labels[np.searchsorted(edges, p_final, side="right") - 1]
-res = jeffreys_grade_test(test.y, p_final, grades)
+ms = Masterscale.from_edges([0.01, 0.02, 0.05, 0.10], names=list("ABCDE"))
+res = jeffreys_grade_test(test.y, p_final, ms)
 for g, n, k, pd_, light in zip(res.grades, res.n, res.k, res.pd, res.light):
     print(f"grade {g}: n={n:5d}  defaults={k:3d}  PD={pd_:.4f}  {light}")
 ```

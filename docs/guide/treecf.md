@@ -69,9 +69,11 @@ res = exp.explain(x, target=Target.calibrated(chain, op="<=", value=0.02),
 
 ## Grade recourse and `buffer_logit`
 
-`Target.bands(bands, space="calibrated", calibrator=cal)` solves a whole
+`Target.bands(ms.bands, space="calibrated", calibrator=cal)` solves a whole
 rating ladder in one call: one counterfactual (or certified infeasibility)
-per grade band.
+per grade band. treecf takes the band dict, which a `Masterscale` exposes as
+`ms.bands`; accepting the object directly is a one-line follow-up on the
+treecf side, not something this package needs.
 
 `buffer_logit` shrinks the calibrated interval in logit space *before*
 inversion, so a future central-tendency update of at most that magnitude

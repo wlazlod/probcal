@@ -51,7 +51,8 @@ when grade *i*'s own sample is too small or too clean to say anything by itself.
 ## The bound
 
 For grades ordered best to worst (index 1..K, as given; the order is not inferred from the
-data), pool grade *i* with every worse grade:
+data, and a [`Masterscale`](../guide/cutoffs.md#your-own-masterscale) supplies it), pool
+grade *i* with every worse grade:
 
 $$
 n^*_i = \sum_{j=i}^{K} n_j, \qquad d^*_i = \sum_{j=i}^{K} d_j .
@@ -129,8 +130,22 @@ y = np.zeros(800)             # zero defaults observed
 res2 = pluto_tasche_from_arrays(grades, y, order=("A", "B", "C"), confidence=0.9)
 ```
 
+These examples build grades from counts, not from `p`, so they pass label
+arrays and the order explicitly. When the grades come from a masterscale,
+pass it and the best-to-worst order is the scale's:
+
+```python
+# s_cal, y_cal, ms: held-out calibration scores, outcomes, the masterscale
+from probcal.metrics import pluto_tasche_from_arrays
+
+res3 = pluto_tasche_from_arrays(ms, y_cal, p=s_cal, confidence=0.9)
+print(res3.grades)          # ('G1', 'G2', 'G3'), the scale's order
+```
+
 Both entry points return the same `PlutoTascheResult` and are re-exported from
-`probcal.metrics.grade`, alongside the per-grade backtests they complement.
+`probcal.metrics.grade`, alongside the per-grade backtests they complement. To design
+the grades rather than inherit them, see [Design the grades](../guide/cutoffs.md#design-the-grades);
+the Pluto–Tasche and Jeffreys bands then apply to the built scale unchanged.
 
 ## Jeffreys upper bands: a masterscale band table
 

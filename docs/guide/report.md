@@ -18,7 +18,7 @@ Regenerate it deliberately, not on every build:
 `uv run python docs/scripts/generate_sample_report.py`.
 
 ```python
-# mon, grades, segments: a CalibrationMonitor with earlier batches applied, rating labels, segment labels
+# mon, ms, segments: a CalibrationMonitor with earlier batches applied, the masterscale, segment labels
 # s_cal, y_cal: held-out calibration scores and outcomes
 from probcal import BetaCalibrator
 from probcal.report import validation_report   # probcal[viz]
@@ -29,13 +29,19 @@ html = validation_report(
     y_cal, s_cal,
     calibrator=cal,        # optional: adds the appendix (to_json + interpret())
     monitor=mon,            # optional: adds the e-process trajectory section
-    grades=grades,          # optional: adds the Jeffreys/Pluto-Tasche section
+    grades=ms,              # optional: adds the grade table and Jeffreys/Pluto-Tasche section
     by=segments,            # optional: adds the grouped-evaluation section
     n_boot=50, seed=42,     # one shared knob for every resampling site
                             # (50: reduced for the docs harness; use 200+)
     path="validation.html",
 )
 ```
+
+With a `Masterscale` in `grades`, the rating-grades section opens with its
+grade table, the grades are ordered by the scale, and the scale's fingerprint
+joins the header next to the data, calibrator, and monitor fingerprints
+([your own masterscale](cutoffs.md#your-own-masterscale)). A plain label
+array still works and orders grades by mean predicted probability.
 
 Sections are omitted, not left blank, when their input is absent:
 reliability, the metric report, and the CORP decomposition always appear
@@ -59,9 +65,9 @@ delimiter renders as literal text, never as injected HTML or a corrupted
 table row.
 
 ```python
-# s_cal, y_cal, grades: held-out calibration scores, outcomes, rating labels
+# s_cal, y_cal, ms: held-out calibration scores, outcomes, the masterscale
 validation_report(
-    y_cal, s_cal, grades=grades,
+    y_cal, s_cal, grades=ms,
     format="markdown", path="validation.md",
 )
 ```

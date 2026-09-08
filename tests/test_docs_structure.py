@@ -58,7 +58,9 @@ _API_MODULES = (
 _API_EXTRA_SYMBOLS = ("probcal._math.expit", "probcal._math.logit")
 
 # The snippet vocabulary (docs/README.md, mirrored by tests/test_docs_snippets.py).
-_VOCABULARY = frozenset({"s_cal", "y_cal", "w_cal", "model", "s_new", "mon", "grades", "segments"})
+_VOCABULARY = frozenset(
+    {"s_cal", "y_cal", "w_cal", "model", "s_new", "mon", "grades", "segments", "ms"}
+)
 _VOCAB_INCLUDE = '--8<-- "docs/_snippets/vocab.md"'
 _CODE_BLOCK_RE = re.compile(r"```python\n(.*?)```", re.S)
 
@@ -281,3 +283,29 @@ def test_vocabulary_names_are_declared(page: pathlib.Path) -> None:
     if needs_include and page.name != "getting-started.md" and _VOCAB_INCLUDE not in text:
         problems.append(f"page uses the vocabulary but lacks {_VOCAB_INCLUDE}")
     assert not problems, f"{page.relative_to(_DOCS)}: " + "; ".join(problems)
+
+
+_GRADE_ASSIGNMENT_RE = re.compile(r"np\.(searchsorted|digitize)\(")
+# (file relative to the repo root, substring on the line) pairs that are not grade assignment.
+_GRADE_ASSIGNMENT_ALLOWLIST: tuple[tuple[str, str], ...] = ()
+
+
+def test_no_hand_rolled_grade_assignment() -> None:
+    """Every example builds grades through Masterscale, so one boundary convention holds."""
+    files = [
+        _ROOT / "README.md",
+        *sorted((_ROOT / "docs").rglob("*.md")),
+        *sorted((_ROOT / "docs" / "scripts").glob("*.py")),
+        *sorted((_ROOT / "docs" / "notebooks").glob("*.ipynb")),
+    ]
+    hits = []
+    for path in files:
+        if "site" in path.parts:
+            continue
+        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+            if _GRADE_ASSIGNMENT_RE.search(line):
+                rel = str(path.relative_to(_ROOT))
+                if any(rel == f and s in line for f, s in _GRADE_ASSIGNMENT_ALLOWLIST):
+                    continue
+                hits.append(f"{rel}:{lineno}: {line.strip()[:80]}")
+    assert not hits, "hand-rolled grade assignment; use Masterscale.assign:\n" + "\n".join(hits)

@@ -28,7 +28,7 @@ optional stopping) live in the *Monitoring* concepts chapter.
     [Monitoring](../concepts/monitoring.md).
 
 ```python
-# s_cal, y_cal, grades: held-out calibration scores, outcomes, rating labels
+# s_cal, y_cal, ms: held-out calibration scores, outcomes, the masterscale
 from probcal import BetaCalibrator
 from probcal.monitor import CalibrationMonitor
 
@@ -37,8 +37,8 @@ mon = CalibrationMonitor(alpha=0.05)
 
 # Each time a cohort's outcomes mature (arrival order — never reordered).
 # The monitor watches the *calibrated* forecast, never the raw score:
-y_batch, p_batch, grade_batch = y_cal[:200], deployed.predict_proba(s_cal[:200]), grades[:200]
-step = mon.update(y_batch, p_batch, grade=grade_batch, label="2026Q3")
+y_batch, p_batch = y_cal[:200], deployed.predict_proba(s_cal[:200])
+step = mon.update(y_batch, p_batch, grade=ms, label="2026Q3")   # grades assigned by the scale
 step.e_global      # the alarm statistic (alarm when it ever reaches 1/alpha)
 step.delta_ci      # anytime-valid CI for the current offset: (-3.0, 0.55) here,
                    # i.e. one 200-row batch buys almost no precision; the
@@ -62,6 +62,10 @@ sequences below the wealth curves; the
 [monitoring chapter](../concepts/monitoring.md#components) shows the
 rendered figure on a twelve-cohort drift scenario and reads it line by
 line.
+
+Passing a `Masterscale` as `grade` assigns the labels from the calibrated
+probabilities and records the scale's fingerprint on first use; a different
+scale later raises, since it would change the grade universe mid-stream.
 
 Three operational rules. Persist the state instead of recomputing from raw
 data; predictability is what makes the guarantee hold. A portfolio-wide

@@ -201,6 +201,9 @@ class CalibrationMonitor:
     ----------
     steps_ : list[MonitorStep]
         The processed batches, in arrival order.
+    masterscale_fingerprint_ : str or None
+        Fingerprint of the ``Masterscale`` passed to :meth:`update`, once one
+        has been; serialized with the state.
     """
 
     def __init__(
@@ -263,6 +266,7 @@ class CalibrationMonitor:
         self._max_log_global = -np.inf
         self._alarmed = False
         self._warned_weights = False
+        self.masterscale_fingerprint_: str | None = None
 
     def _past(self, grade: str | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         window = slice(None) if self.plug_in_window is None else slice(-self.plug_in_window, None)
@@ -371,9 +375,12 @@ class CalibrationMonitor:
         sample_weight : array_like or None
             Positive weights; non-uniform weights break the exact
             martingale property and warn once (reporting parity).
-        grade : array_like or None
-            Optional per-observation grade labels; activates the per-grade
-            offset processes.
+        grade : array_like, Masterscale, or None
+            Optional per-observation grade labels, or a
+            :class:`probcal.Masterscale` that assigns them from ``p``;
+            either activates the per-grade offset processes. The first
+            masterscale seen is recorded as ``masterscale_fingerprint_`` and
+            serialized; a different one later raises.
         label : str or None
             Batch label for reporting; defaults to ``batch-<k>``.
 
@@ -398,7 +405,19 @@ class CalibrationMonitor:
             self._warned_weights = True
         g_arr: np.ndarray | None = None
         if grade is not None:
-            g_arr = np.asarray(grade).astype(str)
+            if hasattr(grade, "assign") and hasattr(grade, "fingerprint"):
+                fp = grade.fingerprint()  # type: ignore[attr-defined]
+                if self.masterscale_fingerprint_ is None:
+                    self.masterscale_fingerprint_ = fp
+                elif fp != self.masterscale_fingerprint_:
+                    raise ValueError(
+                        "this monitor was started with masterscale "
+                        f"{self.masterscale_fingerprint_[:12]}...; a different masterscale "
+                        f"({fp[:12]}...) changes the grade universe. Start a new monitor."
+                    )
+                g_arr = np.asarray(grade.assign(p_arr)).astype(str)  # type: ignore[attr-defined]
+            else:
+                g_arr = np.asarray(grade).astype(str)
             if len(g_arr) != len(p_arr):
                 raise ValueError("grade and p must have equal length")
         z = logit(p_arr)
@@ -817,6 +836,7 @@ class CalibrationMonitor:
         from .. import __version__
 
         p = self._ctor_params()
+        state = self._state_dict()
         return {
             "probcal_schema": SCHEMA_VERSION,
             "probcal_version": __version__,
@@ -831,28 +851,34 @@ class CalibrationMonitor:
                 "plug_in_window": p["plug_in_window"],
                 "recommendation_window": p["recommendation_window"],
             },
-            "state": {
-                "z": [a.tolist() for a in self._z],
-                "y": [a.tolist() for a in self._y],
-                "w": [a.tolist() for a in self._w],
-                "g": [a.tolist() if a is not None else None for a in self._g],
-                "offset": self._offset.state(),
-                "log_shape": self._log_shape,
-                "grade_procs": {g: p.state() for g, p in self._grade_procs.items()},
-                "cs_log": self._cs_log.tolist(),
-                "cs_max": self._cs_max.tolist(),
-                "grade_cs_log": {g: a.tolist() for g, a in self._grade_cs_log.items()},
-                "grade_cs_max": {g: a.tolist() for g, a in self._grade_cs_max.items()},
-                "max_log_global": float(self._max_log_global),
-                "alarmed": self._alarmed,
-                "warned_weights": self._warned_weights,
-                "steps": [self._step_to_dict(s) for s in self.steps_],
-            },
+            "state": state,
             "fit_meta": {
                 "n_batches": len(self._z),
                 "n_obs": int(sum(len(a) for a in self._z)),
             },
         }
+
+    def _state_dict(self) -> dict[str, object]:
+        state: dict[str, object] = {
+            "z": [a.tolist() for a in self._z],
+            "y": [a.tolist() for a in self._y],
+            "w": [a.tolist() for a in self._w],
+            "g": [a.tolist() if a is not None else None for a in self._g],
+            "offset": self._offset.state(),
+            "log_shape": self._log_shape,
+            "grade_procs": {g: p.state() for g, p in self._grade_procs.items()},
+            "cs_log": self._cs_log.tolist(),
+            "cs_max": self._cs_max.tolist(),
+            "grade_cs_log": {g: a.tolist() for g, a in self._grade_cs_log.items()},
+            "grade_cs_max": {g: a.tolist() for g, a in self._grade_cs_max.items()},
+            "max_log_global": float(self._max_log_global),
+            "alarmed": self._alarmed,
+            "warned_weights": self._warned_weights,
+            "steps": [self._step_to_dict(s) for s in self.steps_],
+        }
+        if self.masterscale_fingerprint_ is not None:
+            state["masterscale_fingerprint"] = self.masterscale_fingerprint_
+        return state
 
     @staticmethod
     def _step_to_dict(s: MonitorStep) -> dict[str, object]:
@@ -905,6 +931,7 @@ class CalibrationMonitor:
         mon._max_log_global = float(st["max_log_global"])
         mon._alarmed = bool(st["alarmed"])
         mon._warned_weights = bool(st["warned_weights"])
+        mon.masterscale_fingerprint_ = st.get("masterscale_fingerprint")
         mon.steps_ = []
         for sd in st["steps"]:
             sd = dict(sd)

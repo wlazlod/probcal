@@ -20,6 +20,7 @@ from .curves import (
 )
 from .datasets import make_pd_portfolio
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
+from .masterscale import GradeTable, Masterscale
 from .monitor import moc_offset, moc_offset_from_counts
 from .offset import LogitOffset, OffsetEstimate, estimate_offset, offset_from_estimate
 from .parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
@@ -43,9 +44,11 @@ __all__: list[str] = [
     "Chain",
     "CrossVennAbersCalibrator",
     "ENIRCalibrator",
+    "GradeTable",
     "HistogramBinningCalibrator",
     "IsotonicCalibrator",
     "LogitOffset",
+    "Masterscale",
     "OffsetEstimate",
     "PlattCalibrator",
     "ScalingBinningCalibrator",

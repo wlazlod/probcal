@@ -13,11 +13,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from probcal import BetaCalibrator, expit, logit, make_pd_portfolio
+from probcal import BetaCalibrator, Masterscale, expit, logit, make_pd_portfolio
 from probcal.monitor import CalibrationMonitor
 
 GRADE_EDGES = (0.005, 0.01, 0.02, 0.05)
 GRADE_NAMES = np.array(["G1", "G2", "G3", "G4", "G5"])
+MASTERSCALE = Masterscale.from_edges(GRADE_EDGES, names=list(GRADE_NAMES))
 SEGMENT_NAMES = np.array(["retail", "sme", "corporate"])
 # Segment levels as deviations from the deployed map — retail below it,
 # corporate above, sme between — then centered so the pooled portfolio is
@@ -42,7 +43,7 @@ class DriftScenario:
 
 
 def _grades(p: np.ndarray) -> np.ndarray:
-    return GRADE_NAMES[np.searchsorted(GRADE_EDGES, p)]
+    return MASTERSCALE.assign(p)
 
 
 def build(

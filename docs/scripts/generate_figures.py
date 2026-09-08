@@ -28,6 +28,7 @@ from probcal import (  # noqa: E402
     BetaCalibrator,
     CalibratorSelector,
     LogitOffset,
+    Masterscale,
     calibration_belt,
     expit,
     logit,
@@ -120,10 +121,8 @@ def main() -> None:
         "ecce.png",
     )
 
-    grade_edges = [0.005, 0.01, 0.02, 0.05]
-    grade_names = np.array(["G1", "G2", "G3", "G4", "G5"])
-    grades = grade_names[np.searchsorted(grade_edges, p_cal)]
-    save(plot_grade_backtest(jeffreys_grade_test(y, p_cal, grades)), "grade_backtest.png")
+    ms = Masterscale.from_edges([0.005, 0.01, 0.02, 0.05], names=["G1", "G2", "G3", "G4", "G5"])
+    save(plot_grade_backtest(jeffreys_grade_test(y, p_cal, ms)), "grade_backtest.png")
 
     offset = LogitOffset(target_mean=float(y.mean())).fit(scores)
     save(plot_offset_audit(offset), "offset_audit.png")

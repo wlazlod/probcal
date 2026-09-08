@@ -199,7 +199,7 @@ coin flip.
 """)
 
 code("""\
-from probcal import BetaCalibrator, CalibratorSelector, IsotonicCalibrator
+from probcal import BetaCalibrator, CalibratorSelector, IsotonicCalibrator, Masterscale
 from probcal.metrics import evaluate
 
 selector = CalibratorSelector().fit(s_cal, y_cal)
@@ -236,10 +236,9 @@ from probcal.metrics import jeffreys_grade_test
 cal = BetaCalibrator().fit(s_cal, y_cal)
 p_test = cal.predict_proba(s_test)
 
-edges = np.array([0.0, 0.005, 0.01, 0.02, 0.04, 0.08, 1.0])
-labels = np.array(["A", "B", "C", "D", "E", "F"])
-grades_before = labels[np.clip(np.searchsorted(edges, s_test, side="right") - 1, 0, 5)]
-grades_after = labels[np.clip(np.searchsorted(edges, p_test, side="right") - 1, 0, 5)]
+ms = Masterscale.from_edges([0.005, 0.01, 0.02, 0.04, 0.08], names=list("ABCDEF"))
+grades_before = ms.assign(s_test)   # grading on raw scores
+grades_after = ms.assign(p_test)    # grading on calibrated PD
 
 print("before calibration (grading on raw scores):")
 print(jeffreys_grade_test(y_test, s_test, grades_before))

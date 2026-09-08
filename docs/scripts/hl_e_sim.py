@@ -21,6 +21,7 @@ import sys
 
 import numpy as np
 
+from probcal import Masterscale
 from probcal._math import expit, logit
 from probcal.datasets import make_pd_portfolio
 from probcal.metrics import hl_e_test
@@ -31,11 +32,10 @@ def _scores(n: int, seed: int = 42) -> np.ndarray:
 
 
 def _equal_mass_grades(p: np.ndarray, n_grades: int) -> np.ndarray:
-    """Assign each score to one of ``n_grades`` equal-mass bins by rank."""
-    order = np.argsort(p)
-    bin_id = np.empty(len(p), dtype=np.int64)
-    bin_id[order] = (np.arange(len(p)) * n_grades) // len(p)
-    return np.array([f"G{i}" for i in bin_id])
+    """Assign each score to one of ``n_grades`` equal-mass grades (quantile edges)."""
+    edges = np.quantile(p, np.arange(1, n_grades) / n_grades)
+    ms = Masterscale.from_edges(edges, names=[f"G{i}" for i in range(n_grades)])
+    return ms.assign(p)
 
 
 def type1(runs: int = 2000, n: int = 2000, seed: int = 42, n_grades: int = 5) -> dict:

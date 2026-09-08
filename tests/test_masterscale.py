@@ -224,3 +224,34 @@ def test_grade_tests_skip_empty_grades_like_labels_do() -> None:
     ms = Masterscale.from_edges([0.01, 0.05, 0.999], names=["A", "B", "C", "D"])
     res = jeffreys_grade_test(P_TEST.y, P_TEST.scores, ms)
     assert "D" not in res.grades
+
+
+# ----------------------------------------------------------------- Task 4
+
+from probcal.metrics import jeffreys_upper_bands, pluto_tasche_from_arrays  # noqa: E402
+
+
+def test_pluto_tasche_from_arrays_masterscale_equivalence() -> None:
+    labels = MS.assign(P_TEST.scores)
+    order = tuple(g for g in MS.names if g in set(labels))
+    with_ms = pluto_tasche_from_arrays(MS, P_TEST.y, p=P_TEST.scores)
+    with_labels = pluto_tasche_from_arrays(labels, P_TEST.y, order=order)
+    assert with_ms.grades == with_labels.grades == order
+    for f in ("n", "d", "n_pooled", "d_pooled", "pd_upper"):
+        np.testing.assert_array_equal(getattr(with_ms, f), getattr(with_labels, f))
+
+
+def test_pluto_tasche_from_arrays_masterscale_needs_p_and_labels_need_order() -> None:
+    with pytest.raises(ValueError, match="p is required"):
+        pluto_tasche_from_arrays(MS, P_TEST.y)
+    with pytest.raises(ValueError, match="order is required"):
+        pluto_tasche_from_arrays(MS.assign(P_TEST.scores), P_TEST.y)
+
+
+def test_jeffreys_upper_bands_masterscale_equivalence() -> None:
+    labels = MS.assign(P_TEST.scores)
+    order = tuple(g for g in MS.names if g in set(labels))
+    with_ms = jeffreys_upper_bands(P_TEST.y, P_TEST.scores, MS)
+    with_labels = jeffreys_upper_bands(P_TEST.y, P_TEST.scores, labels, order=order)
+    assert with_ms == with_labels
+    assert list(with_ms) == list(order)

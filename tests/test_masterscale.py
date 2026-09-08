@@ -172,3 +172,55 @@ def test_to_json_path(tmp_path) -> None:
     ms = Masterscale(BANDS)
     ms.to_json(tmp_path / "ms.json")
     assert Masterscale.from_json(tmp_path / "ms.json") == ms
+
+
+# ----------------------------------------------------------------- Task 3
+
+from probcal.metrics import binomial_grade_test, hl_e_test, jeffreys_grade_test  # noqa: E402
+
+
+def _aligned(res_a, res_b, fields):
+    """Rows of two grade results aligned by grade name, for bit-identity checks."""
+    ia = {g: i for i, g in enumerate(res_a.grades)}
+    ib = {g: i for i, g in enumerate(res_b.grades)}
+    assert set(ia) == set(ib)
+    for f in fields:
+        a, b = getattr(res_a, f), getattr(res_b, f)
+        for g in ia:
+            assert a[ia[g]] == b[ib[g]], (f, g)
+
+
+MS = Masterscale(BANDS)
+P_TEST = make_pd_portfolio(n=6000, random_state=11)
+_FIELDS = ("n", "k", "pd", "p_exact", "p_normal", "p_value", "light", "ci_low", "ci_high")
+
+
+@pytest.mark.parametrize("fn", [binomial_grade_test, jeffreys_grade_test])
+def test_grade_tests_equivalence_gate(fn) -> None:
+    with_ms = fn(P_TEST.y, P_TEST.scores, MS)
+    with_labels = fn(P_TEST.y, P_TEST.scores, MS.assign(P_TEST.scores))
+    _aligned(with_ms, with_labels, [f for f in _FIELDS if hasattr(with_ms, f)])
+    assert with_ms.grades == tuple(g for g in MS.names if g in with_labels.grades)
+
+
+def test_hl_e_test_equivalence_gate() -> None:
+    with_ms = hl_e_test(P_TEST.y, P_TEST.scores, MS)
+    with_labels = hl_e_test(P_TEST.y, P_TEST.scores, MS.assign(P_TEST.scores))
+    assert with_ms.e_value == with_labels.e_value and with_ms.p_value == with_labels.p_value
+    _aligned(with_ms, with_labels, ["e_grade"])
+
+
+def test_grade_tests_report_best_to_worst_not_alphabetically() -> None:
+    ms = Masterscale.from_edges([0.01, 0.05], names=["AAA", "AA", "A"])
+    res = jeffreys_grade_test(P_TEST.y, P_TEST.scores, ms)
+    assert res.grades == ("AAA", "AA", "A")
+    assert np.all(np.diff(res.pd) > 0)
+    res_labels = jeffreys_grade_test(P_TEST.y, P_TEST.scores, ms.assign(P_TEST.scores))
+    assert res_labels.grades == ("A", "AA", "AAA")  # today's behaviour, unchanged
+    assert hl_e_test(P_TEST.y, P_TEST.scores, ms).grades == ("AAA", "AA", "A")
+
+
+def test_grade_tests_skip_empty_grades_like_labels_do() -> None:
+    ms = Masterscale.from_edges([0.01, 0.05, 0.999], names=["A", "B", "C", "D"])
+    res = jeffreys_grade_test(P_TEST.y, P_TEST.scores, ms)
+    assert "D" not in res.grades

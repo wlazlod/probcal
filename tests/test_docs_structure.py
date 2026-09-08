@@ -48,6 +48,7 @@ _API_MODULES = (
     "probcal.report",
     "probcal.attribution",
     "probcal.thresholds",
+    "probcal.masterscale",
     "probcal.datasets",
     "probcal.chain",
     "probcal.monitor",

@@ -63,6 +63,9 @@ def test_golden_loads_and_reproduces(path: pathlib.Path) -> None:
         obj = load(d)
         segments = np.asarray(["a", "b", "c"])[np.arange(len(q)) % 3]
         result = obj.predict_proba(q, segments=segments)
+    elif path.stem == "Masterscale":
+        obj = load(d)
+        result = obj.index(q).astype(float)
     else:
         obj = load(d)
         result = obj.transform(q) if path.stem == "LogitOffset" else obj.predict_proba(q)

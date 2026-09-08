@@ -89,6 +89,8 @@ def _fitted(name: str):
             y = (rng.random(300) < expit(logit(p) + 0.8)).astype(float)
             mon.update(y, p, label=f"drift{k}")
         return mon.apply_recommendation(target=None)
+    if name == "Masterscale":
+        return cls.from_edges([0.01, 0.02, 0.05, 0.10], names=["A", "B", "C", "D", "E"])
     return cls().fit(_D.scores, _D.y)
 
 
@@ -102,6 +104,8 @@ def _predict(obj, q):
         return obj.predict_proba(q, segments=segments)
     if type(obj).__name__ == "CalibratedModel":
         return obj.predict_proba(q.reshape(-1, 1))
+    if type(obj).__name__ == "Masterscale":
+        return obj.index(q).astype(float)
     if type(obj).__name__ == "AppliedAction":
         return np.asarray([obj.offset.delta_] if obj.offset is not None else [0.0])
     return obj.predict_proba(q)

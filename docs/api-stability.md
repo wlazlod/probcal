@@ -1,11 +1,27 @@
 # API stability
 
-**Status:** beta on PyPI. Until 1.0, breaking changes bump the minor
-version, are listed in the changelog with the reasoning, and, where the
-old behavior had legitimate uses, keep an explicit escape hatch (the
-`bins=None`/`grid_size=None` pattern). Serialized artifacts have their own,
-stronger promise: **every 0.x release reads schema 1**, enforced by
-committed golden files in CI (see the *Serialization* chapter).
+--8<-- "docs/_snippets/status.md"
+
+## Two kinds of change
+
+**API-breaking.** A public symbol is removed or renamed, a signature
+changes incompatibly, or a documented behaviour changes meaning. Before
+1.0 this bumps the minor version, is listed in the changelog with the
+reasoning, and goes through the deprecation policy below.
+
+**Numerically visible.** A default estimator, a numeric path, or a fitted
+internal changes so that computed numbers move while every public call
+still works. This may ship in a patch release. It always comes with a
+changelog entry stating the size of the change and, where feasible, a
+parameter that recovers the old values (the `bins=None`/`grid_size=None`
+pattern).
+
+What a patch release may therefore change: metric defaults and numeric
+paths with an escape hatch; the shape of fitted internals that are not
+part of the calibrator protocol (0.1.3 changed `ENIRCalibrator.path_solutions_`);
+performance, documentation, and packaging. What it may not: public
+signatures, exported names, the calibrator protocol, and the ability to
+read every schema-1 artifact.
 
 ## Public surface
 
@@ -41,90 +57,7 @@ The public API is exactly the export lists below; anything prefixed with
   re-exported from top-level `probcal`, so `import probcal` and
   `import probcal.report` both stay matplotlib-free at import time.
 
-## Added in 0.3.0
-
-New public symbols relative to 0.2.0, kept here as one running list for
-this release regardless of which chapter documents them (extend this list
-rather than starting a new one for later 0.3.0 additions):
-
-- `estimate_offset`, `offset_from_estimate`, `OffsetEstimate` (`probcal`):
-  offset-only logistic MLE with a Fisher standard error; see *Offset*.
-- `metrics.pluto_tasche`, `metrics.pluto_tasche_from_arrays`,
-  `PlutoTascheResult`: one-period most-prudent PDs; see *Conservatism*.
-- `metrics.jeffreys_upper_bands`: Jeffreys upper masterscale bands; see
-  *Conservatism*.
-- `monitor.moc_offset`, `monitor.moc_offset_from_counts`: margin-of-
-  conservatism offsets; see *Conservatism* and *Monitoring*.
-- `metrics.hl_e_test`, `HlEResult`: fixed-sample mixture-LR grade e-test
-  (safe Hosmer–Lemeshow analogue); see *Monitoring*.
-- `MonitorStep.grade_delta_ci`: per-grade time-uniform confidence sequences.
-  `MonitorReport.onset_label` and the `CalibrationMonitor(recommendation_window=)`
-  keyword-only constructor parameter (`"since_onset"` default, `"trailing"`
-  escape hatch) give drift-onset localization and the window it feeds into
-  `report()`'s trailing diagnostics; see *Monitoring*.
-- `CalibrationMonitor.apply_recommendation`, `monitor.AppliedAction`: closes
-  the report-to-action loop for `kind="re-offset"`; see *Monitoring*.
-- `SegmentedCalibrator` (`probcal`): empirical-Bayes (DerSimonian-Laird)
-  shrunken per-segment logit offsets on top of a shared base map; see
-  *Segmented calibration*.
-- `metrics.evaluate(by=)` and `GroupedMetricReport` (metric catalog 46 → 47
-  symbols): per-group metric reports plus a pooled report; `plots.
-  plot_reliability(by=)` adds the matching faceted reliability grid; see
-  the new *Grouped evaluation* guide.
-- `metrics.ecce(presorted=)`: keyword-only throughput switch (default
-  `False`) declaring `p` already sorted ascending, so the internal sort is
-  skipped; `evaluate`'s bootstrap sorts each replicate once and shares that
-  order. Results are unchanged when the declaration holds; see *Metrics*'
-  "Computational cost".
-- `probcal.report.validation_report`: a self-contained HTML/markdown
-  validation report (reliability, the metric report, the CORP
-  decomposition, and, when given, the rating-grades, grouped-evaluation,
-  monitoring, and calibrator-appendix sections); see the new *Validation
-  report* guide.
-- `corp_reliability` (`probcal`, `curves`), `CorpResult`: the CORP
-  (consistent, optimally binned, reproducible) reliability diagram and its
-  exact `score == mcb - dsc + unc` decomposition; `reliability_smooth`
-  (`probcal`, `curves`), `KernelReliabilityCurve` is a fourth reliability
-  construction sharing `smooth_ece`'s fixed-point bandwidth exactly; see
-  the new *CORP and score decomposition* chapter.
-- `plots.plot_corp`, `plots.plot_mcb_dsc`, `plots.plot_attributes`,
-  `plots.plot_murphy`: four new plotting functions (CORP reliability, the
-  MCB-DSC plane, the Hsu & Murphy attributes diagram, and Murphy diagrams);
-  see *Visualization* and the new *CORP and score decomposition* chapter.
-- `metrics.murphy_curve`, `MurphyCurve` (metric catalog 38 → 40 symbols):
-  the Ehm, Gneiting, Jordan & Krüger (2016) elementary-score decomposition
-  underlying `plots.plot_murphy`; see *Metrics and tests* and
-  *Visualization*.
-- `BaseCalibrator.__sklearn_is_fitted__` and
-  `BaseCalibrator.__sklearn_tags__` (also `__sklearn_is_fitted__` on `Chain`,
-  `LogitOffset` and `CalibratedModel`): sklearn's duck-typing hooks, so a
-  bare calibrator works with `clone`, `get_tags`, `check_is_fitted` and CV
-  loops on sklearn >= 1.6 without the adapter; sklearn is imported inside
-  `__sklearn_tags__` only, so `import probcal` stays numpy-only. See the
-  *sklearn* guide.
-
-## Added in 0.3.1
-
-New public symbols and behavior relative to 0.3.0, kept here as one running
-list for this release regardless of which chapter documents them:
-
-- `_validation.validate_scores` accepts a two-column probability matrix
-  (`(n, 2)`, entries in `[0, 1]`, rows summing to 1 within `1e-6`), inherited
-  everywhere scores enter the package — every calibrator, `LogitOffset`,
-  `Chain`, the metric catalog, and `probcal.sklearn`'s probability mode; see
-  the *sklearn* guide.
-- `Chain(stages)` accepts unfitted stages, and `Chain.fit(s, y,
-  sample_weight=None)` fits them sequentially (supersedes the 0.3.0 note that
-  a chain composes only fitted stages); `get_params`/`set_params` gain
-  `stages__i__param` nesting. See the *sklearn* guide.
-- `SklearnOffset` (`probcal.sklearn`): a `TransformerMixin`/`BaseEstimator`
-  wrapping `LogitOffset`; see the new "Stacking an offset" section of the
-  *sklearn* guide.
-- `positive_column` keyword-only parameter on `SklearnCalibrator` and
-  `SklearnOffset`, plus the orientation `UserWarning` fired at fit; see the
-  *sklearn* guide.
-- `LogitOffset.fit(y=)` keyword-only parameter, accepted and ignored, giving
-  `Chain.fit`'s sequential protocol one call shape across stages.
+New public symbols per release are listed in the changelog under *Added*.
 
 ## Conventions that will not silently change
 

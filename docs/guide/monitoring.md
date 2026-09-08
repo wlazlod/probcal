@@ -1,7 +1,31 @@
 # Monitoring a deployed calibration
 
+--8<-- "docs/_snippets/vocab.md"
+
 How-to; the statistics (and why fixed-sample tests are invalid under
 optional stopping) live in the *Monitoring* concepts chapter.
+
+!!! note "Assumptions and scope"
+    The guarantee is: under the null that the deployed forecast is
+    calibrated, the alarm fires with probability at most `alpha`, at any
+    look and however long monitoring runs. It holds when:
+
+    - **Batches arrive in order and are never back-filled.** Every plug-in
+      for batch `k` is computed from batches `1..k-1` only, which is what
+      makes the running product a supermartingale. Persist the monitor
+      state between batches rather than recomputing from raw data.
+    - **Outcomes are the matured outcomes of the forecast being watched**,
+      the calibrated probability, not the raw score, and not a forecast
+      refitted since. After re-calibrating, start a new monitor.
+    - **The null is conditional calibration,** `E[y | past, p] = p`. A
+      covariate shift that leaves the forecast calibrated does not trip the
+      alarm; a level or slope drift does, whatever caused it.
+
+    Outside the guarantee: the *recommendation* (re-offset versus re-fit)
+    and the *onset* estimate are diagnostics with no error control, and
+    every component process is reported so they can be second-guessed.
+    Derivations and the simulation evidence are in
+    [Monitoring](../concepts/monitoring.md).
 
 ```python
 # s_cal, y_cal, grades: held-out calibration scores, outcomes, rating labels

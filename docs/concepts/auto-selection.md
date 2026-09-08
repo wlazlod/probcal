@@ -1,5 +1,7 @@
 # Automatic selection
 
+--8<-- "docs/_snippets/vocab.md"
+
 Thirteen calibrators is a catalog, not a recommendation. `CalibratorSelector` turns the catalog
 into a defensible choice by running the comparison the way the
 [data-splitting chapter](data-splitting.md) demands: every candidate scored only on data it
@@ -63,6 +65,7 @@ malfunction. The report prints; nothing needs a plotting backend; and the
 ## In probcal
 
 ```python
+# s_cal, y_cal, s_new: held-out calibration scores, outcomes, scores of new obligors
 from probcal import CalibratorSelector
 
 sel = CalibratorSelector().fit(s_cal, y_cal)      # default menu, log-loss criterion

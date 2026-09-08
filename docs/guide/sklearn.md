@@ -13,8 +13,8 @@ probcal meets sklearn at three depths, from lightest to heaviest:
    wrapped estimator's own `fit`/`predict_proba` expects. You want the
    whole out-of-fold calibration protocol as one auditable object.
 
-`probcal.sklearn` (extra: `pip install "probcal[sklearn]"`, scikit-learn ≥ 1.4)
-holds tiers 2 and 3. Neither is imported by `import probcal`, so the core
+`probcal.sklearn` (extra: `pip install "probcal[sklearn]"`, scikit-learn ≥ 1.4; the
+[support matrix](../api-stability.md#support-matrix) lists both floors) holds tiers 2 and 3. Neither is imported by `import probcal`, so the core
 stays numpy-only regardless of which tier you use.
 
 **Design position.** The core is duck-typed to sklearn's *semantic* contract
@@ -31,7 +31,8 @@ to translate that convention where something in the ecosystem
 `"neg_log_loss"`) actually requires it. Bare duckness targets
 **sklearn ≥ 1.6** (the versions that define the
 `__sklearn_is_fitted__`/`__sklearn_tags__` protocol); on older sklearn, use
-the adapter.
+the adapter. Both floors and what checks them: the
+[support matrix](../api-stability.md#support-matrix).
 
 ## Tier 1: bare duck (sklearn ≥ 1.6)
 

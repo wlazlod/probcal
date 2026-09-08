@@ -1,5 +1,7 @@
 # optbinning scorecards
 
+--8<-- "docs/_snippets/vocab.md"
+
 <!-- docs: requires optbinning -->
 
 `probcal.integrations.optbinning` (extra: `pip install "probcal[optbinning]"`,
@@ -12,6 +14,7 @@ that affine map to machine precision.
 Scorecard → calibration → masterscale → monitoring, end to end:
 
 ```python
+# s_cal, y_cal, s_new: held-out calibration scores, outcomes, scores of new obligors
 import pandas as pd
 from optbinning import BinningProcess, Scorecard
 from sklearn.linear_model import LogisticRegression

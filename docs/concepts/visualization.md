@@ -1,5 +1,7 @@
 # Visualization
 
+--8<-- "docs/_snippets/vocab.md"
+
 Every calibration claim in this package has a picture, and the pictures are built in two
 layers: `probcal.curves` computes plotting-ready dataclasses with numpy alone, and
 `probcal.plots` renders them when matplotlib (the `[viz]` extra) is installed. The
@@ -217,6 +219,7 @@ guard raises with the install instruction rather than a bare `ImportError`.
 ## In probcal
 
 ```python
+# grades: rating labels
 # s_cal, y_cal: held-out calibration scores and outcomes
 import numpy as np
 from probcal import BetaCalibrator, LogitOffset, calibration_belt, reliability_binned, reliability_loess

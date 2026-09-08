@@ -1,5 +1,7 @@
 # Data splitting
 
+--8<-- "docs/_snippets/vocab.md"
+
 Post-hoc calibration is a second round of estimation, and it obeys the same law as the first:
 parameters fitted on a sample look better on that sample than anywhere else. Every design
 decision in probcal's data flows follows from taking that law seriously three times over:
@@ -119,6 +121,7 @@ Tasche (2013), and let the per-grade backtests of
 ## In probcal
 
 ```python
+# s_cal, y_cal, model, s_new: held-out calibration scores, outcomes, a fitted scoring model, scores of new obligors
 from probcal import CalibratedModel, PlattCalibrator
 
 # X_cal, X, X_new: feature matrices for the model — here, s_cal/s_new

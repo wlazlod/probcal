@@ -65,6 +65,28 @@ registered class, written at the release that introduced serialization, and
 CI loads each one and reproduces its stored predictions (to 1e-12) on every
 run. A change that breaks reading old files breaks the build.
 
+## What "bit-identical" covers
+
+Three things are promised exactly, and one is not:
+
+- **A round trip within a release is exact.** `from_json(cal.to_json())`
+  returns an object whose `predict_proba` equals the original's element for
+  element: the fitted state is stored as full-precision float64 values,
+  and JSON round-trips them without loss.
+- **A resumed monitor continues the same trajectory.** Every step's
+  statistics are stored, so `CalibrationMonitor.from_json` produces the same
+  e-values a never-persisted monitor would.
+- **Golden files pin predictions across releases.** Each committed artifact
+  must reproduce its stored predictions to `1e-12` on every release, so a
+  numeric change in a fitted class's forward map is a build failure unless
+  the goldens are regenerated on purpose, with a changelog entry.
+- **Metric estimates are not promised across releases.** A metric's default
+  estimator may change in any 0.x release (0.1.3 made `evaluate`'s bootstrap
+  stratified; 0.2.0 moved `smooth_ece` to a lattice path), always with a
+  changelog entry and a parameter that recovers the old values. The numbers
+  a report quotes are reproducible by pinning the probcal version, which the
+  JSON records as `probcal_version`.
+
 ## Fingerprints
 
 Two hashes serve provenance:

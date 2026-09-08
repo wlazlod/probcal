@@ -8,8 +8,10 @@ strict: true
 
 # README.md is a contributor note (the snippet convention), not a built
 # page — it would otherwise collide with index.md as the implicit index.
+# _snippets/ holds --8<-- includes, not pages.
 exclude_docs: |
   README.md
+  _snippets/
 
 theme:
   name: material

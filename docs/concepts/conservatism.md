@@ -1,5 +1,7 @@
 # Conservatism: most-prudent PDs and margins of conservatism
 
+--8<-- "docs/_snippets/vocab.md"
+
 The per-grade backtests in [Metrics and tests](metrics.md) (`binomial_grade_test`,
 `jeffreys_grade_test`) ask whether a grade's *assigned* PD is consistent with its
 realized defaults. On a low- or zero-default grade (routine for the best few grades of a
@@ -149,6 +151,7 @@ grade size) in the given `order`, the minimum-adjustment non-decreasing fit rath
 running maximum, and warns (`UserWarning`) only when that adjustment changed something.
 
 ```python
+# s_cal, y_cal: held-out calibration scores, outcomes
 import numpy as np
 from probcal import BetaCalibrator
 from probcal.metrics import jeffreys_upper_bands

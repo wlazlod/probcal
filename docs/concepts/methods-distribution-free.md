@@ -1,5 +1,7 @@
 # Distribution-free methods
 
+--8<-- "docs/_snippets/vocab.md"
+
 Every method so far produces a point estimate of the calibrated probability and hopes, with
 varying statistical justification, that it is close. Venn–Abers predictors make a different
 kind of promise: a **validity guarantee that holds by construction**, under no assumption
@@ -150,6 +152,7 @@ than through the selector.
 ## In probcal
 
 ```python
+# s_cal, y_cal, s_new: held-out calibration scores, outcomes, scores of new obligors
 from probcal import CrossVennAbersCalibrator, VennAbersCalibrator
 
 ivap = VennAbersCalibrator().fit(s_cal, y_cal)

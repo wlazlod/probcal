@@ -1,5 +1,7 @@
 # Persisting calibrators
 
+--8<-- "docs/_snippets/vocab.md"
+
 How-to; what is stored, why JSON and never pickle, and the compatibility
 promise live in the *Serialization* concepts chapter.
 

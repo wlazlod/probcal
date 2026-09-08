@@ -255,3 +255,89 @@ def test_jeffreys_upper_bands_masterscale_equivalence() -> None:
     with_labels = jeffreys_upper_bands(P_TEST.y, P_TEST.scores, labels, order=order)
     assert with_ms == with_labels
     assert list(with_ms) == list(order)
+
+
+# ----------------------------------------------------------------- Task 5
+
+from probcal import BetaCalibrator, calibrated_bands_to_raw  # noqa: E402
+
+
+def test_calibrated_bands_to_raw_accepts_masterscale() -> None:
+    cal = BetaCalibrator().fit(PORT.scores, PORT.y)
+    assert calibrated_bands_to_raw(cal, MS) == calibrated_bands_to_raw(cal, MS.bands)
+    assert list(calibrated_bands_to_raw(cal, MS, space="logit")) == list(MS.names)
+
+
+# ----------------------------------------------------------------- Task 6
+
+import json as _json  # noqa: E402
+import pathlib  # noqa: E402
+
+from probcal.monitor import CalibrationMonitor  # noqa: E402
+
+
+def _batches():
+    deployed = BetaCalibrator().fit(PORT.scores, PORT.y)
+    other = make_pd_portfolio(n=3000, random_state=21)
+    p = deployed.predict_proba(other.scores)
+    return [(other.y[i * 500 : (i + 1) * 500], p[i * 500 : (i + 1) * 500]) for i in range(6)]
+
+
+def test_monitor_update_masterscale_equivalence_and_fingerprint() -> None:
+    a, b = CalibrationMonitor(alpha=0.05), CalibrationMonitor(alpha=0.05)
+    for k, (y, p) in enumerate(_batches()):
+        sa = a.update(y, p, grade=MS, label=f"b{k}")
+        sb = b.update(y, p, grade=MS.assign(p), label=f"b{k}")
+        assert sa.e_global == sb.e_global and sa.e_grades == sb.e_grades
+        assert sa.grade_delta_ci == sb.grade_delta_ci
+    assert a.masterscale_fingerprint_ == MS.fingerprint()
+    assert b.masterscale_fingerprint_ is None
+    d = a.to_dict()
+    assert d["state"]["masterscale_fingerprint"] == MS.fingerprint()
+    assert "masterscale_fingerprint" not in b.to_dict()["state"]
+    back = CalibrationMonitor.from_dict(d)
+    assert back.masterscale_fingerprint_ == MS.fingerprint()
+    assert back.fingerprint() == a.fingerprint()
+
+
+def test_monitor_rejects_a_different_masterscale_mid_stream() -> None:
+    mon = CalibrationMonitor()
+    (y, p), *_ = _batches()
+    mon.update(y, p, grade=MS)
+    other = Masterscale.from_edges([0.01, 0.02, 0.05, 0.11], names=list("ABCDE"))
+    with pytest.raises(ValueError, match="masterscale"):
+        mon.update(y, p, grade=other)
+
+
+def test_pre_0_3_3_monitor_payload_loads_without_the_field() -> None:
+    golden = pathlib.Path(__file__).parent / "golden" / "CalibrationMonitor.json"
+    d = _json.loads(golden.read_text())["object"]
+    assert "masterscale_fingerprint" not in d["state"]
+    mon = CalibrationMonitor.from_dict(d)
+    assert mon.masterscale_fingerprint_ is None
+
+
+# ----------------------------------------------------------------- Task 7
+
+
+def test_validation_report_with_masterscale(tmp_path, monkeypatch) -> None:
+    pytest.importorskip("matplotlib")
+    from probcal.report import validation_report
+
+    monkeypatch.chdir(tmp_path)
+    cal = BetaCalibrator().fit(PORT.scores, PORT.y)
+    p = cal.predict_proba(P_TEST.scores)
+    html = validation_report(P_TEST.y, p, grades=MS, n_boot=20, seed=1)
+    assert MS.fingerprint() in html
+    assert "masterscale" in html
+    assert "Grade table" in html
+    tab = MS.table(P_TEST.y, p)
+    assert f"{int(tab.n[0])}" in html
+    assert "ordered best to worst by the masterscale" in html
+    md = validation_report(
+        P_TEST.y, p, grades=MS, n_boot=20, seed=1, format="markdown", path=tmp_path / "r.md"
+    )
+    assert MS.fingerprint() in md and "Grade table" in md
+    # A label array keeps today's wording.
+    html_labels = validation_report(P_TEST.y, p, grades=MS.assign(p), n_boot=20, seed=1)
+    assert "by mean predicted probability" in html_labels and "Grade table" not in html_labels

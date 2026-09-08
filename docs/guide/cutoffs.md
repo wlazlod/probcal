@@ -66,27 +66,84 @@ same refusal covers `point_inverse` targets at exactly 0 or 1, and
 probability-space results whose raw logit exceeds `logit(1 - 1e-12)`;
 there the error names `space="logit"`, where the answer is exact.
 
-## A whole masterscale in one call
+## Your own masterscale
 
-Grade edges are policy artifacts that outlive model versions; the
-translation is what gets re-derived at each recalibration.
+A bank's masterscale is a table of PD bands. `Masterscale` holds that table
+as one object: it assigns grades, hands the bands to every translator, and
+serializes with a fingerprint, so the most audited table in the model file
+is versioned like the calibrator.
 
 ```python
-from probcal import calibrated_bands_to_raw
+# s_cal, y_cal, s_new: held-out calibration scores, outcomes, scores of new obligors
+from probcal import BetaCalibrator, Masterscale, calibrated_bands_to_raw
+from probcal.metrics import jeffreys_grade_test
 
-masterscale = {"A": (0.0, 0.005), "B": (0.005, 0.02),
-               "C": (0.02, 0.08), "D": (0.08, 1.0)}
+ms = Masterscale({"A": (0.0, 0.005), "B": (0.005, 0.02),
+                  "C": (0.02, 0.08), "D": (0.08, 1.0)})
+cal = BetaCalibrator().fit(s_cal, y_cal)
+p_cal, p_new = cal.predict_proba(s_cal), cal.predict_proba(s_new)
 
-raw_bands = calibrated_bands_to_raw(cal, masterscale, space="logit")
+grades = ms.assign(p_new)                        # one grade per obligor
+print(ms.table(y_cal, p_cal))                    # counts, events, mean PD per grade
+print(jeffreys_grade_test(y_cal, p_cal, ms))     # the backtest, best to worst
+
+raw_bands = calibrated_bands_to_raw(cal, ms, space="logit")
 for grade, (band_lo, band_hi) in raw_bands.items():
-    print(f"{grade}: raw margin in [{band_lo:.4f}, {band_hi:.4f})")
+    print(f"{grade}: raw margin in [{band_lo:.4f}, {band_hi:.4f}]")
+
+ms.to_json("masterscale.json")                   # versioned, fingerprinted
+print(ms.fingerprint()[:12])
 ```
 
-Adjacent grades share their edge exactly (`A`'s upper bound *is* `B`'s
-lower bound), so the translated ladder covers the raw line without gaps or
-overlaps. Store the output next to the calibrator's fingerprint: policy
-fixed, mapping versioned. That pair is what makes a grade assignment
-reproducible months later ([Auditability](auditability.md)).
+One convention, stated once: `assign` is half-open, `lo <= p < hi`, with
+the top band closed at its upper edge, so every probability belongs to
+exactly one grade and a value sitting on a shared edge goes to the worse
+grade. The inverted bands above are closed intervals, since a boundary
+point has measure zero on the raw scale. A validator reconciling counts
+against the table uses the assignment rule. Adjacent grades share their
+edge exactly, so the translated ladder covers the raw line without gaps or
+overlaps; store the output next to the calibrator's fingerprint, policy
+fixed, mapping versioned ([Auditability](auditability.md)).
+
+The same object feeds the scorecard translation (`cs.masterscale(ms)`, see
+[optbinning scorecards](optbinning.md)), the monitor
+(`mon.update(y, p, grade=ms)`), the report
+(`validation_report(y, p, grades=ms)`), and treecf
+(`Target.bands(ms.bands, space="calibrated", calibrator=cal)`).
+
+## Design the grades
+
+When the ladder is not given, `build_masterscale` chooses it from data by
+exact dynamic programming over equal-mass pre-bins of the calibrated PD,
+under floors on the count and the event count per grade.
+
+```python
+# s_cal, y_cal: held-out calibration scores and outcomes
+from probcal import BetaCalibrator, build_masterscale
+
+cal = BetaCalibrator().fit(s_cal, y_cal)
+p_cal = cal.predict_proba(s_cal)
+
+designed = build_masterscale(y_cal, p_cal, n_grades=4, min_count=100, min_events=3)
+print(designed.interpret())                      # bands, convention, provenance
+print(designed.table(y_cal, p_cal))
+
+even = build_masterscale(y_cal, p_cal, n_grades=4, objective="target_shares",
+                         target_shares=[0.4, 0.3, 0.2, 0.1], min_events=3)
+print(even.edges)
+```
+
+`objective="likelihood"` maximizes the grade-level binomial log-likelihood,
+which is the same as minimizing within-grade PD heterogeneity;
+`objective="target_shares"` matches prescribed grade shares. Both respect
+the floors, and an infeasible combination raises naming the binding one.
+Grade PDs are monotone by construction because the edges cut sorted
+probabilities, and the edges are observed values, so the scale's own
+`assign` reproduces the partition the optimizer scored. The provenance
+block travels with the JSON. From here the downstream steps are the ones
+above: conservative bands with
+[Jeffreys upper bands](../concepts/conservatism.md#jeffreys-upper-bands-a-masterscale-band-table),
+points with the scorecard adapter, per-grade monitoring.
 
 ## `buffer_logit`: cutoffs that survive the next re-anchoring
 
@@ -156,7 +213,7 @@ sc = Scorecard(
 ).fit(X_cal, y_cal.astype(int))
 
 cs = calibrate_scorecard(sc, X_cal, y_cal)
-print(cs.masterscale(masterscale))   # {'A': (638.7, inf), 'B': (598.9, 638.7), ...}
+print(cs.masterscale(ms))             # {'A': (638.7, inf), 'B': (598.9, 638.7), ...}
 ```
 
 The points are untouched by calibration; only the mapping from points to

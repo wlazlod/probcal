@@ -156,7 +156,8 @@ columns sit in the same table as the fit quality:
 - Cutoffs, masterscale bands, and counterfactual targets all run through
   the inverse: the how-to is [Set cutoffs and invert
   maps](cutoffs.md), the theory
-  [Inverse maps](../concepts/inverse-maps.md).
+  [Inverse maps](../concepts/inverse-maps.md). A masterscale is a
+  `Masterscale`, one object for assignment, translation, and the report.
 - Whatever you fit, its parameters, provenance, and reproduction are
   evidence you can hand to a validator: see
   [Auditability](auditability.md) and

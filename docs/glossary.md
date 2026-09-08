@@ -28,8 +28,11 @@ the masterscale. Per-grade backtests compare each grade's realized default
 count with the PD assigned to it.
 
 **Masterscale.** The fixed ladder of PD bands that defines the grades, shared
-across models and reporting periods. `jeffreys_upper_bands` builds one from
-posteriors; `calibrated_bands_to_raw` translates it into raw-score cutoffs.
+across models and reporting periods. `Masterscale` is the object: it assigns
+grades (`lo <= p < hi`, top band closed), hands its bands to every translator,
+and serializes with a fingerprint. `build_masterscale` designs one from data;
+`jeffreys_upper_bands` builds a conservative band table from posteriors;
+`calibrated_bands_to_raw` translates bands into raw-score cutoffs.
 
 **Central tendency.** The long-run average default rate a portfolio's PDs are
 required to aggregate to, set by policy rather than by the sample. Reaching it

@@ -2,10 +2,11 @@
 
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.utils.validation import _check_sample_weight, check_is_fitted
+from sklearn.utils.validation import check_is_fitted
 
 from ..offset import LogitOffset
-from ._compat import OFFSET_XFAIL_CHECKS, validate_X
+from ._base import check_sample_weight, drop_zero_weight, score_column, xfail_tags
+from ._compat import validate_X
 
 
 class SklearnOffset(TransformerMixin, BaseEstimator):
@@ -59,15 +60,14 @@ class SklearnOffset(TransformerMixin, BaseEstimator):
     # ------------------------------------------------------------------ helpers
 
     def _probs(self, X: np.ndarray) -> np.ndarray:
-        if X.shape[1] == 1:
-            return X[:, 0]
-        if X.shape[1] == 2:
-            if self.positive_column == 0:
-                X = X[:, ::-1]
-            return X  # (n, 2): validate_scores checks the simplex and takes column 1
-        raise ValueError(
-            "SklearnOffset takes one probability column or a two-column "
-            f"probability matrix, got {X.shape[1]} columns"
+        return score_column(
+            X,
+            self.positive_column,
+            logit_input=False,
+            error=(
+                "SklearnOffset takes one probability column or a two-column "
+                f"probability matrix, got {X.shape[1]} columns"
+            ),
         )
 
     # ------------------------------------------------------------------ estimator API
@@ -82,7 +82,8 @@ class SklearnOffset(TransformerMixin, BaseEstimator):
         y : array_like or None
             Ignored; accepted for pipeline/estimator compatibility.
         sample_weight : array_like or None
-            Positive observation weights.
+            Non-negative observation weights; zero-weight rows are excluded
+            (sklearn semantics), a negative weight raises.
 
         Returns
         -------
@@ -92,19 +93,13 @@ class SklearnOffset(TransformerMixin, BaseEstimator):
         Raises
         ------
         ValueError
-            If ``X``'s column count is unsupported or ``positive_column``
-            is invalid.
+            If ``X``'s column count is unsupported, ``positive_column``
+            is invalid, or a weight is negative.
         """
         if self.positive_column not in (0, 1):
             raise ValueError(f"positive_column must be 0 or 1, got {self.positive_column!r}")
         X_arr = validate_X(self, X, reset=True, allow_1d=True)
-        sw = None if sample_weight is None else _check_sample_weight(sample_weight, X_arr)
-        p = self._probs(X_arr)
-        if sw is not None:
-            # Zero weight means excluded (sklearn semantics); probcal requires
-            # strictly positive weights, so drop those rows here.
-            keep = sw > 0.0
-            p, sw = p[keep], sw[keep]
+        sw, (p,) = drop_zero_weight(check_sample_weight(sample_weight, X_arr), self._probs(X_arr))
         self.offset_ = LogitOffset(delta=self.delta, target_mean=self.target_mean)
         self.offset_.fit(p, sample_weight=sw, y=y)
         return self
@@ -127,8 +122,11 @@ class SklearnOffset(TransformerMixin, BaseEstimator):
 
     # ------------------------------------------------------------------ tags
 
+    # sklearn >= 1.6 refuses an estimator defining ``_more_tags`` without
+    # ``__sklearn_tags__``, so the override must exist even though it adds
+    # nothing to the inherited tags.
     def __sklearn_tags__(self):  # noqa: ANN204 - sklearn protocol, version-dependent type
         return super().__sklearn_tags__()
 
     def _more_tags(self) -> dict[str, object]:  # sklearn < 1.6
-        return {"_xfail_checks": dict(OFFSET_XFAIL_CHECKS)}
+        return xfail_tags(self)

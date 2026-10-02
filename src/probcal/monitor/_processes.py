@@ -1,4 +1,4 @@
-"""Log-space Bernoulli likelihood-ratio arithmetic and predictable plug-ins.
+"""Log-space Bernoulli likelihood-ratio processes and predictable plug-ins.
 
 Every e-process in the monitor multiplies factors
 ``LR_i(q) = q^y (1-q)^(1-y) / (p^y (1-p)^(1-y))`` whose conditional
@@ -10,7 +10,8 @@ Accumulation is in log space throughout; mixtures combine with logsumexp.
 import numpy as np
 
 from .._math import bern_log_lr, expit, irls_logistic, logsumexp
-from ..offset import _offset_mle
+from .._validation import EPS
+from ..offset import _solve_delta
 
 
 def plug_in_delta(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
@@ -26,7 +27,7 @@ def plug_in_delta(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
     target = float(np.average(y, weights=w))
     if not 0.0 < target < 1.0:
         return 0.0
-    return _offset_mle(z, y, w)
+    return _solve_delta(z, w, target)
 
 
 def plug_in_shape(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> tuple[float, float]:
@@ -96,10 +97,51 @@ class OffsetProcess:
         self.log_mix = np.asarray(state["log_mix"], dtype=np.float64)
 
 
+class ConfidenceSequence:
+    """Time-uniform confidence sequence for a log-odds offset.
+
+    One e-process per shifted null ``delta_0`` on ``grid`` ("the forecast,
+    moved by ``delta_0``, is calibrated"), each against the same predictable
+    plug-in alternative ``sigma(z + delta_hat)``. A null whose running
+    maximum log-e ever reaches ``-log(alpha)`` stays rejected, so the
+    surviving set is a running intersection. Shared by the portfolio-level
+    CS and every per-grade CS (same grid, each with its own plug-in).
+    """
+
+    def __init__(self, grid: np.ndarray) -> None:
+        self.grid = grid
+        self.log = np.zeros(len(grid))
+        self.max = np.zeros(len(grid))
+
+    def update(
+        self, z: np.ndarray, p: np.ndarray, y: np.ndarray, w: np.ndarray, delta_hat: float
+    ) -> None:
+        """Advance every shifted-null e-process by one batch."""
+        q_alt = np.clip(p if delta_hat == 0.0 else expit(z + delta_hat), EPS, 1.0 - EPS)
+        log_q = np.log(q_alt)
+        log_1mq = np.log1p(-q_alt)
+        p0 = np.clip(expit(z[None, :] + self.grid[:, None]), EPS, 1.0 - EPS)
+        terms = y * (log_q[None, :] - np.log(p0)) + (1.0 - y) * (log_1mq[None, :] - np.log1p(-p0))
+        self.log = self.log + (w[None, :] * terms).sum(axis=1)
+        self.max = np.maximum(self.max, self.log)
+
+    def surviving(self, threshold: float) -> np.ndarray:
+        """Grid nulls whose running maximum log-e stays below ``threshold``."""
+        return self.grid[self.max < threshold]
+
+    def interval(self, threshold: float) -> tuple[float, float] | None:
+        """Hull of the surviving nulls; ``None`` when every null is rejected."""
+        s = self.surviving(threshold)
+        return (float(s.min()), float(s.max())) if s.size else None
+
+    def set_state(self, log: object, max_: object) -> None:
+        self.log = np.asarray(log, dtype=np.float64)
+        self.max = np.asarray(max_, dtype=np.float64)
+
+
 __all__ = [
+    "ConfidenceSequence",
     "OffsetProcess",
-    "bern_log_lr",
-    "logsumexp",
     "plug_in_delta",
     "plug_in_shape",
 ]

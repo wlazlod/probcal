@@ -207,7 +207,7 @@ class _StubModel:
     """Deterministic sklearn-free model over a single score column (mirrors
     tests/test_golden.py's _StubModel)."""
 
-    def fit(self, X, y):  # noqa: ARG002
+    def fit(self, X, y):
         return self
 
     def predict_proba(self, X):

@@ -33,7 +33,7 @@ def test_grade_delta_ci_empty_without_grades() -> None:
 
 
 def test_grade_delta_ci_populated_and_shrinks_toward_injected_offset() -> None:
-    mon = CalibrationMonitor(alpha=0.05, delta_ci_grid=(-2.0, 2.0, 81))
+    mon = CalibrationMonitor(alpha=0.05, delta_ci_grid=(-2.0, 2.0, 81), grades=("A", "B"))
     step = None
     for k in range(6):
         y, p, g = _grade_batch(n=1500, shift_a=0.6, shift_b=0.0, seed=10 + k)
@@ -51,7 +51,7 @@ def test_two_grade_drift_confidence_sequence_coverage() -> None:
     n_runs = 20
     hits_a = hits_b = 0
     for r in range(n_runs):
-        mon = CalibrationMonitor(alpha=0.05, delta_ci_grid=(-2.0, 2.0, 81))
+        mon = CalibrationMonitor(alpha=0.05, delta_ci_grid=(-2.0, 2.0, 81), grades=("A", "B"))
         step = None
         for k in range(6):
             y, p, g = _grade_batch(n=1500, shift_a=0.6, shift_b=0.0, seed=1000 * r + k)
@@ -66,14 +66,14 @@ def test_two_grade_drift_confidence_sequence_coverage() -> None:
 
 def test_persistence_reproduces_grade_ci_bit_for_bit(tmp_path) -> None:
     batches = [_grade_batch(n=300, shift_a=0.3, shift_b=0.0, seed=60 + k) for k in range(5)]
-    mon = CalibrationMonitor()
+    mon = CalibrationMonitor(grades=("A", "B"))
     direct = [
         mon.update(y, p, grade=g, label=f"m{k}").grade_delta_ci
         for k, (y, p, g) in enumerate(batches)
     ]
 
     resumed = []
-    mon2 = CalibrationMonitor()
+    mon2 = CalibrationMonitor(grades=("A", "B"))
     for k, (y, p, g) in enumerate(batches):
         resumed.append(mon2.update(y, p, grade=g, label=f"m{k}").grade_delta_ci)
         path = tmp_path / f"state{k}.json"
@@ -88,10 +88,13 @@ def test_0_2_0_monitor_file_loads_and_continues() -> None:
     assert len(mon.steps_) == 3
     assert all(s.grade_delta_ci == {} for s in mon.steps_)
 
-    for k in range(2):
-        y, p, g = _grade_batch(n=300, shift_a=0.5, shift_b=0.0, seed=900 + k)
-        step = mon.update(y, p, grade=g, label=f"new{k}")
-        assert set(step.grade_delta_ci) == {"A", "B"}
+    # A 0.2.0 monitor declared no grades: per-grade processes are tracked
+    # and reported, but stay out of the global alarm (and say so once).
+    with pytest.warns(UserWarning, match="grades=None"):
+        for k in range(2):
+            y, p, g = _grade_batch(n=300, shift_a=0.5, shift_b=0.0, seed=900 + k)
+            step = mon.update(y, p, grade=g, label=f"new{k}")
+            assert set(step.grade_delta_ci) == {"A", "B"}
 
     assert mon.steps_[0].grade_delta_ci == {}
     assert mon.steps_[-1].grade_delta_ci["A"] is None or isinstance(
@@ -110,7 +113,7 @@ def test_plot_e_process_grades_panel_adds_second_axes() -> None:
     matplotlib.use("Agg")
     from probcal.plots import plot_e_process
 
-    mon = CalibrationMonitor(delta_ci_grid=(-2.0, 2.0, 21))
+    mon = CalibrationMonitor(delta_ci_grid=(-2.0, 2.0, 21), grades=("A", "B"))
     for k in range(3):
         y, p, g = _grade_batch(n=200, shift_a=0.4, shift_b=0.0, seed=2000 + k)
         mon.update(y, p, grade=g, label=f"m{k}")

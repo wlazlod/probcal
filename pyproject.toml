@@ -73,6 +73,11 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.format]
+# ruff >= 0.16 also formats code blocks in Markdown; the docs snippets keep
+# hand-aligned explanatory comments, so formatting stays Python-only.
+exclude = ["*.md"]
+
 [tool.mypy]
 # No python_version pin: mypy targets the interpreter it runs on. The 3.11 floor
 # (DECISIONS #1) is guarded by running mypy on the CI 3.11 leg, which installs a

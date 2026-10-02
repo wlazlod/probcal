@@ -121,7 +121,7 @@ def main() -> None:
             "expected": _predict(obj, _Q).tolist(),
         }
         path = out_dir / f"{name}.json"
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
         print(f"wrote {path.name}")
 
 

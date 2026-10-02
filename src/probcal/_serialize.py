@@ -87,11 +87,7 @@ def decode_value(v: object, *, arrays: bool = True) -> object:
             return load(v["__probcal__"])
         return {k: decode_value(x, arrays=arrays) for k, x in v.items()}
     if isinstance(v, list):
-        if (
-            arrays
-            and v
-            and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v)
-        ):
+        if arrays and v and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v):
             return np.asarray(v, dtype=np.float64)
         return [decode_value(x, arrays=arrays) for x in v]
     return v

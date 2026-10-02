@@ -72,8 +72,7 @@ jobs:
       - name: Lint
         run: ruff check .
 
-      - name: Format check (non-blocking until the one-off `ruff format` lands)
-        continue-on-error: true
+      - name: Format check
         run: ruff format --check .
 
       - name: Build docs
@@ -112,9 +111,8 @@ jobs:
       - name: Lint
         run: ruff check .
 
-      - name: Format check (non-blocking until the one-off `ruff format` lands)
+      - name: Format check
         if: matrix.python-version == '3.12'
-        continue-on-error: true
         run: ruff format --check .
 
       # mypy targets the running interpreter: the 3.11 leg guards the floor

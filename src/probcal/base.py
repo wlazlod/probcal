@@ -488,8 +488,7 @@ class BaseCalibrator(JsonIO, ABC):
         for key, value in params.items():
             if key not in valid:
                 raise ValueError(
-                    f"unknown parameter {key!r} for {type(self).__name__}; "
-                    f"valid: {sorted(valid)}"
+                    f"unknown parameter {key!r} for {type(self).__name__}; valid: {sorted(valid)}"
                 )
             setattr(self, key, value)
         return self

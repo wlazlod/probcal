@@ -72,6 +72,9 @@ instead (the exact escape hatch; no silent approximation).
 
 Reattaching after a reload: persist the scorecard with optbinning's own
 `save`/`load` and the calibration layer as JSON, then
-`CalibratedScorecard.from_dict(d, scorecard=sc)`. The stored
-scorecard-table fingerprint is checked, so a calibration layer can never be
-silently attached to a different scorecard.
+`CalibratedScorecard.from_json("scorecard-calibration.json", scorecard=sc)`
+(or `from_dict(d, scorecard=sc)`). The stored scorecard-table fingerprint is
+checked, so a calibration layer can never be silently attached to a
+different scorecard. A scorecard whose probability is constant on the
+calibration data gets the same treatment as `rounding=True`: a warning,
+`points_affine_coeffs_ = None`, and a refusing `masterscale`.

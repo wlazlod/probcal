@@ -98,7 +98,10 @@ density-weighted curve rather than a plain line: a variable-width `LineCollectio
 where predictions are dense, `linewidths = 0.5 + 4.0 * density / density.max()`), the
 miscalibration area shaded between the curve and the identity, its bootstrap ribbon, and an
 `smECE = ...` readout in the bottom-right corner, the same convention that fills the fourth
-reliability construction described above.
+reliability construction described above. Where no observation lies within the kernel's
+truncation radius (`5 * sigma`) of a grid point, `reliability_smooth` reports that point's
+rate and ribbon as NaN rather than inventing a value (0.3.x drew a rate of 0 with a `[0, 0]`
+ribbon in such gaps), so the curve breaks across a data gap instead of bridging it.
 
 ![Reliability diagram with the kernel curve: the density-weighted smECE-consistent line (wide where predictions are dense), its bootstrap ribbon, and the smECE readout](img/reliability_smooth.png)
 
@@ -115,6 +118,20 @@ test-backed statement no eyeballed curve provides. The associated p-value summar
 the global test. The construction (Nattino et al., 2017, describe the practitioner-facing
 version) is reimplemented in probcal from the papers, on the numpy-only χ² machinery of
 `probcal._math`.
+
+Two approximations are worth stating. The band is the **Wald approximation** of the
+likelihood-ratio region, with a \( \chi^2_{d+1} \) radius for a degree-\( d \) polynomial:
+it is *simultaneous* (Scheffé-type) over the whole curve for the selected polynomial, but
+conditional on the selected degree. The p-value ignores the forward degree selection that
+preceded it, so it is somewhat anti-conservative. The polynomial is fitted on the centred and
+scaled logit (weighted mean and SD), which only improves conditioning. With `sample_weight`,
+the fits and tests use Kish-rescaled weights ([weight convention](metrics.md#sample-weights)).
+
+`calibration_belt(..., confidence=(0.8, 0.95))` sets the two levels; the result carries
+`levels` and `bands = {level: (lower, upper)}`, so `belt.bands[0.95]` is the 95% band. The
+0.3.x attributes `lower_80`/`upper_80`/`lower_95`/`upper_95` remain as deprecated properties
+(removed in 0.5.0); despite their names they return the `levels[0]`/`levels[1]` bands,
+whatever the requested levels are.
 
 ![Calibration belt on the miscalibrated portfolio: the 80% and 95% bands exclude the diagonal, rejecting calibration across the whole range](img/belt.png)
 
@@ -237,6 +254,7 @@ curve = reliability_binned(y, p, n_bins=10)        # Wilson CIs, both scales
 smooth = reliability_loess(y, p)
 belt = calibration_belt(y, p)
 print(belt.degree, belt.p_value)
+lo95, hi95 = belt.bands[0.95]                      # {level: (lower, upper)}
 print(reliability_summary(y, p))                   # the stats-box numbers, standalone
 
 ax = plot_reliability(curve, smooth=smooth, scale="logit", y=y, p=p)   # the flagship view

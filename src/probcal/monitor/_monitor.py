@@ -111,11 +111,11 @@ class MonitorStep:
         offset, same construction and grid as ``delta_ci`` (empty when no
         grades were given; absent for steps loaded from a pre-0.3 payload).
     log_e_increment : float or None
-        This batch's additive plug-in log-LR increment: the offset
-        plug-in's ``bern_log_lr`` contribution (0.0 when ``delta_hat ==
-        0``) plus the shape plug-in's (0.0 when its plug-in is the
-        identity). Unlike ``e_global`` — a logsumexp mixture, not additive
-        across batches — this is the purely additive series
+        This batch's additive plug-in log-LR increment: the sum of the
+        plug-in ``bern_log_lr`` contributions of the components in the
+        alarm — offset and shape when monitored (0.0 when a plug-in is the
+        identity), plus the declared grades' plug-ins. Unlike ``e_global``
+        — a logsumexp mixture, not additive across batches — this is the purely additive series
         :func:`~probcal.monitor._onset.estimate_onset` localizes drift
         onset from. Steps written by :meth:`CalibrationMonitor.update` always
         carry a float; steps loaded from a pre-0.3 payload carry ``None``

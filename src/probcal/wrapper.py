@@ -313,6 +313,10 @@ class CalibratedModel(JsonIO):
         calibration scores. The offset is never folded into
         the calibrator's parameters.
 
+        Positional use (``offset_to(0.03)``, the 0.3 signature
+        ``(target_mean, delta, X)``) still works but emits a
+        ``DeprecationWarning``; it will be removed in 0.5.0.
+
         Parameters
         ----------
         target_mean : float or None, keyword-only
@@ -324,10 +328,6 @@ class CalibratedModel(JsonIO):
         X : array_like or None, keyword-only
             Inputs to compute the current pipeline output on; ``None`` uses
             the stored calibration scores instead.
-
-        Positional use (``offset_to(0.03)``, the 0.3 signature
-        ``(target_mean, delta, X)``) still works but emits a
-        ``DeprecationWarning``; it will be removed in 0.5.0.
 
         Returns
         -------

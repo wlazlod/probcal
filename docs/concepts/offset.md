@@ -38,9 +38,14 @@ where the shift is prescribed by policy or derived externally. **Mode B** takes 
 for \( \delta \). The left side is a strictly increasing, continuous function of \( \delta \)
 (each summand is; a sum of strictly increasing functions is strictly increasing), running
 from 0 to 1 as \( \delta \) spans the real line, so **the root exists and is unique** for any
-\( \pi^* \in (0, 1) \). probcal solves it by bisection (`probcal._math.bisect`); the
-monotonicity that guarantees uniqueness also makes bisection unconditionally convergent. The
-uniqueness claim is unit-tested, not just asserted.
+\( \pi^* \in (0, 1) \). probcal solves it by bisection on \( \delta \in [-40, 40] \)
+(`probcal.offset._solve_delta` over `probcal._math.bisect`); the monotonicity that guarantees
+uniqueness also makes bisection unconditionally convergent. The uniqueness claim is
+unit-tested, not just asserted. In floating point the attainable means are bounded (scores
+are clipped at `1e-12`, shifts at ±40), so a target outside the bracket's means, such as a
+target of 0.5 for a portfolio whose scores all sit at the clip, raises
+`UnattainableTargetError` (a `ValueError` subclass) naming the attainable range, instead of
+returning a clamped shift.
 
 ## Estimating delta with a standard error
 
@@ -50,8 +55,8 @@ given realized outcomes, what is `delta`'s maximum-likelihood value, and how pre
 known? It fits the single-parameter model `y ~ Bernoulli(sigma(logit(p) + delta))` by maximum
 likelihood. The score equation `sum(w * (y - sigma(logit(p) + delta))) = 0` is exactly the
 mean-matching condition mode B solves with `target_mean = mean_w(y)`, so `estimate_offset`
-finds `delta` with the same bisection root-finder, the shared `_offset_mle` helper, not a
-reimplementation, so the two routes cannot drift apart. The Fisher information for this
+finds `delta` with the same bisection root-finder, `_solve_delta` (through the
+`_offset_mle` helper), not a reimplementation, so the two routes cannot drift apart. The Fisher information for this
 one-parameter model at the fitted `delta` is `sum(w * q * (1 - q))` with `q = sigma(logit(p) +
 delta)`, so its inverse square root is `delta`'s asymptotic standard error. `estimate_offset`
 returns an `OffsetEstimate(delta, se, n, events, weight_sum)`; `probcal.offset.
@@ -62,7 +67,7 @@ serialization, `interval_inverse`.
 The same score equation is also what `probcal.monitor._processes.plug_in_delta` solves at
 every batch as the monitor's predictable offset plug-in (falling back to `0.0` only for a
 degenerate past: no data yet, or an outcome rate outside `(0, 1)`). It calls the identical
-`_offset_mle` function `estimate_offset` calls, so a monitor's running point estimate of
+`_solve_delta` root-finder `LogitOffset(target_mean=...)` and `estimate_offset` use, so a monitor's running point estimate of
 `delta` and a one-shot `estimate_offset` call on the same data agree bit-for-bit; the standard
 error is the piece `estimate_offset` adds that a monitor's e-process does not need, since the
 monitor's own read on uncertainty is the confidence sequence (see
@@ -183,6 +188,13 @@ affine on the logit scale, so it composes into the exact
 subtraction, so [inverse maps](inverse-maps.md) pass through it exactly: a quarterly
 \( \delta \) update of magnitude at most \( m \) moves every raw-score threshold by at most
 \( m \) in logit units, which is the fact the `buffer_logit` robustness margin is built on.
+
+To append an offset that is already fitted (a monitor's re-offset, an `estimate_offset`
+result, a policy `LogitOffset(delta=...)`), `CalibratedModel.with_offset(offset)` returns a deep
+copy of the wrapped model with a copy of the fitted offset appended. It needs no calibration
+data, so unlike the argument-less `offset_to()` it also works on a model loaded from JSON; the
+original is not mutated. `offset_to` takes keyword arguments only (`target_mean=`, `delta=`,
+`X=`); positional use is deprecated in 0.4.0 and removed in 0.5.0.
 
 The same discipline holds when a `Chain` is fit directly rather than built by
 `offset_to`. `Chain.fit(s, y, sample_weight=None)` refits every stage in sequence on the same

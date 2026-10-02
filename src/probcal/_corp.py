@@ -97,27 +97,6 @@ def decompose(
     return s_p, s_p - s_pav, unc - s_pav, unc
 
 
-def eval_step(lo: np.ndarray, hi: np.ndarray, level: np.ndarray, grid: np.ndarray) -> np.ndarray:
-    """Value of a PAV block fit at each grid point (right-continuous step).
-
-    A grid point below the first block's left edge takes the first block's
-    level. ``hi`` is not needed to evaluate a step function and is ignored;
-    the four-argument form is kept for the ``docs/scripts/corp_sim.py`` call
-    site — new code calls :func:`probcal._steps.eval_step` ``(lo, level, grid)``.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> lo = np.array([0.1, 0.5])
-    >>> hi = np.array([0.4, 0.9])
-    >>> level = np.array([0.2, 0.7])
-    >>> eval_step(lo, hi, level, np.array([0.0, 0.3, 0.6]))
-    array([0.2, 0.2, 0.7])
-    """
-    del hi
-    return _eval_step(lo, level, grid)
-
-
 def corp_bands(
     y: np.ndarray,
     p: np.ndarray,

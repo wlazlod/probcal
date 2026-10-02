@@ -106,11 +106,9 @@ class CalibratedClassifier(BinaryCalibratedMixin, ClassifierMixin, BaseEstimator
     out-of-fold protocol without sklearn, with deliberate differences:
     its folds are always class-stratified and drawn with numpy's
     ``default_rng(random_state)`` (so the same seed assigns different folds
-    than ``StratifiedKFold``); its model fits are always unweighted, with
-    ``sample_weight`` reaching only the calibrator, whereas here the
-    weights also reach the cross-validated fits and the refit when the
-    estimator accepts them; it casts ``X`` to float64; and it alone offers
-    ``ensemble=True`` (one calibrator per fold). Use this class inside
+    than ``StratifiedKFold``), and it alone offers ``ensemble=True`` (one
+    calibrator per fold). Both pass ``X`` to the model untouched and hand
+    ``sample_weight`` to the model fits when the estimator accepts it. Use this class inside
     sklearn pipelines and searches, ``CalibratedModel`` for a numpy-only
     deployment wrapper.
     """

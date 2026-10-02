@@ -47,7 +47,7 @@ def grade_cs_coverage(runs: int = 100, shift_a: float = 0.6, shift_b: float = 0.
     """Share of runs whose last-step per-grade CI covers the true per-grade shift."""
     hits_a = hits_b = 0
     for r in range(runs):
-        mon = CalibrationMonitor(alpha=0.05, delta_ci_grid=(-2.0, 2.0, 81))
+        mon = CalibrationMonitor(alpha=0.05, delta_ci_grid=(-2.0, 2.0, 81), grades=("A", "B"))
         step = None
         for k in range(6):
             y, p, g = _grade_batch(n=1500, shift_a=shift_a, shift_b=shift_b, seed=1000 * r + k)

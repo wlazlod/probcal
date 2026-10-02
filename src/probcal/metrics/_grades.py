@@ -80,6 +80,8 @@ def aggregate(
     uniq, inv = np.unique(labels, return_inverse=True)
     idx = np.array([pos[str(u)] for u in uniq], dtype=np.intp)[inv]
     m = len(order)
+    n: np.ndarray
+    k: np.ndarray
     if w is None:
         n = np.bincount(idx, minlength=m).astype(np.int64)
         k = np.bincount(idx, weights=y, minlength=m).round().astype(np.int64)

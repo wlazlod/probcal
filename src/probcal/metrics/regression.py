@@ -1,16 +1,18 @@
 """Recalibration-regression framework: calibration intercept, slope, and joint test.
 
 The Cox (1958) framework; lineage through Miller, Hui & Tierney (1991).
-Theory: ``docs/concepts/metrics.md``.
+Theory: ``docs/concepts/metrics.md``. Sample weights follow the package
+convention in :mod:`probcal.metrics._common`.
 """
 
 from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import expit, gammainc_lower, irls_logistic, logit
-from .scores import _prep
-from .smooth import spiegelhalter_z
+from .._math import chi2_sf, expit, irls_logistic, logit
+from .._validation import EPS
+from ._common import _prep, effective_weights
+from .smooth import _spiegelhalter
 
 
 def calibration_intercept(y: object, p: object, *, sample_weight: object = None) -> float:
@@ -26,17 +28,26 @@ def calibration_intercept(y: object, p: object, *, sample_weight: object = None)
     p : array_like
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
     float
         Fitted intercept in log-odds units.
     """
-    y_arr, p_arr, w = _prep(y, p, sample_weight)
-    z = logit(p_arr)
-    res = irls_logistic(np.ones((len(z), 1)), y_arr, w=w, offset=z)
-    return float(res.beta[0])
+    return _intercept(*_prep(y, p, sample_weight))
+
+
+def _intercept(y: np.ndarray, p: np.ndarray, w: np.ndarray) -> float:
+    z = logit(p)
+    return float(irls_logistic(np.ones((len(z), 1)), y, w=w, offset=z).beta[0])
+
+
+def _slope_fit(y: np.ndarray, p: np.ndarray, w: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Design matrix ``[1, logit(p)]`` and the fitted (intercept, slope)."""
+    z = logit(p)
+    X = np.column_stack([np.ones_like(z), z])
+    return X, irls_logistic(X, y, w=w).beta
 
 
 def calibration_slope(y: object, p: object, *, sample_weight: object = None) -> float:
@@ -51,18 +62,14 @@ def calibration_slope(y: object, p: object, *, sample_weight: object = None) -> 
     p : array_like
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
     float
         Fitted slope on the logit scale.
     """
-    y_arr, p_arr, w = _prep(y, p, sample_weight)
-    z = logit(p_arr)
-    X = np.column_stack([np.ones_like(z), z])
-    res = irls_logistic(X, y_arr, w=w)
-    return float(res.beta[1])
+    return float(_slope_fit(*_prep(y, p, sample_weight))[1][1])
 
 
 @dataclass(frozen=True)
@@ -77,9 +84,9 @@ class CalibrationTestResult:
     p_value : float
         Upper-tail p-value of the statistic.
     alpha : float
-        Fitted intercept.
+        Fitted intercept (also available as :attr:`intercept`).
     beta : float
-        Fitted slope.
+        Fitted slope (also available as :attr:`slope`).
     """
 
     statistic: float
@@ -87,11 +94,26 @@ class CalibrationTestResult:
     alpha: float
     beta: float
 
+    @property
+    def intercept(self) -> float:
+        """Fitted intercept; the name used by the rest of the package for ``alpha``."""
+        return self.alpha
+
+    @property
+    def slope(self) -> float:
+        """Fitted slope; the name used by the rest of the package for ``beta``."""
+        return self.beta
+
 
 def calibration_test(
     y: object, p: object, *, sample_weight: object = None
 ) -> CalibrationTestResult:
     """Likelihood-ratio test of joint calibration (alpha, beta) = (0, 1).
+
+    With weights, the fit uses ``sample_weight`` as given (the MLE is
+    scale-invariant) and the LR statistic uses the Kish-rescaled weights, so
+    it is invariant to rescaling the weights; unit weights give the plain
+    test (see :mod:`probcal.metrics._common`).
 
     Parameters
     ----------
@@ -100,7 +122,7 @@ def calibration_test(
     p : array_like
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
@@ -108,19 +130,18 @@ def calibration_test(
         Test statistic, p-value, and fitted intercept/slope.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    z = logit(p_arr)
-    X = np.column_stack([np.ones_like(z), z])
-    fit = irls_logistic(X, y_arr, w=w)
-    alpha, beta = float(fit.beta[0]), float(fit.beta[1])
+    X, beta_hat = _slope_fit(y_arr, p_arr, w)
+    alpha, beta = float(beta_hat[0]), float(beta_hat[1])
+    # Likelihood ratio on the Kish-rescaled weights (package convention):
+    # invariant to rescaling the weights, the plain LR for unit weights.
+    we = effective_weights(w)
 
     def _ll(prob: np.ndarray) -> float:
-        prob = np.clip(prob, 1e-12, 1.0 - 1e-12)
-        return float(np.sum(w * (y_arr * np.log(prob) + (1.0 - y_arr) * np.log1p(-prob))))
+        prob = np.clip(prob, EPS, 1.0 - EPS)
+        return float(np.sum(we * (y_arr * np.log(prob) + (1.0 - y_arr) * np.log1p(-prob))))
 
-    ll_fit = _ll(expit(X @ fit.beta))
-    ll_null = _ll(p_arr)
-    lr = max(2.0 * (ll_fit - ll_null), 0.0)
-    p_value = 1.0 - float(gammainc_lower(1.0, lr / 2.0))  # chi-square, df = 2
+    lr = max(2.0 * (_ll(expit(X @ beta_hat)) - _ll(p_arr)), 0.0)
+    p_value = chi2_sf(lr, 2.0)
     return CalibrationTestResult(statistic=lr, p_value=p_value, alpha=alpha, beta=beta)
 
 
@@ -172,16 +193,17 @@ def calibration_guardrails(
     p : array_like
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
     GuardrailReport
         Slope, intercept, and Spiegelhalter-p values with pass/fail flags.
     """
-    slope = calibration_slope(y, p, sample_weight=sample_weight)
-    intercept = calibration_intercept(y, p, sample_weight=sample_weight)
-    sp = spiegelhalter_z(y, p, sample_weight=sample_weight)
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    slope = float(_slope_fit(y_arr, p_arr, w)[1][1])
+    intercept = _intercept(y_arr, p_arr, w)
+    sp = _spiegelhalter(y_arr, p_arr, w)
     slope_ok = 0.9 <= slope <= 1.1
     intercept_ok = abs(intercept) <= 0.1
     sp_ok = sp.p_value > 0.05

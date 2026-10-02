@@ -265,3 +265,22 @@ def test_skce_test_validation() -> None:
         skce_test(np.array([0.0, 1.0, 0.0, 1.0]), np.full(4, 0.5))
     res = skce_test(np.array([0.0, 1.0, 0.0, 1.0]), np.full(4, 0.5), bandwidth=0.1)
     assert isinstance(res, SkceTestResult)
+
+
+# ------------------------------------------------------------------ 0.4.0 fixes
+
+
+def test_bootstrap_replicates_on_the_statistic_scale() -> None:
+    # Regression (MET-8): t_obs = n * U_n = S / (n - 1) but replicates were
+    # S_b / n, shrinking every replicate by (n - 1) / n.
+    y, p = _calibrated(40)
+    n = len(p)
+    res = skce_test(y, p, method="bootstrap", n_boot=199, bandwidth=0.5, random_state=3)
+    h = _h_matrix(y, p, "laplace", 0.5, "probability")
+    ht = _centered_h(h)
+    t_obs = (h.sum() - np.trace(h)) / (n - 1)
+    rng = np.random.default_rng(3)
+    counts = rng.multinomial(n, np.full(n, 1.0 / n), size=199).astype(float)
+    t_b = (np.einsum("bi,ij,bj->b", counts, ht, counts) - counts @ np.diag(ht)) / (n - 1)
+    assert res.p_value == (1 + int(np.sum(t_b >= t_obs))) / 200
+    assert res.statistic * n == pytest.approx(t_obs)

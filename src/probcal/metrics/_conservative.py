@@ -16,26 +16,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import beta_ppf, pava
+from .._math import beta_ppf
 from .._results import Interpretation, _ResultBase
 from .._validation import validate_scores, validate_weights
-
-
-def _validate_binary_y(y: object) -> np.ndarray:
-    """Coerce a binary outcome array without requiring both classes present.
-
-    Pluto-Tasche targets low- and zero-default portfolios by design, so
-    unlike ``probcal._validation.validate_binary_y`` an all-zero ``y`` is
-    accepted rather than rejected.
-    """
-    arr = np.asarray(y, dtype=np.float64)
-    if arr.ndim != 1:
-        raise ValueError(f"y must be a 1-D array, got shape {arr.shape}")
-    if not np.all(np.isfinite(arr)):
-        raise ValueError("y must contain only finite values")
-    if not np.all((arr == 0.0) | (arr == 1.0)):
-        raise ValueError("y must be binary with values in {0, 1}")
-    return arr
+from ._common import binary_y
+from ._deprecation import UNSET, renamed_kwarg
+from ._grades import aggregate, grade_labels, is_masterscale, resolve_order
 
 
 @dataclass(frozen=True)
@@ -140,9 +126,9 @@ def pluto_tasche(
     ``d*_i = sum(d[i:])``. The most-prudent PD is the one-sided
     Clopper-Pearson upper bound of the pooled rate,
     ``p`` solving ``I_p(d*_i + 1, n*_i - d*_i) = confidence``
-    (``beta_ppf(confidence, d*_i + 1, n*_i - d*_i)``), i.e. the smallest PD
-    under which observing at most ``d*_i`` defaults in ``n*_i`` obligors has
-    probability ``>= 1 - confidence``. Pooling with worse grades is the
+    (``beta_ppf(confidence, d*_i + 1, n*_i - d*_i)``), i.e. the largest PD
+    under which observing at most ``d*_i`` defaults in ``n*_i`` obligors
+    still has probability ``>= 1 - confidence``. Pooling with worse grades is the
     rating-monotonicity assumption doing its work: a grade's own data alone
     is often uninformative (frequently zero defaults), but the assumption
     that its true PD cannot exceed a worse grade's lets that grade's
@@ -286,8 +272,10 @@ def pluto_tasche_from_arrays(
     confidence : float, keyword-only
         Confidence level in ``(0, 1)`` for every grade's upper bound.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``; per-grade
-        counts become weighted sums.
+        Optional positive weights, same length as ``y``; per-grade counts
+        become weighted sums, i.e. weights are read literally as frequency
+        counts (integer weights equal row duplication) -- an exception to
+        the relative-weight convention of :mod:`probcal.metrics._common`.
 
     Returns
     -------
@@ -311,10 +299,8 @@ def pluto_tasche_from_arrays(
     >>> res.n
     array([100., 400., 300.])
     """
-    from .grade import _resolve_grades
-
-    y_arr = _validate_binary_y(y)
-    if hasattr(grades, "assign") and hasattr(grades, "names"):
+    y_arr = binary_y(y, require_both_classes=False)
+    if is_masterscale(grades):
         if p is None:
             raise ValueError(
                 "p is required when grades is a Masterscale (labels are assigned from p)"
@@ -322,31 +308,14 @@ def pluto_tasche_from_arrays(
         p_arr = validate_scores(p, name="p")
         if len(p_arr) != len(y_arr):
             raise ValueError("y and p must have equal length")
-        g_str, default_order = _resolve_grades(grades, p_arr)
     else:
         if order is None:
             raise ValueError("order is required when grades is a label array")
-        g_str, default_order = _resolve_grades(grades, np.empty(0))
-    if g_str.ndim != 1 or len(g_str) != len(y_arr):
-        raise ValueError("grades and y must be 1-D arrays of equal length")
+        p_arr = np.empty(0)
+    g_str, default_order = grade_labels(grades, p_arr, len(y_arr))
     w_arr = validate_weights(sample_weight, len(y_arr))
-
-    unique_labels = tuple(sorted(np.unique(g_str)))
-    if order is None:
-        order_t = default_order if default_order is not None else ()
-    else:
-        order_t = tuple(str(g) for g in np.asarray(order).reshape(-1))
-        if tuple(sorted(order_t)) != unique_labels:
-            raise ValueError(
-                f"order {order_t} does not match the unique grade labels {unique_labels}"
-            )
-
-    n = np.empty(len(order_t), dtype=np.float64)
-    d = np.empty(len(order_t), dtype=np.float64)
-    for i, label in enumerate(order_t):
-        mask = g_str == label
-        n[i] = float(np.sum(w_arr[mask]))
-        d[i] = float(np.sum(w_arr[mask] * y_arr[mask]))
+    order_t = resolve_order(g_str, order, default_order)
+    n, d, _, _ = aggregate(g_str, order_t, y_arr, w=w_arr)
 
     return pluto_tasche(n, d, confidence=confidence, grades=order_t)
 
@@ -356,14 +325,15 @@ def jeffreys_upper_bands(
     p: object,
     grades: object,
     *,
-    level: float = 0.9,
+    confidence: float = 0.9,
     order: object = None,
+    level: object = UNSET,
 ) -> dict[str, tuple[float, float]]:
     """Jeffreys per-grade upper bounds as a contiguous masterscale band table.
 
     For grade ``i`` (best to worst, in ``order``): ``hi_i`` is the same
     one-sided Jeffreys posterior upper bound ``jeffreys_grade_test`` reports
-    as its own-grade display interval, ``beta_ppf(level, k_i + 0.5,
+    as its own-grade display interval, ``beta_ppf(confidence, k_i + 0.5,
     n_i - k_i + 0.5)`` under a ``Beta(k_i + 0.5, n_i - k_i + 0.5)`` posterior
     on grade ``i``'s own default rate; ``lo_i`` is the previous grade's
     ``hi`` (``0.0`` for the best grade), so the bands are contiguous by
@@ -374,11 +344,13 @@ def jeffreys_upper_bands(
 
     The raw ``hi`` sequence need not come out non-decreasing (a noisy grade
     can have a smaller posterior upper bound than a better grade), which
-    would make the bands overlap or invert. It is monotonized by
-    :func:`probcal._math.pava` (weighted isotonic regression, weights = grade
-    size ``n``) in the given ``order`` — the minimum-adjustment non-decreasing
-    fit, not a running maximum — with a ``UserWarning`` emitted only when
-    that adjustment actually changed a value.
+    would make the bands overlap or invert. It is replaced by its running
+    maximum best to worst (``np.maximum.accumulate``, the same prudent hull
+    :func:`pluto_tasche` uses), which never lowers any grade's bound -- it
+    only raises a worse grade's bound to a better grade's -- with a
+    ``UserWarning`` emitted only when that adjustment changed a value. (0.3.x
+    used a size-weighted PAVA fit, which could *lower* a grade's upper bound
+    and give a grade a zero-width band.)
 
     The resulting ``{grade: (lo, hi)}`` table is exactly the shape
     :func:`probcal.thresholds.calibrated_bands_to_raw` consumes to translate
@@ -398,13 +370,16 @@ def jeffreys_upper_bands(
     grades : array_like or Masterscale
         Rating grade label per observation, or a :class:`probcal.Masterscale`
         that assigns them from ``p`` and supplies the default ``order``.
-    level : float, keyword-only
+    confidence : float, keyword-only
         Confidence level in ``(0, 1)`` for every grade's Jeffreys upper
         bound.
     order : sequence of str or None, keyword-only
         Explicit best-to-worst grade order; must match the unique labels in
-        ``grades`` exactly. ``None`` (default) orders grades by their mean
-        ``p``, ascending (lowest predicted PD first).
+        ``grades`` exactly. ``None`` (default) uses the masterscale's order,
+        or orders label-array grades by their mean ``p``, ascending (lowest
+        predicted PD first).
+    level : float, keyword-only
+        Deprecated spelling of ``confidence`` (removed in 0.5.0).
 
     Returns
     -------
@@ -415,8 +390,8 @@ def jeffreys_upper_bands(
     Raises
     ------
     ValueError
-        If ``y``/``p``/``grades`` are not equal-length 1-D arrays, ``level``
-        is not in ``(0, 1)``, or ``order`` does not match the unique grade
+        If ``y``/``p``/``grades`` are not equal-length 1-D arrays,
+        ``confidence`` is not in ``(0, 1)``, or ``order`` does not match the unique grade
         labels.
 
     Examples
@@ -426,52 +401,38 @@ def jeffreys_upper_bands(
     >>> grades = np.array(["A"] * 100 + ["B"] * 100)
     >>> y = np.array([0.0] * 100 + [1.0] * 5 + [0.0] * 95)
     >>> p = np.array([0.01] * 100 + [0.05] * 100)
-    >>> bands = jeffreys_upper_bands(y, p, grades, level=0.9)
+    >>> bands = jeffreys_upper_bands(y, p, grades, confidence=0.9)
     >>> bands["A"][0]
     0.0
     >>> bands["A"][1] < bands["B"][1]
     True
     """
-    y_arr = _validate_binary_y(y)
+    conf = renamed_kwarg("jeffreys_upper_bands", "level", "confidence", level, confidence, 0.9)
+    y_arr = binary_y(y, require_both_classes=False)
     p_arr = validate_scores(p, name="p")
     if len(p_arr) != len(y_arr):
         raise ValueError("y and p must have equal length")
-    from .grade import _resolve_grades
+    g_arr, default_order = grade_labels(grades, p_arr, len(y_arr))
+    if not 0.0 < float(conf) < 1.0:  # type: ignore[arg-type]
+        raise ValueError("confidence must lie in (0, 1)")
 
-    g_arr, default_order = _resolve_grades(grades, p_arr)
-    if g_arr.ndim != 1 or len(g_arr) != len(y_arr):
-        raise ValueError("grades must be a 1-D array matching y and p in length")
-    if not 0.0 < level < 1.0:
-        raise ValueError("level must lie in (0, 1)")
-
-    g_str = np.array([str(g) for g in g_arr])
-    unique_labels = tuple(sorted(str(u) for u in np.unique(g_str)))
-
-    if order is None and default_order is not None:
-        order_t = default_order
-    elif order is None:
-        mean_p = {lab: float(np.mean(p_arr[g_str == lab])) for lab in unique_labels}
-        order_t = tuple(sorted(unique_labels, key=lambda lab: mean_p[lab]))
+    if order is None and default_order is None:
+        sorted_labels = resolve_order(g_arr, None, None)
+        _, _, mean_p, _ = aggregate(g_arr, sorted_labels, y_arr, p=p_arr)
+        assert mean_p is not None
+        order_t = tuple(sorted_labels[i] for i in np.argsort(mean_p, kind="stable"))
     else:
-        order_t = tuple(str(g) for g in np.asarray(order).reshape(-1))
-        if tuple(sorted(order_t)) != unique_labels:
-            raise ValueError(
-                f"order {order_t} does not match the unique grade labels {unique_labels}"
-            )
+        order_t = resolve_order(g_arr, order, default_order)
+    n, k, _, _ = aggregate(g_arr, order_t, y_arr)
 
-    n = np.empty(len(order_t), dtype=np.float64)
-    k = np.empty(len(order_t), dtype=np.float64)
-    for i, label in enumerate(order_t):
-        mask = g_str == label
-        n[i] = float(np.sum(mask))
-        k[i] = float(np.sum(y_arr[mask]))
-
-    hi_raw = np.array([beta_ppf(level, k[i] + 0.5, n[i] - k[i] + 0.5) for i in range(len(order_t))])
-    hi = pava(hi_raw, n).fitted
+    hi_raw = np.array(
+        [beta_ppf(float(conf), k[i] + 0.5, n[i] - k[i] + 0.5) for i in range(len(order_t))]  # type: ignore[arg-type]
+    )
+    hi = np.maximum.accumulate(hi_raw)
     if np.any(hi != hi_raw):
         warnings.warn(
-            "jeffreys_upper_bands: PAVA adjusted the upper-band sequence to keep "
-            "it non-decreasing best to worst",
+            "jeffreys_upper_bands: raised upper bounds to the running maximum to keep "
+            "the bands non-decreasing best to worst",
             UserWarning,
             stacklevel=2,
         )

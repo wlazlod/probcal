@@ -41,7 +41,7 @@ def _rare_event_fixture(
 
 def test_evaluate_returns_metric_report_with_cis() -> None:
     y, p = _calibrated()
-    rep = evaluate(y, p, n_boot=30, seed=1)
+    rep = evaluate(y, p, n_boot=30, random_state=1)
     assert isinstance(rep, MetricReport)
     for name in ("log_loss", "brier", "ece", "ece_debiased", "mce", "ici", "smooth_ece"):
         assert name in rep.names
@@ -53,8 +53,8 @@ def test_evaluate_returns_metric_report_with_cis() -> None:
 
 def test_evaluate_seeded_reproducible() -> None:
     y, p = _calibrated(400)
-    a = evaluate(y, p, n_boot=20, seed=7)
-    b = evaluate(y, p, n_boot=20, seed=7)
+    a = evaluate(y, p, n_boot=20, random_state=7)
+    b = evaluate(y, p, n_boot=20, random_state=7)
     np.testing.assert_allclose(a.ci_low, b.ci_low)
     np.testing.assert_allclose(a.ci_high, b.ci_high)
 
@@ -87,8 +87,8 @@ def test_reliability_summary_e90_reflects_sample_weight() -> None:
 
 def test_evaluate_metrics_subset_matches_full_run() -> None:
     d = make_pd_portfolio(n=400)
-    full = evaluate(d.y, d.scores, n_boot=25, seed=3)
-    sub = evaluate(d.y, d.scores, n_boot=25, seed=3, metrics=["e90", "ici"])
+    full = evaluate(d.y, d.scores, n_boot=25, random_state=3)
+    sub = evaluate(d.y, d.scores, n_boot=25, random_state=3, metrics=["e90", "ici"])
     assert sub.names == ("ici", "e90")  # catalog order, not argument order
     for name in sub.names:
         i, j = full.names.index(name), sub.names.index(name)
@@ -158,7 +158,7 @@ def test_evaluate_stratified_avoids_degenerate_substitution_artifact() -> None:
     assert (old_boot[:, 1] == point["log_loss"]).sum() == n_degen
     old_width = np.percentile(old_boot, 97.5, axis=0) - np.percentile(old_boot, 2.5, axis=0)
 
-    rep = evaluate(y, p, n_boot=200, seed=3, metrics=names)
+    rep = evaluate(y, p, n_boot=200, random_state=3, metrics=names)
     idx_map = {name: i for i, name in enumerate(rep.names)}
     new_width = np.array([rep.ci_high[idx_map[name]] - rep.ci_low[idx_map[name]] for name in names])
 
@@ -187,8 +187,8 @@ def test_evaluate_stratified_replicates_preserve_class_counts() -> None:
         assert int(y[idx].sum()) == n_events
 
     # Seed reproducibility: two identical calls give identical CIs.
-    a = evaluate(y, p, n_boot=100, seed=3, metrics=("intercept", "log_loss"))
-    b = evaluate(y, p, n_boot=100, seed=3, metrics=("intercept", "log_loss"))
+    a = evaluate(y, p, n_boot=100, random_state=3, metrics=("intercept", "log_loss"))
+    b = evaluate(y, p, n_boot=100, random_state=3, metrics=("intercept", "log_loss"))
     np.testing.assert_array_equal(a.ci_low, b.ci_low)
     np.testing.assert_array_equal(a.ci_high, b.ci_high)
 
@@ -210,8 +210,8 @@ def test_evaluate_stratify_false_runs_and_is_reproducible() -> None:
     # probability, making 100 straight failures astronomically unlikely to
     # construct deterministically without mocking the RNG -- not attempted.)
     y, p = _calibrated(300)
-    a = evaluate(y, p, n_boot=30, seed=5, stratify=False)
-    b = evaluate(y, p, n_boot=30, seed=5, stratify=False)
+    a = evaluate(y, p, n_boot=30, random_state=5, stratify=False)
+    b = evaluate(y, p, n_boot=30, random_state=5, stratify=False)
     np.testing.assert_array_equal(a.ci_low, b.ci_low)
     np.testing.assert_array_equal(a.ci_high, b.ci_high)
     assert len(a.names) == len(a.values)
@@ -319,9 +319,33 @@ def test_point_metrics_presorted_matches_the_default_path() -> None:
 def test_evaluate_accepts_single_column_p() -> None:
     y, p = _calibrated(300)
     names = ["log_loss", "brier", "ece", "intercept"]
-    flat = evaluate(y, p, metrics=names, n_boot=25, seed=7)
-    col = evaluate(y, p.reshape(-1, 1), metrics=names, n_boot=25, seed=7)
+    flat = evaluate(y, p, metrics=names, n_boot=25, random_state=7)
+    col = evaluate(y, p.reshape(-1, 1), metrics=names, n_boot=25, random_state=7)
     assert col.names == flat.names
     assert np.array_equal(col.values, flat.values)
     assert np.array_equal(col.ci_low, flat.ci_low)
     assert np.array_equal(col.ci_high, flat.ci_high)
+
+
+# ------------------------------------------------------------------ 0.4.0 fixes
+
+
+def test_evaluate_n_boot_zero_gives_point_estimates_only() -> None:
+    # Regression (MET-10): n_boot=0 raised IndexError from np.percentile.
+    y, p = _calibrated(300)
+    rep = evaluate(y, p, n_boot=0, metrics=("brier", "ece"))
+    assert np.all(np.isnan(rep.ci_low)) and np.all(np.isnan(rep.ci_high))
+    full = evaluate(y, p, n_boot=5, metrics=("brier", "ece"))
+    np.testing.assert_array_equal(rep.values, full.values)
+    with pytest.raises(ValueError, match="n_boot"):
+        evaluate(y, p, n_boot=-1)
+
+
+def test_evaluate_seed_keyword_deprecated() -> None:
+    y, p = _calibrated(300)
+    with pytest.warns(DeprecationWarning, match="random_state"):
+        old = evaluate(y, p, n_boot=10, seed=4, metrics=("brier",))
+    new = evaluate(y, p, n_boot=10, random_state=4, metrics=("brier",))
+    np.testing.assert_array_equal(old.ci_low, new.ci_low)
+    with pytest.raises(TypeError, match="only random_state"):
+        evaluate(y, p, n_boot=10, seed=4, random_state=5)

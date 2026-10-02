@@ -10,7 +10,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import beta_ppf, betainc, norm_cdf
+from .._math import beta_ppf, betainc, norm_sf
+from .._validation import validate_weights
+from ._common import _prep
 
 # Re-exported so `probcal.metrics.grade.pluto_tasche` sits alongside the
 # per-grade backtests it complements; defined in `_conservative.py`.
@@ -20,11 +22,12 @@ from ._conservative import (  # noqa: F401
     pluto_tasche,
     pluto_tasche_from_arrays,
 )
+from ._grades import _resolve_grades as _resolve_grades  # re-exported for probcal.report
+from ._grades import aggregate, grade_labels, resolve_order
 
 # Re-exported so `probcal.metrics.grade.hl_e_test` sits alongside the other
 # per-grade tests; defined in `_safe.py`.
 from ._safe import HlEResult, hl_e_test  # noqa: F401
-from .scores import _prep
 
 
 def _traffic_light(p_value: float) -> str:
@@ -35,46 +38,24 @@ def _traffic_light(p_value: float) -> str:
     return "green"
 
 
-def _resolve_grades(grades: object, p_arr: np.ndarray) -> tuple[np.ndarray, tuple[str, ...] | None]:
-    """Labels plus grade order from either a label array or a ``Masterscale``.
-
-    An object exposing ``assign`` and ``names`` (a :class:`probcal.Masterscale`)
-    assigns the labels from ``p_arr`` and supplies its best-to-worst order,
-    restricted to the grades actually present; a plain array is returned as
-    strings with ``order=None`` (callers keep their current ordering rule).
-    """
-    if hasattr(grades, "assign") and hasattr(grades, "names"):
-        labels = np.asarray(grades.assign(p_arr)).astype(str)  # type: ignore[attr-defined]
-        present = set(labels.tolist())
-        order = tuple(str(g) for g in grades.names if str(g) in present)  # type: ignore[attr-defined]
-        return labels, order
-    return np.asarray(grades).astype(str), None
-
-
-def _per_grade(
-    y: np.ndarray, p: np.ndarray, grades: np.ndarray, order: tuple[str, ...] | None = None
-) -> tuple[tuple, np.ndarray, np.ndarray, np.ndarray]:
-    labels = np.asarray(order) if order is not None else np.unique(grades)
-    n = np.empty(len(labels), dtype=np.int64)
-    k = np.empty(len(labels), dtype=np.int64)
-    pd = np.empty(len(labels))
-    for i, g in enumerate(labels):
-        mask = grades == g
-        n[i] = int(np.sum(mask))
-        k[i] = int(np.sum(y[mask]))
-        pd[i] = float(np.mean(p[mask]))
-    return tuple(str(g) for g in labels), n, k, pd
-
-
-def _check_weights(sample_weight: object, n_obs: int) -> None:
+def _grade_counts(
+    y: object, p: object, grades: object, sample_weight: object, order: object
+) -> tuple[tuple[str, ...], np.ndarray, np.ndarray, np.ndarray]:
+    """Validated per-grade ``(labels, n, k, mean PD)`` for the binomial/Jeffreys tests."""
+    y_arr, p_arr, _ = _prep(y, p, None)
     if sample_weight is not None:
-        w = np.asarray(sample_weight, dtype=np.float64)
-        if not np.allclose(w, w[0]):
+        w = validate_weights(sample_weight, len(y_arr))
+        if not np.all(w == w[0]):
             warnings.warn(
                 "grade tests use raw integer counts; non-uniform sample weights are ignored",
                 UserWarning,
                 stacklevel=3,
             )
+    labels, default_order = grade_labels(grades, p_arr, len(y_arr))
+    order_t = resolve_order(labels, order, default_order)
+    n, k, pd, _ = aggregate(labels, order_t, y_arr, p=p_arr)
+    assert pd is not None
+    return order_t, n, k, pd
 
 
 @dataclass(frozen=True)
@@ -84,8 +65,8 @@ class BinomialGradeResult:
     Attributes
     ----------
     grades : tuple of str
-        Grade labels: sorted when a label array was given, best to worst when
-        a ``Masterscale`` was given.
+        Grade labels: the ``order`` passed, else best to worst for a
+        ``Masterscale``, else sorted.
     n : numpy.ndarray
         Observation count per grade.
     k : numpy.ndarray
@@ -93,7 +74,8 @@ class BinomialGradeResult:
     pd : numpy.ndarray
         Assigned PD per grade (mean of ``p`` within the grade).
     p_exact : numpy.ndarray
-        Exact binomial tail p-value per grade.
+        Exact binomial tail p-value per grade (also available as
+        :attr:`p_value`, the name the other tests use).
     p_normal : numpy.ndarray
         Normal-approximation p-value per grade.
     light : tuple of str
@@ -113,9 +95,19 @@ class BinomialGradeResult:
     ci_low: np.ndarray
     ci_high: np.ndarray
 
+    @property
+    def p_value(self) -> np.ndarray:
+        """Alias of :attr:`p_exact` (the exact test decides the traffic light)."""
+        return self.p_exact
+
 
 def binomial_grade_test(
-    y: object, p: object, grades: object, *, sample_weight: object = None
+    y: object,
+    p: object,
+    grades: object,
+    *,
+    sample_weight: object = None,
+    order: object = None,
 ) -> BinomialGradeResult:
     """Exact binomial tail test per grade: P(X >= k | n, PD).
 
@@ -139,16 +131,17 @@ def binomial_grade_test(
     sample_weight : array_like or None, keyword-only
         Not used: grade tests use raw integer counts. A ``UserWarning`` is
         emitted if the weights are non-uniform.
+    order : sequence of str or None, keyword-only
+        Explicit grade order for the result (a permutation of the grade
+        labels present); ``None`` keeps the masterscale order or sorts the
+        labels.
 
     Returns
     -------
     BinomialGradeResult
         Per-grade counts, p-values, traffic lights, and display intervals.
     """
-    y_arr, p_arr, _ = _prep(y, p, None)
-    _check_weights(sample_weight, len(y_arr))
-    g_arr, order = _resolve_grades(grades, p_arr)
-    labels, n, k, pd = _per_grade(y_arr, p_arr, g_arr, order)
+    labels, n, k, pd = _grade_counts(y, p, grades, sample_weight, order)
     p_exact = np.empty(len(labels))
     p_normal = np.empty(len(labels))
     for i in range(len(labels)):
@@ -158,7 +151,7 @@ def binomial_grade_test(
             p_exact[i] = float(betainc(float(k[i]), float(n[i] - k[i] + 1), pd[i]))
         se = np.sqrt(n[i] * pd[i] * (1.0 - pd[i]))
         z = (k[i] - n[i] * pd[i]) / se if se > 0 else 0.0
-        p_normal[i] = float(1.0 - norm_cdf(np.array([z]))[0])
+        p_normal[i] = norm_sf(z)
     light = tuple(_traffic_light(v) for v in p_exact)
     ci_low = np.empty(len(labels))
     ci_high = np.empty(len(labels))
@@ -186,8 +179,8 @@ class JeffreysGradeResult:
     Attributes
     ----------
     grades : tuple of str
-        Grade labels: sorted when a label array was given, best to worst when
-        a ``Masterscale`` was given.
+        Grade labels: the ``order`` passed, else best to worst for a
+        ``Masterscale``, else sorted.
     n : numpy.ndarray
         Observation count per grade.
     k : numpy.ndarray
@@ -214,7 +207,12 @@ class JeffreysGradeResult:
 
 
 def jeffreys_grade_test(
-    y: object, p: object, grades: object, *, sample_weight: object = None
+    y: object,
+    p: object,
+    grades: object,
+    *,
+    sample_weight: object = None,
+    order: object = None,
 ) -> JeffreysGradeResult:
     """Jeffreys test per grade: posterior P(theta <= PD | k, n) under Beta(k+1/2, n-k+1/2).
 
@@ -236,16 +234,17 @@ def jeffreys_grade_test(
     sample_weight : array_like or None, keyword-only
         Not used: grade tests use raw integer counts. A ``UserWarning`` is
         emitted if the weights are non-uniform.
+    order : sequence of str or None, keyword-only
+        Explicit grade order for the result (a permutation of the grade
+        labels present); ``None`` keeps the masterscale order or sorts the
+        labels.
 
     Returns
     -------
     JeffreysGradeResult
         Per-grade counts, p-values, traffic lights, and display intervals.
     """
-    y_arr, p_arr, _ = _prep(y, p, None)
-    _check_weights(sample_weight, len(y_arr))
-    g_arr, order = _resolve_grades(grades, p_arr)
-    labels, n, k, pd = _per_grade(y_arr, p_arr, g_arr, order)
+    labels, n, k, pd = _grade_counts(y, p, grades, sample_weight, order)
     p_value = np.empty(len(labels))
     for i in range(len(labels)):
         p_value[i] = float(betainc(k[i] + 0.5, n[i] - k[i] + 0.5, pd[i]))

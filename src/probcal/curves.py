@@ -12,12 +12,13 @@ documentation. The belt is reimplemented from the papers; no GPL code is used.
 """
 
 import math
-from dataclasses import dataclass
+import warnings
+from dataclasses import dataclass, fields
 
 import numpy as np
 
 from ._corp import corp_bands, corp_fit, decompose
-from ._math import chi2_ppf, expit, gammainc_lower, irls_logistic, loess, logit
+from ._math import chi2_ppf, chi2_sf, expit, irls_logistic, loess, logit
 from ._results import (
     BeltResult,
     CorpResult,
@@ -25,9 +26,11 @@ from ._results import (
     ReliabilityCurve,
     SmoothReliabilityCurve,
 )
-from .metrics.binned import _bin_index
-from .metrics.scores import _prep
-from .metrics.smooth import _lattice_kernel_smooth, _smece_solve
+from ._validation import EPS, validate_positive_int
+from .metrics._binstats import bin_stats
+from .metrics._common import _prep, effective_weights, is_uniform
+from .metrics._deprecation import UNSET, renamed_kwarg
+from .metrics.smooth import _ecce_walk, _lattice_kernel_smooth, _smece_solve
 
 _Z_95 = 1.959963984540054
 
@@ -67,15 +70,10 @@ def reliability_binned(
         logit-scale coordinates.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    idx, m = _bin_index(p_arr, n_bins, strategy)
-    w_sum = np.bincount(idx, weights=w, minlength=m)
-    keep = w_sum > 0
-    wy = np.bincount(idx, weights=w * y_arr, minlength=m)[keep]
-    wp = np.bincount(idx, weights=w * p_arr, minlength=m)[keep]
-    counts = np.bincount(idx, minlength=m)[keep]
-    w_kept = w_sum[keep]
-    pred_mean = wp / w_kept
-    event_rate = wy / w_kept
+    bs = bin_stats(y_arr, p_arr, w, n_bins, strategy)
+    counts = bs.n_obs
+    pred_mean = bs.p_mean
+    event_rate = bs.rate
     ci_low, ci_high = _wilson(event_rate, counts.astype(np.float64))
     # The Wilson interval contains the point estimate analytically; enforce it
     # against floating-point noise at 0/1-rate bins (negative yerr otherwise).
@@ -115,8 +113,10 @@ def reliability_loess(
         Number of evaluation points, spanning the 0.5th to 99.5th percentile
         of ``p``.
     sample_weight : array_like or None, keyword-only
-        Validated (must match ``y`` in length) but not used: the LOESS fit
-        itself is unweighted.
+        Optional positive weights. Non-uniform weights multiply the tricube
+        kernel weights of each local-linear fit (same nearest-neighbour
+        windows); ``None`` or all-equal weights give the unweighted LOESS
+        curve unchanged. (0.3.x validated the weights and ignored them.)
 
     Returns
     -------
@@ -124,10 +124,44 @@ def reliability_loess(
         Grid coordinates (probability and logit scale) and the smoothed
         event rate at each point.
     """
-    y_arr, p_arr, _ = _prep(y, p, sample_weight)
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
     grid = _grid(p_arr, grid_size)
-    rate = np.clip(loess(p_arr, y_arr, frac=frac, xeval=grid), 0.0, 1.0)
+    if is_uniform(w):
+        fitted = loess(p_arr, y_arr, frac=frac, xeval=grid)
+    else:
+        fitted = _weighted_local_linear(p_arr, y_arr, w, grid, frac)
+    rate = np.clip(fitted, 0.0, 1.0)
     return SmoothReliabilityCurve(grid_p=grid, grid_logit=logit(grid), event_rate=rate)
+
+
+def _weighted_local_linear(
+    x: np.ndarray, y: np.ndarray, w: np.ndarray, xeval: np.ndarray, frac: float
+) -> np.ndarray:
+    """Sample-weighted LOESS (degree 1) at ``xeval``.
+
+    Each fit uses the ``r = ceil(frac * n)`` nearest observations, tricube
+    kernel weights over the window radius times the sample weights, and a
+    weighted least-squares line; a window whose points share one ``x`` (or
+    whose design is singular) returns the weighted mean.
+    """
+    n = x.shape[0]
+    r = min(max(int(math.ceil(frac * n)), 2), n)
+    out = np.empty(xeval.shape[0])
+    for i, x0 in enumerate(xeval):
+        dist = np.abs(x - x0)
+        win = np.argpartition(dist, r - 1)[:r]
+        h = float(dist[win].max())
+        u = dist[win] / h if h > 0.0 else np.zeros(r)
+        k = np.clip(1.0 - u**3, 0.0, None) ** 3 * w[win]
+        xc = x[win] - x0
+        sw, swx, swxx = k.sum(), (k * xc).sum(), (k * xc * xc).sum()
+        swy, swxy = (k * y[win]).sum(), (k * xc * y[win]).sum()
+        det = sw * swxx - swx * swx
+        if h == 0.0 or abs(det) <= 1e-12 * max(sw * swxx, 1e-300):
+            out[i] = swy / sw if sw > 0.0 else float(np.average(y[win], weights=w[win]))
+        else:
+            out[i] = (swxx * swy - swx * swxy) / det
+    return out
 
 
 def reliability_spline(
@@ -149,7 +183,7 @@ def reliability_spline(
         Number of evaluation points, spanning the 0.5th to 99.5th percentile
         of ``p``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights passed to the spline fit.
+        Optional positive weights passed to the spline fit.
 
     Returns
     -------
@@ -192,18 +226,27 @@ def _kernel_rate_density(
         den = np.bincount(idx, weights=w, minlength=b)
         centers, num_s = _lattice_kernel_smooth(num, width, sigma, t_lo)
         _, den_s = _lattice_kernel_smooth(den, width, sigma, t_lo)
-        # An empty lattice cell has no data to average: its smoothed
-        # numerator is 0 too, so dividing by 1 reports a rate of 0 there
-        # rather than a NaN that np.interp would spread to its neighbours.
-        den_safe = np.where(den_s > 0.0, den_s, 1.0)
-        rate = np.interp(grid_logit, centers, num_s / den_safe)
+        # Cells farther than the kernel's +-5 sigma truncation from every
+        # observation have zero smoothed weight: no data, so no rate (NaN;
+        # 0.3.x reported 0 there).
+        with np.errstate(invalid="ignore", divide="ignore"):
+            rate_c = np.where(den_s > 0.0, num_s / den_s, np.nan)
+        rate = np.interp(grid_logit, centers, rate_c)
         density = np.interp(grid_logit, centers, den_s)
     else:
         diff = (grid_logit[:, None] - t[None, :]) / sigma
         taps = np.exp(-0.5 * diff**2) / (sigma * math.sqrt(2.0 * math.pi))
         num = taps @ (w * y)
         den = taps @ w
-        rate = num / den
+        # Same gap rule as the lattice path: no observation within 5 sigma.
+        ts = np.sort(t)
+        j = np.clip(np.searchsorted(ts, grid_logit), 1, len(ts) - 1) if len(ts) > 1 else None
+        if j is None:
+            near = np.abs(grid_logit - ts[0])
+        else:
+            near = np.minimum(np.abs(grid_logit - ts[j - 1]), np.abs(grid_logit - ts[j]))
+        with np.errstate(invalid="ignore", divide="ignore"):
+            rate = np.where((near <= 5.0 * sigma) & (den > 0.0), num / den, np.nan)
         density = den
     density = np.clip(density, 0.0, None)
     density = density / density.sum()
@@ -217,9 +260,10 @@ def reliability_smooth(
     sample_weight: object = None,
     grid_size: int = 200,
     n_boot: int = 100,
-    level: float = 0.9,
+    confidence: float = 0.9,
     random_state: int = 42,
     bins: int | None = 8192,
+    level: object = UNSET,
 ) -> KernelReliabilityCurve:
     """smECE-consistent kernel reliability curve (Blasiok-Nakkiran).
 
@@ -248,25 +292,34 @@ def reliability_smooth(
     ``n_boot=0`` disables the ribbon (``ci_low`` and ``ci_high`` both equal
     ``event_rate``).
 
+    Grid points with no observation within the kernel's ``+-5 sigma_star``
+    reach (data gaps, on the logit scale) have no estimate: ``event_rate``,
+    ``ci_low`` and ``ci_high`` are ``nan`` there (0.3.x reported a rate of 0
+    with a ``[0, 0]`` ribbon). Bootstrap resamples that leave a grid point
+    uncovered are skipped in that point's quantiles.
+
     Parameters
     ----------
     y, p : array_like
         Outcomes and predicted probabilities.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
     grid_size : int, keyword-only
         Number of evaluation points, spanning the 0.5th to 99.5th percentile
         of ``p`` (``curves._grid``).
     n_boot : int, keyword-only
         Number of bootstrap resamples for the confidence ribbon; ``0``
         disables it.
-    level : float, keyword-only
-        Nominal coverage level of the ribbon; must satisfy ``0 < level < 1``.
+    confidence : float, keyword-only
+        Nominal coverage level of the ribbon; must satisfy
+        ``0 < confidence < 1``.
     random_state : int, keyword-only
         Seed for ``numpy.random.default_rng``, used by the bootstrap.
     bins : int or None, keyword-only
         Lattice bin count passed through to the shared smECE solve; see
         ``metrics.smooth_ece``. ``None`` forces the exact path.
+    level : float, keyword-only
+        Deprecated spelling of ``confidence`` (removed in 0.5.0).
 
     Returns
     -------
@@ -277,7 +330,7 @@ def reliability_smooth(
     Raises
     ------
     ValueError
-        If ``level`` is not in ``(0, 1)``.
+        If ``confidence`` is not in ``(0, 1)``.
 
     Examples
     --------
@@ -291,8 +344,12 @@ def reliability_smooth(
     >>> abs(float(curve.density.sum()) - 1.0) < 1e-10
     True
     """
-    if not (0.0 < level < 1.0):
-        raise ValueError("level must satisfy 0 < level < 1")
+    conf = float(renamed_kwarg("reliability_smooth", "level", "confidence", level, confidence, 0.9))  # type: ignore[arg-type]
+    if not (0.0 < conf < 1.0):
+        raise ValueError("confidence must satisfy 0 < confidence < 1")
+    n_boot = int(n_boot)
+    if n_boot < 0:
+        raise ValueError(f"n_boot must be >= 0, got {n_boot}")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     grid_p = _grid(p_arr, grid_size)
     grid_logit = logit(grid_p)
@@ -318,9 +375,14 @@ def reliability_smooth(
             boot_rate[i], _ = _kernel_rate_density(
                 t[idx_b], y_arr[idx_b], w[idx_b], sigma_star, grid_logit, lattice
             )
-        a = (1.0 - level) / 2.0
-        ci_low = np.minimum(np.quantile(boot_rate, a, axis=0), event_rate)
-        ci_high = np.maximum(np.quantile(boot_rate, 1.0 - a, axis=0), event_rate)
+        a = (1.0 - conf) / 2.0
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN columns
+            q_lo = np.nanquantile(boot_rate, a, axis=0)
+            q_hi = np.nanquantile(boot_rate, 1.0 - a, axis=0)
+        gap = np.isnan(event_rate)
+        ci_low = np.where(gap, np.nan, np.fmin(q_lo, event_rate))
+        ci_high = np.where(gap, np.nan, np.fmax(q_hi, event_rate))
     else:
         ci_low = event_rate.copy()
         ci_high = event_rate.copy()
@@ -346,9 +408,10 @@ def corp_reliability(
     *,
     sample_weight: object = None,
     bands: str | None = "consistency",
-    level: float = 0.9,
+    confidence: float = 0.9,
     n_resamples: int = 200,
     random_state: int = 42,
+    level: object = UNSET,
 ) -> CorpResult:
     """CORP reliability diagram with the Brier/log-loss MCB-DSC-UNC decomposition.
 
@@ -366,18 +429,21 @@ def corp_reliability(
     y, p : array_like
         Outcomes and predicted probabilities.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
     bands : {"consistency", "confidence", None}, keyword-only
         Band type to compute around the PAV fit. ``"consistency"`` resamples
         ``y ~ Bernoulli(p)`` under the null that ``p`` is calibrated;
         ``"confidence"`` bootstraps ``(y, p, sample_weight)`` triples. Both
         give pointwise, not simultaneous, bands (see Notes).
-    level : float, keyword-only
-        Nominal coverage level of the bands; must satisfy ``0 < level < 1``.
+    confidence : float, keyword-only
+        Nominal coverage level of the bands; must satisfy
+        ``0 < confidence < 1`` (stored as ``CorpResult.level``).
     n_resamples : int, keyword-only
         Number of resamples used to build the bands.
     random_state : int, keyword-only
         Seed for ``numpy.random.default_rng``, used by the band resampling.
+    level : float, keyword-only
+        Deprecated spelling of ``confidence`` (removed in 0.5.0).
 
     Returns
     -------
@@ -389,11 +455,11 @@ def corp_reliability(
     ------
     ValueError
         If ``bands`` is not one of ``"consistency"``, ``"confidence"``, or
-        ``None``, or if ``level`` is not in ``(0, 1)``.
+        ``None``, or if ``confidence`` is not in ``(0, 1)``.
 
     Notes
     -----
-    Bands are pointwise: at each grid point, ``level`` of resamples fall
+    Bands are pointwise: at each grid point, ``confidence`` of resamples fall
     inside, not that the whole curve does so simultaneously (the
     ``docs/scripts/corp_sim.py`` coverage simulation reports the gap between
     pointwise and uniform coverage). ``corp_reliability`` with
@@ -414,13 +480,14 @@ def corp_reliability(
     """
     if bands not in _BANDS:
         raise ValueError('bands must be "consistency", "confidence", or None')
-    if not (0.0 < level < 1.0):
-        raise ValueError("level must satisfy 0 < level < 1")
+    conf = float(renamed_kwarg("corp_reliability", "level", "confidence", level, confidence, 0.9))  # type: ignore[arg-type]
+    if not (0.0 < conf < 1.0):
+        raise ValueError("confidence must satisfy 0 < confidence < 1")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     lo, hi, level_b, w_b, pav = corp_fit(y_arr, p_arr, w)
     b = decompose(y_arr, p_arr, pav, w, "brier")
     ll = decompose(y_arr, p_arr, pav, w, "log_loss")
-    grid, low, high = corp_bands(y_arr, p_arr, w, bands, level, n_resamples, random_state)
+    grid, low, high = corp_bands(y_arr, p_arr, w, bands, conf, n_resamples, random_state)
     return CorpResult(
         block_lo=lo,
         block_hi=hi,
@@ -436,7 +503,7 @@ def corp_reliability(
         log_loss_dsc=ll[2],
         log_loss_unc=ll[3],
         bands=bands,
-        level=level,
+        level=conf,
         band_grid=grid,
         band_low=low,
         band_high=high,
@@ -452,7 +519,8 @@ class EcceCurve:
     Attributes
     ----------
     frac : numpy.ndarray
-        Cumulative fraction of observations, ``1/n .. 1``.
+        Cumulative weight fraction at the end of each block of tied
+        predictions (``1/n .. 1`` for distinct scores and unit weights).
     cumdev : numpy.ndarray
         Cumulative-deviation walk value at each ``frac``.
     sd_null : numpy.ndarray
@@ -474,17 +542,23 @@ class EcceCurve:
 def ecce_curve(y: object, p: object, *, sample_weight: object = None) -> EcceCurve:
     """Cumulative-deviation walk for the ECCE plot (Arrieta-Ibarra et al., 2022).
 
-    Sorts by prediction and accumulates weighted residuals, mirroring
-    ``metrics.ecce`` exactly so ``stat_max`` agrees with the metric.
-    ``sd_null`` is the pointwise standard deviation of the walk under
-    calibration — an envelope for reading, not a simultaneous band.
+    Sorts by prediction and accumulates weighted residuals with the same
+    helper as ``metrics.ecce``, so ``stat_max`` agrees with the metric. The
+    walk is reported only at the end of each block of tied predictions (the
+    order of tied rows is arbitrary, so intermediate points carry no
+    information); ``frac`` is the cumulative weight fraction. ``sd_null`` is
+    the pointwise standard deviation of the walk under calibration — an
+    envelope for reading, not a simultaneous band — computed with the
+    Kish-rescaled weights of the package weight convention
+    (``sqrt(cumsum(p (1 - p))) / n`` for unit weights; 0.3.x used
+    ``w**2``, which ignored the weights' scale).
 
     Parameters
     ----------
     y, p : array_like
         Outcomes and predicted probabilities.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
@@ -492,21 +566,46 @@ def ecce_curve(y: object, p: object, *, sample_weight: object = None) -> EcceCur
         Cumulative walk, null-envelope SD, and the max-deviation summary.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    order = np.argsort(p_arr, kind="stable")
-    n = len(p_arr)
-    wsum = w.sum()
-    cumdev = np.cumsum(w[order] * (y_arr[order] - p_arr[order])) / wsum
-    # Pointwise H0 SD; reduces to sqrt(cumsum(p(1-p)))/n for unit weights.
-    sd_null = np.sqrt(np.cumsum(w[order] ** 2 * p_arr[order] * (1.0 - p_arr[order]))) / wsum
-    frac = np.arange(1, n + 1) / n
-    k = int(np.argmax(np.abs(cumdev)))
+    walk = _ecce_walk(y_arr, p_arr, w, sd=True)
+    assert walk.sd_null is not None
+    k = int(np.argmax(np.abs(walk.cumdev)))
     return EcceCurve(
-        frac=frac,
-        cumdev=cumdev,
-        sd_null=sd_null,
-        stat_max=float(np.abs(cumdev[k])),
-        argmax_frac=float(frac[k]),
+        frac=walk.frac,
+        cumdev=walk.cumdev,
+        sd_null=walk.sd_null,
+        stat_max=float(np.abs(walk.cumdev[k])),
+        argmax_frac=float(walk.frac[k]),
     )
+
+
+def _belt_result(
+    grid_p: np.ndarray,
+    grid_z: np.ndarray,
+    levels: tuple[float, float],
+    bands: dict[float, tuple[np.ndarray, np.ndarray]],
+    degree: int,
+    p_value: float,
+) -> BeltResult:
+    """Build a :class:`BeltResult`, filling the neutral ``levels``/``bands``
+    fields when the result class has them (see the 0.4.0 notes)."""
+    lo_a, hi_a = bands[levels[0]]
+    lo_b, hi_b = bands[levels[1]]
+    kw: dict[str, object] = {
+        "grid_p": grid_p,
+        "grid_logit": grid_z,
+        "lower_80": lo_a,
+        "upper_80": hi_a,
+        "lower_95": lo_b,
+        "upper_95": hi_b,
+        "degree": degree,
+        "p_value": p_value,
+    }
+    names = {f.name for f in fields(BeltResult)}
+    if "levels" in names:
+        kw["levels"] = levels
+    if "bands" in names:
+        kw["bands"] = bands
+    return BeltResult(**{k: v for k, v in kw.items() if k in names})  # type: ignore[arg-type]
 
 
 def calibration_belt(
@@ -521,12 +620,26 @@ def calibration_belt(
 
     Fits a polynomial logistic recalibration of the outcome on
     ``logit(p)``, selecting the degree by forward likelihood-ratio testing
-    (p < 0.05 to add a term, capped at degree 4), then draws pointwise
-    confidence bands from the information-matrix ellipsoid — a Wald
-    approximation of the LR-region inversion. The
-    associated p-value tests the fitted polynomial against the identity.
+    (p < 0.05 to add a term, capped at degree 4). The polynomial is fitted on
+    the centred and scaled logit (same model, better-conditioned design).
+
+    Both outputs are approximations of the published construction:
+
+    * **Belt.** At each confidence level the band is the image of the Wald
+      (information-matrix) ellipsoid with radius ``chi2_ppf(level, degree +
+      1)`` — a quadratic approximation of the likelihood-ratio confidence
+      region the papers invert. Using the ``degree + 1``-df radius makes it
+      a *simultaneous* (Scheffé-type) band over the grid for the selected
+      polynomial, not a pointwise one; it conditions on the selected degree.
+    * **p-value.** The likelihood-ratio test of the selected polynomial
+      against the identity, referred to ``chi2(degree + 1)``; it ignores the
+      forward selection of the degree, whose exact null distribution
+      (Nattino et al., 2014) puts more mass in the upper tail, so the
+      p-value is anti-conservative.
+
     Where the band excludes the diagonal, the data reject calibration in
-    that region.
+    that region. Weights follow the package convention (Kish-rescaled for
+    the LR tests and the information matrix; unit weights unchanged).
 
     Parameters
     ----------
@@ -539,79 +652,70 @@ def calibration_belt(
         Number of evaluation points, spanning the 0.5th to 99.5th percentile
         of ``p``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
     BeltResult
         Grid coordinates, both confidence bands, selected polynomial degree,
-        and the associated calibration-test p-value.
+        and the associated calibration-test p-value. The band for
+        ``confidence[0]`` is stored in ``lower_80``/``upper_80`` and the band
+        for ``confidence[1]`` in ``lower_95``/``upper_95`` whatever the
+        levels are (the names follow the defaults).
     """
+    levels = tuple(float(c) for c in confidence)
+    if len(levels) != 2 or not all(0.0 < c < 1.0 for c in levels):
+        raise ValueError("confidence must be two levels in (0, 1)")
+    grid_size = validate_positive_int(grid_size, "grid_size")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
+    we = effective_weights(w)
     z = logit(p_arr)
+    centre = float(np.average(z, weights=we))
+    spread = float(np.sqrt(np.average((z - centre) ** 2, weights=we)))
+    if not spread > 0.0:
+        spread = 1.0
 
-    def design(deg: int, t: np.ndarray) -> np.ndarray:
+    def design(deg: int, zz: np.ndarray) -> np.ndarray:
+        t = (zz - centre) / spread
         return np.column_stack([t**k for k in range(deg + 1)])
 
-    def loglik(beta: np.ndarray, deg: int) -> float:
-        prob = np.clip(expit(design(deg, z) @ beta), 1e-12, 1.0 - 1e-12)
-        return float(np.sum(w * (y_arr * np.log(prob) + (1.0 - y_arr) * np.log1p(-prob))))
+    def loglik(prob: np.ndarray) -> float:
+        prob = np.clip(prob, EPS, 1.0 - EPS)
+        return float(np.sum(we * (y_arr * np.log(prob) + (1.0 - y_arr) * np.log1p(-prob))))
 
     # Forward LR selection of the polynomial degree. A separated fit's
     # coefficients come from the ridge fallback: usable as a terminal fit,
     # never a basis for extension.
     degree = 1
-    fit = irls_logistic(design(1, z), y_arr, w=w)
-    ll = loglik(fit.beta, 1)
+    fit = irls_logistic(design(1, z), y_arr, w=we)
+    ll = loglik(expit(design(1, z) @ fit.beta))
     while degree < 4 and not fit.separation:
-        cand = irls_logistic(design(degree + 1, z), y_arr, w=w)
+        X_cand = design(degree + 1, z)
+        cand = irls_logistic(X_cand, y_arr, w=we)
         if cand.separation:
             break
-        ll_cand = loglik(cand.beta, degree + 1)
-        lr = max(2.0 * (ll_cand - ll), 0.0)
-        p_add = 1.0 - float(gammainc_lower(0.5, lr / 2.0))  # chi-square df=1
-        if p_add >= 0.05:
+        ll_cand = loglik(expit(X_cand @ cand.beta))
+        if chi2_sf(max(2.0 * (ll_cand - ll), 0.0), 1.0) >= 0.05:
             break
         degree += 1
         fit, ll = cand, ll_cand
 
     # Associated calibration test: fitted polynomial vs the identity map.
-    ll_null = float(
-        np.sum(
-            w
-            * (
-                y_arr * np.log(np.clip(p_arr, 1e-12, 1))
-                + (1.0 - y_arr) * np.log(np.clip(1.0 - p_arr, 1e-12, 1))
-            )
-        )
-    )
-    lr_cal = max(2.0 * (ll - ll_null), 0.0)
     df = degree + 1
-    p_value = 1.0 - float(gammainc_lower(df / 2.0, lr_cal / 2.0))
+    p_value = chi2_sf(max(2.0 * (ll - loglik(p_arr)), 0.0), float(df))
 
-    # Pointwise bands from the information-matrix ellipsoid.
+    # Bands from the information-matrix ellipsoid.
     X = design(degree, z)
     mu = expit(np.clip(X @ fit.beta, -30.0, 30.0))
-    info = (X * (w * mu * (1.0 - mu))[:, None]).T @ X
+    info = (X * (we * mu * (1.0 - mu))[:, None]).T @ X
     info_inv = np.linalg.inv(info + 1e-10 * np.eye(df))
     grid_p = _grid(p_arr, grid_size)
     grid_z = logit(grid_p)
     Xg = design(degree, grid_z)
     eta = Xg @ fit.beta
     se_sq = np.einsum("ij,jk,ik->i", Xg, info_inv, Xg)
-    bands = {}
-    for conf in confidence:
+    bands: dict[float, tuple[np.ndarray, np.ndarray]] = {}
+    for conf in levels:
         radius = np.sqrt(chi2_ppf(conf, float(df)) * se_sq)
         bands[conf] = (expit(eta - radius), expit(eta + radius))
-    lo_80, hi_80 = bands[confidence[0]]
-    lo_95, hi_95 = bands[confidence[1]]
-    return BeltResult(
-        grid_p=grid_p,
-        grid_logit=grid_z,
-        lower_80=lo_80,
-        upper_80=hi_80,
-        lower_95=lo_95,
-        upper_95=hi_95,
-        degree=degree,
-        p_value=p_value,
-    )
+    return _belt_result(grid_p, grid_z, (levels[0], levels[1]), bands, degree, p_value)

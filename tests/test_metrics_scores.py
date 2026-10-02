@@ -89,3 +89,55 @@ def test_scores_vs_sklearn() -> None:
     y, p = _calibrated(2000)
     assert abs(log_loss(y, p) - skm.log_loss(y, p)) < 1e-10
     assert abs(brier_score(y, p) - skm.brier_score_loss(y, p)) < 1e-10
+
+
+# ------------------------------------------------------------------ 0.4.0 fixes
+
+
+def _old_murphy(y: np.ndarray, p: np.ndarray, n_bins: int = 10, bias_corrected: bool = False):
+    from probcal.metrics._binstats import bin_index
+
+    idx, m = bin_index(p, n_bins, "mass")
+    y_bar = float(np.mean(y))
+    rel = res = 0.0
+    for b in range(m):
+        mask = idx == b
+        if not np.any(mask):
+            continue
+        pb, yb, nb = float(np.mean(p[mask])), float(np.mean(y[mask])), int(mask.sum())
+        rel_term, res_term = (pb - yb) ** 2, (yb - y_bar) ** 2
+        if bias_corrected and nb > 1:
+            var_yb = yb * (1.0 - yb) / (nb - 1)
+            rel_term, res_term = max(rel_term - var_yb, 0.0), max(res_term - var_yb, 0.0)
+        rel += nb / len(y) * rel_term
+        res += nb / len(y) * res_term
+    return rel, res
+
+
+@pytest.mark.parametrize("bias_corrected", [False, True])
+def test_murphy_vectorized_matches_old_loop(bias_corrected: bool) -> None:
+    rng = np.random.default_rng(8)
+    p = expit(rng.normal(-1.0, 1.0, 3000))
+    y = (rng.random(3000) < p).astype(float)
+    got = murphy_decomposition(y, p, bias_corrected=bias_corrected)
+    rel, res = _old_murphy(y, p, bias_corrected=bias_corrected)
+    assert got.reliability == pytest.approx(rel, rel=1e-12, abs=1e-16)
+    assert got.resolution == pytest.approx(res, rel=1e-12, abs=1e-16)
+
+
+def test_murphy_bias_correction_uses_kish_counts() -> None:
+    # Regression (MET-7): the correction used raw counts whatever the weights.
+    rng = np.random.default_rng(9)
+    p = expit(rng.normal(-1.0, 1.0, 2000))
+    y = (rng.random(2000) < p).astype(float)
+    w = np.where(np.arange(2000) % 20 == 0, 40.0, 1.0)
+    a = murphy_decomposition(y, p, bias_corrected=True, sample_weight=w)
+    b = murphy_decomposition(y, p, bias_corrected=True, sample_weight=5.0 * w)
+    assert a.reliability == pytest.approx(b.reliability, rel=1e-12)
+    from probcal.metrics._binstats import bin_stats
+
+    bs = bin_stats(y, p, w, 10, "mass")
+    n_eff = bs.w_sum * w.sum() / np.dot(w, w)
+    var = bs.rate * (1 - bs.rate) / (n_eff - 1)
+    want = np.sum(bs.w_sum / w.sum() * np.maximum((bs.p_mean - bs.rate) ** 2 - var, 0.0))
+    assert a.reliability == pytest.approx(want, rel=1e-12)

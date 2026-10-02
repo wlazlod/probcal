@@ -4,7 +4,7 @@ A fixed-sample audit has no "past" batches to build a predictable plug-in
 from (unlike ``probcal.monitor``, which learns its offset/shape plug-ins
 from strictly earlier data), so the honest fixed-sample e-value is the
 **mixture** likelihood ratio alone: average the Bernoulli likelihood-ratio
-factor ``LR_i(sigma(z_i + delta) : p_i)`` (``monitor._processes.bern_log_lr``)
+factor ``LR_i(sigma(z_i + delta) : p_i)`` (``probcal._math.bern_log_lr``)
 over a fixed, data-independent grid of offsets ``delta``, symmetrized to
 ``+/-`` the same way ``CalibrationMonitor`` symmetrizes its own mixture
 grid. Averages of e-values are e-values, so each grade's mixture average is
@@ -29,7 +29,8 @@ import numpy as np
 
 from .._math import bern_log_lr, expit, logit, logsumexp
 from .._results import Interpretation, _ResultBase
-from .scores import _prep
+from ._common import _prep
+from ._grades import grade_labels, resolve_order
 
 
 @dataclass(frozen=True)
@@ -132,7 +133,7 @@ def hl_e_test(
     ``log E_g = logsumexp_{delta in +/-mixture_grid}(sum_{i in g} log
     LR_i(sigma(z_i + delta) : p_i)) - log(2 * len(mixture_grid))``
 
-    i.e. the log-mean Bernoulli log-likelihood-ratio (``monitor._processes
+    i.e. the log-mean Bernoulli log-likelihood-ratio (``probcal._math
     .bern_log_lr``) of the grade's observations, averaged over the
     symmetrized offset grid -- the same mixture construction
     ``CalibrationMonitor``'s offset e-process uses, applied once per grade
@@ -149,8 +150,11 @@ def hl_e_test(
 
     Sample weights, when given, enter as exponents on the Bernoulli factors
     (passed straight into ``bern_log_lr``) -- consistent with how
-    ``CalibrationMonitor`` and the rest of ``probcal.metrics`` treat
-    weights, but note that non-integer weights break the interpretation of
+    ``CalibrationMonitor`` treats weights. This is the literal-frequency
+    reading, an exception to the relative-weight convention of the rest of
+    ``probcal.metrics`` (:mod:`probcal.metrics._common`): rescaling all
+    weights by ``c`` multiplies every log-likelihood-ratio term by ``c``. Note that
+    non-integer weights break the interpretation of
     ``LR`` as a genuine likelihood ratio of independent Bernoulli draws
     (the same caveat ``docs/concepts/monitoring.md`` records for the
     monitor).
@@ -169,7 +173,7 @@ def hl_e_test(
         Positive logit-scale offsets; symmetrized to ``+/-`` before
         averaging (matching ``CalibrationMonitor(mixture_grid=...)``).
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
@@ -199,11 +203,7 @@ def hl_e_test(
     True
     """
     y_arr, p_arr, w_arr = _prep(y, p, sample_weight)
-    from .grade import _resolve_grades
-
-    g_arr, order = _resolve_grades(grades, p_arr)
-    if g_arr.ndim != 1 or len(g_arr) != len(y_arr):
-        raise ValueError("grades must be a 1-D array matching y and p in length")
+    g_arr, default_order = grade_labels(grades, p_arr, len(y_arr))
     grid = np.asarray(mixture_grid, dtype=np.float64)
     if grid.ndim != 1 or grid.size == 0:
         raise ValueError("mixture_grid must be a non-empty 1-D sequence")
@@ -214,14 +214,10 @@ def hl_e_test(
     log_norm = float(np.log(2.0 * grid.size))
     z_arr = logit(p_arr)
 
-    g_str = g_arr
-    if order is not None:
-        labels = order
-    else:
-        labels = tuple(str(label) for label in sorted(np.unique(g_str)))
+    labels = resolve_order(g_arr, None, default_order)
     log_e_grade = np.empty(len(labels))
     for i, label in enumerate(labels):
-        mask = g_str == label
+        mask = g_arr == label
         y_g, p_g, z_g, w_g = y_arr[mask], p_arr[mask], z_arr[mask], w_arr[mask]
         log_terms = np.array([bern_log_lr(y_g, p_g, expit(z_g + delta), w_g) for delta in offsets])
         log_e_grade[i] = logsumexp(log_terms) - log_norm

@@ -24,8 +24,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import logit, norm_cdf
-from .scores import _prep
+from .._math import logit, norm_sf
+from .._validation import validate_positive_int
+from ._common import _prep
 
 _MAX_MEDIAN_POINTS = 4096
 
@@ -241,8 +242,7 @@ def skce_test(
     """
     if method not in ("bootstrap", "asymptotic"):
         raise ValueError(f"method must be 'bootstrap' or 'asymptotic', got {method!r}")
-    if n_boot < 1:
-        raise ValueError(f"n_boot must be at least 1, got {n_boot}")
+    n_boot = validate_positive_int(n_boot, "n_boot")
     y_arr, p_arr, _ = _prep(y, p, None)
     n = len(p_arr)
     if n < 4:
@@ -258,7 +258,7 @@ def skce_test(
             p_value = 1.0 if stat <= 0.0 else 0.0
         else:
             z = math.sqrt(len(terms)) * stat / sd
-            p_value = float(1.0 - norm_cdf(np.array([z]))[0])
+            p_value = norm_sf(z)
         return SkceTestResult(
             statistic=stat,
             estimator="ul",
@@ -277,7 +277,10 @@ def skce_test(
     rng = np.random.default_rng(random_state)
     counts = rng.multinomial(n, np.full(n, 1.0 / n), size=n_boot).astype(np.float64)
     quad = np.einsum("bi,ij,bj->b", counts, h_tilde, counts)
-    t_b = (quad - counts @ np.diag(h_tilde)) / n
+    # Same scale as t_obs = n * U_n = S / (n - 1), with S the off-diagonal sum:
+    # the resampled off-diagonal sum over (n - 1). (0.3.x divided by n, which
+    # shrank every replicate by (n - 1) / n and made p-values anti-conservative.)
+    t_b = (quad - counts @ np.diag(h_tilde)) / (n - 1)
     p_value = float((1 + int(np.sum(t_b >= t_obs))) / (n_boot + 1))
     return SkceTestResult(
         statistic=stat,

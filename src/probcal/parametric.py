@@ -12,15 +12,10 @@ import warnings
 
 import numpy as np
 
-from ._math import bisect, expit, irls_logistic, logit
+from ._math import bisect, expit, expit1, irls_logistic, logit, logit1
 from ._registry import register
 from ._results import Interpretation
-from .base import (
-    BaseCalibrator,
-    UnattainableTargetError,
-    _check_representable,
-    _validate_point_targets,
-)
+from .base import BaseCalibrator, UnattainableTargetError
 
 _U_LO = 1e-6
 _U_HI = 1e6
@@ -31,6 +26,31 @@ _IRLS_NOT_CONVERGED = (
 )
 
 _BETA_INVERSE_KAPPA = 1.524  # minimax hyperbola parameter (max deviation 0.076)
+
+
+def _fit_logit_scale(
+    z: np.ndarray, y: np.ndarray, w: np.ndarray, lo: float, hi: float
+) -> tuple[float, str | None]:
+    """MLE of ``u`` in ``g = sigma(u * z)`` on ``[lo, hi]`` (temperature / Beta "a").
+
+    The score ``sum w * z * (sigma(u z) - y)`` is non-decreasing in ``u`` (the
+    NLL is convex), so its root is bracketed and found by bisection. Without
+    a sign change the NLL has no interior minimum and the nearer boundary is
+    returned together with its name (``"lo"`` or ``"hi"``) for the caller to
+    report — likewise when the root sits exactly on a bracket end; otherwise
+    the second element is ``None``.
+    """
+
+    def score(u: float) -> float:
+        return float(np.sum(w * z * (expit(u * z) - y)))
+
+    f_lo, f_hi = score(lo), score(hi)
+    if f_lo * f_hi > 0.0:
+        return (lo, "lo") if abs(f_lo) <= abs(f_hi) else (hi, "hi")
+    u = bisect(score, lo, hi, tol=1e-12)
+    # A score that vanishes exactly at a bracket end (saturated sigmoid on
+    # separated data) is a boundary solution too, not an interior minimum.
+    return u, ("lo" if u == lo else "hi" if u == hi else None)
 
 
 def _beta_point_inverse_z(
@@ -180,15 +200,6 @@ class PlattCalibrator(BaseCalibrator):
         """Parsimony rank 2.0: a two-parameter map, simpler than the nonparametric methods."""
         return 2.0
 
-    def _closed_inverse(self, t: float) -> float:
-        return float(expit(np.array([(logit(np.array([t]))[0] - self.b_) / self.a_]))[0])
-
-    def _inverse_left(self, t: float) -> float:
-        return self._closed_inverse(t)
-
-    def _inverse_right(self, t: float) -> float:
-        return self._closed_inverse(t)
-
     def interpret(self) -> Interpretation:
         """Read the fitted slope and intercept against the identity ``(1, 0)``.
 
@@ -225,8 +236,10 @@ class PlattCalibrator(BaseCalibrator):
 class TemperatureCalibrator(BaseCalibrator):
     """Temperature scaling: ``g(s) = sigma(logit(s) / T)``.
 
-    ``T`` minimizes the calibration-set negative log-likelihood via a
-    safeguarded 1-D Newton iteration (bisection fallback) on ``u = 1/T``.
+    ``T`` minimizes the calibration-set negative log-likelihood: the score in
+    ``u = 1/T`` is monotone, so its root is found by bisection on
+    ``u in [1e-6, 1e6]``; without an interior minimum the nearer boundary is
+    used and a ``UserWarning`` is raised.
 
     Attributes
     ----------
@@ -244,22 +257,14 @@ class TemperatureCalibrator(BaseCalibrator):
     _STATE_ATTRS = ("T_",)
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        z = logit(s)
-
-        def score(u: float) -> float:
-            return float(np.sum(w * z * (expit(u * z) - y)))
-
-        f_lo, f_hi = score(_U_LO), score(_U_HI)
-        if f_lo * f_hi > 0.0:
-            u = _U_LO if abs(f_lo) <= abs(f_hi) else _U_HI
+        u, boundary = _fit_logit_scale(logit(s), y, w, _U_LO, _U_HI)
+        if boundary is not None:
             warnings.warn(
                 "TemperatureCalibrator: NLL has no interior minimum in "
                 f"1/T ∈ [{_U_LO:g}, {_U_HI:g}]; clamping to the boundary",
                 UserWarning,
                 stacklevel=2,
             )
-        else:
-            u = bisect(score, _U_LO, _U_HI, tol=1e-12)
         self.T_ = float(1.0 / u)
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
@@ -275,15 +280,6 @@ class TemperatureCalibrator(BaseCalibrator):
     def complexity_rank(self) -> float:
         """Parsimony rank 1.0: the simplest map, a single parameter."""
         return 1.0
-
-    def _closed_inverse(self, t: float) -> float:
-        return float(expit(np.array([self.T_ * logit(np.array([t]))[0]]))[0])
-
-    def _inverse_left(self, t: float) -> float:
-        return self._closed_inverse(t)
-
-    def _inverse_right(self, t: float) -> float:
-        return self._closed_inverse(t)
 
     def interpret(self) -> Interpretation:
         """Read the fitted temperature against the identity ``T = 1``."""
@@ -319,7 +315,9 @@ class BetaCalibrator(BaseCalibrator):
     additionally fixes ``c = 0`` (a single-parameter map, the temperature
     family in a different parameterization). The monotonicity constraint
     ``a, b >= 0`` is enforced by the betacal refit strategy: a negative
-    exponent drops its feature and refits.
+    exponent drops its feature and refits. :meth:`point_inverse` is exact for
+    every variant, including the non-affine ``"abm"`` (see
+    :meth:`_point_inverse_logit`).
 
     Parameters
     ----------
@@ -391,19 +389,17 @@ class BetaCalibrator(BaseCalibrator):
             else:
                 self.c_ = float(beta[0])
             self.a_ = self.b_ = a
-        else:  # "a": a = b, c = 0
-            z = ln_s + ln_1ms
-
-            def score(u: float) -> float:
-                return float(np.sum(w * z * (expit(u * z) - y)))
-
-            f_lo, f_hi = score(0.0), score(_U_HI)
-            if f_lo * f_hi > 0.0:
-                a = 0.0 if abs(f_lo) <= abs(f_hi) else _U_HI
-                if a == 0.0:
-                    self.constraint_active_ = True
-            else:
-                a = bisect(score, 0.0, _U_HI, tol=1e-12)
+        else:  # "a": a = b, c = 0 — the temperature family, u = a
+            a, boundary = _fit_logit_scale(ln_s + ln_1ms, y, w, 0.0, _U_HI)
+            if boundary == "lo":
+                self.constraint_active_ = True  # monotonicity constraint a >= 0
+            elif boundary == "hi":
+                warnings.warn(
+                    "BetaCalibrator(variant='a'): NLL has no interior minimum in "
+                    f"a ∈ [0, {_U_HI:g}]; clamping to the boundary",
+                    UserWarning,
+                    stacklevel=2,
+                )
             self.a_ = self.b_ = float(a)
             self.c_ = 0.0
 
@@ -440,8 +436,7 @@ class BetaCalibrator(BaseCalibrator):
 
     @staticmethod
     def _intercept_only(y: np.ndarray, w: np.ndarray) -> float:
-        p = float(np.average(y, weights=w))
-        return float(logit(np.array([p]))[0])
+        return logit1(float(np.average(y, weights=w)))
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         return expit(self.a_ * np.log(s) + self.b_ * (-np.log1p(-s)) + self.c_)
@@ -459,104 +454,49 @@ class BetaCalibrator(BaseCalibrator):
             return (self.a_, self.c_)
         return None
 
-    def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
-        """Raw scores whose calibrated probabilities equal ``p`` (exact preimage).
+    def _point_inverse_logit(self, p: np.ndarray) -> np.ndarray:
+        """Exact raw logits for validated targets ``p`` (hook of ``point_inverse``).
 
-        Overrides :meth:`BaseCalibrator.point_inverse` with the beta
-        family's own exact construction, so the ``"abm"``
-        variant — not affine on the logit scale — still gets a closed-form
-        inverse instead of falling back to :meth:`interval_inverse`'s
-        bisection. With ``z = logit(s)`` and ``K = logit(p) - c``, the
-        forward map is ``a*z + (b-a)*softplus(z) = K``, solved by a
-        minimax-hyperbola seed refined by up to 4 certified Halley steps
-        (:func:`_beta_point_inverse_z`). Degenerate exponents are handled by
-        dedicated closed forms: ``a == b`` collapses to the affine formula
-        ``z = K/a``; ``a == 0`` (``h`` ranges over ``(0, inf)``, attainable
-        probability range ``(sigma(c), 1)``) gives ``z = ln(expm1(K/b))``;
-        ``b == 0`` (range ``(-inf, 0)``, attainable range ``(0, sigma(c))``)
-        gives ``z = -ln(expm1(-K/a))``; ``a == b == 0`` is a constant map
-        with no point inverse.
-
-        Parameters
-        ----------
-        p : array_like
-            Calibrated probabilities strictly inside ``(0, 1)``; boundary
-            and out-of-range values raise ``UnattainableTargetError``
-            (all-or-nothing, no silent clamp).
-        space : {"probability", "logit"}, keyword-only
-            Scale of the returned raw values.
-
-        Returns
-        -------
-        numpy.ndarray
-            Raw scores (or logits, if ``space="logit"``) whose calibrated
-            probability equals ``p``.
-
-        Raises
-        ------
-        RuntimeError
-            If not yet fitted; or if the general (``a != b``, both nonzero)
-            case fails to certify to machine precision after 4 Halley steps
-            (only reachable at exponent ratios far outside the numerically
-            verified domain, ``a, b in (0, 5]`` and ratio ``<= 50`` — see
-            :func:`_beta_point_inverse_z`).
-        ValueError
-            If ``space`` is not ``"probability"`` or ``"logit"``.
-        NotImplementedError
-            If the calibrator is not monotone, or the fit collapsed to a
-            constant map (``a == b == 0``): a constant map has no point
-            inverse.
-        UnattainableTargetError
-            If any element of ``p`` lies outside the open interval
-            ``(0, 1)``, or outside the attainable probability range of a
-            degenerate (``a == 0`` or ``b == 0``) fit — ``p`` is validated
-            all-or-nothing: if any element is outside the range (named in
-            the error message), the whole call raises and no element is
-            silently clamped. Also raised when ``space="probability"`` and
-            the raw logit of any result exceeds ``logit(1 - 1e-12)`` in
-            magnitude — the probability representation would round to
-            0.0/1.0 and silently fail to round-trip; ``space="logit"`` is
-            exact there.
+        :meth:`BaseCalibrator.point_inverse` validates, refuses non-monotone
+        fits and unrepresentable results; this hook supplies the beta
+        family's own exact construction, so the ``"abm"`` variant — not affine
+        on the logit scale — still gets a closed-form inverse. With
+        ``z = logit(s)`` and ``K = logit(p) - c``, the forward map is
+        ``a*z + (b-a)*softplus(z) = K``, solved by a minimax-hyperbola seed
+        refined by up to 4 certified Halley steps
+        (:func:`_beta_point_inverse_z`; ``RuntimeError`` only at exponent
+        ratios far outside the verified domain ``a, b in (0, 5]``, ratio
+        ``<= 50``). Degenerate exponents use closed forms: ``a == b`` gives
+        ``z = K/a``; ``a == 0`` (attainable range ``(sigma(c), 1)``) gives
+        ``z = ln(expm1(K/b))``; ``b == 0`` (range ``(0, sigma(c))``) gives
+        ``z = -ln(expm1(-K/a))``; targets outside a degenerate fit's range raise
+        ``UnattainableTargetError`` (all-or-nothing). ``a == b == 0`` is a
+        constant map: ``NotImplementedError``.
         """
-        self._check_fitted()
-        if not self.is_monotone_:
-            raise NotImplementedError(
-                f"{type(self).__name__} is not monotone (is_monotone_=False); its preimage "
-                "may be a union of intervals. Use a monotone calibrator for thresholding "
-                "and recourse."
-            )
-        if space not in ("probability", "logit"):
-            raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
-        arr = _validate_point_targets(p)
         a, b = self.a_, self.b_
-        K = logit(arr) - self.c_
+        K = logit(p) - self.c_
         if a == 0.0 and b == 0.0:
             raise NotImplementedError(
                 f"{type(self).__name__} fitted a constant map (a=b=0); it has no exact point "
                 "inverse; use interval_inverse"
             )
         if a == b:
-            z = K / a
-        elif a == 0.0:
-            lo = float(expit(np.array([self.c_]))[0])
+            return K / a
+        if a == 0.0:
             if np.any(K <= 0.0):
                 raise UnattainableTargetError(
                     f"calibrated target is outside the attainable probability range "
-                    f"({lo:.6g}, 1) of this degenerate (a=0) beta fit"
+                    f"({expit1(self.c_):.6g}, 1) of this degenerate (a=0) beta fit"
                 )
-            z = np.log(np.expm1(K / b))
-        elif b == 0.0:
-            hi = float(expit(np.array([self.c_]))[0])
+            return np.log(np.expm1(K / b))
+        if b == 0.0:
             if np.any(K >= 0.0):
                 raise UnattainableTargetError(
                     f"calibrated target is outside the attainable probability range "
-                    f"(0, {hi:.6g}) of this degenerate (b=0) beta fit"
+                    f"(0, {expit1(self.c_):.6g}) of this degenerate (b=0) beta fit"
                 )
-            z = -np.log(np.expm1(-K / a))
-        else:
-            z = _beta_point_inverse_z(K, a, b)
-        _check_representable(z, space)
-        return z if space == "logit" else expit(z)
+            return -np.log(np.expm1(-K / a))
+        return _beta_point_inverse_z(K, a, b)
 
     @property
     def complexity_rank(self) -> float:
@@ -579,10 +519,7 @@ class BetaCalibrator(BaseCalibrator):
                 f"a = {self.a_:.3f}: sensitivity near s -> 0; a < 1 raises the smallest "
                 "probabilities (model was overconfident in the low tail), a > 1 deepens them"
             ),
-            (
-                f"b = {self.b_:.3f}: sensitivity near s -> 1; the mirrored reading for the "
-                "high tail"
-            ),
+            (f"b = {self.b_:.3f}: sensitivity near s -> 1; the mirrored reading for the high tail"),
             (
                 f"c = {self.c_:.3f}: base-rate shift of {self.c_:+.3f} log-odds, odds factor "
                 f"{np.exp(self.c_):.3f}"

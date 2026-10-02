@@ -226,3 +226,49 @@ def test_interpret_reports_tau2_and_per_segment_row() -> None:
     assert any("tau2" in m for m in result.messages)
     for g in cal.segments_:
         assert any(repr(g) in m for m in result.messages)
+
+
+# ---------------------------------------------------------------- 0.4.0 regressions
+
+
+def test_is_monotone_survives_serialization() -> None:
+    """CAL-3: 0.3.x kept is_monotone_ out of the state, so a non-monotone base
+    came back from JSON as monotone (False -> True)."""
+    from probcal.binning import HistogramBinningCalibrator
+
+    rng = np.random.default_rng(3)
+    s = rng.uniform(0.05, 0.95, 400)
+    y = (rng.random(400) < 0.3).astype(float)
+    cal = SegmentedCalibrator(base=HistogramBinningCalibrator(n_bins=12, shrinkage=None)).fit(s, y)
+    assert cal.base_.is_monotone_ is False
+    assert cal.is_monotone_ is False
+    assert SegmentedCalibrator.from_json(cal.to_json()).is_monotone_ is False
+
+
+def test_selector_base_with_custom_candidates_serializes() -> None:
+    """CAL-15: the base prototype is encoded through its own param hook."""
+    from probcal import CalibratorSelector, TemperatureCalibrator
+
+    s, y = _pd_data(900, seed=4)
+    segments = np.array(["a", "b", "c"])[np.arange(900) % 3]
+    base = CalibratorSelector(
+        candidates={"p": PlattCalibrator(), "t": TemperatureCalibrator()}, cv=3
+    )
+    cal = SegmentedCalibrator(base=base).fit(s, y, segments=segments)
+    again = SegmentedCalibrator.from_json(cal.to_json())
+    np.testing.assert_array_equal(
+        again.predict_proba(s, segments=segments), cal.predict_proba(s, segments=segments)
+    )
+    assert set(again.base.candidates) == {"p", "t"}
+
+
+def test_complexity_rank_and_interpret_name_follow_the_class() -> None:
+    """CAL-24: rank delegates to the base map; interpret names the actual class."""
+
+    class _Mine(SegmentedCalibrator):
+        pass
+
+    assert SegmentedCalibrator().complexity_rank == BetaCalibrator().complexity_rank
+    assert SegmentedCalibrator(base=PlattCalibrator()).complexity_rank == 2.0
+    s, y = _pd_data(600, seed=5)
+    assert _Mine().fit(s, y).interpret().method == "_Mine"

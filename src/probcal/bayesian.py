@@ -17,12 +17,25 @@ import numpy as np
 from ._math import lgamma_vec, pava
 from ._registry import register
 from ._results import Interpretation
-from ._serialize import decode_value, encode_value
-from ._validation import EPS
+from ._steps import aggregate_ties, bin_sums, equal_mass_edges, eval_step, migrate_state
+from ._validation import EPS, validate_positive_int
 from .base import BaseCalibrator
-from .binning import _equal_mass_edges
 
 _JEFFREYS = 0.5
+# Per-bin log normalizer of the Beta(1/2, 1/2) prior, ln B(a0, b0).
+_LOG_BETA_PRIOR = 2.0 * math.lgamma(_JEFFREYS) - math.lgamma(2.0 * _JEFFREYS)
+
+_WEIGHTS_DEPRECATED = (
+    "{cls}.weights_ is deprecated and will be removed in 0.5.0; use model_weights_ "
+    "(the ensemble weights, not sample weights)"
+)
+
+
+def _deprecated_weights(obj: BaseCalibrator) -> np.ndarray:
+    warnings.warn(
+        _WEIGHTS_DEPRECATED.format(cls=type(obj).__name__), DeprecationWarning, stacklevel=3
+    )
+    return obj.model_weights_  # type: ignore[attr-defined, no-any-return]
 
 
 @register
@@ -38,77 +51,90 @@ class BBQCalibrator(BaseCalibrator):
     ----------
     min_bins, max_bins : int or None
         Range of candidate bin counts; defaults to ``[2, ceil(sqrt(n))]``
-        capped at 50.
+        capped at 50. Bins are equal-mass in the sample weights.
 
     Attributes
     ----------
     bins_grid_ : numpy.ndarray
         Candidate bin counts.
-    weights_ : numpy.ndarray
-        Posterior weights over the candidates (sum to 1).
+    model_weights_ : numpy.ndarray
+        Posterior weights over the candidates (sum to 1). Formerly
+        ``weights_`` (deprecated alias, removed in 0.5.0).
+    model_edges_, model_rates_ : list of numpy.ndarray
+        Interior edges and posterior-mean bin rates of each candidate binning.
+    is_monotone_ : bool
+        Whether the averaged step map is non-decreasing over the whole score
+        domain — checked exactly at every bin edge of every candidate.
 
     References
     ----------
     Naeini, Cooper & Hauskrecht (2015).
     """
 
-    _STATE_ATTRS = ("bins_grid_", "weights_", "is_monotone_")
+    _STATE_ATTRS = ("bins_grid_", "model_weights_", "model_edges_", "model_rates_", "is_monotone_")
 
     def __init__(self, min_bins: int | None = None, max_bins: int | None = None) -> None:
         self.min_bins = min_bins
         self.max_bins = max_bins
 
-    def _state(self) -> dict[str, object]:
-        base = super()._state()
-        base["models"] = [[encode_value(e), encode_value(r)] for e, r in self._models]
-        return base
+    @property
+    def weights_(self) -> np.ndarray:
+        """Deprecated alias of :attr:`model_weights_` (removed in 0.5.0)."""
+        return _deprecated_weights(self)
 
     def _set_state(self, state: dict[str, object]) -> None:
-        state = dict(state)
-        models = state.pop("models")
+        state = migrate_state(state, {"weights_": "model_weights_"})
+        models = state.pop("models", None)  # pre-0.4 layout: [[edges, rates], ...]
+        if models is not None:
+            state["model_edges_"] = [e for e, _ in models]  # type: ignore[attr-defined]
+            state["model_rates_"] = [r for _, r in models]  # type: ignore[attr-defined]
         super()._set_state(state)
-        self._models = [
-            (np.asarray(decode_value(e)), np.asarray(decode_value(r)))
-            for e, r in models  # type: ignore[attr-defined, union-attr]
-        ]
+        # An empty edge list decodes as a plain list; keep every member an array.
+        edges: list[object] = self.__dict__["model_edges_"]
+        rates: list[object] = self.__dict__["model_rates_"]
+        self.model_edges_ = [np.asarray(e, dtype=np.float64) for e in edges]
+        self.model_rates_ = [np.asarray(r, dtype=np.float64) for r in rates]
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         n = len(s)
-        lo = 2 if self.min_bins is None else self.min_bins
-        hi = min(50, int(np.ceil(np.sqrt(n)))) if self.max_bins is None else self.max_bins
+        lo = 2 if self.min_bins is None else validate_positive_int(self.min_bins, "min_bins")
+        if self.max_bins is None:
+            hi = min(50, int(np.ceil(np.sqrt(n))))
+        else:
+            hi = validate_positive_int(self.max_bins, "max_bins")
         hi = max(hi, lo)
         self.bins_grid_ = np.arange(lo, hi + 1)
 
-        models = []
+        edges_list: list[np.ndarray] = []
+        rates_list: list[np.ndarray] = []
         log_marg = np.empty(len(self.bins_grid_))
         for i, b in enumerate(self.bins_grid_):
-            edges = _equal_mass_edges(s, int(b))
-            idx = np.searchsorted(edges, s, side="right")
-            m = len(edges) + 1
-            k = np.bincount(idx, weights=w * y, minlength=m)
-            tot = np.bincount(idx, weights=w, minlength=m)
+            edges = equal_mass_edges(s, int(b), w)
+            k, tot = bin_sums(np.searchsorted(edges, s, side="right"), y, w, len(edges) + 1)
             # Beta-Binomial log marginal likelihood, Jeffreys prior per bin.
             a0 = b0 = _JEFFREYS
             log_marg[i] = float(
-                np.sum(
-                    lgamma_vec(k + a0)
-                    + lgamma_vec(tot - k + b0)
-                    - lgamma_vec(tot + a0 + b0)
-                    - (
-                        lgamma_vec(np.full(m, a0))
-                        + lgamma_vec(np.full(m, b0))
-                        - lgamma_vec(np.full(m, a0 + b0))
-                    )
-                )
+                np.sum(lgamma_vec(k + a0) + lgamma_vec(tot - k + b0) - lgamma_vec(tot + a0 + b0))
+                - len(k) * _LOG_BETA_PRIOR
             )
-            rate = (k + a0) / (tot + a0 + b0)
-            models.append((edges, rate))
-        shifted = log_marg - log_marg.max()
-        wgt = np.exp(shifted)
-        self.weights_ = wgt / wgt.sum()
-        self._models = models
-        probe = np.linspace(0.01, 0.99, 199)
-        self.is_monotone_ = bool(np.all(np.diff(self._predict(probe)) >= -1e-12))
+            edges_list.append(edges)
+            rates_list.append((k + a0) / (tot + a0 + b0))
+        wgt = np.exp(log_marg - log_marg.max())
+        self.model_weights_ = wgt / wgt.sum()
+        self.model_edges_ = edges_list
+        self.model_rates_ = rates_list
+        self.is_monotone_ = self._check_monotone_exact()
+
+    def _check_monotone_exact(self) -> bool:
+        """Non-decreasing over the whole domain, checked at every breakpoint.
+
+        The averaged map is a step function whose value changes only at the
+        union of all candidates' edges, so its value at the domain floor and
+        at each edge (right-continuous) determines it completely. IEEE
+        addition and multiplication are monotone, so the comparison is exact.
+        """
+        breaks = np.unique(np.concatenate([np.asarray(e) for e in self.model_edges_] + [[EPS]]))
+        return bool(np.all(np.diff(self._predict(breaks)) >= 0.0))
 
     @property
     def complexity_rank(self) -> float:
@@ -117,17 +143,18 @@ class BBQCalibrator(BaseCalibrator):
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         out = np.zeros(len(s))
-        for weight, (edges, rate) in zip(self.weights_, self._models, strict=True):
+        for weight, edges, rate in zip(
+            self.model_weights_, self.model_edges_, self.model_rates_, strict=True
+        ):
             out += weight * rate[np.searchsorted(edges, s, side="right")]
         return out
 
     def interpret(self) -> Interpretation:
         """Read the posterior weights as uncertainty about the data's resolution."""
         self._check_fitted()
-        top = np.argsort(self.weights_)[::-1][:3]
-        top_txt = ", ".join(
-            f"B={int(self.bins_grid_[i])} (weight {self.weights_[i]:.3f})" for i in top
-        )
+        wts = self.model_weights_
+        top = np.argsort(wts)[::-1][:3]
+        top_txt = ", ".join(f"B={int(self.bins_grid_[i])} (weight {wts[i]:.3f})" for i in top)
         return Interpretation(
             method=type(self).__name__,
             param_names=("n_models",),
@@ -178,8 +205,11 @@ class ENIRCalibrator(BaseCalibrator):
         ``max_solutions`` is ``None``).
     kept_breakpoints_ : numpy.ndarray of shape (K,)
         Indices into ``path_lambdas_`` of the retained breakpoints.
-    weights_ : numpy.ndarray of shape (K,)
+    model_weights_ : numpy.ndarray of shape (K,)
         BIC weights over the retained solutions, renormalized to sum to 1.
+        Formerly ``weights_`` (deprecated alias, removed in 0.5.0).
+    scores_ : numpy.ndarray of shape (m,)
+        Distinct calibration scores: the grid ``path_solutions_`` lives on.
     dropped_weight_ : float
         BIC weight lost to retention — the weight of scored solutions that the
         ``max_solutions`` cap evicted, before renormalization; a
@@ -194,27 +224,30 @@ class ENIRCalibrator(BaseCalibrator):
     is_monotone_: bool = False
 
     _STATE_ATTRS = (
-        "_x",
+        "scores_",
         "path_lambdas_",
         "path_solutions_",
         "kept_breakpoints_",
-        "weights_",
+        "model_weights_",
         "dropped_weight_",
     )
 
     def __init__(self, max_solutions: int | None = 256) -> None:
         self.max_solutions = max_solutions
 
+    @property
+    def weights_(self) -> np.ndarray:
+        """Deprecated alias of :attr:`model_weights_` (removed in 0.5.0)."""
+        return _deprecated_weights(self)
+
     def _set_state(self, state: dict[str, object]) -> None:
-        super()._set_state(state)
-        self._mixed = self.weights_ @ self.path_solutions_  # recomputed, not stored
+        super()._set_state(migrate_state(state, {"_x": "scores_", "weights_": "model_weights_"}))
+        self._mixed = self.model_weights_ @ self.path_solutions_  # recomputed, not stored
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        if self.max_solutions is not None and self.max_solutions < 1:
-            raise ValueError("max_solutions must be a positive integer or None")
-        order = np.argsort(s, kind="stable")
-        s_sorted, y_sorted, w_sorted = s[order], y[order], w[order]
-        s_u, start = np.unique(s_sorted, return_index=True)
+        if self.max_solutions is not None:
+            validate_positive_int(self.max_solutions, "max_solutions")
+        s_u, y_u, w_u = aggregate_ties(s, y, w)
         if s_u.size > _ENIR_UNIQUE_WARN:
             # Quadratic extrapolation anchored at the measured ~0.6 min
             # (35.5s) fit at m = 50,000 on the benchmark host.
@@ -229,11 +262,9 @@ class ENIRCalibrator(BaseCalibrator):
                 UserWarning,
                 stacklevel=2,
             )
-        w_u = np.add.reduceat(w_sorted, start)
-        y_u = np.add.reduceat(w_sorted * y_sorted, start) / w_u
-        self._x = s_u
+        self.scores_ = s_u
         self._path_fit(y_u, w_u)
-        self._mixed = self.weights_ @ self.path_solutions_
+        self._mixed = self.model_weights_ @ self.path_solutions_
 
     # TODO(ENIR): an O(m log m) event-driven engine (heap-scheduled breakpoint
     # trajectory) remains possible here if the equivalence gate is relaxed
@@ -367,7 +398,7 @@ class ENIRCalibrator(BaseCalibrator):
         self.path_solutions_ = np.stack([sols[t_i] for t_i in kept_t])
         self.kept_breakpoints_ = kept_t
         self.dropped_weight_ = float(max(0.0, 1.0 - kept_w.sum()))
-        self.weights_ = kept_w / kept_w.sum()
+        self.model_weights_ = kept_w / kept_w.sum()
         if self.dropped_weight_ > 1e-6:
             warnings.warn(
                 f"ENIR dropped {self.dropped_weight_:.2e} of the BIC ensemble weight; "
@@ -382,16 +413,15 @@ class ENIRCalibrator(BaseCalibrator):
         return 80.0
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
-        idx = np.clip(np.searchsorted(self._x, s, side="right") - 1, 0, len(self._x) - 1)
-        return np.clip(self._mixed[idx], EPS, 1.0 - EPS)
+        return np.clip(eval_step(self.scores_, self._mixed, s), EPS, 1.0 - EPS)
 
     def interpret(self) -> Interpretation:
         """Read the path length and BIC weights; warn about non-monotonicity."""
         self._check_fitted()
-        top = np.argsort(self.weights_)[::-1][:3]
+        wts = self.model_weights_
+        top = np.argsort(wts)[::-1][:3]
         top_txt = ", ".join(
-            f"lambda={self.path_lambdas_[self.kept_breakpoints_[i]]:.4g} "
-            f"(weight {self.weights_[i]:.3f})"
+            f"lambda={self.path_lambdas_[self.kept_breakpoints_[i]]:.4g} (weight {wts[i]:.3f})"
             for i in top
         )
         return Interpretation(

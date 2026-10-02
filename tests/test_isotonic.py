@@ -99,3 +99,53 @@ def test_cir_interpret_mentions_strictness() -> None:
     cal = CenteredIsotonicCalibrator().fit(*_sample(400))
     interp = cal.interpret()
     assert any("strict" in m.lower() for m in interp.messages)
+
+
+# ---------------------------------------------------------------- 0.4.0 regressions
+
+
+def _fitted_variants() -> list[object]:
+    s, y = _sample(2000)
+    return [
+        IsotonicCalibrator().fit(s, y),
+        IsotonicCalibrator(interpolation="linear").fit(s, y),
+        CenteredIsotonicCalibrator().fit(s, y),
+    ]
+
+
+def test_interval_inverse_round_trip_all_variants() -> None:
+    """CAL-1: predict_proba(interval_inverse(lo, hi)) lies inside [lo, hi].
+
+    0.3.x inverted ``interpolation="linear"`` through the step blocks, so the
+    returned raw interval mapped to e.g. [0.043, 0.205] for a [0.05, 0.2] target.
+    """
+    targets = [(0.05, 0.2), (0.1, 0.5), (0.3, 0.31), (0.0, 0.4), (0.2, 1.0), (0.42, 0.42)]
+    for cal in _fitted_variants():
+        for lo, hi in targets:
+            raw_lo, raw_hi = cal.interval_inverse(lo, hi)
+            if raw_lo > raw_hi:
+                continue  # a flat step skips the target: empty preimage
+            p = cal.predict_proba(np.array([raw_lo, raw_hi]))
+            assert lo <= p[0] <= hi, (type(cal).__name__, cal.get_params(), lo, hi, p)
+            assert lo <= p[1] <= hi, (type(cal).__name__, cal.get_params(), lo, hi, p)
+
+
+def test_linear_interval_inverse_is_tight() -> None:
+    """CAL-1: the linear map's bounds are the exact crossings, not block edges."""
+    cal = IsotonicCalibrator(interpolation="linear").fit(*_sample(2000))
+    raw_lo, raw_hi = cal.interval_inverse(0.05, 0.2)
+    below = cal.predict_proba(np.array([raw_lo - 1e-7]))[0]
+    above = cal.predict_proba(np.array([raw_hi + 1e-7]))[0]
+    assert below < 0.05
+    assert above > 0.2
+
+
+def test_tie_aggregation_is_row_order_invariant() -> None:
+    s, y = _sample(1500)
+    s = np.round(s, 2)
+    w = RNG.uniform(0.5, 2.0, len(s))
+    perm = RNG.permutation(len(s))
+    a = CenteredIsotonicCalibrator().fit(s, y, sample_weight=w)
+    b = CenteredIsotonicCalibrator().fit(s[perm], y[perm], sample_weight=w[perm])
+    np.testing.assert_array_equal(a.block_center_s_, b.block_center_s_)
+    np.testing.assert_array_equal(a.block_mean_, b.block_mean_)

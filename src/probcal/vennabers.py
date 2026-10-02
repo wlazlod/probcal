@@ -15,6 +15,8 @@ import numpy as np
 
 from ._registry import register
 from ._results import Interpretation
+from ._steps import aggregate_ties, migrate_state
+from ._validation import stratified_folds, validate_cv, validate_scores
 from .base import BaseCalibrator
 
 
@@ -98,12 +100,26 @@ class VennAbersCalibrator(BaseCalibrator):
     sum-diagram sweep, so prediction is a ``searchsorted`` gather rather than a
     pair of PAVA refits per unique query score.
 
+    Tied calibration scores are pooled into one point (weights summed), as
+    isotonic regression requires, and a query whose score equals a calibration
+    score joins that point; the output therefore does not depend on row
+    order. A query labeled 1 (resp. 0) strictly between two calibration scores
+    has the same fitted value as when merged into the next (resp. previous)
+    point, so the two tables are read at ``searchsorted`` ``"left"`` (``F1_``)
+    and ``"right"`` (``F0_``).
+
     Attributes
     ----------
-    F0_, F1_ : numpy.ndarray of shape (n + 1,)
+    scores_ : numpy.ndarray of shape (m,)
+        Distinct calibration scores, sorted.
+    F0_, F1_ : numpy.ndarray of shape (m + 1,)
         Fitted probabilities for a unit-weight query labeled 0 (resp. 1)
-        inserted at each of the n+1 positions of the sorted calibration set.
-        Both are non-decreasing, and ``F0_ <= F1_`` elementwise.
+        inserted at each of the m+1 gaps between the distinct calibration
+        scores. Both are non-decreasing, and ``F0_ <= F1_`` elementwise.
+    ties_pooled_ : bool
+        ``True`` for every fit since 0.4.0. ``False`` only for an object read
+        from a pre-0.4 payload, which keeps its stored tables and their
+        original lookup (query inserted before any tied calibration scores).
 
     Notes
     -----
@@ -112,23 +128,30 @@ class VennAbersCalibrator(BaseCalibrator):
     the scope note in ``docs/concepts/methods-distribution-free.md``.
     """
 
-    _STATE_ATTRS = ("_s", "_y", "_w", "F0_", "F1_")  # O(n) by design, documented
+    _STATE_ATTRS = ("scores_", "F0_", "F1_", "ties_pooled_")  # O(m) by design, documented
 
     def _set_state(self, state: dict[str, object]) -> None:
-        super()._set_state(state)
+        legacy = "_s" in state
+        super()._set_state(migrate_state(state, {"_s": "scores_"}, drop=("_y", "_w")))
+        if legacy:
+            self.ties_pooled_ = False
         # Lazy interval-width cache, rebuilt on demand.
         self._widths_cache: tuple[float, float] | None = None
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        order = np.argsort(s, kind="stable")
-        self._s = s[order]
-        self._y = y[order]
-        self._w = w[order]
+        s_u, y_u, w_u = aggregate_ties(s, y, w)
+        self.scores_ = s_u
+        self.ties_pooled_ = True
         self._widths_cache = None
-        c = np.concatenate([[0.0], np.cumsum(self._w)])
-        z = np.concatenate([[0.0], np.cumsum(self._w * self._y)])
+        c = np.concatenate([[0.0], np.cumsum(w_u)])
+        z = np.concatenate([[0.0], np.cumsum(w_u * y_u)])
         self.F0_ = _csd_sweep(c, z, 0.0)
         self.F1_ = _csd_sweep(c, z, 1.0)
+
+    def _interval(self, arr: np.ndarray) -> np.ndarray:
+        idx1 = np.searchsorted(self.scores_, arr, side="left")
+        idx0 = np.searchsorted(self.scores_, arr, side="right") if self.ties_pooled_ else idx1
+        return np.column_stack([self.F0_[idx0], self.F1_[idx1]])
 
     def predict_interval(self, s: object) -> np.ndarray:
         """Venn–Abers intervals ``[p0, p1]`` for new scores.
@@ -146,11 +169,7 @@ class VennAbersCalibrator(BaseCalibrator):
             ``predict_proba`` output.
         """
         self._check_fitted()
-        from ._validation import validate_scores
-
-        arr = validate_scores(s)
-        idx = np.searchsorted(self._s, arr, side="left")
-        return np.column_stack([self.F0_[idx], self.F1_[idx]])
+        return self._interval(validate_scores(s))
 
     @property
     def complexity_rank(self) -> float:
@@ -158,7 +177,7 @@ class VennAbersCalibrator(BaseCalibrator):
         return 60.0
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
-        intervals = self.predict_interval(s)
+        intervals = self._interval(s)
         p0, p1 = intervals[:, 0], intervals[:, 1]
         return p1 / (1.0 - p0 + p1)
 
@@ -166,7 +185,7 @@ class VennAbersCalibrator(BaseCalibrator):
         """Report interval widths over the calibration scores — where to trust the map."""
         self._check_fitted()
         if self._widths_cache is None:
-            intervals = self.predict_interval(self._s)
+            intervals = self._interval(self.scores_)
             widths = intervals[:, 1] - intervals[:, 0]
             self._widths_cache = (float(widths.mean()), float(widths.max()))
         mean_w, max_w = self._widths_cache
@@ -176,7 +195,7 @@ class VennAbersCalibrator(BaseCalibrator):
             param_values=(mean_w, max_w),
             messages=(
                 f"mean Venn–Abers interval width {mean_w:.4f}, maximum {max_w:.4f} over the "
-                "calibration scores: width is per-score calibration uncertainty",
+                "distinct calibration scores: width is per-score calibration uncertainty",
                 "the validity guarantee holds for the interval [p0, p1] from "
                 "predict_interval(); the scalar from predict_proba() is the log-loss-minimax "
                 "merger p1/(1-p0+p1) and is not itself covered by the guarantee",
@@ -198,46 +217,39 @@ class CrossVennAbersCalibrator(BaseCalibrator):
     Parameters
     ----------
     cv : int
-        Number of stratified folds; must be at least 2.
+        Number of stratified folds; an integer ``>= 2``.
     random_state : int
         Seed for the fold assignment.
 
     Attributes
     ----------
-    _ivaps : list of VennAbersCalibrator
-        Internal per-fold state: one fitted IVAP per fold, each trained on
-        the other ``cv - 1`` folds. No public fitted attribute is exposed;
-        read fitted state through :meth:`predict_interval` instead.
+    ivaps_ : list of VennAbersCalibrator
+        One fitted IVAP per fold, each trained on the other ``cv - 1`` folds.
 
     References
     ----------
     Vovk & Petej (2014).
     """
 
-    _STATE_ATTRS = ("_ivaps",)
+    _STATE_ATTRS = ("ivaps_",)
 
     def __init__(self, cv: int = 5, random_state: int = 42) -> None:
         self.cv = cv
         self.random_state = random_state
 
+    def _set_state(self, state: dict[str, object]) -> None:
+        super()._set_state(migrate_state(state, {"_ivaps": "ivaps_"}))
+
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        if self.cv < 2:
-            raise ValueError("cv must be at least 2")
-        rng = np.random.default_rng(self.random_state)
-        folds = np.empty(len(y), dtype=np.int64)
-        for cls in (0.0, 1.0):
-            idx = np.flatnonzero(y == cls)
-            perm = rng.permutation(idx)
-            folds[perm] = np.arange(len(perm)) % self.cv
-        self._ivaps: list[VennAbersCalibrator] = []
-        for k in range(self.cv):
+        cv = validate_cv(self.cv, y)
+        folds = stratified_folds(y, cv, self.random_state)
+        self.ivaps_: list[VennAbersCalibrator] = []
+        for k in range(cv):
             mask = folds != k
-            ivap = VennAbersCalibrator()
-            ivap.fit(s[mask], y[mask], sample_weight=w[mask])
-            self._ivaps.append(ivap)
+            self.ivaps_.append(VennAbersCalibrator().fit(s[mask], y[mask], sample_weight=w[mask]))
 
     def _fold_pairs(self, s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        pairs = np.stack([ivap.predict_interval(s) for ivap in self._ivaps])  # (K, n, 2)
+        pairs = np.stack([ivap._interval(s) for ivap in self.ivaps_])  # (K, n, 2)
         return pairs[:, :, 0], pairs[:, :, 1]
 
     @property
@@ -267,10 +279,7 @@ class CrossVennAbersCalibrator(BaseCalibrator):
             defines only the scalar merge, not an interval for CVAP).
         """
         self._check_fitted()
-        from ._validation import validate_scores
-
-        arr = validate_scores(s)
-        p0, p1 = self._fold_pairs(arr)
+        p0, p1 = self._fold_pairs(validate_scores(s))
         return np.column_stack([p0.min(axis=0), p1.max(axis=0)])
 
     def interpret(self) -> Interpretation:

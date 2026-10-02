@@ -9,14 +9,12 @@ import pytest
 
 from probcal._math import (
     _FPMIN,
-    _loess_fit_sorted,
     _loess_fit_sorted_vec,
     _loess_window_starts,
     beta_ppf,
     betainc,
     bisect,
     chi2_ppf,
-    erf_vec,
     expit,
     gammainc_lower,
     irls_logistic,
@@ -24,9 +22,7 @@ from probcal._math import (
     loess,
     logit,
     natural_cubic_basis,
-    newton_1d,
     norm_cdf,
-    norm_ppf,
     pava,
     weighted_quantile,
 )
@@ -63,28 +59,11 @@ def test_bisect_finds_root() -> None:
     assert abs(root - np.sqrt(2.0)) < 1e-10
 
 
-def test_newton_1d_finds_root() -> None:
-    root = newton_1d(lambda x: x**3 - 8.0, lambda x: 3 * x**2, x0=1.0, lo=0.0, hi=10.0)
-    assert abs(root - 2.0) < 1e-10
-
-
-def test_newton_1d_bisection_fallback() -> None:
-    # Newton from x0 with a tiny derivative would jump out of [lo, hi]; must still converge.
-    root = newton_1d(lambda x: np.tanh(x - 3.0), lambda x: 1e-12, x0=0.5, lo=0.0, hi=10.0)
-    assert abs(root - 3.0) < 1e-8
-
-
 # ---------------------------------------------------------------- special functions
 
 
 def test_lgamma_vec_known_values() -> None:
     np.testing.assert_allclose(lgamma_vec(np.array([1.0, 2.0, 5.0])), [0.0, 0.0, np.log(24.0)])
-
-
-def test_erf_vec_known_values() -> None:
-    out = erf_vec(np.array([0.0, 10.0, -10.0]))
-    np.testing.assert_allclose(out, [0.0, 1.0, -1.0], atol=1e-15)
-    assert out.dtype == np.float64
 
 
 def test_betainc_identity_parameters() -> None:
@@ -140,15 +119,6 @@ def test_beta_ppf_validation() -> None:
 def test_norm_cdf_symmetry() -> None:
     x = np.linspace(-8.0, 8.0, 81)
     np.testing.assert_allclose(norm_cdf(x) + norm_cdf(-x), np.ones_like(x), atol=1e-14)
-
-
-def test_norm_ppf_known_quantile() -> None:
-    assert abs(norm_ppf(np.array([0.975]))[0] - 1.959963984540054) < 1e-11
-
-
-def test_norm_ppf_roundtrip() -> None:
-    q = np.linspace(1e-10, 1 - 1e-10, 101)
-    np.testing.assert_allclose(norm_cdf(norm_ppf(q)), q, atol=1e-12)
 
 
 # ---------------------------------------------------------------- PAVA
@@ -438,6 +408,49 @@ def test_weighted_quantile_integer_weights_matches_repeat_within_one_gap() -> No
 # ------------------------------------------- vectorized presorted anchor fit (0.3.0)
 
 
+def _loess_fit_sorted(
+    xs: np.ndarray, ys: np.ndarray, evs: np.ndarray, r: int, degree: int
+) -> np.ndarray:
+    """Retired (0.3.x) per-point LOESS loop, frozen as the engine's reference.
+
+    LOESS at sorted eval points via the contiguous min-width r-window.
+
+    For 1-D x the r-nearest-neighbor window is contiguous in sorted order; the
+    two-pointer rule advances the window start while the point entering on the
+    right is strictly closer than the one leaving on the left. Distance ties
+    resolve to the leftmost minimal-width window (strict `<`).
+
+    ``xs`` and ``evs`` must already be sorted ascending.
+    """
+    n = xs.shape[0]
+    out = np.empty(evs.shape[0], dtype=np.float64)
+    i = 0
+    for j in range(evs.shape[0]):
+        x0 = evs[j]
+        while i + r < n and xs[i + r] - x0 < x0 - xs[i]:
+            i += 1
+        xw = xs[i : i + r]
+        yw = ys[i : i + r]
+        h = max(x0 - xs[i], xs[i + r - 1] - x0)
+        if h == 0.0:
+            out[j] = yw.mean()
+            continue
+        u = np.abs(xw - x0) / h
+        wts = np.clip(1.0 - u**3, 0.0, None) ** 3
+        if degree == 0:
+            out[j] = float(np.average(yw, weights=np.maximum(wts, _FPMIN)))
+            continue
+        xc = xw - x0
+        sw = wts.sum()
+        swx = (wts * xc).sum()
+        swxx = (wts * xc * xc).sum()
+        swy = (wts * yw).sum()
+        swxy = (wts * xc * yw).sum()
+        det = sw * swxx - swx * swx
+        out[j] = swy / sw if abs(det) < _FPMIN else (swxx * swy - swx * swxy) / det
+    return out
+
+
 def _loess_anchor_case(
     p: np.ndarray, y: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, int, np.ndarray]:
@@ -478,6 +491,25 @@ def test_loess_window_starts_match_the_two_pointer_loop(p: np.ndarray, y: np.nda
     np.testing.assert_array_equal(_loess_window_starts(xs, anchors, r), np.array(expected))
 
 
+def test_loess_per_observation_matches_the_retired_loop() -> None:
+    """0.4.0 routes every evaluation through the blocked engine; on data points
+    it agrees with the retired loop to a few ulps."""
+    for n, rnd in ((300, None), (2000, 2), (2000, 3)):
+        d = make_pd_portfolio(n=n, random_state=5)
+        p = d.scores if rnd is None else np.round(d.scores, rnd)
+        order = np.argsort(p, kind="stable")
+        xs, ys = p[order], d.y[order].astype(float)
+        for frac in (0.2, 0.75):
+            r = min(max(int(np.ceil(frac * n)), 2), n)
+            for degree in (0, 1):
+                np.testing.assert_allclose(
+                    loess(xs, ys, frac=frac, degree=degree, presorted=True),
+                    _loess_fit_sorted(xs, ys, xs, r, degree),
+                    rtol=0,
+                    atol=1e-13,
+                )
+
+
 @pytest.mark.parametrize("p,y", _loess_fixtures())
 @pytest.mark.parametrize("degree", [0, 1])
 def test_loess_vectorized_anchors_match_the_loop(p: np.ndarray, y: np.ndarray, degree: int) -> None:
@@ -508,8 +540,8 @@ def test_loess_presorted_matches_the_default_path(p: np.ndarray, y: np.ndarray) 
     )
 
 
-def test_loess_presorted_without_grid_still_uses_the_scalar_loop() -> None:
-    """The per-observation path is O(n * r) to gather, so it must stay on the loop."""
+def test_loess_presorted_without_grid_matches_default() -> None:
+    """``presorted`` is a throughput switch on the per-observation path too."""
     d = make_pd_portfolio(n=400, random_state=3)
     order = np.argsort(d.scores, kind="stable")
     xs, ys = d.scores[order], d.y[order]
@@ -573,3 +605,47 @@ def test_loess_rank_deficient_windows_do_not_reach_reported_values() -> None:
     slow = loess(xs, ys, frac=0.75, grid_size=512)
     np.testing.assert_allclose(fast, slow, rtol=1e-9, atol=1e-12)
     assert np.max(np.abs(fast - slow)) <= 1e-12
+
+
+# ------------------------------------------------- IRLS convergence criterion (0.4.0)
+
+
+def test_irls_unconverged_iteration_cap_is_reported() -> None:
+    """Convergence is judged on the full Newton step: two iterations from zero
+    are not enough on a well-posed problem, and soft targets cannot hide it."""
+    X, y = _make_logistic_data()
+    n_pos = float(y.sum())
+    soft = np.where(y == 1.0, (n_pos + 1.0) / (n_pos + 2.0), 1.0 / (len(y) - n_pos + 2.0))
+    assert not irls_logistic(X, soft, max_iter=2).converged
+    assert irls_logistic(X, soft).converged
+
+
+def test_irls_quasi_separation_stall_is_not_convergence() -> None:
+    """CAL-12: on a quasi-separated design the line search eventually stalls
+    with a vanishing gradient; 0.3.x called that ``converged`` and returned a
+    runaway slope without a warning."""
+    x = np.concatenate([np.linspace(-4.0, -0.2, 50), [0.0, 0.0], np.linspace(0.2, 4.0, 50)])
+    y = np.concatenate([np.zeros(50), [0.0, 1.0], np.ones(50)])
+    X = np.column_stack([np.ones(len(x)), x])
+    with pytest.warns(UserWarning, match="separation"):
+        res = irls_logistic(X, y, max_iter=1000)
+    assert res.separation and res.converged
+    assert res.beta[1] < 100.0  # the ridge fit, not the runaway iterate
+
+
+def test_irls_penalty_matrix_generalizes_ridge() -> None:
+    X, y = _make_logistic_data()
+    a = irls_logistic(X, y, ridge=3.0)
+    b = irls_logistic(X, y, penalty=3.0 * np.eye(2))
+    np.testing.assert_allclose(a.beta, b.beta, rtol=1e-12)
+    assert a.converged and b.converged
+
+
+def test_irls_penalty_null_space_still_detects_separation() -> None:
+    """A penalty that leaves the slope free cannot stop a separating slope."""
+    x = np.array([-2.0, -1.0, 1.0, 2.0])
+    X = np.column_stack([np.ones(4), x])
+    y = np.array([0.0, 0.0, 1.0, 1.0])
+    with pytest.warns(UserWarning, match="separation"):
+        res = irls_logistic(X, y, penalty=np.diag([1.0, 0.0]))
+    assert res.separation and res.converged

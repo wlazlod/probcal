@@ -80,7 +80,7 @@ def test_corp_level_must_be_in_unit_interval():
 
     y, p = _calibrated(200)
     for level in (0.0, 1.0, -0.1, 1.5):
-        with pytest.raises(ValueError, match="level"):
+        with pytest.raises(ValueError, match="level|confidence"):
             corp_reliability(y, p, bands=None, level=level)
 
 

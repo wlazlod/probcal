@@ -6,13 +6,16 @@ misuse. Protocol, criteria, and report reading:
 ``docs/concepts/auto-selection.md``.
 """
 
+from typing import cast
+
 import numpy as np
 
 from ._corp import corp_fit, decompose
 from ._registry import SERIALIZABLE, register
 from ._results import Interpretation, SelectionReport
 from ._serialize import decode_value, encode_value
-from .base import BaseCalibrator
+from ._validation import stratified_folds, validate_cv
+from .base import BaseCalibrator, clone_unfitted
 from .binning import HistogramBinningCalibrator, ScalingBinningCalibrator
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
 from .metrics import brier_score as _brier
@@ -50,6 +53,14 @@ class CalibratorSelector(BaseCalibrator):
     Custom candidates declare their tie-break position by overriding
     ``complexity_rank`` (lower = simpler; default 100.0 ranks last).
 
+    Once fitted, the selector *is* its winner for every protocol question:
+    ``predict_proba``, ``interpret``, ``is_monotone_``,
+    ``affine_logit_coeffs_``, ``complexity_rank``, ``point_inverse`` and
+    ``interval_inverse`` all delegate to ``best_calibrator_``. ``fit`` raises
+    ``ValueError`` if ``scoring`` is not one of the accepted criteria (plain
+    ECE and Hosmer–Lemeshow are refused as selection criteria) or ``cv`` is
+    not an integer ``>= 2``.
+
     Parameters
     ----------
     candidates : dict[str, BaseCalibrator] or None
@@ -61,7 +72,7 @@ class CalibratorSelector(BaseCalibrator):
         Out-of-fold selection criterion, lower is better. Plain ECE and
         Hosmer–Lemeshow are refused — see the metrics chapter's table.
     cv : int
-        Inner stratified fold count.
+        Inner stratified fold count; an integer ``>= 2``.
     random_state : int
         Seed for the fold assignment.
 
@@ -88,7 +99,7 @@ class CalibratorSelector(BaseCalibrator):
         self.cv = cv
         self.random_state = random_state
 
-    _STATE_ATTRS = ("best_name_", "best_calibrator_", "is_monotone_")
+    _STATE_ATTRS = ("best_name_", "best_calibrator_")
 
     def _state(self) -> dict[str, object]:
         base = super()._state()
@@ -108,6 +119,7 @@ class CalibratorSelector(BaseCalibrator):
 
     def _set_state(self, state: dict[str, object]) -> None:
         state = dict(state)
+        state.pop("is_monotone_", None)  # pre-0.4 payloads; now read from the winner
         rep = state.pop("report")
         super()._set_state(state)
         self.report_ = SelectionReport(
@@ -140,7 +152,8 @@ class CalibratorSelector(BaseCalibrator):
                         f"cannot serialize candidate {name!r}: {cls_name} is not a "
                         "registered probcal class"
                     )
-                enc[name] = {"class": cls_name, "params": proto.get_params()}
+                to_params = getattr(proto, "_params_for_dict", proto.get_params)
+                enc[name] = {"class": cls_name, "params": to_params()}
             params["candidates"] = {"__candidates__": enc}
         return params
 
@@ -149,38 +162,13 @@ class CalibratorSelector(BaseCalibrator):
         params = dict(params)
         cands = params.get("candidates")
         if isinstance(cands, dict) and "__candidates__" in cands:
-            params["candidates"] = {
-                name: SERIALIZABLE[spec["class"]](**spec["params"])
-                for name, spec in cands["__candidates__"].items()  # type: ignore[attr-defined, index]
-            }
+            built = {}
+            for name, spec in cands["__candidates__"].items():  # type: ignore[attr-defined]
+                proto_cls = SERIALIZABLE[spec["class"]]
+                from_params = getattr(proto_cls, "_params_from_dict", dict)
+                built[name] = proto_cls(**from_params(dict(spec["params"])))
+            params["candidates"] = built
         return params
-
-    def fit(self, s: object, y: object, sample_weight: object = None) -> "CalibratorSelector":
-        """Run the nested selection and refit the winner on all data.
-
-        Parameters
-        ----------
-        s : array_like
-            Raw scores/probabilities in ``[0, 1]``.
-        y : array_like
-            Binary outcomes in ``{0, 1}``; both classes must be present.
-        sample_weight : array_like or None
-            Positive observation weights.
-
-        Returns
-        -------
-        CalibratorSelector
-            ``self``, with ``best_name_``, ``best_calibrator_``, and
-            ``report_`` set.
-
-        Raises
-        ------
-        ValueError
-            If ``scoring`` is not one of the accepted criteria (plain ECE
-            and Hosmer–Lemeshow are refused as selection criteria).
-        """
-        super().fit(s, y, sample_weight)
-        return self
 
     def _fit(self, s_arr: np.ndarray, y_arr: np.ndarray, w_arr: np.ndarray) -> None:
         if self.scoring not in _SCORERS:
@@ -190,18 +178,14 @@ class CalibratorSelector(BaseCalibrator):
                 "Hosmer-Lemeshow are not selection criteria"
             )
         scorer = _SCORERS[self.scoring]
+        cv = validate_cv(self.cv, y_arr)
         menu = self.candidates if self.candidates is not None else _default_candidates()
         # CORP decomposition to attach to the report: Brier when the selection
         # criterion itself is Brier, log loss otherwise (matches the scorer
         # actually driving the ranking as closely as the two-way CORP split allows).
         corp_score = "brier" if self.scoring == "brier" else "log_loss"
 
-        rng = np.random.default_rng(self.random_state)
-        folds = np.empty(len(y_arr), dtype=np.int64)
-        for cls in (0.0, 1.0):
-            idx = np.flatnonzero(y_arr == cls)
-            perm = rng.permutation(idx)
-            folds[perm] = np.arange(len(perm)) % self.cv
+        folds = stratified_folds(y_arr, cv, self.random_state)
 
         names = list(menu)
         means = np.empty(len(names))
@@ -212,11 +196,11 @@ class CalibratorSelector(BaseCalibrator):
         unc = 0.0
         for i, name in enumerate(names):
             proto = menu[name]
-            fold_scores = np.empty(self.cv)
+            fold_scores = np.empty(cv)
             oof = np.empty(len(y_arr))
-            for k in range(self.cv):
+            for k in range(cv):
                 train, held = folds != k, folds == k
-                cal = type(proto)(**proto.get_params())
+                cal = cast(BaseCalibrator, clone_unfitted(proto))
                 cal.fit(s_arr[train], y_arr[train], sample_weight=w_arr[train])
                 pred_held = cal.predict_proba(s_arr[held])
                 oof[held] = pred_held
@@ -231,7 +215,7 @@ class CalibratorSelector(BaseCalibrator):
 
         # Parsimony tie-break within one standard error of the best mean.
         best_idx = int(np.argmin(means))
-        se_best = sds[best_idx] / np.sqrt(self.cv)
+        se_best = sds[best_idx] / np.sqrt(cv)
         tied = [i for i in range(len(names)) if means[i] <= means[best_idx] + se_best]
         winner = min(
             tied,
@@ -253,10 +237,15 @@ class CalibratorSelector(BaseCalibrator):
             unc=float(unc),
         )
         self.best_name_ = names[winner]
-        proto = menu[self.best_name_]
-        self.best_calibrator_ = type(proto)(**proto.get_params())
+        self.best_calibrator_: BaseCalibrator = cast(
+            BaseCalibrator, clone_unfitted(menu[self.best_name_])
+        )
         self.best_calibrator_.fit(s_arr, y_arr, sample_weight=w_arr)
-        self.is_monotone_ = bool(getattr(self.best_calibrator_, "is_monotone_", True))
+
+    # ------------------------------------------------------------- delegation
+
+    def _winner(self) -> BaseCalibrator | None:
+        return self.__dict__.get("best_calibrator_")
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         """Delegate to the refitted winner."""
@@ -264,4 +253,54 @@ class CalibratorSelector(BaseCalibrator):
 
     def interpret(self) -> Interpretation:
         """Delegate to the refitted winner."""
+        self._check_fitted()
         return self.best_calibrator_.interpret()
+
+    @property  # type: ignore[override]
+    def is_monotone_(self) -> bool:  # type: ignore[override]
+        """The winner's ``is_monotone_`` (``True`` before fitting)."""
+        best = self._winner()
+        return True if best is None else bool(getattr(best, "is_monotone_", True))
+
+    @property
+    def affine_logit_coeffs_(self) -> tuple[float, float] | None:
+        """The winner's affine-logit coefficients, or ``None``."""
+        self._check_fitted()
+        return self.best_calibrator_.affine_logit_coeffs_
+
+    @property
+    def complexity_rank(self) -> float:
+        """The winner's parsimony rank once fitted; 100.0 before."""
+        best = self._winner()
+        return 100.0 if best is None else float(getattr(best, "complexity_rank", 100.0))
+
+    def interval_inverse(
+        self,
+        lo: float,
+        hi: float,
+        *,
+        space: str = "probability",
+        buffer_logit: float = 0.0,
+    ) -> tuple[float, float]:
+        """Delegate to the winner's exact ``interval_inverse``."""
+        self._check_fitted()
+        return self.best_calibrator_.interval_inverse(
+            lo, hi, space=space, buffer_logit=buffer_logit
+        )
+
+    def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
+        """Delegate to the winner's ``point_inverse``."""
+        self._check_fitted()
+        return self.best_calibrator_.point_inverse(p, space=space)
+
+    def _point_inverse_logit(self, p: np.ndarray) -> np.ndarray:
+        return self.best_calibrator_._point_inverse_logit(p)
+
+    def _output_range(self) -> tuple[float, float]:
+        return self.best_calibrator_._output_range()
+
+    def _inverse_left(self, t: float) -> float:
+        return self.best_calibrator_._inverse_left(t)
+
+    def _inverse_right(self, t: float) -> float:
+        return self.best_calibrator_._inverse_right(t)

@@ -16,6 +16,7 @@ unhashable (``__hash__ = None``), like the arrays themselves.
 """
 
 import dataclasses
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import ClassVar
@@ -328,8 +329,11 @@ class BeltResult(_ResultBase):
     ----------
     grid_p, grid_logit : numpy.ndarray
         Evaluation grid on the probability and logit scales.
-    lower_80, upper_80, lower_95, upper_95 : numpy.ndarray
-        Pointwise confidence band bounds at the two default levels.
+    levels : tuple of float
+        The two confidence levels requested (``confidence=`` argument).
+    bands : dict
+        ``{level: (lower, upper)}`` band bounds on the probability scale,
+        one entry per level in ``levels``.
     degree : int
         Polynomial degree selected by forward likelihood-ratio testing.
     p_value : float
@@ -338,17 +342,46 @@ class BeltResult(_ResultBase):
 
     grid_p: np.ndarray
     grid_logit: np.ndarray
-    lower_80: np.ndarray
-    upper_80: np.ndarray
-    lower_95: np.ndarray
-    upper_95: np.ndarray
+    levels: tuple[float, float]
+    bands: dict[float, tuple[np.ndarray, np.ndarray]]
     degree: int
     p_value: float
+
+    def _legacy(self, which: int, side: int, name: str) -> np.ndarray:
+        level = self.levels[which]
+        warnings.warn(
+            f"BeltResult.{name} is deprecated and will be removed in 0.5.0; use "
+            f"belt.bands[{level!r}][{side}] (it holds the confidence={level!r} band, "
+            "whatever the attribute name says)",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return self.bands[level][side]
+
+    @property
+    def lower_80(self) -> np.ndarray:
+        """Deprecated: ``bands[levels[0]][0]``."""
+        return self._legacy(0, 0, "lower_80")
+
+    @property
+    def upper_80(self) -> np.ndarray:
+        """Deprecated: ``bands[levels[0]][1]``."""
+        return self._legacy(0, 1, "upper_80")
+
+    @property
+    def lower_95(self) -> np.ndarray:
+        """Deprecated: ``bands[levels[1]][0]``."""
+        return self._legacy(1, 0, "lower_95")
+
+    @property
+    def upper_95(self) -> np.ndarray:
+        """Deprecated: ``bands[levels[1]][1]``."""
+        return self._legacy(1, 1, "upper_95")
 
     def __repr__(self) -> str:
         return (
             f"BeltResult(degree={self.degree}, p_value={self.p_value:.4g}, "
-            f"grid of {len(self.grid_p)} points)"
+            f"levels={self.levels}, grid of {len(self.grid_p)} points)"
         )
 
 

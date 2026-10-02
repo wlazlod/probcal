@@ -74,13 +74,17 @@ def validate_scores(s: object, *, name: str = "s") -> np.ndarray:
     return np.clip(arr, EPS, 1.0 - EPS)
 
 
-def validate_binary_y(y: object) -> np.ndarray:
+def validate_binary_y(y: object, *, require_both_classes: bool = True) -> np.ndarray:
     """Coerce a binary target to a 1-D float64 array of 0.0 and 1.0.
 
     Parameters
     ----------
     y : array_like
         Binary outcomes; accepted values are ``{0, 1}`` (int, float, or bool).
+    require_both_classes : bool, keyword-only
+        Reject a single-class ``y`` (the default). ``False`` serves the
+        low-default functions (Pluto-Tasche, Jeffreys bands), where an
+        all-zero ``y`` is the motivating case.
 
     Returns
     -------
@@ -90,7 +94,8 @@ def validate_binary_y(y: object) -> np.ndarray:
     Raises
     ------
     ValueError
-        If any value is outside ``{0, 1}``, or only one class is present.
+        If any value is outside ``{0, 1}``, or only one class is present
+        while ``require_both_classes`` is true.
     """
     arr = np.asarray(y, dtype=np.float64)
     if arr.ndim != 1:
@@ -99,7 +104,9 @@ def validate_binary_y(y: object) -> np.ndarray:
         raise ValueError("y must contain only finite values")
     if not np.all((arr == 0.0) | (arr == 1.0)):
         raise ValueError("y must be binary with values in {0, 1}")
-    if arr.min() == arr.max():
+    if arr.size == 0:
+        raise ValueError("y must not be empty")
+    if require_both_classes and arr.min() == arr.max():
         raise ValueError("y must contain both classes")
     return arr
 

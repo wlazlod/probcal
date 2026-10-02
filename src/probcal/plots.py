@@ -524,12 +524,12 @@ def plot_belt(belt: BeltResult, *, scale: str = "probability", ax: Any = None) -
         ax = _get_axes(ax, (6.5, 6))
         x = belt.grid_logit if scale == "logit" else belt.grid_p
         ax.plot(x, x, ls="--", c=_GREY, lw=1)
-        ax.fill_between(
-            x, _band(belt.lower_95), _band(belt.upper_95), color=_BLUE, alpha=0.2, label="95%"
-        )
-        ax.fill_between(
-            x, _band(belt.lower_80), _band(belt.upper_80), color=_BLUE, alpha=0.35, label="80%"
-        )
+        # Widest level first so the narrower band sits on top of it.
+        for level, alpha in zip(sorted(belt.levels, reverse=True), (0.2, 0.35), strict=True):
+            lo, hi = belt.bands[level]
+            ax.fill_between(
+                x, _band(lo), _band(hi), color=_BLUE, alpha=alpha, label=f"{level:.0%}"
+            )
         ax.set_title(f"calibration belt (degree {belt.degree}, p = {belt.p_value:.3g})")
         _scale_axis_labels(ax, scale, "predicted probability", "event rate")
         ax.legend(loc="upper left")

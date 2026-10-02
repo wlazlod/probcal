@@ -71,11 +71,11 @@ def test_belt_calibrated_data() -> None:
     assert isinstance(belt, BeltResult)
     assert belt.p_value > 0.01
     assert 1 <= belt.degree <= 4
-    inside = (belt.lower_95 <= belt.grid_p) & (belt.grid_p <= belt.upper_95)
+    inside = (belt.bands[0.95][0] <= belt.grid_p) & (belt.grid_p <= belt.bands[0.95][1])
     assert inside.mean() >= 0.9
-    assert np.all(belt.lower_80 >= belt.lower_95 - 1e-12)
-    assert np.all(belt.upper_80 <= belt.upper_95 + 1e-12)
-    assert np.all(belt.lower_95 <= belt.upper_95)
+    assert np.all(belt.bands[0.8][0] >= belt.bands[0.95][0] - 1e-12)
+    assert np.all(belt.bands[0.8][1] <= belt.bands[0.95][1] + 1e-12)
+    assert np.all(belt.bands[0.95][0] <= belt.bands[0.95][1])
 
 
 def test_belt_rejects_distortion() -> None:
@@ -83,7 +83,7 @@ def test_belt_rejects_distortion() -> None:
     p_bad = expit(0.5 * logit(p) - 0.7)
     belt = calibration_belt(y, p_bad)
     assert belt.p_value < 1e-4
-    outside = (belt.grid_p < belt.lower_95) | (belt.grid_p > belt.upper_95)
+    outside = (belt.grid_p < belt.bands[0.95][0]) | (belt.grid_p > belt.bands[0.95][1])
     assert outside.any()
 
 
@@ -103,7 +103,7 @@ def test_belt_separated_data_stops_extension() -> None:
     with pytest.warns(UserWarning, match="[Ss]eparation"):
         belt = calibration_belt(y, p)
     assert belt.degree == 1
-    assert np.all(np.isfinite(belt.lower_95)) and np.all(np.isfinite(belt.upper_95))
+    assert np.all(np.isfinite(belt.bands[0.95][0])) and np.all(np.isfinite(belt.bands[0.95][1]))
     assert 0.0 <= belt.p_value <= 1.0
 
 
@@ -303,14 +303,13 @@ def test_belt_centring_keeps_the_model() -> None:
 
 
 def test_belt_bands_follow_requested_levels() -> None:
-    # MET-13: lower_80/upper_95 hold confidence[0]/[1] whatever their values.
+    # MET-13: bands are keyed by the requested levels.
     y, p = _calibrated(3000)
     wide = calibration_belt(y, p, confidence=(0.9, 0.99))
     std = calibration_belt(y, p)
-    assert np.all(wide.upper_80 >= std.upper_80 - 1e-12)  # 90% >= 80%
-    assert np.all(wide.upper_95 >= std.upper_95 - 1e-12)  # 99% >= 95%
-    if hasattr(wide, "bands"):
-        np.testing.assert_array_equal(wide.bands[0.9][1], wide.upper_80)
+    assert wide.levels == (0.9, 0.99)
+    assert np.all(wide.bands[0.9][1] >= std.bands[0.8][1] - 1e-12)
+    assert np.all(wide.bands[0.99][1] >= std.bands[0.95][1] - 1e-12)
     with pytest.raises(ValueError, match="confidence"):
         calibration_belt(y, p, confidence=(0.8, 1.2))
 
@@ -322,7 +321,7 @@ def test_belt_weights_are_relative() -> None:
     b = calibration_belt(y, p, sample_weight=10.0 * w)
     assert a.degree == b.degree
     assert a.p_value == pytest.approx(b.p_value, rel=1e-6)
-    np.testing.assert_allclose(a.upper_95, b.upper_95, rtol=1e-6)
+    np.testing.assert_allclose(a.bands[0.95][1], b.bands[0.95][1], rtol=1e-6)
 
 
 def test_reliability_loess_uses_weights() -> None:

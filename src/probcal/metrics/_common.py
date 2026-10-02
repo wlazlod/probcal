@@ -32,20 +32,8 @@ from .._validation import validate_binary_y, validate_scores, validate_weights
 
 
 def binary_y(y: object, *, require_both_classes: bool = True) -> np.ndarray:
-    """``validate_binary_y``, optionally accepting a single-class target.
-
-    ``require_both_classes=False`` serves the low-/zero-default portfolio
-    functions (Pluto-Tasche, Jeffreys bands), where an all-zero ``y`` is the
-    motivating case. The single-class check is the last one
-    ``validate_binary_y`` performs, so every other check has passed when it is
-    the one that fails.
-    """
-    try:
-        return validate_binary_y(y)
-    except ValueError as exc:
-        if require_both_classes or "both classes" not in str(exc):
-            raise
-        return np.asarray(y, dtype=np.float64)
+    """``validate_binary_y`` (kept as the metrics-local name)."""
+    return validate_binary_y(y, require_both_classes=require_both_classes)
 
 
 def _prep(

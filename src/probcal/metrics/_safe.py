@@ -33,7 +33,7 @@ from ._common import _prep
 from ._grades import grade_labels, resolve_order
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class HlEResult(_ResultBase):
     """Mixture-LR grade e-test result (:func:`hl_e_test`).
 

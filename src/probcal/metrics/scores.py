@@ -171,7 +171,7 @@ def murphy_decomposition(
     return MurphyDecomposition(reliability=rel, resolution=res, uncertainty=unc)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class MurphyCurve(_ResultBase):
     """Murphy diagram: mean elementary score of the binary mean functional across thresholds.
 

@@ -24,7 +24,7 @@ from ._deprecation import UNSET, renamed_kwarg
 from ._grades import aggregate, grade_labels, is_masterscale, resolve_order
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class PlutoTascheResult(_ResultBase):
     """Pluto-Tasche one-period most-prudent PD per rating grade.
 

@@ -244,7 +244,7 @@ def _section_reliability(
 def _section_evaluate(
     fmt: str, y_arr: np.ndarray, p_arr: np.ndarray, *, n_boot: int, seed: int
 ) -> str:
-    report = evaluate(y_arr, p_arr, n_boot=n_boot, seed=seed)
+    report = evaluate(y_arr, p_arr, n_boot=n_boot, random_state=seed)
     return _section(fmt, "Metric report", _result_table(fmt, report))
 
 
@@ -342,7 +342,7 @@ def _section_groups(
     seed: int,
     sink: _FigureSink,
 ) -> str:
-    grouped = evaluate(y_arr, p_arr, n_boot=n_boot, seed=seed, by=by)
+    grouped = evaluate(y_arr, p_arr, n_boot=n_boot, random_state=seed, by=by)
 
     def draw() -> Any:
         from .plots import plot_reliability

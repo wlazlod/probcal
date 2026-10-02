@@ -13,7 +13,7 @@ documentation. The belt is reimplemented from the papers; no GPL code is used.
 
 import math
 import warnings
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -586,26 +586,14 @@ def _belt_result(
     degree: int,
     p_value: float,
 ) -> BeltResult:
-    """Build a :class:`BeltResult`, filling the neutral ``levels``/``bands``
-    fields when the result class has them (see the 0.4.0 notes)."""
-    lo_a, hi_a = bands[levels[0]]
-    lo_b, hi_b = bands[levels[1]]
-    kw: dict[str, object] = {
-        "grid_p": grid_p,
-        "grid_logit": grid_z,
-        "lower_80": lo_a,
-        "upper_80": hi_a,
-        "lower_95": lo_b,
-        "upper_95": hi_b,
-        "degree": degree,
-        "p_value": p_value,
-    }
-    names = {f.name for f in fields(BeltResult)}
-    if "levels" in names:
-        kw["levels"] = levels
-    if "bands" in names:
-        kw["bands"] = bands
-    return BeltResult(**{k: v for k, v in kw.items() if k in names})  # type: ignore[arg-type]
+    return BeltResult(
+        grid_p=grid_p,
+        grid_logit=grid_z,
+        levels=levels,
+        bands=bands,
+        degree=degree,
+        p_value=p_value,
+    )
 
 
 def calibration_belt(

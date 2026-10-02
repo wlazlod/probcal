@@ -5,10 +5,10 @@ import pytest
 
 from probcal._math import expit
 from probcal.datasets import make_pd_portfolio
+from probcal.metrics._binstats import bin_stats
+from probcal.metrics._common import _prep
 from probcal.metrics.binned import (
-    _bin_gaps,
-    _ece_sweep_best_b_sorted,
-    _ece_sweep_presorted,
+    _sweep_best_b,
     adaptive_ece,
     ece,
     ece_debiased,
@@ -35,9 +35,11 @@ def test_ece_two_bin_hand_case() -> None:
     assert abs(ece(y, p, n_bins=2, norm="l2") - expected_l2) < 1e-12
 
 
-def test_adaptive_ece_is_equal_mass_alias() -> None:
+def test_adaptive_ece_is_deprecated_equal_mass_alias() -> None:
     y, p = _calibrated(1000)
-    assert adaptive_ece(y, p, n_bins=10) == ece(y, p, n_bins=10, strategy="mass")
+    with pytest.warns(DeprecationWarning, match="removed in 0.4.0"):
+        v = adaptive_ece(y, p, n_bins=10)
+    assert v == ece(y, p, n_bins=10, strategy="mass")
 
 
 def test_ece_debiased_below_plain_and_near_zero_when_calibrated() -> None:
@@ -62,7 +64,7 @@ def test_ece_sweep_returns_reasonable_value() -> None:
 
 def test_hosmer_lemeshow_result_fields() -> None:
     y, p = _calibrated(2000)
-    res = hosmer_lemeshow(y, p, g=10)
+    res = hosmer_lemeshow(y, p, n_bins=10)
     assert res.df == 8
     assert res.statistic >= 0.0
     assert 0.0 <= res.p_value <= 1.0
@@ -78,40 +80,135 @@ def test_hosmer_lemeshow_rejects_gross_miscalibration() -> None:
 def test_hl_pvalue_vs_scipy_chi2() -> None:
     stats = pytest.importorskip("scipy.stats")
     y, p = _calibrated(2000)
-    res = hosmer_lemeshow(y, p, g=10)
+    res = hosmer_lemeshow(y, p, n_bins=10)
     expected = float(stats.chi2.sf(res.statistic, res.df))
     assert abs(res.p_value - expected) < 1e-9
 
 
-# --------------------------------------------------- vectorized ece_sweep scan (0.3.0)
+# ------------------------------------------------------------------ 0.3.4 fixes
 
 
-def _ece_sweep_best_b_reference(y: np.ndarray, p: np.ndarray, w: np.ndarray) -> int:
-    """The pre-0.3.0 ``ece_sweep`` scan loop, kept verbatim as the oracle.
+def _old_hosmer_lemeshow(y: np.ndarray, p: np.ndarray, g: int = 10) -> tuple[float, int]:
+    """0.3.x HL statistic (unweighted), verbatim loop."""
+    from probcal.metrics._binstats import bin_index
 
-    ``_ece_sweep_best_b_sorted`` replaces this bin-index/bincount loop with a
-    presorted cut-position scan; only ``best_b`` may be decided differently,
-    and this reference pins that it is not.
-    """
+    idx, m = bin_index(p, g, "mass")
+    stat, used = 0.0, 0
+    for b in range(m):
+        mask = idx == b
+        if not np.any(mask):
+            continue
+        nb = float(mask.sum())
+        obs = float(np.sum(y[mask]))
+        exp = float(np.sum(p[mask]))
+        denom = exp * (1.0 - exp / nb)
+        if denom > 0:
+            stat += (obs - exp) ** 2 / denom
+        used += 1
+    return stat, max(used - 2, 1)
+
+
+def test_hl_vectorized_matches_old_loop_and_unit_weights() -> None:
+    y, p = _calibrated(3000)
+    old_stat, old_df = _old_hosmer_lemeshow(y, p)
+    res = hosmer_lemeshow(y, p)
+    assert res.df == old_df
+    assert res.statistic == pytest.approx(old_stat, rel=1e-12)
+    assert hosmer_lemeshow(y, p, sample_weight=np.ones(len(y))) == res
+
+
+def test_hl_g_keyword_is_deprecated() -> None:
+    y, p = _calibrated(1000)
+    with pytest.warns(DeprecationWarning, match="n_bins"):
+        res = hosmer_lemeshow(y, p, g=8)
+    assert res == hosmer_lemeshow(y, p, n_bins=8)
+    with pytest.raises(TypeError, match="only n_bins"):
+        hosmer_lemeshow(y, p, g=8, n_bins=5)
+
+
+def test_hl_too_few_groups_gives_nan_not_fake_df() -> None:
+    # Two distinct scores -> at most two non-empty groups: no degrees of freedom.
+    p = np.array([0.2] * 50 + [0.6] * 50)
+    y = np.array(([1.0] * 10 + [0.0] * 40) + ([1.0] * 30 + [0.0] * 20))
+    res = hosmer_lemeshow(y, p)
+    assert res.df == 0
+    assert np.isnan(res.p_value)
+
+
+def test_hl_weights_are_relative() -> None:
+    y, p = _calibrated(2000)
+    w = np.random.default_rng(3).uniform(0.5, 2.0, len(y))
+    a = hosmer_lemeshow(y, p, sample_weight=w)
+    b = hosmer_lemeshow(y, p, sample_weight=1000.0 * w)
+    assert b.statistic == pytest.approx(a.statistic, rel=1e-10)
+    # Constant weights are unit weights.
+    assert hosmer_lemeshow(y, p, sample_weight=np.full(len(y), 7.0)).statistic == pytest.approx(
+        hosmer_lemeshow(y, p).statistic, rel=1e-12
+    )
+
+
+def test_hl_pvalue_tail_accurate() -> None:
+    y, p = _calibrated(5000)
+    res = hosmer_lemeshow(y, np.clip(p * 0.5, 1e-6, 1 - 1e-6))
+    assert 0.0 < res.p_value < 1e-200  # 1 - cdf rounded this to exactly 0
+
+
+def test_n_bins_validated() -> None:
+    y, p = _calibrated(200)
+    with pytest.raises(ValueError, match="n_bins"):
+        ece(y, p, n_bins=0)
+    with pytest.raises(ValueError, match="n_bins"):
+        hosmer_lemeshow(y, p, n_bins=2.5)  # type: ignore[arg-type]
+
+
+def _old_ece_debiased(y: np.ndarray, p: np.ndarray, n_bins: int = 15) -> float:
+    bs = bin_stats(y, p, np.ones(len(y)), n_bins, "mass")
+    shares = bs.w_sum / len(y)
+    gaps = np.abs(bs.p_mean - bs.rate)
+    out = 0.0
+    for i in range(len(gaps)):
+        if bs.n_obs[i] > 1:
+            var_b = bs.rate[i] * (1.0 - bs.rate[i]) / (bs.n_obs[i] - 1)
+            out += shares[i] * np.sqrt(max(gaps[i] ** 2 - var_b, 0.0))
+        else:
+            out += shares[i] * gaps[i]
+    return float(out)
+
+
+def test_ece_debiased_unit_weights_unchanged_and_kish_weighted() -> None:
+    y, p = _calibrated(3000)
+    assert ece_debiased(y, p) == pytest.approx(_old_ece_debiased(y, p), rel=1e-12, abs=1e-15)
+    assert ece_debiased(y, p, sample_weight=np.ones(len(y))) == ece_debiased(y, p)
+    # Concentrated weights shrink the effective bin counts, so the variance
+    # correction grows; 0.3.x used the raw counts and ignored this.
+    w = np.where(np.arange(len(y)) % 10 == 0, 50.0, 1.0)
+    yw, pw, ww = _prep(y, p, w)
+    bs = bin_stats(yw, pw, ww, 15, "mass")
+    n_eff = bs.w_sum * ww.sum() / np.dot(ww, ww)
+    gaps = np.abs(bs.p_mean - bs.rate)
+    var_b = bs.rate * (1 - bs.rate) / (n_eff - 1)
+    want = np.sum(bs.w_sum / ww.sum() * np.sqrt(np.maximum(gaps**2 - var_b, 0.0)))
+    assert ece_debiased(y, p, sample_weight=w) == pytest.approx(want, rel=1e-12)
+    assert ece_debiased(y, p, sample_weight=3.0 * w) == pytest.approx(want, rel=1e-12)
+
+
+# --------------------------------------------------- ece_sweep: Roelofs et al. stopping rule
+
+
+def _sweep_reference(y: np.ndarray, p: np.ndarray, w: np.ndarray, stop: bool) -> int:
+    """Bin-count scan written out: ``stop`` = paper rule, else 0.3.x rule."""
     best_b = 1
     for b in range(2, min(len(p), 100) + 1):
-        _, _, rates, _ = _bin_gaps(y, p, w, b, "mass")
+        rates = bin_stats(y, p, w, b, "mass").rate
         if np.all(np.diff(rates) >= 0.0):
             best_b = b
+        elif stop:
+            break
     return best_b
 
 
-def _ece_sweep_reference(y: np.ndarray, p: np.ndarray, w: np.ndarray, norm: str = "l1") -> float:
-    """The pre-0.3.0 ``ece_sweep`` body, verbatim, over prepped arrays."""
-    best_b = _ece_sweep_best_b_reference(y, p, w)
-    if best_b == 1:
-        return abs(float(np.average(p, weights=w)) - float(np.average(y, weights=w)))
-    return ece(y, p, n_bins=best_b, strategy="mass", norm=norm, sample_weight=w)
-
-
 def _sweep_fixtures() -> list[object]:
-    """(y, p, w) cases: two portfolio sizes, heavy score ties, non-uniform weights."""
-    out = []
+    out: list[object] = []
     for n in (500, 5000):
         d = make_pd_portfolio(n=n, random_state=3)
         out.append(pytest.param(d.y, d.scores, np.ones(n), id=f"portfolio-{n}"))
@@ -123,30 +220,32 @@ def _sweep_fixtures() -> list[object]:
 
 
 @pytest.mark.parametrize("y,p,w", _sweep_fixtures())
-def test_sorted_sweep_scan_picks_the_same_best_b(
-    y: np.ndarray, p: np.ndarray, w: np.ndarray
-) -> None:
-    order = np.argsort(p, kind="stable")
-    assert _ece_sweep_best_b_sorted(p[order], y[order], w[order]) == _ece_sweep_best_b_reference(
-        y, p, w
-    )
+def test_sweep_rules_match_reference(y: np.ndarray, p: np.ndarray, w: np.ndarray) -> None:
+    ya, pa, wa = _prep(y, p, w)
+    assert _sweep_best_b(ya, pa, wa, 100, "first_violation") == _sweep_reference(ya, pa, wa, True)
+    assert _sweep_best_b(ya, pa, wa, 100, "largest") == _sweep_reference(ya, pa, wa, False)
 
 
-@pytest.mark.parametrize("y,p,w", _sweep_fixtures())
-def test_ece_sweep_value_is_bit_identical_to_the_old_body(
-    y: np.ndarray, p: np.ndarray, w: np.ndarray
-) -> None:
-    assert ece_sweep(y, p, sample_weight=w) == _ece_sweep_reference(y, p, w)
-    assert ece_sweep(y, p, norm="max", sample_weight=w) == _ece_sweep_reference(y, p, w, "max")
+def test_ece_sweep_stops_at_first_violation() -> None:
+    # Continuous scores, seed chosen so that a non-monotone bin count sits
+    # below a larger monotone one: 0.3.x jumped over it, the paper stops.
+    rng = np.random.default_rng(0)
+    p = expit(rng.normal(-1.5, 1.0, 500))
+    y = (rng.random(500) < expit(1.1 * np.log(p / (1 - p)) + 0.1)).astype(float)
+    ya, pa, wa = _prep(y, p, None)
+    first = _sweep_best_b(ya, pa, wa, 100, "first_violation")
+    largest = _sweep_best_b(ya, pa, wa, 100, "largest")
+    assert first < largest
+    rates = bin_stats(ya, pa, wa, first + 1, "mass").rate
+    assert np.any(np.diff(rates) < 0.0)
+    assert ece_sweep(y, p) == ece(y, p, n_bins=first)
+    assert ece_sweep(y, p, rule="largest") == ece(y, p, n_bins=largest)
 
 
-@pytest.mark.parametrize("y,p,w", _sweep_fixtures())
-def test_ece_sweep_presorted_matches_the_public_value(
-    y: np.ndarray, p: np.ndarray, w: np.ndarray
-) -> None:
-    # The presorted variant reaches the same ``best_b`` and the same unchanged
-    # final ``ece`` call; the remaining difference is bincount summation order
-    # over the reordered rows (~1e-16), which is why this is not ``==``.
-    order = np.argsort(p, kind="stable")
-    got = _ece_sweep_presorted(y[order], p[order], w[order])
-    assert got == pytest.approx(ece_sweep(y, p, sample_weight=w), rel=1e-12, abs=1e-15)
+def test_ece_sweep_options_validated() -> None:
+    y, p = _calibrated(300)
+    with pytest.raises(ValueError, match="rule"):
+        ece_sweep(y, p, rule="nope")
+    with pytest.raises(ValueError, match="max_bins"):
+        ece_sweep(y, p, max_bins=0)
+    assert ece_sweep(y, p, max_bins=1) == pytest.approx(abs(np.mean(p) - np.mean(y)))

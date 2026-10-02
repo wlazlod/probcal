@@ -217,3 +217,74 @@ def test_selection_report_has_mcb_dsc_columns() -> None:
     np.testing.assert_allclose(sel2.report_.mcb, rep.mcb)
     np.testing.assert_allclose(sel2.report_.dsc, rep.dsc)
     assert sel2.report_.unc == pytest.approx(rep.unc)
+
+
+# ---------------------------------------------------------------- 0.3.4 regressions
+
+
+def test_selector_delegates_the_inverse_protocol_to_its_winner() -> None:
+    """CAL-7: 0.3.x delegated only predict/interpret, so a selector that picked
+    Platt had no point_inverse and a bisection-only interval_inverse."""
+    from probcal.isotonic import IsotonicCalibrator
+    from probcal.parametric import PlattCalibrator
+
+    s, y = _distorted(1200)
+    sel = CalibratorSelector(candidates={"platt": PlattCalibrator()}, cv=3).fit(s, y)
+    best = sel.best_calibrator_
+    assert sel.affine_logit_coeffs_ == best.affine_logit_coeffs_
+    assert sel.complexity_rank == best.complexity_rank == 2.0
+    p = np.linspace(0.05, 0.9, 12)
+    np.testing.assert_array_equal(sel.point_inverse(p), best.point_inverse(p))
+    assert sel.interval_inverse(0.1, 0.3, space="logit") == best.interval_inverse(
+        0.1, 0.3, space="logit"
+    )
+
+    iso = CalibratorSelector(candidates={"iso": IsotonicCalibrator()}, cv=3).fit(s, y)
+    # Exact block-edge semantics, not the base-class bisection approximation.
+    assert iso.interval_inverse(0.2, 0.4) == iso.best_calibrator_.interval_inverse(0.2, 0.4)
+    assert iso.affine_logit_coeffs_ is None
+    with pytest.raises(NotImplementedError):
+        iso.point_inverse(np.array([0.3]))
+
+
+def test_selector_is_monotone_follows_the_winner_through_json() -> None:
+    from probcal.binning import HistogramBinningCalibrator
+
+    rng = np.random.default_rng(3)
+    s = rng.uniform(0.05, 0.95, 400)
+    y = (rng.random(400) < 0.3).astype(float)  # flat truth: noisy, non-monotone bins
+    sel = CalibratorSelector(
+        candidates={"hist": HistogramBinningCalibrator(n_bins=12, shrinkage=None)}, cv=3
+    ).fit(s, y)
+    assert sel.best_calibrator_.is_monotone_ is False
+    assert sel.is_monotone_ is False
+    assert CalibratorSelector.from_json(sel.to_json()).is_monotone_ is False
+
+
+def test_selector_unfitted_protocol() -> None:
+    """CAL-24: interpret() refuses before fit; complexity_rank is the default."""
+    sel = CalibratorSelector()
+    with pytest.raises(RuntimeError, match="not fitted"):
+        sel.interpret()
+    assert sel.complexity_rank == 100.0
+    assert sel.is_monotone_ is True
+
+
+@pytest.mark.parametrize("bad", [1, 0, 2.5, True])
+def test_selector_cv_validated(bad: object) -> None:
+    """CAL-14: cv=1 used to fit every candidate on an empty training fold."""
+    with pytest.raises(ValueError, match="cv"):
+        CalibratorSelector(cv=bad).fit(*_calibrated(300))  # type: ignore[arg-type]
+
+
+def test_selector_with_nested_non_json_candidate_round_trips() -> None:
+    """Candidate params go through each prototype's own _params_for_dict."""
+    from probcal import SegmentedCalibrator
+    from probcal.parametric import PlattCalibrator
+
+    cands = {"seg": SegmentedCalibrator(base=PlattCalibrator()), "platt": PlattCalibrator()}
+    sel = CalibratorSelector(candidates=cands, cv=3).fit(*_distorted(900))
+    again = CalibratorSelector.from_json(sel.to_json())
+    grid = np.linspace(0.01, 0.99, 30)
+    np.testing.assert_array_equal(again.predict_proba(grid), sel.predict_proba(grid))
+    assert isinstance(again.candidates["seg"].base, PlattCalibrator)

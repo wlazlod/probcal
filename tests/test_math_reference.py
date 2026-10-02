@@ -11,14 +11,12 @@ from probcal._math import (
     beta_ppf,
     betainc,
     chi2_ppf,
-    erf_vec,
     expit,
     gammainc_lower,
     irls_logistic,
     lgamma_vec,
     loess,
     logit,
-    norm_ppf,
     pava,
 )
 
@@ -61,20 +59,10 @@ def test_chi2_ppf_vs_scipy() -> None:
         np.testing.assert_allclose(ours, stats.chi2.ppf(q, df), atol=1e-8, rtol=1e-10)
 
 
-def test_norm_ppf_vs_scipy() -> None:
-    stats = pytest.importorskip("scipy.stats")
-    q = np.concatenate(
-        [np.array([1e-12, 1e-9, 1e-4]), np.linspace(0.01, 0.99, 99), np.array([1 - 1e-9])]
-    )
-    np.testing.assert_allclose(norm_ppf(q), stats.norm.ppf(q), atol=1e-11)
-
-
-def test_lgamma_erf_vs_scipy() -> None:
+def test_lgamma_vs_scipy() -> None:
     sp = pytest.importorskip("scipy.special")
     x = np.linspace(0.05, 30.0, 500)
     np.testing.assert_allclose(lgamma_vec(x), sp.gammaln(x), rtol=1e-13)
-    z = np.linspace(-6.0, 6.0, 500)
-    np.testing.assert_allclose(erf_vec(z), sp.erf(z), rtol=1e-13, atol=1e-15)
 
 
 def test_pava_vs_sklearn() -> None:

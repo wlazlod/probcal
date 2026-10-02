@@ -281,3 +281,44 @@ def test_public_exports() -> None:
     ):
         assert name in probcal.__all__
         assert getattr(probcal, name) is not None
+
+
+# ---------------------------------------------------------------- 0.3.4 regressions
+
+
+def test_beta_a_boundary_clamp_warns_like_temperature() -> None:
+    """CAL-13: separated data push the "a" exponent to the 1e6 cap; 0.3.x clamped
+    there silently while TemperatureCalibrator warned for the same NLL."""
+    s = np.array([0.2, 0.3, 0.4, 0.6, 0.7, 0.8])
+    y = np.array([0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
+    with pytest.warns(UserWarning, match="no interior minimum"):
+        cal = BetaCalibrator(variant="a").fit(s, y)
+    assert cal.a_ == 1e6
+    with pytest.warns(UserWarning, match="no interior minimum"):
+        TemperatureCalibrator().fit(s, y)
+
+
+def test_beta_a_and_temperature_share_the_estimate() -> None:
+    """Beta "a" is temperature scaling in another parameterization: a = 1/T."""
+    s, y = _sample(0.7, 0.0, n=5000)
+    beta = BetaCalibrator(variant="a").fit(s, y)
+    temp = TemperatureCalibrator().fit(s, y)
+    np.testing.assert_allclose(beta.a_, 1.0 / temp.T_, rtol=1e-9)
+
+
+@pytest.mark.parametrize("variant", ["abm", "ab", "a"])
+def test_beta_point_inverse_round_trip_through_base_hook(variant: str) -> None:
+    cal = BetaCalibrator(variant=variant).fit(*_sample(0.8, -0.3, n=5000))
+    p = np.linspace(0.02, 0.9, 25)
+    np.testing.assert_allclose(cal.predict_proba(cal.point_inverse(p)), p, atol=1e-12)
+    z = cal.point_inverse(p, space="logit")
+    np.testing.assert_allclose(expit(z), cal.point_inverse(p), atol=1e-15)
+
+
+@pytest.mark.parametrize("cls", [PlattCalibrator, TemperatureCalibrator])
+def test_affine_interval_inverse_is_closed_form(cls: type) -> None:
+    """CAL-17: Platt/Temperature invert through the base affine-logit closed form."""
+    cal = cls().fit(*_sample(0.8, -0.3, n=5000))
+    a, b = cal.affine_logit_coeffs_
+    lo, hi = cal.interval_inverse(0.1, 0.4, space="logit")
+    np.testing.assert_allclose([lo, hi], (logit(np.array([0.1, 0.4])) - b) / a, rtol=1e-12)

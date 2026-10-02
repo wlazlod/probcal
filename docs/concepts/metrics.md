@@ -15,6 +15,34 @@ All metrics share the signature `metric(y, p, *, sample_weight=None, **kw)`, and
 `evaluate(y, p)` assembles everything into a `MetricReport` with seeded bootstrap percentile
 confidence intervals.
 
+## Sample weights
+
+Every `sample_weight` in `probcal.metrics` and `probcal.curves` must be strictly positive and
+finite, and is read as a **relative frequency weight**:
+
+- Point estimates (scores, binned and smooth calibration errors, fitted intercept and slope)
+  are weighted means. They do not change when all weights are multiplied by a constant, and
+  unit weights reproduce the unweighted numbers exactly.
+- Wherever a *sample size* enters (a test statistic's variance, a finite-sample bias
+  correction, a likelihood-ratio statistic), the weights are first rescaled to
+  `w_eff = w * sum(w) / sum(w**2)`, so they sum to Kish's effective sample size
+  `n_eff = sum(w)**2 / sum(w**2)`. This applies to `spiegelhalter_z`, `ece_debiased`,
+  `murphy_decomposition(bias_corrected=True)`, `hosmer_lemeshow`, `calibration_test`,
+  `calibration_belt` and the `ecce_curve` null envelope. Unit weights give `w_eff == w`
+  exactly; a constant factor changes nothing; and weights concentrated on a few rows cannot
+  manufacture significance.
+
+Two count-form functions read weights literally instead: `pluto_tasche_from_arrays` sums
+weights as obligor and default counts (an integer weight equals row duplication), and
+`hl_e_test` uses weights as exponents on the likelihood-ratio factors, matching
+`CalibrationMonitor`. The per-grade binomial and Jeffreys tests use raw integer counts and
+ignore weights.
+
+0.3.4 introduced this convention. Before it, test statistics treated `sum(w)` as the sample
+size: Hosmer–Lemeshow and the calibration LR test scaled with a constant weight `c`, and
+Spiegelhalter's z was divided by `sqrt(c)`. For weights drawn from U(0.5, 2) the HL and LR
+statistics now come out smaller by the factor `n_eff / sum(w)` (about 0.72).
+
 ## Proper scoring rules
 
 The **log loss** and **Brier score** (Brier, 1950) were defined in
@@ -110,13 +138,21 @@ the absolute difference of two noisy means is biased upward, so a *perfectly cal
 model has positive expected ECE, and the bias grows with \( B \) and shrinks with portfolio size
 slowly. `ece_debiased` applies the bias correction in the spirit of Bröcker (2009) and Ferro
 and Fricker (2012); `ece_sweep` implements the monotonic-sweep calibration error of Roelofs
-et al. (2022), which chooses the largest equal-mass \( B \) whose bin means remain monotone,
-a principled, data-driven resolution choice that markedly reduces bias. `adaptive_ece` is an
-explicit alias for equal-mass ECE, provided because the literature uses the name; the
-documentation states the equivalence.
+et al. (2022), a principled, data-driven resolution choice that markedly reduces bias. It
+follows the paper's rule (its eq. 8 and Algorithm 1): sweep \( B = 2, 3, \ldots \) equal-mass
+bins and stop at the **first** bin count whose bin event rates are not monotone; the chosen
+\( B^* \) is the last count before that violation, so every smaller count is monotone too.
+The paper sweeps up to \( B = n \); probcal stops at `max_bins=100` as a cost cap. Up to 0.3.x,
+probcal instead took the largest monotone \( B \) anywhere in 2..100, skipping over
+non-monotone counts; `ece_sweep(rule="largest")` restores that. On synthetic continuous data
+the chosen \( B \) changes in about half of the cases (usually smaller), the value by at most
+~0.01 absolute at n=500 and ~0.003 at n=10⁴. `adaptive_ece` is a deprecated alias for
+equal-mass ECE (`ece(strategy="mass")`), kept because the literature uses the name; it warns
+and is removed in 0.4.0.
 
 The **Hosmer–Lemeshow test** (Hosmer and Lemeshow, 1980) groups observations into \( g \)
-risk deciles and forms
+risk deciles (`hosmer_lemeshow(..., n_bins=10)`; the 0.3.x spelling `g=` is deprecated) and
+forms
 
 \[
 C = \sum_{b=1}^{g} \frac{(O_b - E_b)^2}{E_b\,\bigl(1 - E_b/n_b\bigr)} \;\sim\; \chi^2_{g-2},
@@ -128,7 +164,9 @@ the statistic depends on an essentially arbitrary grouping (changing \( g \), or
 handling at decile boundaries, changes the p-value), and its power scales with \( n \) so that
 on large portfolios it rejects calibration defects of no practical consequence, while on small
 ones it detects almost nothing. probcal ships it because validators expect it, marks it
-report-only, and never lets the [selector](auto-selection.md) see it.
+report-only, and never lets the [selector](auto-selection.md) see it. With fewer than three
+non-empty groups the reference distribution has no degrees of freedom left, so the result
+reports `df=0` and `p_value=nan` rather than a p-value on a floored `df=1`.
 
 ## Binning-free estimators
 
@@ -150,6 +188,16 @@ maximum \( \max_k |C_k|/n \) and the mean absolute deviation summarize the drift
 of \( C_k \) against sorted \( p \) localizes *where* the miscalibration lives without any
 smoothing parameter at all; `ecce_curve` and `plot_ecce` render it
 ([Visualization](visualization.md)).
+
+**Ties.** Sorting by \( p \) leaves the order inside a block of tied predictions arbitrary, and
+reading the walk inside such a block would make the statistic depend on input row order.
+probcal reads the walk only at the end of each tied block (where it is order-free), takes the
+\( x \) coordinate as the cumulative weight fraction, and averages the mean deviation over
+blocks weighted by block weight. Without ties and with unit weights this is the textbook
+statistic, bit for bit; with ties `ecce_max` changes only if the old maximum fell inside a
+block, while `ecce_mean` moves (about +8.5% on scores rounded to two decimals), and
+`EcceCurve` has one point per distinct prediction. `ecce`, `ecce_curve` and `evaluate` share
+the same walk.
 
 **ICI and its quantiles** (Austin and Steyerberg, 2019). Fit a LOESS smoother
 \( \hat{c}(p) \) of outcome on prediction (Austin and Steyerberg, 2014, established the
@@ -174,7 +222,9 @@ z = \frac{\sum_i (y_i - p_i)(1 - 2p_i)}
 
 gives an asymptotically standard normal statistic with a two-sided p-value. No binning, no
 smoothing; the trade is that it aggregates over the whole range and can miss compensating
-regional errors.
+regional errors. When every prediction is exactly 0.5 the null variance is zero and the
+statistic is undefined: `z` and `p_value` are NaN (and the guardrail reports
+`spiegelhalter_ok=False`).
 
 ## Kernel calibration error and tests (SKCE)
 
@@ -245,7 +295,10 @@ estimated as *diagnoses*.
 The **calibration test** is the likelihood-ratio test of \( (\alpha, \beta) = (0, 1) \)
 jointly, on 2 degrees of freedom: the Cox-framed "weak calibration" test, in the lineage
 running through Miller, Hui and Tierney (1991). Its χ² p-value comes from
-`probcal._math.gammainc_lower`, keeping the runtime numpy-only.
+`probcal._math.chi2_sf`, an upper-tail evaluation that keeps the runtime numpy-only and stays
+accurate deep in the tail (since 0.3.4, every χ² and normal p-value in the package, including
+Hosmer–Lemeshow, the belt, Spiegelhalter and SKCE, is computed this way, so tiny p-values are
+reported as such instead of rounding to exactly 0).
 
 **Guardrails.** `calibration_guardrails(y, p)` condenses the framework into three flags used
 across the package and printed in every selection report: slope within \( [0.9, 1.1] \),
@@ -306,9 +359,13 @@ artifact is visible rather than misread. Bootstrap-heavy computations carry the 
 marker and a fixed default seed, per the package's reproducibility conventions.
 
 **Grouping (`by=`).** `evaluate(..., by=labels)` runs the exact same pooled call above on the
-full data plus one independent call per sorted group, returning a `GroupedMetricReport`
-instead of a plain `MetricReport`. Group `i` (in sorted-label order) uses `seed + 1000 * i`
-rather than reusing `seed` for every group. The offset is fixed and label-independent, so
+full data plus one independent call per group, returning a `GroupedMetricReport`
+instead of a plain `MetricReport`. Groups are formed from the raw label values (so `1` and
+`"1"` are different groups) and displayed as `str(value)`, ordered by display name; two
+distinct values that print the same raise `ValueError`. Group `i` (in that order) uses
+`random_state + 1000 * i` rather than reusing `random_state` for every group. (`random_state`
+replaces the 0.3.x keyword `seed`, which still works with a `DeprecationWarning` until
+0.4.0.) The offset is fixed and label-independent, so
 reproducibility does not depend on how many groups exist or what they are named, and no two
 groups' bootstrap draws can coincide by construction. This is side-by-side reporting, not a
 test: no comparison across groups is computed, and no multiple-comparison correction is
@@ -381,7 +438,7 @@ print(calibration_slope(y_cal, s_cal), spiegelhalter_z(y_cal, s_cal))
 print(skce(y_cal, s_cal), skce_test(y_cal, s_cal).p_value)  # kernel calibration error + test
 print(calibration_guardrails(y_cal, s_cal))               # the three-flag summary
 
-report = evaluate(y_cal, s_cal, n_boot=100, seed=42)      # everything + bootstrap CIs
+report = evaluate(y_cal, s_cal, n_boot=100, random_state=42)   # everything + bootstrap CIs
 print(report)
 
 print(jeffreys_grade_test(y_cal, s_cal, ms))              # ECB-style backtest, best to worst
@@ -426,78 +483,60 @@ gap can be much larger, because there the exact path's fixed 257-point grid unde
 small-sigma kernels and the lattice value (≥ 8 samples per sigma) is the better one.
 
 **`evaluate`'s cost is dominated by the bootstrap**, not any single metric: every point
-estimate in the requested catalog is recomputed `n_boot` times (default 1000). Per replicate,
-scores, ECCE, and the regression framework are O(n); binned ECEs are O(n log n); the ICI
-family shares one LOESS fit at O(grid_size · frac · n); `smooth_ece` bins once in O(n) and then
-costs O(bins · taps) per bisection step, where taps is the truncated-Gaussian kernel width
-(at most ~161 taps), independent of n, measured at ~ms per call for n up to 10⁵. `metrics=`
-restricts the catalog to the names actually needed.
+estimate in the requested catalog is recomputed `n_boot` times (default 1000; `n_boot=0`
+returns point estimates only, with NaN interval bounds). Per replicate, scores, regression
+metrics and ECCE are O(n); the binned ECEs are O(n log n), with `ece`/`ece_debiased`/`mce`
+sharing one 15-bin pass; `ece_sweep` is O(n log n) per candidate bin count and stops at the
+first non-monotone count (typically fewer than 15 candidates); the ICI family shares one
+LOESS fit at O(grid_size · frac · n); `smooth_ece` bins once in O(n) and then costs
+O(bins · taps) per bisection step, where taps is the truncated-Gaussian kernel width (at most
+~161 taps), independent of n. `metrics=` restricts the catalog to the names actually needed.
 
-0.3.0 removes the large constant factors *inside* the loop, in three steps. First, each
-replicate is sorted by prediction once (`np.argsort(..., kind="stable")`) and that order is
-shared: the LOESS fit and ECCE skip their own sorts, and `ece`/`ece_debiased`/`mce`, which all
-bin at 15 equal-mass bins, share a single binning pass instead of three. Second, `ece_sweep`'s
-~99-candidate monotonicity scan reads per-bin weighted sums off prefix-sum differences at
-`searchsorted` cut positions instead of rebuilding a length-n bin index per candidate. Third,
-the LOESS anchor evaluation is vectorized: the 512 anchors' tricube-weighted local fits are
-solved in cache-sized blocks of whole windows rather than one Python iteration each (every
-window holds exactly the same number of points, so the block is rectangular). That third step
-is what actually moves the total, since the anchor fit was 84% of a replicate after the
-first two.
+Each replicate is sorted by prediction once (`np.argsort(..., kind="stable")`), and the LOESS
+fit and the ECCE walk reuse that order. The LOESS anchors are fitted in cache-sized blocks of
+whole windows rather than one Python iteration each (`_math._loess_fit_sorted_vec`, the only
+LOESS engine since 0.3.4; it matches the former per-point loop to ≤ 4.3×10⁻¹⁵ on fitted values
+and is tested against it). Reported **point estimates** come off the unsorted path; the
+bootstrap replicates' reordered sums move percentile CI bounds only in their last bits.
 
-Reported **point estimates are untouched**: they are still computed on the unsorted, scalar
-path, bit-for-bit. Only the bootstrap replicates take the fast path, and it differs from the
-slow one in two harmless ways. The reordered weighted sums move percentile CI bounds in their
-last bits (measured ≤ 4×10⁻¹¹ relative on a n=10⁴/`n_boot`=1000 full-catalog run), and the
-vectorized tricube weight cubes by multiplication where the scalar loop writes `** 3`, a
-sub-ulp difference (≤ 2.3×10⁻¹⁶ relative) worth taking because numpy sends `** 3` to `libm`
-`pow` at ten times the cost of two multiplies. The window selection itself is exact: the
-vectorized search reproduces the scalar two-pointer rule's comparison verbatim and is tested to
-land on the same index, tied scores included.
+The vectorized anchor fit differs from a scalar loop by ≤ 2.3×10⁻¹⁶ relative **on
+well-conditioned windows only**. If a window is rank-deficient (every non-zero tricube weight
+sitting on one distinct `p`, which needs the far half of the window to lie at exactly the
+bandwidth), the local-linear determinant is pure cancellation (~10⁻²³ rather than 0), and an
+ulp-level weight difference can put two evaluation orders on opposite sides of the
+`abs(det) < _FPMIN` guard, giving values that differ by O(1). On such a window the `swy / sw`
+branch (the weighted mean, what a rank-deficient local *linear* fit degenerates to) is the
+well-defined answer; the other branch divides by cancellation noise. Since anchors are data
+quantiles, this has not been observed to reach a reported value, and the corner is pinned by
+`tests/test_math.py`.
 
-The sub-ulp bound holds **on well-conditioned windows only**. If a window is rank-deficient
-(every non-zero tricube weight sitting on one distinct `p`, which needs the far half of the
-window to lie at exactly the bandwidth), the local-linear determinant is pure cancellation
-(~10⁻²³ rather than 0), and the ulp-level weight difference can put the two paths on opposite
-sides of the `abs(det) < _FPMIN` guard, giving values that differ by O(1). On such a window the
-`swy / sw` branch (the weighted mean, what a rank-deficient local *linear* fit degenerates to)
-is the well-defined answer and either path may be the one that takes it; the other divides by
-cancellation noise and is already arbitrary in the scalar loop, independently of the
-vectorization. Since anchors are data quantiles, this has not been observed to reach a reported
-value: zero end-to-end differences across 1,738 two-distinct-score configurations whose anchor
-grid straddles the gap. The guard is deliberately left as it is, since changing it would move
-the point-estimate path, and the corner is pinned by
-`tests/test_math.py::test_loess_vectorized_rank_deficient_window`.
+Measured on the dev host at n=10⁴, one full-catalog replicate costs about 28 ms (0.3.x: 34 ms);
+`ece_sweep`'s early stop accounts for most of the difference (1.8 ms per replicate, was
+8.9 ms), and the binned ECE family costs 0.34 ms. `evaluate(n=10⁴, n_boot=1000)` takes about
+28 s. The ICI family's LOESS fit remains the largest single cost, so `metrics=` excluding it
+(`ici`/`e50`/`e90`/`emax`) is the biggest lever. For n above roughly 10⁶, reduce `n_boot`, pass
+a `metrics=` subset, or both.
 
-Measured on the dev host at n=10⁴, one full-catalog replicate costs 0.089s: ICI family 0.051s
-(58%), `ece_sweep`'s scan 0.024s (27%), `intercept`/`slope` 0.009s (10%), `smooth_ece` 0.003s,
-the whole binned ECE family 0.4ms. `evaluate(n=10⁴, n_boot=1000)` takes 87s, down from 304s in
-0.2.x (3.5x); the intermediate figure after the sort and sweep changes alone was 226s, and the
-vectorized anchor fit (0.186s → 0.046s per call) accounts for the rest. The ICI family is still
-the largest single share, so `metrics=` excluding it (`ici`/`e50`/`e90`/`emax`) remains the
-biggest lever. For n above roughly 10⁶, reduce `n_boot`, pass a `metrics=` subset, or both.
-
-`docs/scripts/benchmarks.py` measures these on demand; per-metric rows (`ece`, `ece_sweep`,
-`ecce`, `ici`, `smooth_ece`) are 0.3.0 additions. Measured on the dev host:
+`docs/scripts/benchmarks.py` measures single calls on demand. Measured on the dev host
+(0.3.4):
 
 | n | call | wall time (s) |
 | --- | --- | --- |
-| 10,000 | `ece(d.y, d.scores)` | 0.009 |
-| 10,000 | `ece_sweep(d.y, d.scores)` | 0.095 |
+| 10,000 | `ece(d.y, d.scores)` | 0.004 |
+| 10,000 | `ece_sweep(d.y, d.scores)` | 0.002 |
 | 10,000 | `ecce(d.y, d.scores)` | 0.001 |
-| 10,000 | `ici(d.y, d.scores)` | 0.186 |
-| 10,000 | `smooth_ece(d.y, d.scores)` | 0.003 |
-| 10,000 | `evaluate(d.y, d.scores, n_boot=100)` | 9.4 |
-| 100,000 | `ece(d.y, d.scores)` | 0.015 |
-| 100,000 | `ece_sweep(d.y, d.scores)` | 0.796 |
-| 100,000 | `ecce(d.y, d.scores)` | 0.011 |
-| 100,000 | `ici(d.y, d.scores)` | 1.863 |
-| 100,000 | `smooth_ece(d.y, d.scores)` | 0.005 |
-| 100,000 | `evaluate(d.y, d.scores, n_boot=100)` | 93.1 |
+| 10,000 | `ici(d.y, d.scores)` | 0.021 |
+| 10,000 | `smooth_ece(d.y, d.scores)` | 0.001 |
+| 10,000 | `evaluate(d.y, d.scores, n_boot=100)` | 2.8 |
+| 100,000 | `ece(d.y, d.scores)` | 0.006 |
+| 100,000 | `ece_sweep(d.y, d.scores)` | 0.058 |
+| 100,000 | `ecce(d.y, d.scores)` | 0.010 |
+| 100,000 | `ici(d.y, d.scores)` | 0.193 |
+| 100,000 | `smooth_ece(d.y, d.scores)` | 0.003 |
+| 100,000 | `evaluate(d.y, d.scores, n_boot=100)` | 25.8 |
 
-The single-call `ece_sweep` and `ici` rows time the public functions, which keep the original
-scan and the scalar anchor loop; the vectorized versions are bootstrap-internal and cost 0.024s
-and 0.046s respectively at n=10⁴.
+The public `ece_sweep` and `ici` now run the same code as the bootstrap path (early-stopping
+sweep, vectorized LOESS), so the single-call rows above are the per-replicate costs.
 
 ## References
 

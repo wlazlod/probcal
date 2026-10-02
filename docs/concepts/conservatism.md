@@ -149,9 +149,9 @@ the Pluto–Tasche and Jeffreys bands then apply to the built scale unchanged.
 
 ## Jeffreys upper bands: a masterscale band table
 
-`jeffreys_upper_bands(y, p, grades, *, level=0.9, order=None)` packages the same per-grade
+`jeffreys_upper_bands(y, p, grades, *, confidence=0.9, order=None)` packages the same per-grade
 Jeffreys posterior upper bound `jeffreys_grade_test` already reports as its own-grade display
-interval (`beta_ppf(level, k_i + 0.5, n_i - k_i + 0.5)` under a `Beta(k_i + 0.5, n_i - k_i +
+interval (`beta_ppf(confidence, k_i + 0.5, n_i - k_i + 0.5)` under a `Beta(k_i + 0.5, n_i - k_i +
 0.5)` posterior on grade *i*'s own default rate, no cross-grade pooling) into the
 `{grade: (lo, hi)}` masterscale table `thresholds.calibrated_bands_to_raw` consumes directly.
 `lo_i` is the previous grade's `hi` (`0.0` for the best grade), so the bands are contiguous by
@@ -161,9 +161,13 @@ needs pooling with worse grades to say anything about a zero-default grade at al
 
 The own-grade `hi` sequence need not come out non-decreasing on its own (a noisy grade can post
 a smaller posterior upper bound than a better grade), which would make adjacent bands overlap.
-`jeffreys_upper_bands` monotonizes it with `_math.pava` (weighted isotonic regression, weight =
-grade size) in the given `order`, the minimum-adjustment non-decreasing fit rather than a
-running maximum, and warns (`UserWarning`) only when that adjustment changed something.
+`jeffreys_upper_bands` monotonizes it with a running maximum in the given `order`
+(`np.maximum.accumulate`), and warns (`UserWarning`) only when that adjustment changed
+something. A running maximum only ever *raises* a bound, which is the prudent direction for an
+upper bound. Up to 0.3.x the hull was a weighted isotonic regression (PAVA, weight = grade
+size): the minimum-adjustment fit, but one that could pull a small grade's bound *down* below
+its own posterior quantile when a large, better-performing grade followed it. (`level=` is the
+0.3.x spelling of `confidence=`; it still works with a `DeprecationWarning` until 0.4.0.)
 
 ```python
 # s_cal, y_cal: held-out calibration scores, outcomes
@@ -175,7 +179,7 @@ from probcal.thresholds import calibrated_bands_to_raw
 grades = np.array(["A"] * 100 + ["B"] * 100)
 y = np.array([0.0] * 100 + [1.0] * 5 + [0.0] * 95)
 p = np.array([0.01] * 100 + [0.05] * 100)
-bands = jeffreys_upper_bands(y, p, grades, level=0.9)
+bands = jeffreys_upper_bands(y, p, grades, confidence=0.9)
 # {"A": (0.0, 0.0134...), "B": (0.0134..., 0.0846...)}
 
 fitted_calibrator = BetaCalibrator().fit(s_cal, y_cal)  # s_cal, y_cal: held-out calibration scores and outcomes

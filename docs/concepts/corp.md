@@ -16,7 +16,7 @@ a bandwidth-tuned overlay, needs to be defensible.
 ## The PAV fit
 
 `corp_reliability(y, p, bands="consistency")` sorts `p`, pools tied scores
-(`isotonic._aggregate_ties`), and runs weighted PAVA (`_math.pava`) on the pooled
+(`_steps.aggregate_ties`), and runs weighted PAVA (`_math.pava`) on the pooled
 event rate: this is ordinary least-squares isotonic regression, `min sum w_i (y_i -
 m_i)^2` subject to `m` non-decreasing, solved in amortized O(n) by the standard
 pool-and-merge sweep, with no partition search and no cross-validated bin count. The result
@@ -55,7 +55,7 @@ Two numeric conventions apply throughout:
   everywhere else in the package (`_math.logit`'s `_LOGIT_CLIP`), so log-loss decomposition
   stays finite at degenerate blocks instead of raising or returning `inf`.
 - **Weighted PAVA.** Sample weights are pooled through both stages: tied scores are
-  aggregated first (`isotonic._aggregate_ties`, weight-summing duplicate `p` values into
+  aggregated first (`_steps.aggregate_ties`, weight-summing duplicate `p` values into
   one point with a weighted mean `y`), then `_math.pava` runs its weighted merge sweep on
   the aggregated points. An unweighted call is exactly the `w = 1` special case; there is
   no separate unweighted code path to drift out of sync.
@@ -77,8 +77,9 @@ step, in two flavors:
 
 Both bands are built the same way (`_corp.corp_bands`): resample `n_resamples` times, refit
 PAV on a shared 201-point grid spanning the 0.5th to 99.5th percentile of `p`
-(`_corp.eval_step` evaluates the step fit at arbitrary grid points), and take the pointwise
-central `level` quantile interval across resamples at each grid point independently.
+(`_steps.eval_step(lo, level, grid)` evaluates the right-continuous step fit at arbitrary
+grid points), and take the pointwise central `confidence` quantile interval across resamples
+at each grid point independently (the result stores it as `CorpResult.level`).
 
 That last clause is the reason coverage is stated **pointwise, not uniform**: at any one
 grid point, a nominal 90% band contains the true fit's value roughly 90% of the time across
@@ -156,7 +157,7 @@ from probcal.selection import CalibratorSelector
 port = make_pd_portfolio(n=5000, random_state=0)
 y, p = port.y, port.scores
 
-result = corp_reliability(y, p, bands="consistency", level=0.9)
+result = corp_reliability(y, p, bands="consistency", confidence=0.9)
 print(result.brier, result.brier_mcb, result.brier_dsc, result.brier_unc)
 ax = plot_corp(result, scale="logit")
 

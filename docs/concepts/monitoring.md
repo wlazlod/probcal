@@ -73,17 +73,31 @@ components and variants combine below.
 repair.
 
 **Per-grade processes** `E_grade[g]` (when a `grade` array is passed): the
-offset process restricted to grade `g`, combined by averaging into
-`E_grades`. A single drifting grade can then trip the alarm even when the
-portfolio-level mean is preserved.
+offset process restricted to grade `g`. With the grade universe declared up
+front (`CalibrationMonitor(grades=masterscale.names)`), they are combined by an
+equal-weight average over the **declared** grades into `E_grades`, and a single
+drifting grade can then trip the alarm even when the portfolio-level mean is
+preserved. A declared grade with no data yet contributes `e = 1`; a label
+outside the declared set raises `ValueError`, as do declared grades that
+collide after normalization (`1` and `1.0` are the same grade).
 
 **Global alarm** on `E = mean(E_off, E_shape[, E_grades])` at level
-`alpha`; component e-values are always reported for diagnosis.
+`alpha`; component e-values are always reported for diagnosis. `E_grades`
+is in the mixture **only when `grades=` is declared**, and then from the
+first batch on. The reason is Ville's inequality: an average of e-processes
+is an e-process only if its components and weights are fixed in advance. A
+mixture that admits a new grade mid-stream, or re-weights when one first
+appears, is not a supermartingale under the null (0.3.x did exactly this,
+and its `e_global` could jump at the batch a grade first showed up). With
+`grades=None`, per-grade processes and confidence sequences are still
+tracked and reported (`e_grades`, `grade_delta_ci`, `grade_table`) as
+diagnostics, but they stay out of the alarm, and the monitor warns once
+suggesting `grades=masterscale.names`.
 
 ![E-process trajectory over twelve monthly cohorts: the global wealth curve and its offset, shape and per-grade components stay near 1 for six batches, then climb on a log scale and cross the dashed 1/alpha threshold at the labelled alarm batch m08; the lower panel plots each grade's time-uniform offset confidence sequence tightening from batch to batch, with the two event-rich grades ending clear of zero and the three thinner ones still straddling it](img/e_process.png)
 
 The figure is the whole rule in one view: twelve cohorts of a deployed
-beta calibration, the true PD shifted by +0.6 log-odds from month seven
+beta calibration, monitored with the five masterscale grades declared, the true PD shifted by +0.6 log-odds from month seven
 onward. Wealth hovers around 1 while the forecast is calibrated, the
 alarm fires at the first crossing of `1/alpha` (batch `m08`), and the
 components say *what* moved: offset and shape both climb here.
@@ -123,14 +137,19 @@ answers a question the portfolio-level CS cannot: a single grade drifting
 while the portfolio average stays put is invisible to `delta_ci`, but shows
 up in that grade's own `MonitorStep.grade_delta_ci[g]`. `plot_e_process(...,
 grades_panel=True)` adds a second axes plotting every grade's CS band
-(lo/hi) across steps, below the main e-process plot; `grades_panel=False`
-(the default) renders pixel-identically to 0.2.0.
+(lo/hi) across steps in a panel carved from the main axes' slot (inside the
+figure, or inside a caller-supplied `ax`'s slot), with the step labels moved to
+the panel. The default `grades_panel=False` output is unchanged (pinned by a
+structural plot snapshot).
 
 ## Drift-onset estimate and the since-onset window
 
 Each step also carries `MonitorStep.log_e_increment`: the batch's additive plug-in
-log-LR contribution, the offset plug-in's `bern_log_lr` factor (0 when `delta_hat ==
-0`) plus the shape plug-in's (0 when its plug-in is the identity). `e_global` is a
+log-LR contribution, summed over the **active** components only: the offset plug-in's
+`bern_log_lr` factor (0 when `delta_hat == 0`) if `"offset"` is in `components`, the
+shape plug-in's (0 when its plug-in is the identity) if `"shape"` is, plus the
+per-grade plug-in increments when `grades=` is declared. Undeclared grades never
+contribute. `e_global` is a
 logsumexp mixture and is *not* additive across batches, so it cannot be searched for
 where the evidence trail turns; `log_e_increment` is purely additive and exists for
 exactly that purpose.
@@ -197,8 +216,10 @@ action, returning an `AppliedAction(kind, offset, composed, monitor, window, aud
   factored out so the two windows can never disagree), and fits a
   `LogitOffset` on it. If `target` is given, the offset is composed onto it:
   `Chain([target.calibrator_, *target.offsets_, offset])` for a `Chain`, or
-  `copy.deepcopy(target).offset_to(delta=est.delta)` for a `CalibratedModel`
-  (`target` itself is never mutated either way; `None` leaves `composed=None`).
+  `target.with_offset(offset)` for a `CalibratedModel` (a deep copy with the
+  fitted offset appended; it needs no calibration data, so it also works on a
+  model loaded from JSON). `target` itself is never mutated either way; `None`
+  leaves `composed=None`.
   A **fresh** `CalibrationMonitor` is returned too, built with the same
   constructor parameters (`CalibrationMonitor(**mon._ctor_params())`): fresh,
   not continued, because the e-process is a martingale under the null "the
@@ -275,6 +296,15 @@ caveat that applies to every bound on that page, this one included.
   calendar order are simply processed in arrival order.
 - **After re-calibration**, start a **new** monitor on the new forecasts: the
   old null no longer describes production.
+- **Fixed grade universe.** Declare `grades=` at construction for per-grade
+  evidence to count towards the alarm; the mixture's components and weights
+  must not change once monitoring has started. Grades that will appear later
+  belong in the declaration from day one (they contribute `e = 1` until they
+  have data).
+- **Cost of `plug_in_window=None`.** The plug-in refits on the whole history
+  before every batch, so per-batch cost grows linearly with history and the
+  total cost quadratically. Set a window (`plug_in_window` must be a positive
+  integer) for long-running monitors.
 - **Weights.** Sample weights enter as exponents on the Bernoulli factors
   for reporting parity with the rest of probcal, but non-integer weights
   break the exact martingale property, and the monitor warns once when it
@@ -298,7 +328,7 @@ sample_weight=None) -> HlEResult` is a **one-shot, fixed-sample** e-value
 audit per rating grade, for the case where there is no sequence of matured
 batches to monitor, just one dataset to check once. It reuses the same
 mixture construction `CalibrationMonitor`'s offset e-process uses
-(`monitor._processes.bern_log_lr`, `logsumexp`, the symmetrized
+(`probcal._math.bern_log_lr`, `logsumexp`, the symmetrized
 `mixture_grid`), applied once per grade with **no predictable plug-in
 component**: a fixed sample has no strictly-earlier data to learn one
 from, so the honest e-value here is the mixture average alone:

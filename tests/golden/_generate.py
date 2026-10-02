@@ -31,7 +31,7 @@ class _StubModel:
     Mirrored in tests/test_golden.py — keep the two definitions identical.
     """
 
-    def fit(self, X, y):  # noqa: ARG002
+    def fit(self, X, y):
         return self
 
     def predict_proba(self, X):
@@ -121,7 +121,7 @@ def main() -> None:
             "expected": _predict(obj, _Q).tolist(),
         }
         path = out_dir / f"{name}.json"
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
         print(f"wrote {path.name}")
 
 

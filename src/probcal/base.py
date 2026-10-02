@@ -1,25 +1,29 @@
 """BaseCalibrator: the common fit / predict_proba / interpret contract."""
 
 import inspect
-import json
-import os
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Self
 
 import numpy as np
 
-from ._math import _LOGIT_CLIP, expit, logit
+from ._math import _LOGIT_CLIP, expit, expit1, logit, logit1
 from ._results import Interpretation
 from ._serialize import (
-    SCHEMA_VERSION,
-    check_schema,
+    JsonIO,
+    check_payload,
     data_fingerprint,
     decode_value,
     encode_value,
-    fingerprint_of_dict,
+    envelope,
 )
-from ._validation import EPS, validate_binary_y, validate_scores, validate_weights
+from ._validation import (
+    EPS,
+    validate_binary_y,
+    validate_scores,
+    validate_space,
+    validate_weights,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
     from sklearn.utils import Tags
@@ -80,7 +84,53 @@ def _check_representable(z: np.ndarray, space: str) -> None:
         )
 
 
-class BaseCalibrator(ABC):
+def shrink_interval(lo: float, hi: float, buffer_logit: float) -> tuple[float, float]:
+    """Shrink ``[lo, hi]`` by ``buffer_logit`` on the logit scale (0/1 ends stay put).
+
+    Shared by every ``interval_inverse``: robustness against future
+    recalibration drift of magnitude ``<= buffer_logit``.
+
+    Raises
+    ------
+    ValueError
+        If ``buffer_logit`` is negative or not finite.
+    UnattainableTargetError
+        If the buffer empties the interval.
+    """
+    buffer_logit = float(buffer_logit)
+    if not buffer_logit >= 0.0 or buffer_logit == float("inf"):
+        raise ValueError(f"buffer_logit must be a finite value >= 0, got {buffer_logit!r}")
+    lo_b, hi_b = float(lo), float(hi)
+    if buffer_logit > 0.0:
+        if lo > 0.0:
+            lo_b = expit1(logit1(lo) + buffer_logit)
+        if hi < 1.0:
+            hi_b = expit1(logit1(hi) - buffer_logit)
+        if lo_b > hi_b:
+            raise UnattainableTargetError(
+                f"buffer_logit={buffer_logit} empties the calibrated interval [{lo}, {hi}]"
+            )
+    return lo_b, hi_b
+
+
+def validate_interval(lo: float, hi: float) -> None:
+    """``0 <= lo <= hi <= 1``."""
+    if not 0.0 <= lo <= hi <= 1.0:
+        raise ValueError(f"need 0 <= lo <= hi <= 1, got lo={lo}, hi={hi}")
+
+
+def clone_unfitted(obj: object) -> object:
+    """A fresh, unfitted copy built from ``obj.get_params()``."""
+    return type(obj)(**obj.get_params())  # type: ignore[attr-defined]
+
+
+_NOT_MONOTONE = (
+    "{name} is not monotone (is_monotone_=False); its preimage may be a union of "
+    "intervals. Use a monotone calibrator for thresholding and recourse."
+)
+
+
+class BaseCalibrator(JsonIO, ABC):
     """Common contract for all probcal calibrators.
 
     Subclasses implement ``_fit`` (estimation on validated arrays),
@@ -283,26 +333,10 @@ class BaseCalibrator(ABC):
             preimage may be a union of intervals.
         """
         self._check_fitted()
-        if not self.is_monotone_:
-            raise NotImplementedError(
-                f"{type(self).__name__} is not monotone (is_monotone_=False); its preimage "
-                "may be a union of intervals. Use a monotone calibrator for thresholding "
-                "and recourse."
-            )
-        if not 0.0 <= lo <= hi <= 1.0:
-            raise ValueError(f"need 0 <= lo <= hi <= 1, got lo={lo}, hi={hi}")
-        if space not in ("probability", "logit"):
-            raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
-        lo_b, hi_b = float(lo), float(hi)
-        if buffer_logit > 0.0:
-            if lo > 0.0:
-                lo_b = float(expit(np.array([logit(np.array([lo]))[0] + buffer_logit]))[0])
-            if hi < 1.0:
-                hi_b = float(expit(np.array([logit(np.array([hi]))[0] - buffer_logit]))[0])
-            if lo_b > hi_b:
-                raise UnattainableTargetError(
-                    f"buffer_logit={buffer_logit} empties the calibrated interval " f"[{lo}, {hi}]"
-                )
+        self._check_monotone()
+        validate_interval(lo, hi)
+        validate_space(space)
+        lo_b, hi_b = shrink_interval(lo, hi, buffer_logit)
         gmin, gmax = self._output_range()
         if lo_b > gmax or hi_b < gmin:
             raise UnattainableTargetError(
@@ -312,10 +346,14 @@ class BaseCalibrator(ABC):
         raw_lo = 0.0 if lo_b <= gmin else float(self._inverse_left(lo_b))
         raw_hi = 1.0 if hi_b >= gmax else float(self._inverse_right(hi_b))
         if space == "logit":
-            lo_out = -np.inf if raw_lo <= 0.0 else float(logit(np.array([raw_lo]))[0])
-            hi_out = np.inf if raw_hi >= 1.0 else float(logit(np.array([raw_hi]))[0])
+            lo_out = -np.inf if raw_lo <= 0.0 else logit1(raw_lo)
+            hi_out = np.inf if raw_hi >= 1.0 else logit1(raw_hi)
             return lo_out, hi_out
         return raw_lo, raw_hi
+
+    def _check_monotone(self) -> None:
+        if not self.is_monotone_:
+            raise NotImplementedError(_NOT_MONOTONE.format(name=type(self).__name__))
 
     def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
         """Raw scores whose calibrated probabilities equal ``p`` (exact preimage).
@@ -364,24 +402,25 @@ class BaseCalibrator(ABC):
             fail to round-trip; ``space="logit"`` is exact there.
         """
         self._check_fitted()
-        if not self.is_monotone_:
-            raise NotImplementedError(
-                f"{type(self).__name__} is not monotone (is_monotone_=False); its preimage "
-                "may be a union of intervals. Use a monotone calibrator for thresholding "
-                "and recourse."
-            )
-        if space not in ("probability", "logit"):
-            raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
+        self._check_monotone()
+        validate_space(space)
         arr = _validate_point_targets(p)
+        z = self._point_inverse_logit(arr)
+        _check_representable(z, space)
+        return z if space == "logit" else expit(z)
+
+    def _point_inverse_logit(self, p: np.ndarray) -> np.ndarray:
+        """Raw logits whose calibrated probability is ``p`` (validated, inside (0, 1)).
+
+        Default: the affine-logit closed form. Override for other exact inverses.
+        """
         coeffs = self.affine_logit_coeffs_
         if coeffs is None:
             raise NotImplementedError(
                 f"{type(self).__name__} has no exact point inverse; use interval_inverse"
             )
         a, b = coeffs
-        z = (logit(arr) - b) / a
-        _check_representable(z, space)
-        return z if space == "logit" else expit(z)
+        return (logit(p) - b) / a
 
     # Hooks for interval_inverse — overridden by closed-form / block calibrators.
 
@@ -392,8 +431,19 @@ class BaseCalibrator(ABC):
         """(min, max) of the fitted map over the raw-score domain."""
         return self._predict_scalar(EPS), self._predict_scalar(1.0 - EPS)
 
+    def _affine_inverse(self, t: float) -> float | None:
+        """Closed-form inverse for affine-logit maps, ``None`` otherwise."""
+        coeffs = self.affine_logit_coeffs_
+        if coeffs is None or coeffs[0] == 0.0:
+            return None
+        a, b = coeffs
+        return expit1((logit1(t) - b) / a)
+
     def _inverse_left(self, t: float) -> float:
-        """inf{s : g(s) >= t} by monotone bisection (invariant: g(hi) >= t)."""
+        """inf{s : g(s) >= t}: closed form when affine, else monotone bisection."""
+        closed = self._affine_inverse(t)
+        if closed is not None:
+            return closed
         lo_s, hi_s = EPS, 1.0 - EPS
         if self._predict_scalar(lo_s) >= t:
             return lo_s
@@ -406,7 +456,10 @@ class BaseCalibrator(ABC):
         return hi_s
 
     def _inverse_right(self, t: float) -> float:
-        """sup{s : g(s) <= t} by monotone bisection (invariant: g(lo) <= t)."""
+        """sup{s : g(s) <= t}: closed form when affine, else monotone bisection."""
+        closed = self._affine_inverse(t)
+        if closed is not None:
+            return closed
         lo_s, hi_s = EPS, 1.0 - EPS
         if self._predict_scalar(hi_s) <= t:
             return hi_s
@@ -435,11 +488,14 @@ class BaseCalibrator(ABC):
         for key, value in params.items():
             if key not in valid:
                 raise ValueError(
-                    f"unknown parameter {key!r} for {type(self).__name__}; "
-                    f"valid: {sorted(valid)}"
+                    f"unknown parameter {key!r} for {type(self).__name__}; valid: {sorted(valid)}"
                 )
             setattr(self, key, value)
         return self
+
+    def _clone(self) -> Self:
+        """A fresh, unfitted copy with the same constructor parameters."""
+        return type(self)(**self.get_params())
 
     # ------------------------------------------------------------- serialization
 
@@ -482,20 +538,16 @@ class BaseCalibrator(ABC):
             If not yet fitted.
         """
         self._check_fitted()
-        from . import __version__
-
         fit_meta = dict(getattr(self, "fit_meta_", {}))
         for flag in ("converged_", "separation_fallback_"):
             if hasattr(self, flag):
                 fit_meta[flag] = bool(getattr(self, flag))
-        return {
-            "probcal_schema": SCHEMA_VERSION,
-            "probcal_version": __version__,
-            "class": type(self).__name__,
-            "params": encode_value(self._params_for_dict()),
-            "state": self._state(),
-            "fit_meta": fit_meta,
-        }
+        return envelope(
+            self,
+            params=encode_value(self._params_for_dict()),
+            state=self._state(),
+            fit_meta=encode_value(fit_meta),
+        )
 
     @classmethod
     def from_dict(cls, d: dict) -> "BaseCalibrator":
@@ -522,75 +574,16 @@ class BaseCalibrator(ABC):
             the class is not registered, or ``d["class"]`` does not match
             the subclass this was called on.
         """
-        check_schema(d)
         if cls is BaseCalibrator:
             from ._registry import load
 
             return load(d)  # type: ignore[return-value]
-        if cls.__name__ != d.get("class"):
-            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
-        params = cls._params_from_dict(decode_value(d.get("params", {})))  # type: ignore[arg-type]
+        check_payload(cls, d)
+        params = cls._params_from_dict(
+            decode_value(d.get("params", {}), arrays=False)  # type: ignore[arg-type]
+        )
         obj = cls(**params)  # type: ignore[arg-type]
         obj._set_state(dict(d.get("state", {})))  # type: ignore[arg-type]
-        obj.fit_meta_ = dict(d.get("fit_meta", {}))  # type: ignore[arg-type]
+        obj.fit_meta_ = dict(decode_value(d.get("fit_meta", {}), arrays=False))  # type: ignore[call-overload]
         obj.fitted_ = True
         return obj
-
-    def to_json(
-        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
-    ) -> str | None:
-        """Serialize to JSON — never pickle (auditable, no code execution on load).
-
-        Parameters
-        ----------
-        path : path-like or None
-            When given, write to this file and return ``None``; otherwise
-            return the JSON text.
-        indent : int, keyword-only
-            JSON indentation.
-
-        Returns
-        -------
-        str or None
-            JSON text, or ``None`` when written to ``path``.
-        """
-        text = json.dumps(self.to_dict(), indent=indent)
-        if path is None:
-            return text
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        return None
-
-    @classmethod
-    def from_json(cls, path_or_str: object) -> "BaseCalibrator":
-        """Load from a JSON string or a filesystem path.
-
-        Parameters
-        ----------
-        path_or_str : str or path-like
-            JSON text (starting with ``{``) or a path to a JSON file.
-
-        Returns
-        -------
-        BaseCalibrator
-            A fitted instance (see :meth:`from_dict`).
-        """
-        text = str(path_or_str)
-        if not text.lstrip().startswith("{"):
-            with open(text, encoding="utf-8") as fh:
-                text = fh.read()
-        return cls.from_dict(json.loads(text))
-
-    def fingerprint(self) -> str:
-        """SHA-256 of the canonical serialized form, version- and timestamp-blind.
-
-        Two identical fits on identical data produce the same fingerprint;
-        consumers (model registries, monitors, recourse engines) record it
-        as provenance.
-
-        Returns
-        -------
-        str
-            Hex digest.
-        """
-        return fingerprint_of_dict(self.to_dict())

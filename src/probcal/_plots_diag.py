@@ -1,10 +1,10 @@
 """Diagnostic plots split out of ``probcal.plots`` (requires the [viz] extra).
 
-Holds :func:`plot_corp`, the CORP reliability diagram, and
-:func:`plot_mcb_dsc`, the MCB-DSC plane. Split into its own module to keep
-files small; ``plots.py`` imports them back so ``probcal.plots.plot_corp``/
-``plot_mcb_dsc`` remain the public path. Theory:
-``docs/concepts/visualization.md``.
+Holds :func:`plot_corp` (the CORP reliability diagram), :func:`plot_mcb_dsc`
+(the MCB-DSC plane), :func:`plot_attributes` (the Hsu-Murphy attributes
+diagram) and :func:`plot_murphy` (Murphy diagrams). Split into its own module
+to keep files small; ``plots.py`` imports them back so ``probcal.plots.<name>``
+remains the public path. Theory: ``docs/concepts/visualization.md``.
 """
 
 from collections.abc import Mapping
@@ -12,8 +12,19 @@ from typing import Any
 
 import numpy as np
 
-from ._math import logit
-from ._plots_common import _BLUE, _BOX, _GREEN, _GREY, _STYLE, _logit_axis, _plt, _require_mpl
+from ._plots_common import (
+    _BLUE,
+    _GREEN,
+    _GREY,
+    _STYLE,
+    _get_axes,
+    _pav_step_xy,
+    _plt,
+    _require_mpl,
+    _scale_axis_labels,
+    _text_box,
+    _tr,
+)
 from ._results import CorpResult, SelectionReport
 from .curves import corp_reliability, reliability_binned
 from .metrics.scores import MurphyCurve, _prep, murphy_curve
@@ -64,29 +75,22 @@ def plot_corp(
     >>> ax = plot_corp(corp_reliability(y, p, n_resamples=20))  # doctest: +SKIP
     """
     _require_mpl()
-
-    def _tr(x: np.ndarray) -> np.ndarray:
-        if scale == "logit":
-            return logit(np.clip(x, 1e-12, 1.0 - 1e-12))
-        return np.asarray(x, dtype=np.float64)
-
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(6.5, 6))
+        ax = _get_axes(ax, (6.5, 6))
         lo, hi, level, weight = (
             result.block_lo,
             result.block_hi,
             result.block_level,
             result.block_weight,
         )
-        domain = _tr(np.array([lo[0], hi[-1]]))
+        domain = _tr([lo[0], hi[-1]], scale)
         ax.plot(domain, domain, ls="--", c=_GREY, lw=1, label="identity")
 
         if len(result.band_grid) > 0:
             ax.fill_between(
-                _tr(result.band_grid),
-                _tr(result.band_low),
-                _tr(result.band_high),
+                _tr(result.band_grid, scale),
+                _tr(result.band_low, scale),
+                _tr(result.band_high, scale),
                 color=_BLUE,
                 alpha=0.15,
                 label=f"{result.level:.0%} {result.bands} band",
@@ -94,23 +98,17 @@ def plot_corp(
 
         # Each block contributes [lo, hi] at its level; steps-post joins
         # consecutive blocks with a vertical segment at the right edge.
-        x_edges = np.empty(2 * len(lo))
-        x_edges[0::2] = lo
-        x_edges[1::2] = hi
-        y_levels = np.repeat(level, 2)
-        ax.step(_tr(x_edges), _tr(y_levels), where="post", color=_BLUE, lw=2, label="PAV fit")
+        x_edges, y_levels = _pav_step_xy(lo, hi, level)
+        ax.step(
+            _tr(x_edges, scale), _tr(y_levels, scale), where="post", color=_BLUE, lw=2,
+            label="PAV fit",
+        )  # fmt: skip
 
-        centres = _tr((lo + hi) / 2.0)
+        centres = _tr((lo + hi) / 2.0, scale)
         heights = 0.08 * weight / weight.max()
         ax.vlines(centres, 0.0, heights, color=_GREY, alpha=0.6, transform=ax.get_xaxis_transform())
 
-        if scale == "logit":
-            _logit_axis(ax)
-            ax.set_xlabel("predicted probability (logit scale)")
-            ax.set_ylabel("PAV-recalibrated probability (logit scale)")
-        else:
-            ax.set_xlabel("predicted probability")
-            ax.set_ylabel("PAV-recalibrated probability")
+        _scale_axis_labels(ax, scale, "predicted probability", "PAV-recalibrated probability")
 
         if show_decomposition:
             txt = (
@@ -119,7 +117,7 @@ def plot_corp(
                 f"DSC {result.brier_dsc:.4f}\n"
                 f"UNC {result.brier_unc:.4f}"
             )
-            ax.text(0.03, 0.97, txt, transform=ax.transAxes, va="top", fontsize=9, bbox=_BOX)
+            _text_box(ax, txt)
 
         ax.set_title("CORP reliability diagram")
         ax.legend(loc="lower right")
@@ -219,8 +217,7 @@ def plot_mcb_dsc(
     mean_score = mcb - dsc + unc
 
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(6.5, 6))
+        ax = _get_axes(ax, (6.5, 6))
 
         spread = float(dsc.max() - dsc.min())
         pad = spread * 0.15 if spread > 0 else max(0.05, 0.1 * float(dsc.max()))
@@ -327,34 +324,31 @@ def plot_attributes(
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     ybar = float(np.average(y_arr, weights=w))
 
-    def _tr(x: np.ndarray) -> np.ndarray:
-        if scale == "logit":
-            return logit(np.clip(x, 1e-12, 1.0 - 1e-12))
-        return np.asarray(x, dtype=np.float64)
+    def _t(x: Any) -> np.ndarray:
+        return _tr(x, scale)
 
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(6.5, 6))
+        ax = _get_axes(ax, (6.5, 6))
 
         grid = np.linspace(0.0, 1.0, 400)
-        ybar_t = float(_tr(np.array([ybar]))[0])
-        ax.plot(_tr(grid), _tr(grid), ls="--", color=_GREY, lw=1, label="identity")
+        ybar_t = float(_t([ybar])[0])
+        ax.plot(_t(grid), _t(grid), ls="--", color=_GREY, lw=1, label="identity")
         ax.axhline(ybar_t, color=_GREY, ls=":", lw=1, label="climatology / no resolution")
         ax.axvline(ybar_t, color=_GREY, ls=":", lw=1, label="climatology")
         no_skill = (grid + ybar) / 2.0
-        ax.plot(_tr(grid), _tr(no_skill), color=_GREY, ls="-.", lw=1, label="no skill")
+        ax.plot(_t(grid), _t(no_skill), color=_GREY, ls="-.", lw=1, label="no skill")
 
         half_width = np.abs(grid - ybar)
         y_upper = np.clip(grid + half_width, 0.0, 1.0)
         y_lower = np.clip(grid - half_width, 0.0, 1.0)
-        ax.fill_between(_tr(grid), _tr(y_lower), _tr(y_upper), color=_GREEN, alpha=0.08)
+        ax.fill_between(_t(grid), _t(y_lower), _t(y_upper), color=_GREEN, alpha=0.08)
 
         if method == "binned":
             curve = reliability_binned(y_arr, p_arr, n_bins=n_bins, sample_weight=w)
             sizes = 15.0 + 200.0 * curve.count / curve.count.max()
             ax.scatter(
-                _tr(curve.pred_mean),
-                _tr(curve.event_rate),
+                _t(curve.pred_mean),
+                _t(curve.event_rate),
                 s=sizes,
                 color=_BLUE,
                 zorder=5,
@@ -362,20 +356,10 @@ def plot_attributes(
             )
         else:
             result = corp_reliability(y_arr, p_arr, sample_weight=w, bands=None)
-            lo, hi, level = result.block_lo, result.block_hi, result.block_level
-            x_edges = np.empty(2 * len(lo))
-            x_edges[0::2] = lo
-            x_edges[1::2] = hi
-            y_levels = np.repeat(level, 2)
-            ax.step(_tr(x_edges), _tr(y_levels), where="post", color=_BLUE, lw=2, label="PAV fit")
+            x_edges, y_levels = _pav_step_xy(result.block_lo, result.block_hi, result.block_level)
+            ax.step(_t(x_edges), _t(y_levels), where="post", color=_BLUE, lw=2, label="PAV fit")
 
-        if scale == "logit":
-            _logit_axis(ax)
-            ax.set_xlabel("predicted probability (logit scale)")
-            ax.set_ylabel("observed event rate (logit scale)")
-        else:
-            ax.set_xlabel("predicted probability")
-            ax.set_ylabel("observed event rate")
+        _scale_axis_labels(ax, scale, "predicted probability", "observed event rate")
 
         ax.set_title("attributes diagram")
         ax.legend(loc="lower right")
@@ -438,67 +422,58 @@ def plot_murphy(
     >>> ax = plot_murphy({"model": murphy_curve(y, p)})  # doctest: +SKIP
     """
     _require_mpl()
+    msg = "diff=True needs a mapping of exactly two {name: (y, p)} raw-data pairs"
+    # Validate (and compute) everything before a figure exists, so a bad call
+    # leaves no orphan figure registered in pyplot.
+    if diff:
+        if not isinstance(curves, Mapping) or len(curves) != 2:
+            raise ValueError(msg)
+        items: list[tuple[str, Any]] = list(curves.items())
+        (name_a, pair_a), (name_b, pair_b) = items
+        if not all(isinstance(pr, tuple) and len(pr) == 2 for pr in (pair_a, pair_b)):
+            raise ValueError(msg)
+        y_a, p_a, _w_a = _prep(pair_a[0], pair_a[1], None)
+        y_b, p_b, _w_b = _prep(pair_b[0], pair_b[1], None)
+        if len(y_a) != len(y_b):
+            raise ValueError("diff=True needs paired (y, p) of equal length")
+
+        theta = murphy_curve(y_a, p_a).thresholds
+        delta = (
+            murphy_curve(y_a, p_a, thresholds=theta).score
+            - murphy_curve(y_b, p_b, thresholds=theta).score
+        )
+        rng = np.random.default_rng(random_state)
+        n = len(y_a)
+        boot = np.empty((n_boot, len(theta)))
+        for b in range(n_boot):
+            idx = rng.integers(0, n, n)
+            ca = murphy_curve(y_a[idx], p_a[idx], thresholds=theta)
+            cb = murphy_curve(y_b[idx], p_b[idx], thresholds=theta)
+            boot[b] = ca.score - cb.score
+        band_lo = np.percentile(boot, 5, axis=0)
+        band_hi = np.percentile(boot, 95, axis=0)
+    elif not isinstance(curves, MurphyCurve):
+        for curve in curves.values():
+            if not isinstance(curve, MurphyCurve):
+                raise ValueError(
+                    "plot_murphy: mapping values must be MurphyCurve objects; "
+                    "pass diff=True with (y, p) pairs for a difference plot"
+                )
+
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(6.5, 6))
-
+        ax = _get_axes(ax, (6.5, 6))
         if diff:
-            if not isinstance(curves, Mapping):
-                raise ValueError(
-                    "diff=True needs a mapping of exactly two {name: (y, p)} raw-data pairs"
-                )
-            pairs = list(curves.items())
-            if len(pairs) != 2:
-                raise ValueError(
-                    "diff=True needs a mapping of exactly two {name: (y, p)} raw-data pairs"
-                )
-            name_a, pair_a = pairs[0]
-            name_b, pair_b = pairs[1]
-            if (
-                not isinstance(pair_a, tuple)
-                or not isinstance(pair_b, tuple)
-                or len(pair_a) != 2
-                or len(pair_b) != 2
-            ):
-                raise ValueError(
-                    "diff=True needs a mapping of exactly two {name: (y, p)} raw-data pairs"
-                )
-            y_a, p_a = pair_a
-            y_b, p_b = pair_b
-            y_a, p_a, _w_a = _prep(y_a, p_a, None)
-            y_b, p_b, _w_b = _prep(y_b, p_b, None)
-            if len(y_a) != len(y_b):
-                raise ValueError("diff=True needs paired (y, p) of equal length")
-
-            theta = murphy_curve(y_a, p_a).thresholds
-            score_a = murphy_curve(y_a, p_a, thresholds=theta).score
-            score_b = murphy_curve(y_b, p_b, thresholds=theta).score
-            delta = score_a - score_b
-
-            rng = np.random.default_rng(random_state)
-            n = len(y_a)
-            boot = np.empty((n_boot, len(theta)))
-            for b in range(n_boot):
-                idx = rng.integers(0, n, n)
-                ca = murphy_curve(y_a[idx], p_a[idx], thresholds=theta)
-                cb = murphy_curve(y_b[idx], p_b[idx], thresholds=theta)
-                boot[b] = ca.score - cb.score
-            lo = np.percentile(boot, 5, axis=0)
-            hi = np.percentile(boot, 95, axis=0)
-
-            ax.fill_between(theta, lo, hi, color=_BLUE, alpha=0.15, label="90% bootstrap band")
+            ax.fill_between(
+                theta, band_lo, band_hi, color=_BLUE, alpha=0.15, label="90% bootstrap band"
+            )
             ax.plot(theta, delta, color=_BLUE, lw=2, label=f"{name_a} - {name_b}")
             ax.axhline(0.0, color=_GREY, lw=1, ls="--", label="zero")
             ax.legend(loc="best")
         elif isinstance(curves, MurphyCurve):
             ax.plot(curves.thresholds, curves.score, color=_BLUE, lw=2)
         else:
-            for name, curve in curves.items():
-                if not isinstance(curve, MurphyCurve):
-                    raise ValueError(
-                        "plot_murphy: mapping values must be MurphyCurve objects; "
-                        "pass diff=True with (y, p) pairs for a difference plot"
-                    )
+            curve_map: Mapping[str, Any] = curves
+            for name, curve in curve_map.items():
                 ax.plot(curve.thresholds, curve.score, lw=2, label=name)
             ax.legend(loc="best")
 

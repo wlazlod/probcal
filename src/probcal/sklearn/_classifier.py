@@ -1,20 +1,25 @@
 """CalibratedClassifier: CalibratedClassifierCV(ensemble=False) on probcal calibrators."""
 
-import os
+import numbers
 import warnings
 
 import numpy as np
 from sklearn import get_config
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.model_selection import KFold, StratifiedKFold, check_cv, cross_val_predict
+from sklearn.utils import indexable
 from sklearn.utils.metadata_routing import MetadataRouter, get_routing_for_object
-from sklearn.utils.multiclass import check_classification_targets
-from sklearn.utils.validation import _check_sample_weight, check_is_fitted, has_fit_parameter
+from sklearn.utils.validation import (
+    _num_samples,
+    check_consistent_length,
+    check_is_fitted,
+    column_or_1d,
+    has_fit_parameter,
+)
 
 from .._math import expit
 from ..base import BaseCalibrator
-from ..parametric import BetaCalibrator
-from ._compat import CLASSIFIER_XFAIL_CHECKS, validate_X, validate_X_y
+from ._base import BinaryCalibratedMixin, check_sample_weight
 
 
 def _accepts_sample_weight(estimator: object) -> bool:
@@ -34,7 +39,7 @@ def _accepts_sample_weight(estimator: object) -> bool:
     return False
 
 
-class CalibratedClassifier(ClassifierMixin, BaseEstimator):
+class CalibratedClassifier(BinaryCalibratedMixin, ClassifierMixin, BaseEstimator):
     """Cross-validated probability calibration of a classifier, probcal-style.
 
     The drop-in for ``sklearn.calibration.CalibratedClassifierCV`` with
@@ -51,6 +56,10 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
     can be handed directly to consumers of that protocol (e.g. treecf's
     ``Target.calibrated``).
 
+    ``X`` is passed to the estimator untouched (no float conversion), like
+    ``CalibratedClassifierCV``: DataFrames, mixed-dtype columns for a
+    ``ColumnTransformer`` pipeline, and sparse matrices all work.
+
     Parameters
     ----------
     estimator : object or None
@@ -60,17 +69,24 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
     calibrator : BaseCalibrator or None, keyword-only
         Unfitted probcal prototype (cloned via ``get_params``); ``None``
         uses ``BetaCalibrator()``.
-    cv : int or "prefit", keyword-only
-        Fold count for the out-of-fold protocol, or ``"prefit"`` to score
-        the calibration set with the already-fitted ``estimator`` directly.
+    cv : int, cross-validation splitter, iterable, or "prefit", keyword-only
+        An integer ``>= 2`` is a fold count (see ``stratify``); a splitter
+        or an iterable of ``(train, test)`` splits is used as given
+        (through ``sklearn.model_selection.check_cv``; it must partition the
+        rows, as ``cross_val_predict`` requires). ``"prefit"`` scores the
+        calibration set with the already-fitted ``estimator`` directly.
     method : {"predict_proba", "decision_function"}, keyword-only
         Score source. ``"decision_function"`` margins are mapped through
         ``expit`` before calibration — the calibrator then absorbs any
         monotone distortion this introduces.
     stratify : bool, keyword-only
-        Stratify the folds by class (recommended for rare events).
+        For an integer ``cv`` only: ``True`` uses
+        ``StratifiedKFold(cv, shuffle=True, random_state=random_state)``
+        (recommended for rare events), ``False`` uses
+        ``KFold(cv, shuffle=True, random_state=random_state)``. Ignored for
+        a splitter ``cv``.
     random_state : int or None, keyword-only
-        Fold-assignment seed (used only when ``stratify=True``).
+        Fold-shuffling seed for an integer ``cv``.
 
     Attributes
     ----------
@@ -81,6 +97,20 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
         The fitted probcal calibrator (one map, pooled OOF scores).
     classes_ : numpy.ndarray of shape (2,)
         Class labels; column 1 of :meth:`predict_proba` is ``classes_[1]``.
+    n_features_in_ : int
+        Copied from ``estimator_`` when it defines one.
+
+    Notes
+    -----
+    :class:`probcal.CalibratedModel` (``flow="cv"``) runs the same
+    out-of-fold protocol without sklearn, with deliberate differences:
+    its folds are always class-stratified and drawn with numpy's
+    ``default_rng(random_state)`` (so the same seed assigns different folds
+    than ``StratifiedKFold``), and it alone offers ``ensemble=True`` (one
+    calibrator per fold). Both pass ``X`` to the model untouched and hand
+    ``sample_weight`` to the model fits when the estimator accepts it. Use this class inside
+    sklearn pipelines and searches, ``CalibratedModel`` for a numpy-only
+    deployment wrapper.
     """
 
     def __init__(
@@ -112,8 +142,20 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
             return expit(raw)
         return raw[:, 1] if raw.ndim == 2 else raw
 
-    def _estimator_scores(self, estimator: object, X: np.ndarray) -> np.ndarray:
+    def _estimator_scores(self, estimator: object, X: object) -> np.ndarray:
         return self._to_scores(np.asarray(getattr(estimator, self.method)(X)))
+
+    def _splitter(self, y: np.ndarray) -> object:
+        cv = self.cv
+        if isinstance(cv, numbers.Integral) and not isinstance(cv, bool):
+            if int(cv) < 2:
+                raise ValueError(f"cv must be an integer >= 2, a splitter, or 'prefit'; got {cv!r}")
+            kind = StratifiedKFold if self.stratify else KFold
+            return kind(n_splits=int(cv), shuffle=True, random_state=self.random_state)
+        return check_cv(cv, y, classifier=True)
+
+    def _is_prefit(self) -> bool:
+        return isinstance(self.cv, str) and self.cv == "prefit"
 
     # ------------------------------------------------------------------ estimator API
 
@@ -122,15 +164,16 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
 
         Parameters
         ----------
-        X : array_like of shape (n, d)
-            Features, passed to the wrapped estimator.
+        X : array_like, DataFrame, or sparse matrix
+            Features, passed to the wrapped estimator untouched.
         y : array_like of shape (n,)
             Binary target; any two label values.
         sample_weight : array_like or None
-            Positive observation weights. Always used for the calibrator
-            stage; also handed to the cross-validated fits and the refit
-            when the estimator can take them. When it cannot, a
-            ``UserWarning`` names it and those fits run unweighted.
+            Non-negative observation weights (zero excludes a row from the
+            calibrator fit). Always used for the calibrator stage; also
+            handed to the cross-validated fits and the refit when the
+            estimator can take them. When it cannot, a ``UserWarning``
+            names it and those fits run unweighted.
 
         Returns
         -------
@@ -140,7 +183,9 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
         Raises
         ------
         ValueError
-            If ``method`` is unknown or ``y`` has more than two classes.
+            If ``method`` or ``cv`` is invalid, ``y`` has more than two
+            classes, a weight is negative, or (``cv="prefit"``) the
+            estimator's ``classes_`` differ from the labels in ``y``.
 
         Warns
         -----
@@ -152,29 +197,30 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
             raise ValueError(
                 f"method must be 'predict_proba' or 'decision_function', got {self.method!r}"
             )
-        X_arr, y_arr = validate_X_y(self, X, y, reset=True)
-        sw = None if sample_weight is None else _check_sample_weight(sample_weight, X_arr)
-        check_classification_targets(y_arr)
-        self.classes_ = np.unique(y_arr)
-        if len(self.classes_) != 2:
-            raise ValueError(
-                "Only binary classification is supported. Got " f"{len(self.classes_)} classes."
-            )
-        y_bin = (y_arr == self.classes_[1]).astype(np.float64)
+        X, y = indexable(X, y)
+        y_arr = column_or_1d(y, warn=True)
+        check_consistent_length(X, y_arr)
+        if _num_samples(X) == 0:
+            raise ValueError("Found array with 0 sample(s); a minimum of 1 is required.")
+        sw = check_sample_weight(sample_weight, X)
+        y_bin = self._binary_target(y_arr)
 
-        if self.cv == "prefit":
+        if self._is_prefit():
             check_is_fitted(self.estimator)
+            est_classes = getattr(self.estimator, "classes_", None)
+            if est_classes is not None and not np.array_equal(
+                np.asarray(est_classes), self.classes_
+            ):
+                raise ValueError(
+                    f"the prefit estimator was trained on classes {list(est_classes)}, but y "
+                    f"has classes {list(self.classes_)}; its score columns would be "
+                    "misread as P(classes_[1])"
+                )
             self.estimator_ = self.estimator
-            oof = self._estimator_scores(self.estimator_, X_arr)
+            oof = self._estimator_scores(self.estimator_, X)
         else:
             base = self.estimator if self.estimator is not None else self._default_estimator()
-            n_splits = int(self.cv)  # type: ignore[call-overload]
-            if self.stratify:
-                splitter: object = StratifiedKFold(
-                    n_splits=n_splits, shuffle=True, random_state=self.random_state
-                )
-            else:
-                splitter = n_splits
+            splitter = self._splitter(y_arr)
             inner_sw = sw
             if sw is not None and not _accepts_sample_weight(base):
                 inner_sw = None
@@ -188,106 +234,30 @@ class CalibratedClassifier(ClassifierMixin, BaseEstimator):
                 )
             fit_params = {} if inner_sw is None else {"params": {"sample_weight": inner_sw}}
             raw = cross_val_predict(
-                clone(base), X_arr, y_arr, cv=splitter, method=self.method, **fit_params
+                clone(base), X, y_arr, cv=splitter, method=self.method, **fit_params
             )
             oof = self._to_scores(np.asarray(raw))
             refit = clone(base)
             if inner_sw is None:
-                refit.fit(X_arr, y_arr)
+                refit.fit(X, y_arr)
             else:
-                refit.fit(X_arr, y_arr, sample_weight=inner_sw)
+                refit.fit(X, y_arr, sample_weight=inner_sw)
             self.estimator_ = refit
 
-        if sw is not None:
-            # Zero weight means excluded (sklearn semantics); probcal requires
-            # strictly positive weights, so drop those rows here.
-            keep = sw > 0.0
-            oof, y_bin, sw = oof[keep], y_bin[keep], sw[keep]
-            if np.unique(y_bin).size < 2:
-                raise ValueError(
-                    "Only one class remains after removing zero-weight samples; "
-                    "both classes are required."
-                )
-        proto = self.calibrator if self.calibrator is not None else BetaCalibrator()
-        self.calibrator_ = clone(proto)
-        self.calibrator_.fit(oof, y_bin, sample_weight=sw)
+        for attr in ("n_features_in_", "feature_names_in_"):
+            if hasattr(self.estimator_, attr):
+                setattr(self, attr, getattr(self.estimator_, attr))
+        self._fit_calibrator(oof, y_bin, sw)
         return self
 
-    def predict_proba(self, X: object) -> np.ndarray:
-        """Calibrated ``(n, 2)`` probabilities: estimator scores composed with the calibrator."""
-        check_is_fitted(self, "calibrator_")
-        X_arr = validate_X(self, X)
-        p = self.calibrator_.predict_proba(self._estimator_scores(self.estimator_, X_arr))
-        return np.column_stack([1.0 - p, p])
-
-    def predict(self, X: object) -> np.ndarray:
-        """Class labels at the 0.5 calibrated-probability threshold."""
-        proba = self.predict_proba(X)
-        return self.classes_[(proba[:, 1] >= 0.5).astype(int)]
-
-    # ------------------------------------------------------------------ probcal protocol
-
-    @property
-    def is_monotone_(self) -> bool:
-        """Whether the fitted calibration map is non-decreasing (delegated)."""
-        check_is_fitted(self, "calibrator_")
-        return bool(self.calibrator_.is_monotone_)
-
-    @property
-    def affine_logit_coeffs_(self) -> tuple[float, float] | None:
-        """Affine-logit coefficients of the calibration map, if any (delegated)."""
-        check_is_fitted(self, "calibrator_")
-        return self.calibrator_.affine_logit_coeffs_
-
-    def interval_inverse(
-        self, lo: float, hi: float, *, space: str = "probability", buffer_logit: float = 0.0
-    ) -> tuple[float, float]:
-        """Preimage of a calibrated interval in the estimator's score space (delegated)."""
-        check_is_fitted(self, "calibrator_")
-        return self.calibrator_.interval_inverse(lo, hi, space=space, buffer_logit=buffer_logit)
-
-    def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
-        """Exact preimage of calibrated probabilities (delegated)."""
-        check_is_fitted(self, "calibrator_")
-        return self.calibrator_.point_inverse(p, space=space)
-
-    def fingerprint(self) -> str:
-        """The fitted calibrator's provenance fingerprint (delegated)."""
-        check_is_fitted(self, "calibrator_")
-        return self.calibrator_.fingerprint()
-
-    def to_dict(self) -> dict[str, object]:
-        """The fitted calibrator's versioned JSON envelope (delegated).
-
-        The estimator itself follows sklearn's pickle conventions and is
-        outside the JSON's scope — persist it with your model artifact.
-        """
-        check_is_fitted(self, "calibrator_")
-        return self.calibrator_.to_dict()
-
-    def to_json(
-        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
-    ) -> "str | None":
-        """The fitted calibrator's JSON serialization (delegated), never pickle."""
-        check_is_fitted(self, "calibrator_")
-        return self.calibrator_.to_json(path, indent=indent)
-
-    def interpret(self):  # noqa: ANN201 - probcal Interpretation
-        """The fitted calibrator's plain-language reading (delegated)."""
-        check_is_fitted(self, "calibrator_")
-        return self.calibrator_.interpret()
-
-    # ------------------------------------------------------------------ tags
+    def _positive_proba(self, X: object) -> np.ndarray:
+        return self.calibrator_.predict_proba(self._estimator_scores(self.estimator_, X))
 
     def __sklearn_tags__(self):  # noqa: ANN204 - sklearn protocol, version-dependent type
-        tags = super().__sklearn_tags__()
-        tags.classifier_tags.multi_class = False
-        tags.target_tags.required = True
-        return tags
+        from sklearn.utils import get_tags
 
-    def _more_tags(self) -> dict[str, object]:  # sklearn < 1.6
-        return {
-            "binary_only": True,
-            "requires_y": True,
-            "_xfail_checks": dict(CLASSIFIER_XFAIL_CHECKS),
-        }
+        tags = super().__sklearn_tags__()
+        base = self.estimator if self.estimator is not None else self._default_estimator()
+        # X reaches the estimator untouched, so its input capabilities are ours.
+        tags.input_tags.sparse = get_tags(base).input_tags.sparse
+        return tags

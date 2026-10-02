@@ -3,17 +3,14 @@
 import warnings
 
 import numpy as np
-from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin, clone
-from sklearn.utils.multiclass import check_classification_targets
-from sklearn.utils.validation import _check_sample_weight, check_is_fitted
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
 
-from .._math import expit
 from ..base import BaseCalibrator
-from ..parametric import BetaCalibrator
-from ._compat import CALIBRATOR_XFAIL_CHECKS, validate_X, validate_X_y
+from ._base import BinaryCalibratedMixin, check_sample_weight, drop_zero_weight, score_column
+from ._compat import validate_X, validate_X_y
 
 
-class SklearnCalibrator(ClassifierMixin, TransformerMixin, BaseEstimator):
+class SklearnCalibrator(BinaryCalibratedMixin, ClassifierMixin, TransformerMixin, BaseEstimator):
     """Probability calibration over a single score column, sklearn-style.
 
     Wraps any probcal calibrator as a scikit-learn classifier/transformer
@@ -24,6 +21,10 @@ class SklearnCalibrator(ClassifierMixin, TransformerMixin, BaseEstimator):
     away (``calibrator_``) with its full audit surface (``interpret()``,
     ``interval_inverse``, ``to_dict``, ``fingerprint()``). The prototype
     passed as ``calibrator`` may also be a :class:`~probcal.Chain`.
+    The calibrator protocol (``is_monotone_``, ``interval_inverse``,
+    ``point_inverse``, ``affine_logit_coeffs_``, ``interpret``) and the JSON
+    surface (``to_dict``, ``to_json``, ``fingerprint``) are delegated to
+    ``calibrator_``, exactly as on :class:`CalibratedClassifier`.
 
     Parameters
     ----------
@@ -67,18 +68,16 @@ class SklearnCalibrator(ClassifierMixin, TransformerMixin, BaseEstimator):
     # ------------------------------------------------------------------ helpers
 
     def _scores(self, X: np.ndarray) -> np.ndarray:
-        if X.shape[1] == 1:
-            s = X[:, 0]
-            return expit(s) if self.input == "logit" else s
-        if X.shape[1] == 2 and self.input == "probability":
-            if self.positive_column == 0:
-                X = X[:, ::-1]
-            return X  # (n, 2): validate_scores checks the simplex and takes column 1
-        raise ValueError(
-            "SklearnCalibrator is score-level and takes one score column, or a "
-            "two-column probability matrix with input='probability'; got "
-            f"{X.shape[1]} columns with input={self.input!r}; calibrate the "
-            "model's score, not its features"
+        return score_column(
+            X,
+            self.positive_column,
+            logit_input=self.input == "logit",
+            error=(
+                "SklearnCalibrator is score-level and takes one score column, or a "
+                "two-column probability matrix with input='probability'; got "
+                f"{X.shape[1]} columns with input={self.input!r}; calibrate the "
+                "model's score, not its features"
+            ),
         )
 
     # ------------------------------------------------------------------ estimator API
@@ -95,7 +94,8 @@ class SklearnCalibrator(ClassifierMixin, TransformerMixin, BaseEstimator):
         y : array_like of shape (n,)
             Binary target; any two label values.
         sample_weight : array_like or None
-            Positive observation weights.
+            Non-negative observation weights; zero-weight rows are excluded
+            (sklearn semantics).
 
         Returns
         -------
@@ -106,36 +106,21 @@ class SklearnCalibrator(ClassifierMixin, TransformerMixin, BaseEstimator):
         ------
         ValueError
             If ``X``'s column count/``input`` combination is unsupported,
-            ``input`` or ``positive_column`` is invalid, or ``y`` has more
-            than two classes.
+            ``input`` or ``positive_column`` is invalid, ``y`` has more
+            than two classes, or a weight is negative.
         """
         if self.input not in ("probability", "logit"):
             raise ValueError(f"input must be 'probability' or 'logit', got {self.input!r}")
         if self.positive_column not in (0, 1):
             raise ValueError(f"positive_column must be 0 or 1, got {self.positive_column!r}")
         X_arr, y_arr = validate_X_y(self, X, y, reset=True, allow_1d=True)
-        sw = None if sample_weight is None else _check_sample_weight(sample_weight, X_arr)
-        check_classification_targets(y_arr)
-        self.classes_ = np.unique(y_arr)
-        if len(self.classes_) != 2:
-            raise ValueError(
-                "Only binary classification is supported. Got " f"{len(self.classes_)} classes."
-            )
-        y_bin = (y_arr == self.classes_[1]).astype(np.float64)
+        sw = check_sample_weight(sample_weight, X_arr)
+        y_bin = self._binary_target(y_arr)
         s = self._scores(X_arr)
-        if sw is not None:
-            # Zero weight means excluded (sklearn semantics); probcal requires
-            # strictly positive weights, so drop those rows here.
-            keep = sw > 0.0
-            s, y_bin, sw = s[keep], y_bin[keep], sw[keep]
-            if np.unique(y_bin).size < 2:
-                raise ValueError(
-                    "Only one class remains after removing zero-weight samples; "
-                    "both classes are required."
-                )
         if s.ndim == 2:
-            col = s[:, 1]
-            if float(col[y_bin == 1.0].mean()) < float(col[y_bin == 0.0].mean()):
+            _, (col, y_kept) = drop_zero_weight(sw, s[:, 1], y_bin)
+            both = np.unique(y_kept).size == 2
+            if both and float(col[y_kept == 1.0].mean()) < float(col[y_kept == 0.0].mean()):
                 warnings.warn(
                     "the selected positive-probability column has a lower mean among "
                     "events than among non-events; if the matrix is ordered the other "
@@ -143,38 +128,13 @@ class SklearnCalibrator(ClassifierMixin, TransformerMixin, BaseEstimator):
                     UserWarning,
                     stacklevel=2,
                 )
-        proto = self.calibrator if self.calibrator is not None else BetaCalibrator()
-        self.calibrator_ = clone(proto)
-        self.calibrator_.fit(s, y_bin, sample_weight=sw)
+        self._fit_calibrator(s, y_bin, sw)
         return self
 
-    def predict_proba(self, X: object) -> np.ndarray:
-        """Calibrated ``(n, 2)`` probabilities ``[P(classes_[0]), P(classes_[1])]``."""
-        check_is_fitted(self, "calibrator_")
+    def _positive_proba(self, X: object) -> np.ndarray:
         X_arr = validate_X(self, X, allow_1d=True)
-        p = self.calibrator_.predict_proba(self._scores(X_arr))
-        return np.column_stack([1.0 - p, p])
-
-    def predict(self, X: object) -> np.ndarray:
-        """Class labels at the 0.5 calibrated-probability threshold."""
-        proba = self.predict_proba(X)
-        return self.classes_[(proba[:, 1] >= 0.5).astype(int)]
+        return self.calibrator_.predict_proba(self._scores(X_arr))
 
     def transform(self, X: object) -> np.ndarray:
         """Calibrated-probability column ``(n, 1)`` — lets the adapter end a Pipeline."""
         return self.predict_proba(X)[:, [1]]
-
-    # ------------------------------------------------------------------ tags
-
-    def __sklearn_tags__(self):  # noqa: ANN204 - sklearn protocol, version-dependent type
-        tags = super().__sklearn_tags__()
-        tags.classifier_tags.multi_class = False
-        tags.target_tags.required = True
-        return tags
-
-    def _more_tags(self) -> dict[str, object]:  # sklearn < 1.6
-        return {
-            "binary_only": True,
-            "requires_y": True,
-            "_xfail_checks": dict(CALIBRATOR_XFAIL_CHECKS),
-        }

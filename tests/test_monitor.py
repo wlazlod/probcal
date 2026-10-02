@@ -83,7 +83,7 @@ def test_no_alarm_on_calibrated_stream() -> None:
 
 
 def test_grade_component_catches_single_grade_drift() -> None:
-    mon = CalibrationMonitor(alpha=0.05)
+    mon = CalibrationMonitor(alpha=0.05, grades=("A", "B"))
     for k in range(8):
         y_a, p_a = _batch(n=1000, shift=1.2, seed=200 + k)
         y_b, p_b = _batch(n=1000, shift=0.0, seed=300 + k)

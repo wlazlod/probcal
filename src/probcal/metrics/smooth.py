@@ -1,15 +1,19 @@
 """Binning-free calibration metrics: smoothECE, ECCE, ICI family, Spiegelhalter z.
 
-Theory: ``docs/concepts/metrics.md``.
+Theory: ``docs/concepts/metrics.md``. Sample weights follow the package
+convention in :mod:`probcal.metrics._common`.
 """
 
 import math
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import numpy as np
 
-from .._math import loess, logit, norm_cdf, weighted_quantile
-from .scores import _prep
+from .._math import loess, logit, norm_sf, weighted_quantile
+from ._common import _prep, effective_weights, is_uniform
+from ._deprecation import UNSET, deprecated
 
 
 def _smece_at_sigma(loc: np.ndarray, mass: np.ndarray, sigma: float) -> float:
@@ -20,17 +24,20 @@ def _smece_at_sigma(loc: np.ndarray, mass: np.ndarray, sigma: float) -> float:
     return float(np.trapezoid(np.abs(kern @ mass), grid))
 
 
-def _smece_fixed_point(loc: np.ndarray, mass: np.ndarray) -> tuple[float, float]:
-    """Solve smECE(sigma) = sigma by bisection; return (value, sigma_used)."""
+def _bisect_fixed_point(f: Callable[[float], float]) -> tuple[float, float]:
+    """Solve ``f(sigma) = sigma`` on ``[1e-4, 2]`` by bisection; return (value, sigma).
+
+    Shared by the exact and the lattice smECE evaluators. If ``f(1e-4) <=
+    1e-4`` (near-perfect calibration) the value at the lower end is returned.
+    """
     lo, hi = 1e-4, 2.0
-    if _smece_at_sigma(loc, mass, lo) - lo <= 0.0:  # near-perfectly calibrated
-        return _smece_at_sigma(loc, mass, lo), lo
+    if f(lo) - lo <= 0.0:
+        return f(lo), lo
     for _ in range(40):
-        mid = 0.5 * (lo + hi)
-        f_mid = _smece_at_sigma(loc, mass, mid) - mid
         if abs(hi - lo) < 1e-4:
             break
-        if f_mid > 0.0:
+        mid = 0.5 * (lo + hi)
+        if f(mid) - mid > 0.0:
             lo = mid
         else:
             hi = mid
@@ -38,7 +45,33 @@ def _smece_fixed_point(loc: np.ndarray, mass: np.ndarray) -> tuple[float, float]
     return sigma, sigma
 
 
+def _smece_fixed_point(loc: np.ndarray, mass: np.ndarray) -> tuple[float, float]:
+    """Exact-path fixed point (257-point grid evaluator)."""
+    return _bisect_fixed_point(lambda sigma: _smece_at_sigma(loc, mass, sigma))
+
+
 _SMECE_MAX_BINS = 1 << 20
+
+
+def _coarsen(m: np.ndarray, width: float, sigma: float) -> tuple[np.ndarray, float]:
+    """Mass-conserving coarsening of a lattice measure to spacing ``>= ~sigma/8``.
+
+    The integer factor ``max(1, int(sigma / (8 * width)))`` merges adjacent
+    cells; returns the coarsened vector and its cell width.
+    """
+    factor = max(1, int(sigma / (8.0 * width)))
+    if factor == 1:
+        return m, width
+    pad = (-m.shape[0]) % factor
+    mp = np.concatenate([m, np.zeros(pad)]) if pad else m
+    return mp.reshape(-1, factor).sum(axis=1), width * factor
+
+
+def _gauss_taps(sigma: float, w2: float) -> np.ndarray:
+    """Gaussian kernel taps on a ``w2``-spaced lattice, truncated at +-5 sigma."""
+    k = int(math.ceil(5.0 * sigma / w2))
+    offs = np.arange(-k, k + 1) * w2
+    return np.exp(-0.5 * (offs / sigma) ** 2) / (sigma * math.sqrt(2.0 * math.pi))
 
 
 def _smece_at_sigma_lattice(m: np.ndarray, width: float, sigma: float) -> float:
@@ -53,44 +86,16 @@ def _smece_at_sigma_lattice(m: np.ndarray, width: float, sigma: float) -> float:
     sigma), which replaces the aliasing-prone coarse-grid evaluation that made
     the pre-fix binned path spuriously report ~0 at small sigma.
     """
-    factor = max(1, int(sigma / (8.0 * width)))
-    if factor > 1:
-        pad = (-m.shape[0]) % factor
-        mp = np.concatenate([m, np.zeros(pad)]) if pad else m
-        mc = mp.reshape(-1, factor).sum(axis=1)
-        w2 = width * factor
-    else:
-        mc, w2 = m, width
+    mc, w2 = _coarsen(m, width, sigma)
     if 5.0 * sigma <= w2:  # isolated masses: integral is the total variation
         return float(np.sum(np.abs(mc)))
-    k = int(math.ceil(5.0 * sigma / w2))
-    offs = np.arange(-k, k + 1) * w2
-    taps = np.exp(-0.5 * (offs / sigma) ** 2) / (sigma * math.sqrt(2.0 * math.pi))
-    f = np.convolve(mc, taps, mode="full")  # spans +-k cells beyond the lattice
+    f = np.convolve(mc, _gauss_taps(sigma, w2), mode="full")  # spans +-k cells beyond
     return float(w2 * np.sum(np.abs(f)))
 
 
 def _smece_fixed_point_lattice(m: np.ndarray, width: float) -> tuple[float, float]:
-    """Bisection twin of ``_smece_fixed_point`` on the lattice evaluator.
-
-    Deliberately duplicates the 12-line skeleton (including the discarded
-    final-mid quirk) instead of parametrizing it, so the exact path's
-    bit-behavior is untouchable by construction.
-    """
-    lo, hi = 1e-4, 2.0
-    if _smece_at_sigma_lattice(m, width, lo) - lo <= 0.0:
-        return _smece_at_sigma_lattice(m, width, lo), lo
-    for _ in range(40):
-        mid = 0.5 * (lo + hi)
-        f_mid = _smece_at_sigma_lattice(m, width, mid) - mid
-        if abs(hi - lo) < 1e-4:
-            break
-        if f_mid > 0.0:
-            lo = mid
-        else:
-            hi = mid
-    sigma = 0.5 * (lo + hi)
-    return sigma, sigma
+    """Lattice-path fixed point (same bisection as the exact path)."""
+    return _bisect_fixed_point(lambda sigma: _smece_at_sigma_lattice(m, width, sigma))
 
 
 def _lattice(t: np.ndarray, bins: int) -> tuple[np.ndarray, float, float]:
@@ -198,20 +203,9 @@ def _lattice_kernel_smooth(
         cell scale (a ratio of two such vectors, e.g. ``num / den``, cancels
         the coarsening factor and is scale-free).
     """
-    factor = max(1, int(sigma / (8.0 * width)))
-    if factor > 1:
-        pad = (-m.shape[0]) % factor
-        mp = np.concatenate([m, np.zeros(pad)]) if pad else m
-        mc = mp.reshape(-1, factor).sum(axis=1)
-        w2 = width * factor
-    else:
-        mc, w2 = m, width
-    n = mc.shape[0]
-    k = int(math.ceil(5.0 * sigma / w2))
-    offs = np.arange(-k, k + 1) * w2
-    taps = np.exp(-0.5 * (offs / sigma) ** 2) / (sigma * math.sqrt(2.0 * math.pi))
-    smoothed = np.convolve(mc, taps, mode="same")
-    centers = t_lo + (np.arange(n) + 0.5) * w2
+    mc, w2 = _coarsen(m, width, sigma)
+    smoothed = np.convolve(mc, _gauss_taps(sigma, w2), mode="same")
+    centers = t_lo + (np.arange(mc.shape[0]) + 0.5) * w2
     return centers, smoothed
 
 
@@ -257,7 +251,7 @@ def smooth_ece(
     p : array_like
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
     bins : int or None, keyword-only
         Number of lattice bins for the fast path (default 8192); ``None``
         forces the exact O(n) computation.
@@ -283,21 +277,74 @@ class EcceResult:
     stat_max : float
         Maximum absolute cumulative deviation.
     stat_mean : float
-        Mean absolute cumulative deviation.
+        Weighted mean absolute cumulative deviation (each tied-score block
+        weighted by its total sample weight).
     """
 
     stat_max: float
     stat_mean: float
 
 
+class _Walk(NamedTuple):
+    """The ECCE cumulative walk, evaluated at the end of every tied-``p`` block."""
+
+    frac: np.ndarray
+    """Cumulative weight fraction at each block end (``1/n .. 1`` without ties)."""
+    cumdev: np.ndarray
+    """Cumulative weighted residual ``sum(w * (y - p)) / sum(w)`` at each block end."""
+    block_w: np.ndarray
+    """Total weight of each block."""
+    sd_null: np.ndarray | None
+    """Pointwise SD of the walk under calibration (Kish-rescaled weights), if asked."""
+
+
+def _ecce_walk(
+    y: np.ndarray, p: np.ndarray, w: np.ndarray, *, presorted: bool = False, sd: bool = False
+) -> _Walk:
+    """Cumulative-deviation walk shared by :func:`ecce` and ``curves.ecce_curve``.
+
+    Within a block of tied scores the sort order is arbitrary, so the walk is
+    only read at block ends: the result does not depend on how ties are
+    ordered in the input. ``presorted=True`` declares ``p`` ascending (the
+    bootstrap fast path); nothing checks it.
+    """
+    if presorted:
+        ys, ps, ws = y, p, w
+    else:
+        order = np.argsort(p, kind="stable")
+        ys, ps, ws = y[order], p[order], w[order]
+    w_total = w.sum()
+    n = ps.shape[0]
+    ends = np.append(np.flatnonzero(ps[1:] != ps[:-1]), n - 1)
+    cumdev = (np.cumsum(ws * (ys - ps)) / w_total)[ends]
+    cum_w = np.cumsum(ws)[ends]
+    block_w = np.diff(cum_w, prepend=0.0)
+    sd_null = None
+    if sd:
+        we = effective_weights(ws)
+        sd_null = np.sqrt(np.cumsum(we * ps * (1.0 - ps))[ends]) / we.sum()
+    return _Walk(frac=cum_w / cum_w[-1], cumdev=cumdev, block_w=block_w, sd_null=sd_null)
+
+
+def _ecce_stats(walk: _Walk) -> EcceResult:
+    a = np.abs(walk.cumdev)
+    return EcceResult(
+        stat_max=float(np.max(a)), stat_mean=float(np.average(a, weights=walk.block_w))
+    )
+
+
 def ecce(
-    y: object, p: object, *, sample_weight: object = None, presorted: bool = False
+    y: object, p: object, *, sample_weight: object = None, presorted: object = UNSET
 ) -> EcceResult:
     """Cumulative-deviation calibration error (Arrieta-Ibarra et al., 2022).
 
-    Sort by prediction and walk the cumulative sum of weighted residuals;
-    under calibration the walk hovers near zero, and drift localizes
-    miscalibration without any smoothing parameter.
+    Sort by prediction and walk the cumulative sum of weighted residuals,
+    normalized by the total weight; under calibration the walk hovers near
+    zero, and drift localizes miscalibration without any smoothing
+    parameter. The walk is read only at the end of each block of tied
+    predictions, so the result does not depend on the input order of tied
+    rows; ``stat_mean`` weights each block by its total sample weight.
+    Without ties and with unit weights both statistics equal the 0.3.x values.
 
     Parameters
     ----------
@@ -306,27 +353,70 @@ def ecce(
     p : array_like
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
     presorted : bool, keyword-only
-        Declare that ``p`` is already sorted ascending, so the internal
-        ``argsort`` can be skipped. Purely a throughput switch for callers that
-        already hold a sorted copy (``evaluate``'s bootstrap sorts each
-        replicate once and shares that order across metrics); the result is
-        unchanged when the declaration holds and meaningless when it does not,
-        and nothing checks it.
+        Deprecated (removed in 0.4.0): a throughput switch declaring ``p``
+        already sorted ascending. Still honoured.
 
     Returns
     -------
     EcceResult
         Max and mean absolute cumulative deviation.
     """
+    if presorted is not UNSET:
+        deprecated("ecce(presorted=...) is internal; drop the argument")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    if presorted:
-        c = np.cumsum(w * (y_arr - p_arr)) / w.sum()
-    else:
-        order = np.argsort(p_arr, kind="stable")
-        c = np.cumsum(w[order] * (y_arr[order] - p_arr[order])) / w.sum()
-    return EcceResult(stat_max=float(np.max(np.abs(c))), stat_mean=float(np.mean(np.abs(c))))
+    return _ecce_stats(_ecce_walk(y_arr, p_arr, w, presorted=bool(presorted)))
+
+
+_ICI_FAMILY = ("ici", "e50", "e90", "emax")
+
+
+def _ici_distances(
+    y: np.ndarray, p: np.ndarray, frac: float, grid_size: int | None, *, presorted: bool = False
+) -> np.ndarray:
+    """``|LOESS(y | p) - p|`` per observation (the LOESS fit is unweighted)."""
+    return np.abs(loess(p, y, frac=frac, grid_size=grid_size, presorted=presorted) - p)
+
+
+def _ici_family(
+    y: np.ndarray,
+    p: np.ndarray,
+    w: np.ndarray | None,
+    names: Iterable[str],
+    *,
+    frac: float = 0.75,
+    grid_size: int | None = 512,
+    presorted: bool = False,
+) -> dict[str, float]:
+    """The ICI family off one shared LOESS fit.
+
+    ``ici`` is the ``w``-weighted mean distance; ``e50``/``e90`` are the
+    distance quantiles — ``np.quantile`` for ``w=None`` or all-equal weights
+    (bit-identical to the unweighted values), otherwise
+    :func:`~probcal._math.weighted_quantile`; ``emax`` is the maximum, which
+    positive weights cannot move.
+    """
+    sel = set(names)
+    d = _ici_distances(y, p, frac, grid_size, presorted=presorted)
+    uniform = is_uniform(w)
+    out: dict[str, float] = {}
+    if "ici" in sel:
+        out["ici"] = float(np.average(d, weights=np.ones(len(p)) if w is None else w))
+    for name, q in (("e50", 0.5), ("e90", 0.9)):
+        if name in sel:
+            out[name] = float(np.quantile(d, q)) if uniform else float(weighted_quantile(d, q, w))
+    if "emax" in sel:
+        out["emax"] = float(np.max(d))
+    return out
+
+
+def _ici_public(
+    name: str, y: object, p: object, frac: float, sample_weight: object, grid_size: int | None
+) -> float:
+    y_arr, p_arr, w = _prep(y, p, sample_weight)
+    wq = None if sample_weight is None else w
+    return _ici_family(y_arr, p_arr, wq, (name,), frac=frac, grid_size=grid_size)[name]
 
 
 def ici(
@@ -352,7 +442,7 @@ def ici(
     frac : float, keyword-only
         LOESS smoothing fraction.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``; weights only the
+        Optional positive weights, same length as ``y``; weights only the
         final averaging step, not the LOESS fit.
     grid_size : int or None, keyword-only
         LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
@@ -362,30 +452,7 @@ def ici(
     float
         Weighted mean absolute LOESS-to-prediction distance.
     """
-    y_arr, p_arr, w = _prep(y, p, sample_weight)
-    c = loess(p_arr, y_arr, frac=frac, grid_size=grid_size)
-    return float(np.average(np.abs(c - p_arr), weights=w))
-
-
-def _ici_distances(y: object, p: object, frac: float, grid_size: int | None) -> np.ndarray:
-    y_arr, p_arr, _ = _prep(y, p, None)
-    return np.abs(loess(p_arr, y_arr, frac=frac, grid_size=grid_size) - p_arr)
-
-
-def _ici_quantile(d: np.ndarray, q: float, y: object, p: object, sample_weight: object) -> float:
-    """Quantile of the (always-unweighted) LOESS distances ``d``.
-
-    ``sample_weight is None`` or all-equal weights use ``np.quantile``
-    unchanged, so every unweighted/equal-weight caller stays bit-identical to
-    0.1.2; otherwise the quantile step (only) is weighted via
-    :func:`weighted_quantile`.
-    """
-    if sample_weight is None:
-        return float(np.quantile(d, q))
-    _, _, w = _prep(y, p, sample_weight)
-    if np.all(w == w[0]):
-        return float(np.quantile(d, q))
-    return float(weighted_quantile(d, q, w))
+    return _ici_public("ici", y, p, frac, sample_weight, grid_size)
 
 
 def e50(
@@ -401,7 +468,7 @@ def e50(
     ``grid_size=None`` recovers 0.1.2 values exactly. The LOESS distances are
     always unweighted; ``sample_weight``, when given and
     not uniform, weights only the quantile step (see
-    :func:`weighted_quantile`).
+    :func:`~probcal._math.weighted_quantile`).
 
     Parameters
     ----------
@@ -412,7 +479,7 @@ def e50(
     frac : float, keyword-only
         LOESS smoothing fraction.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights; used only for the quantile step.
+        Optional positive weights; used only for the quantile step.
     grid_size : int or None, keyword-only
         LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
 
@@ -421,8 +488,7 @@ def e50(
     float
         Median of the LOESS distances.
     """
-    d = _ici_distances(y, p, frac, grid_size)
-    return _ici_quantile(d, 0.5, y, p, sample_weight)
+    return _ici_public("e50", y, p, frac, sample_weight, grid_size)
 
 
 def e90(
@@ -438,7 +504,7 @@ def e90(
     ``grid_size=None`` recovers 0.1.2 values exactly. The LOESS distances are
     always unweighted; ``sample_weight``, when given and
     not uniform, weights only the quantile step (see
-    :func:`weighted_quantile`).
+    :func:`~probcal._math.weighted_quantile`).
 
     Parameters
     ----------
@@ -449,7 +515,7 @@ def e90(
     frac : float, keyword-only
         LOESS smoothing fraction.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights; used only for the quantile step.
+        Optional positive weights; used only for the quantile step.
     grid_size : int or None, keyword-only
         LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
 
@@ -458,8 +524,7 @@ def e90(
     float
         90th percentile of the LOESS distances.
     """
-    d = _ici_distances(y, p, frac, grid_size)
-    return _ici_quantile(d, 0.9, y, p, sample_weight)
+    return _ici_public("e90", y, p, frac, sample_weight, grid_size)
 
 
 def emax(
@@ -483,8 +548,9 @@ def emax(
     frac : float, keyword-only
         LOESS smoothing fraction.
     sample_weight : array_like or None, keyword-only
-        Accepted for signature parity with the other ICI-family metrics but
-        not used: the maximum is a weight-independent order statistic.
+        Optional positive weights, validated like everywhere else. The
+        weighted maximum over strictly positive weights is the plain maximum,
+        so the value does not depend on them.
     grid_size : int or None, keyword-only
         LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
 
@@ -493,7 +559,7 @@ def emax(
     float
         Maximum of the LOESS distances.
     """
-    return float(np.max(_ici_distances(y, p, frac, grid_size)))
+    return _ici_public("emax", y, p, frac, sample_weight, grid_size)
 
 
 @dataclass(frozen=True)
@@ -503,9 +569,10 @@ class SpiegelhalterResult:
     Attributes
     ----------
     z : float
-        Standardized test statistic.
+        Standardized test statistic (``nan`` when its null variance is 0).
     p_value : float
-        Two-sided p-value under the standard normal approximation.
+        Two-sided p-value under the standard normal approximation (``nan``
+        when ``z`` is).
     """
 
     z: float
@@ -519,6 +586,15 @@ def spiegelhalter_z(y: object, p: object, *, sample_weight: object = None) -> Sp
     asymptotically standard normal. No binning, no smoothing; aggregates the
     whole range, so compensating regional errors can cancel.
 
+    With weights, numerator and null variance use the Kish-rescaled weights
+    (package convention, :mod:`probcal.metrics._common`): ``z`` is invariant
+    to rescaling the weights and unit weights give the unweighted statistic.
+    (0.3.x used ``w`` in the numerator and ``w**2`` in the variance.)
+
+    The null variance ``sum(w (1 - 2p)^2 p (1 - p))`` is zero when every
+    prediction is exactly 0.5 (or clipped to 0/1); the statistic is then
+    undefined and ``z`` and ``p_value`` are ``nan``.
+
     Parameters
     ----------
     y : array_like
@@ -526,16 +602,22 @@ def spiegelhalter_z(y: object, p: object, *, sample_weight: object = None) -> Sp
     p : array_like
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
     SpiegelhalterResult
         Z statistic and two-sided p-value.
     """
-    y_arr, p_arr, w = _prep(y, p, sample_weight)
-    num = float(np.sum(w * (y_arr - p_arr) * (1.0 - 2.0 * p_arr)))
-    var = float(np.sum(w**2 * (1.0 - 2.0 * p_arr) ** 2 * p_arr * (1.0 - p_arr)))
+    return _spiegelhalter(*_prep(y, p, sample_weight))
+
+
+def _spiegelhalter(y_arr: np.ndarray, p_arr: np.ndarray, w: np.ndarray) -> SpiegelhalterResult:
+    """:func:`spiegelhalter_z` on validated arrays."""
+    we = effective_weights(w)
+    num = float(np.sum(we * (y_arr - p_arr) * (1.0 - 2.0 * p_arr)))
+    var = float(np.sum(we * (1.0 - 2.0 * p_arr) ** 2 * p_arr * (1.0 - p_arr)))
+    if not var > 0.0:
+        return SpiegelhalterResult(z=math.nan, p_value=math.nan)
     z = num / math.sqrt(var)
-    p_value = float(2.0 * (1.0 - norm_cdf(np.array([abs(z)]))[0]))
-    return SpiegelhalterResult(z=z, p_value=p_value)
+    return SpiegelhalterResult(z=z, p_value=min(1.0, 2.0 * norm_sf(abs(z))))

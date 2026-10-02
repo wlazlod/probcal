@@ -58,7 +58,7 @@ def build(
     cal_portfolio = make_pd_portfolio(n=8000, random_state=0)
     calibrator = BetaCalibrator().fit(cal_portfolio.scores, cal_portfolio.y)
 
-    monitor = CalibrationMonitor(alpha=0.05)
+    monitor = CalibrationMonitor(alpha=0.05, grades=MASTERSCALE.names)
     rng = np.random.default_rng(seed)
     # Segments draw from their own stream, so changing the segment structure
     # never perturbs the outcome draw (and with it the monitor's trajectory).

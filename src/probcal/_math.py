@@ -1,7 +1,8 @@
 """Numerical core: PAVA, IRLS logistic regression, special functions, LOESS, spline basis.
 
 Pure numpy + stdlib. Special functions are hand-rolled (continued fractions, series,
-rational approximations) and verified against scipy in ``tests/test_math_reference.py``.
+``math.erfc``/``math.lgamma``) and verified against scipy in
+``tests/test_math_reference.py``.
 """
 
 import math
@@ -11,6 +12,8 @@ from typing import NamedTuple
 
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
+
+from ._validation import EPS
 
 _FPMIN = 1e-300
 _CF_EPS = 1e-16
@@ -32,11 +35,11 @@ def logit(p: object) -> np.ndarray:
     numpy.ndarray
         ``log(p / (1 - p))`` elementwise.
     """
-    arr = np.clip(np.asarray(p, dtype=np.float64), 1e-12, 1.0 - 1e-12)
+    arr = np.clip(np.asarray(p, dtype=np.float64), EPS, 1.0 - EPS)
     return np.log(arr) - np.log1p(-arr)
 
 
-_LOGIT_CLIP = float(logit(1.0 - 1e-12))
+_LOGIT_CLIP = float(logit(1.0 - EPS))
 """``logit`` of the upper clipping bound, ~27.631 (== ``-logit(1e-12)``).
 
 A probability-space result whose raw logit exceeds this magnitude rounds into
@@ -65,6 +68,35 @@ def expit(z: object) -> np.ndarray:
     ez = np.exp(arr[~pos])
     out[~pos] = ez / (1.0 + ez)
     return out
+
+
+def logit1(p: float) -> float:
+    """Scalar :func:`logit` (same clipping), returning a Python float."""
+    q = min(max(float(p), EPS), 1.0 - EPS)
+    return math.log(q) - math.log1p(-q)
+
+
+def expit1(z: float) -> float:
+    """Scalar :func:`expit`, overflow-safe, returning a Python float."""
+    z = float(z)
+    if z >= 0.0:
+        return 1.0 / (1.0 + math.exp(-z))
+    ez = math.exp(z)
+    return ez / (1.0 + ez)
+
+
+def bern_log_lr(y: np.ndarray, p_null: np.ndarray, q_alt: np.ndarray, w: np.ndarray) -> float:
+    """Weighted log Bernoulli likelihood ratio of ``q_alt`` against ``p_null``."""
+    q = np.clip(q_alt, EPS, 1.0 - EPS)
+    p = np.clip(p_null, EPS, 1.0 - EPS)
+    terms = y * (np.log(q) - np.log(p)) + (1.0 - y) * (np.log1p(-q) - np.log1p(-p))
+    return float(np.sum(w * terms))
+
+
+def logsumexp(values: np.ndarray) -> float:
+    """Overflow-safe ``log(sum(exp(values)))``."""
+    m = float(np.max(values))
+    return m + float(np.log(np.sum(np.exp(values - m))))
 
 
 # ------------------------------------------------------------------ 1-D solvers
@@ -119,81 +151,15 @@ def bisect(
     return 0.5 * (lo + hi)
 
 
-def newton_1d(
-    f: Callable[[float], float],
-    df: Callable[[float], float],
-    x0: float,
-    lo: float,
-    hi: float,
-    tol: float = 1e-12,
-    max_iter: int = 100,
-) -> float:
-    """Safeguarded 1-D Newton root finder with bisection fallback.
-
-    Maintains the bracket ``[lo, hi]`` (which must straddle a sign change);
-    any Newton step that leaves the bracket, or meets a vanishing derivative,
-    is replaced by a bisection step.
-
-    Parameters
-    ----------
-    f, df : callable
-        Function and its derivative.
-    x0 : float
-        Initial point inside the bracket.
-    lo, hi : float
-        Bracketing interval with a sign change.
-    tol : float
-        Absolute tolerance on the root.
-    max_iter : int
-        Iteration cap.
-
-    Returns
-    -------
-    float
-        The bracketed root.
-    """
-    flo, fhi = f(lo), f(hi)
-    if flo == 0.0:
-        return lo
-    if fhi == 0.0:
-        return hi
-    if flo * fhi > 0.0:
-        raise ValueError("newton_1d: f(lo) and f(hi) must have opposite signs")
-    x = float(min(max(x0, lo), hi))
-    for _ in range(max_iter):
-        fx = f(x)
-        if fx == 0.0:
-            return x
-        if flo * fx < 0.0:
-            hi = x
-        else:
-            lo, flo = x, fx
-        if (hi - lo) < tol:
-            return 0.5 * (lo + hi)
-        d = df(x)
-        step_ok = d != 0.0 and math.isfinite(d)
-        if step_ok:
-            x_new = x - fx / d
-            step_ok = lo < x_new < hi
-        x = x_new if step_ok else 0.5 * (lo + hi)
-    return x
-
-
 # ------------------------------------------------------------------ special functions
 
 _lgamma_ufunc = np.frompyfunc(math.lgamma, 1, 1)
-_erf_ufunc = np.frompyfunc(math.erf, 1, 1)
 _erfc_ufunc = np.frompyfunc(math.erfc, 1, 1)
 
 
 def lgamma_vec(x: object) -> np.ndarray:
     """Vectorized ``math.lgamma`` cast to float64."""
     return np.asarray(_lgamma_ufunc(np.asarray(x, dtype=np.float64)), dtype=np.float64)
-
-
-def erf_vec(x: object) -> np.ndarray:
-    """Vectorized ``math.erf`` cast to float64."""
-    return np.asarray(_erf_ufunc(np.asarray(x, dtype=np.float64)), dtype=np.float64)
 
 
 def _betacf(a: float, b: float, x: float) -> float:
@@ -269,9 +235,15 @@ def betainc(a: float, b: float, x: object) -> np.ndarray:
     return out.reshape(arr.shape)
 
 
-def _gammainc_lower_scalar(s: float, x: float) -> float:
+def _gammainc_pq_scalar(s: float, x: float) -> tuple[float, float]:
+    """``(P(s, x), Q(s, x))``, each computed directly where it is accurate.
+
+    The series converges for ``x < s + 1`` and yields ``P``; the continued
+    fraction yields ``Q``. The complement is formed by subtraction only on
+    the side where it is not small, so neither tail loses relative precision.
+    """
     if x <= 0.0:
-        return 0.0
+        return 0.0, 1.0
     ln_scale = -x + s * math.log(x) - math.lgamma(s)
     if x < s + 1.0:
         # Series representation of P(s, x).
@@ -284,7 +256,8 @@ def _gammainc_lower_scalar(s: float, x: float) -> float:
             total += term
             if abs(term) < abs(total) * _CF_EPS:
                 break
-        return total * math.exp(ln_scale)
+        p = total * math.exp(ln_scale)
+        return p, 1.0 - p
     # Continued fraction for Q(s, x) (modified Lentz).
     b0 = x + 1.0 - s
     c = 1.0 / _FPMIN
@@ -304,7 +277,12 @@ def _gammainc_lower_scalar(s: float, x: float) -> float:
         h *= delta
         if abs(delta - 1.0) < _CF_EPS:
             break
-    return 1.0 - math.exp(ln_scale) * h
+    q = math.exp(ln_scale) * h
+    return 1.0 - q, q
+
+
+def _gammainc_lower_scalar(s: float, x: float) -> float:
+    return _gammainc_pq_scalar(s, x)[0]
 
 
 def gammainc_lower(s: float, x: object) -> np.ndarray:
@@ -355,6 +333,27 @@ def chi2_ppf(q: float, df: float) -> float:
     return bisect(lambda x: float(gammainc_lower(df / 2.0, x / 2.0)) - q, 0.0, hi, tol=1e-12)
 
 
+def chi2_sf(x: float, df: float) -> float:
+    """Chi-square upper tail ``P(X > x)``, accurate far into the tail.
+
+    Uses the regularized *upper* incomplete gamma ``Q(df/2, x/2)`` directly
+    rather than ``1 - P``, so p-values below ``1e-16`` do not round to 0.
+
+    Parameters
+    ----------
+    x : float
+        Statistic value (``<= 0`` gives 1.0).
+    df : float
+        Positive degrees of freedom.
+
+    Returns
+    -------
+    float
+        Upper-tail probability.
+    """
+    return _gammainc_pq_scalar(float(df) / 2.0, float(x) / 2.0)[1]
+
+
 def beta_ppf(q: float, a: float, b: float) -> float:
     """Beta(a, b) quantile function via bisection on :func:`betainc`.
 
@@ -395,92 +394,9 @@ def norm_cdf(x: object) -> np.ndarray:
     return 0.5 * np.asarray(_erfc_ufunc(-arr / math.sqrt(2.0)), dtype=np.float64)
 
 
-# Acklam's rational approximation coefficients for the normal quantile.
-_ACKLAM_A = (
-    -3.969683028665376e01,
-    2.209460984245205e02,
-    -2.759285104469687e02,
-    1.383577518672690e02,
-    -3.066479806614716e01,
-    2.506628277459239e00,
-)
-_ACKLAM_B = (
-    -5.447609879822406e01,
-    1.615858368580409e02,
-    -1.556989798598866e02,
-    6.680131188771972e01,
-    -1.328068155288572e01,
-)
-_ACKLAM_C = (
-    -7.784894002430293e-03,
-    -3.223964580411365e-01,
-    -2.400758277161838e00,
-    -2.549732539343734e00,
-    4.374664141464968e00,
-    2.938163982698783e00,
-)
-_ACKLAM_D = (
-    7.784695709041462e-03,
-    3.224671290700398e-01,
-    2.445134137142996e00,
-    3.754408661907416e00,
-)
-
-
-def _norm_ppf_acklam(q: np.ndarray) -> np.ndarray:
-    a, b, c, d = _ACKLAM_A, _ACKLAM_B, _ACKLAM_C, _ACKLAM_D
-    p_low = 0.02425
-    x = np.empty_like(q)
-
-    low = q < p_low
-    high = q > 1.0 - p_low
-    mid = ~(low | high)
-
-    if np.any(low):
-        u = np.sqrt(-2.0 * np.log(q[low]))
-        num = ((((c[0] * u + c[1]) * u + c[2]) * u + c[3]) * u + c[4]) * u + c[5]
-        den = (((d[0] * u + d[1]) * u + d[2]) * u + d[3]) * u + 1.0
-        x[low] = num / den
-    if np.any(high):
-        u = np.sqrt(-2.0 * np.log(1.0 - q[high]))
-        num = ((((c[0] * u + c[1]) * u + c[2]) * u + c[3]) * u + c[4]) * u + c[5]
-        den = (((d[0] * u + d[1]) * u + d[2]) * u + d[3]) * u + 1.0
-        x[high] = -(num / den)
-    if np.any(mid):
-        u = q[mid] - 0.5
-        r = u * u
-        num = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * u
-        den = ((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0
-        x[mid] = num / den
-    return x
-
-
-def norm_ppf(q: object) -> np.ndarray:
-    """Standard normal quantile function.
-
-    Acklam's rational approximation refined by two Halley steps on the
-    erfc-based CDF; accurate to well below ``1e-11`` absolute over
-    ``(1e-12, 1 - 1e-12)`` (reference-tested against scipy).
-
-    Parameters
-    ----------
-    q : array_like
-        Probability levels in ``(0, 1)``.
-
-    Returns
-    -------
-    numpy.ndarray
-        ``Phi^{-1}(q)`` elementwise.
-    """
-    arr = np.asarray(q, dtype=np.float64)
-    if np.any(arr <= 0.0) or np.any(arr >= 1.0):
-        raise ValueError("norm_ppf: q must lie strictly inside (0, 1)")
-    x = _norm_ppf_acklam(arr.reshape(-1)).reshape(arr.shape)
-    for _ in range(2):
-        e = norm_cdf(x) - arr
-        u = e * math.sqrt(2.0 * math.pi) * np.exp(0.5 * x * x)
-        x = x - u / (1.0 + 0.5 * x * u)
-    return x
+def norm_sf(x: float) -> float:
+    """Standard normal upper tail ``1 - Phi(x)`` via ``erfc`` (tail-accurate)."""
+    return 0.5 * math.erfc(float(x) / math.sqrt(2.0))
 
 
 # ------------------------------------------------------------------ PAVA
@@ -554,8 +470,14 @@ class IrlsResult(NamedTuple):
     beta: np.ndarray
     converged: bool
     separation: bool
-    n_iter: int
     nll: float
+
+
+_STALL_STEP_TOL = 1e-5
+"""Relative full-Newton-step bound under which a line-search stall still counts
+as convergence: at a genuine optimum the objective stops decreasing in floating
+point once the step is ~sqrt(eps) relative, well below this; along a
+quasi-separation ray the full step stays O(1 / margin) and never gets there."""
 
 
 def irls_logistic(
@@ -566,22 +488,39 @@ def irls_logistic(
     offset: object = None,
     max_iter: int = 100,
     tol: float = 1e-10,
+    *,
+    penalty: object = None,
 ) -> IrlsResult:
     """Logistic regression by Newton/IRLS with monotone descent.
 
-    Each Newton step is halved until it does not increase the (penalized)
-    negative log-likelihood, so the iteration never diverges. Separation is
-    declared only for effectively binary targets (every ``y`` within ``1e-9``
-    of 0 or 1) on unpenalized fits, when every observation sits on the correct
-    side by more than 10 log-odds from the design's own contribution
-    (``eta - offset``) while the gradient is still large (the signature of a
-    nonexistent MLE), when the Hessian is singular, or when the iteration
-    exits unconverged (the divergence signature of quasi-separation); the
-    function then warns and returns a ridge-regularized refit, which is
-    coercive and expected to report ``converged=True``. Soft targets (as
-    produced by Platt target smoothing) make the objective coercive, so
-    ``separation`` is never ``True`` for them; failures surface only as
-    ``converged=False`` or a singular-Hessian ridge fallback.
+    Minimizes ``sum w * (softplus(eta) - y * eta) + 0.5 * beta' Q beta`` with
+    ``eta = X beta + offset`` and ``Q = ridge * I + penalty``. Each Newton step
+    is halved until it does not increase the objective, so the iteration never
+    diverges.
+
+    **Convergence** is judged on the *full* Newton step, never on a halved one:
+    the fit is ``converged`` when ``max|H^-1 g| < tol * (1 + max|beta|)``. If
+    the line search stalls (no step strictly decreases the objective in
+    floating point) the fit counts as converged only when the full step is
+    already below ``1e-5`` relative — the floating-point floor at a genuine
+    optimum; along a quasi-separation ray the full step stays O(1 / margin)
+    while the gradient vanishes, so a stall there is never convergence.
+
+    **Separation** is declared only for effectively binary targets (every
+    ``y`` within ``1e-9`` of 0 or 1) on fits without a ridge term, when every
+    observation sits on the correct side by more than 10 log-odds from the
+    design's own contribution (``eta - offset``) while the gradient is still
+    large (the signature of a nonexistent MLE), when the Hessian is singular,
+    or when the iteration ends unconverged (the divergence signature of
+    quasi-separation, whose full Newton step stays O(1) while the gradient
+    vanishes); the function then warns and returns a ridge-regularized refit
+    (``ridge=1e-6`` on top of ``penalty``), which is coercive and expected to
+    report ``converged=True``. A ``penalty`` matrix with a null space (e.g. a
+    roughness penalty that leaves linear terms free) does not prevent
+    separation along that null space, so it does not switch detection off.
+    Soft targets (as produced by Platt target smoothing) make the objective
+    coercive, so ``separation`` is never ``True`` for them; failures surface
+    only as ``converged=False`` or a singular-Hessian ridge fallback.
 
     Parameters
     ----------
@@ -593,36 +532,43 @@ def irls_logistic(
     w : array_like or None
         Observation weights; ``None`` means unit weights.
     ridge : float
-        L2 penalty added to the Hessian diagonal (and gradient).
+        L2 penalty ``0.5 * ridge * |beta|^2``.
     offset : array_like or None
         Fixed additive term of the linear predictor (coefficient 1).
     max_iter : int
         Newton iteration cap.
     tol : float
-        Convergence tolerance on the max absolute (possibly halved) Newton
-        step.
+        Convergence tolerance on the max absolute full Newton step, relative
+        to ``1 + max|beta|``.
+    penalty : array_like of shape (k, k) or None, keyword-only
+        Symmetric positive semi-definite quadratic penalty
+        ``0.5 * beta' penalty beta`` (e.g. ``lam * D'D`` for a penalized
+        spline), added to the ridge term.
 
     Returns
     -------
     IrlsResult
-        Coefficients plus ``converged``, ``separation``, ``n_iter`` and the
-        final penalized objective value ``nll``.
+        Coefficients plus ``converged``, ``separation`` and the final
+        penalized objective value ``nll``.
     """
     X_arr = np.asarray(X, dtype=np.float64)
     y_arr = np.asarray(y, dtype=np.float64)
     n, k = X_arr.shape
     w_arr = np.ones(n) if w is None else np.asarray(w, dtype=np.float64)
     off = np.zeros(n) if offset is None else np.asarray(offset, dtype=np.float64)
+    pen = np.zeros((k, k)) if penalty is None else np.asarray(penalty, dtype=np.float64)
+    quad = ridge * np.eye(k) + pen
 
     # Separation is a binary-target concept: soft targets make the objective
     # coercive, so a finite minimizer always exists.
     binary = bool(np.all((y_arr < 1e-9) | (y_arr > 1.0 - 1e-9)))
+    detect = binary and ridge == 0.0
     sign = 2.0 * y_arr - 1.0
 
     def nll_at(beta: np.ndarray, eta: np.ndarray) -> float:
         # Overflow-safe softplus(eta) - y*eta; never log(mu) on saturated mu.
         softplus = np.maximum(eta, 0.0) + np.log1p(np.exp(-np.abs(eta)))
-        return float(np.sum(w_arr * (softplus - y_arr * eta))) + 0.5 * ridge * float(beta @ beta)
+        return float(np.sum(w_arr * (softplus - y_arr * eta))) + 0.5 * float(beta @ quad @ beta)
 
     beta = np.zeros(k)
     eta = off.copy()
@@ -630,19 +576,12 @@ def irls_logistic(
     separation = False
     singular = False
     converged = False
-    n_iter = 0
-    while n_iter < max_iter:
-        n_iter += 1
+    for _ in range(max_iter):
         mu = expit(eta)
-        grad = X_arr.T @ (w_arr * (y_arr - mu)) - ridge * beta
+        grad = X_arr.T @ (w_arr * (y_arr - mu)) - quad @ beta
         grad_inf = float(np.max(np.abs(grad)))
         tol_grad = 1e-8 * (1.0 + abs(obj))
-        if (
-            binary
-            and ridge == 0.0
-            and float(np.min(sign * (eta - off))) > 10.0
-            and grad_inf > tol_grad
-        ):
+        if detect and float(np.min(sign * (eta - off))) > 10.0 and grad_inf > tol_grad:
             # Every point classified correctly by > 10 log-odds *by the design
             # itself* (offset excluded: it is not under the coefficients'
             # control) yet the likelihood still improves by pushing beta
@@ -650,13 +589,18 @@ def irls_logistic(
             separation = True
             break
         wt = w_arr * mu * (1.0 - mu)
-        hess = (X_arr * wt[:, None]).T @ X_arr + ridge * np.eye(k)
+        hess = (X_arr * wt[:, None]).T @ X_arr + quad
         try:
             step = np.linalg.solve(hess, grad)
         except np.linalg.LinAlgError:
             singular = True
             separation = binary
             break
+        if not np.all(np.isfinite(step)):
+            singular = True
+            separation = binary
+            break
+        step_rel = float(np.max(np.abs(step))) / (1.0 + float(np.max(np.abs(beta))))
         eta_step = X_arr @ step
         accepted = False
         for _ in range(31):  # step-halving: accept beta + step / 2**j, j in {0, ..., 30}
@@ -668,20 +612,25 @@ def irls_logistic(
                 break
             step = 0.5 * step
             eta_step = 0.5 * eta_step
-        if not accepted:
-            converged = grad_inf < tol_grad
+        stalled = not accepted or obj_new == obj
+        if accepted:
+            beta, eta, obj = beta_new, eta_new, obj_new
+        if stalled:
+            # Line-search stall (no strict decrease left in floating point):
+            # converged only if the *full* step was already negligible — the
+            # floor at a genuine optimum — never merely because the gradient
+            # vanished along a runaway (quasi-separation) direction.
+            converged = step_rel < _STALL_STEP_TOL
             break
-        beta, eta, obj = beta_new, eta_new, obj_new
-        if np.max(np.abs(step)) < tol * (1.0 + np.max(np.abs(beta))):
+        if step_rel < tol:
             converged = True
             break
 
-    if binary and ridge == 0.0 and not (converged or separation or singular):
-        # Exhausting max_iter (or stalling with a large gradient) on an
-        # unpenalized binary fit is the divergence signature of
-        # quasi-separation: tied boundary points keep the per-point margin
-        # near zero, so the margin rule cannot fire, while the Hessian stays
-        # numerically nonsingular as beta runs away.
+    if detect and not (converged or separation or singular):
+        # Ending unconverged on an unpenalized binary fit is the divergence
+        # signature of quasi-separation: tied boundary points keep the
+        # per-point margin near zero, so the margin rule cannot fire, while
+        # the Hessian stays numerically nonsingular as beta runs away.
         separation = True
 
     if (separation or singular) and ridge == 0.0:
@@ -692,60 +641,15 @@ def irls_logistic(
             stacklevel=2,
         )
         ridged = irls_logistic(
-            X_arr, y_arr, w=w_arr, ridge=1e-6, offset=off, max_iter=max_iter, tol=tol
+            X_arr, y_arr, w=w_arr, ridge=1e-6, offset=off, max_iter=max_iter, tol=tol, penalty=pen
         )
         return IrlsResult(
-            beta=ridged.beta,
-            converged=ridged.converged,
-            separation=separation,
-            n_iter=ridged.n_iter,
-            nll=ridged.nll,
+            beta=ridged.beta, converged=ridged.converged, separation=separation, nll=ridged.nll
         )
-    return IrlsResult(beta=beta, converged=converged, separation=separation, n_iter=n_iter, nll=obj)
+    return IrlsResult(beta=beta, converged=converged, separation=separation, nll=obj)
 
 
 # ------------------------------------------------------------------ LOESS
-
-
-def _loess_fit_sorted(
-    xs: np.ndarray, ys: np.ndarray, evs: np.ndarray, r: int, degree: int
-) -> np.ndarray:
-    """LOESS at sorted eval points via the contiguous min-width r-window.
-
-    For 1-D x the r-nearest-neighbor window is contiguous in sorted order; the
-    two-pointer rule advances the window start while the point entering on the
-    right is strictly closer than the one leaving on the left. Distance ties
-    resolve to the leftmost minimal-width window (strict `<`).
-
-    ``xs`` and ``evs`` must already be sorted ascending.
-    """
-    n = xs.shape[0]
-    out = np.empty(evs.shape[0], dtype=np.float64)
-    i = 0
-    for j in range(evs.shape[0]):
-        x0 = evs[j]
-        while i + r < n and xs[i + r] - x0 < x0 - xs[i]:
-            i += 1
-        xw = xs[i : i + r]
-        yw = ys[i : i + r]
-        h = max(x0 - xs[i], xs[i + r - 1] - x0)
-        if h == 0.0:
-            out[j] = yw.mean()
-            continue
-        u = np.abs(xw - x0) / h
-        wts = np.clip(1.0 - u**3, 0.0, None) ** 3
-        if degree == 0:
-            out[j] = float(np.average(yw, weights=np.maximum(wts, _FPMIN)))
-            continue
-        xc = xw - x0
-        sw = wts.sum()
-        swx = (wts * xc).sum()
-        swxx = (wts * xc * xc).sum()
-        swy = (wts * yw).sum()
-        swxy = (wts * xc * yw).sum()
-        det = sw * swxx - swx * swx
-        out[j] = swy / sw if abs(det) < _FPMIN else (swxx * swy - swx * swxy) / det
-    return out
 
 
 # Elements per gathered window block in ``_loess_fit_sorted_vec``. Anchors are
@@ -759,9 +663,12 @@ _LOESS_BLOCK = 1 << 15
 
 
 def _loess_window_starts(xs: np.ndarray, evs: np.ndarray, r: int) -> np.ndarray:
-    """Window start index per eval point, matching ``_loess_fit_sorted``'s rule.
+    """Window start index per eval point: the leftmost minimal-width r-window.
 
-    The loop advances its window while ``xs[i + r] - x0 < x0 - xs[i]``. Both
+    For 1-D x the r-nearest-neighbor window is contiguous in sorted order. The
+    reference two-pointer loop (kept in ``tests/test_math.py``) advances its
+    window while ``xs[i + r] - x0 < x0 - xs[i]``; distance ties resolve to the
+    leftmost minimal-width window. Both
     sides of that comparison are monotone in ``i`` (IEEE subtraction is), so the
     windows that fail it are upward-closed and the loop's answer is the *first*
     ``i`` that fails — found here without the two-pointer walk. ``xs[i] +
@@ -804,42 +711,30 @@ def _loess_window_starts(xs: np.ndarray, evs: np.ndarray, r: int) -> np.ndarray:
 def _loess_fit_sorted_vec(
     xs: np.ndarray, ys: np.ndarray, evs: np.ndarray, r: int, degree: int
 ) -> np.ndarray:
-    """Vectorized twin of :func:`_loess_fit_sorted` for a bounded eval grid.
+    """LOESS at sorted eval points: tricube-weighted local fits on r-windows.
 
-    Same windows, same tricube weights, same closed-form solves — evaluated for
-    many eval points at once instead of one Python iteration each, which is what
-    makes the ICI family affordable inside ``evaluate``'s bootstrap. Every
-    window has exactly ``r`` points, so the block gather is rectangular.
+    The single LOESS engine (0.3.4 retired the per-point Python loop it was
+    once the "vectorized twin" of). Anchors are processed in blocks of
+    ``_LOESS_BLOCK // r`` so the gathered (block x r) window matrix stays
+    cache-resident; every window has exactly ``r`` points, so the gather is
+    rectangular. ``xs`` and ``evs`` must already be sorted ascending.
 
-    Only for a *bounded* number of eval points: the gather is O(len(evs) * r), so
-    this is wired in behind ``loess(..., presorted=True)``'s ``grid_size`` anchor
-    branch (512 anchors) and never for the per-observation path. ``xs`` and
-    ``evs`` must already be sorted ascending.
+    Against the retired loop (frozen in ``tests/test_math.py`` as a
+    reference) the only intended difference is the tricube cube, taken by
+    multiplication (``u * u * u``) rather than ``** 3`` (libm ``pow``, ~10x the
+    cost): at most one ulp per weight on a well-conditioned window, measured
+    <= 4.3e-15 absolute on fitted values over 720 portfolio configurations
+    (continuous, 2-dp and 3-dp scores; frac 0.2/0.75; degree 0/1).
 
-    The tricube weight cubes by multiplication (``u * u * u``) where the loop
-    writes ``u ** 3``. numpy sends ``** 3`` to ``libm`` ``pow`` — 10x the cost of
-    two multiplies, and the two tricube exponentiations are ~80% of this
-    routine's arithmetic — for a result that differs by at most one ulp **on a
-    well-conditioned window** (measured <= 2.3e-16 relative). That is the only
-    intended numeric difference, and it is confined to the bootstrap path; the
-    point-estimate path still runs the loop unchanged.
-
-    On a *rank-deficient* window — every non-zero tricube weight sitting on one
-    distinct ``x``, which happens when the far half of the window lies at exactly
-    the bandwidth ``h`` — that bound does not hold. There ``det`` is pure
-    cancellation (``W**2 * c**2 - (W * c)**2``, computed as ~1e-23 rather than
-    0), so the ulp-level weight difference can put the loop and this routine on
-    opposite sides of the ``abs(det) < _FPMIN`` guard, and the two values then
-    differ by O(1). The ``swy / sw`` branch — the weighted mean, which is what a
-    rank-deficient local *linear* fit degenerates to — is the well-defined
-    answer, and either path may be the one that lands on it; the other divides
-    by cancellation noise and is already arbitrary in the loop, independently of
-    this routine. Grid anchors are data quantiles, and no reported value has been
-    observed to come from such a window (0 differences across 1,738 two-group
-    configurations whose anchor grid does straddle the gap); see
-    ``tests/test_math.py::test_loess_vectorized_rank_deficient_window``. The
-    ``abs(det) < _FPMIN`` guard is deliberately left alone: changing it would
-    move the point-estimate path.
+    On a *rank-deficient* window — every non-zero tricube weight on one
+    distinct ``x``, which happens when the far half of the window lies at
+    exactly the bandwidth ``h`` — ``det`` is pure cancellation (~1e-23 rather
+    than 0), and the ulp-level weight difference can put the two
+    implementations on opposite sides of the ``abs(det) < _FPMIN`` guard. Such
+    a window's local *linear* fit is undefined; the ``swy / sw`` branch (the
+    weighted mean, what it degenerates to) is the well-defined answer, and the
+    loop's alternative divided by cancellation noise. See
+    ``tests/test_math.py::test_loess_vectorized_rank_deficient_window``.
     """
     m = evs.shape[0]
     start = _loess_window_starts(xs, evs, r)
@@ -938,23 +833,16 @@ def loess(
     xs, ys = (x_arr, y_arr) if order is None else (x_arr[order], y_arr[order])
     if grid_size is not None and ev.shape[0] > grid_size:
         anchors = np.unique(np.quantile(ev, np.linspace(0.0, 1.0, grid_size)))
-        # The anchor grid is bounded, so the presorted (bootstrap) path can
-        # afford the blocked vectorized fit; the default path keeps the loop.
-        fit_anchors = (
-            _loess_fit_sorted_vec(xs, ys, anchors, r, degree)
-            if presorted
-            else _loess_fit_sorted(xs, ys, anchors, r, degree)
-        )
-        return np.interp(ev, anchors, fit_anchors)
+        return np.interp(ev, anchors, _loess_fit_sorted_vec(xs, ys, anchors, r, degree))
     if xeval is None:
-        fit = _loess_fit_sorted(xs, ys, xs, r, degree)
+        fit = _loess_fit_sorted_vec(xs, ys, xs, r, degree)
         if order is None:
             return fit
         out = np.empty_like(fit)
         out[order] = fit
     else:
         ev_order = np.argsort(ev, kind="stable")
-        fit = _loess_fit_sorted(xs, ys, ev[ev_order], r, degree)
+        fit = _loess_fit_sorted_vec(xs, ys, ev[ev_order], r, degree)
         out = np.empty_like(fit)
         out[ev_order] = fit
     return out
@@ -963,7 +851,7 @@ def loess(
 # ------------------------------------------------------------------ natural cubic basis
 
 
-def natural_cubic_basis(x: object, knots: object) -> np.ndarray:
+def natural_cubic_basis(x: object, knots: object, *, deriv: int = 0) -> np.ndarray:
     """Natural cubic spline basis (Hastie–Tibshirani–Friedman §5.2.1).
 
     With knots ``xi_1 < ... < xi_K``, returns the K columns
@@ -977,23 +865,36 @@ def natural_cubic_basis(x: object, knots: object) -> np.ndarray:
         Evaluation points.
     knots : array_like
         Strictly increasing interior knots, at least 3 of them.
+    deriv : {0, 1, 2}, keyword-only
+        Derivative order of the returned columns (0: the basis itself).
 
     Returns
     -------
     numpy.ndarray of shape (n, K)
-        Basis matrix.
+        Basis matrix (or its ``deriv``-th derivative).
     """
     x_arr = np.asarray(x, dtype=np.float64)
     kn = np.asarray(knots, dtype=np.float64)
     n_knots = kn.shape[0]
     if n_knots < 3:
         raise ValueError("natural_cubic_basis: need at least 3 knots")
+    if deriv not in (0, 1, 2):
+        raise ValueError(f"natural_cubic_basis: deriv must be 0, 1 or 2, got {deriv!r}")
+    power = 3 - deriv
+    factor = (1.0, 3.0, 6.0)[deriv]
 
     def d(k: int) -> np.ndarray:
-        num = np.clip(x_arr - kn[k], 0.0, None) ** 3 - np.clip(x_arr - kn[-1], 0.0, None) ** 3
-        return num / (kn[-1] - kn[k])
+        num = (
+            np.clip(x_arr - kn[k], 0.0, None) ** power - np.clip(x_arr - kn[-1], 0.0, None) ** power
+        )
+        return factor * num / (kn[-1] - kn[k])
 
-    cols = [np.ones_like(x_arr), x_arr]
+    lead = (
+        [np.ones_like(x_arr), x_arr],
+        [np.zeros_like(x_arr), np.ones_like(x_arr)],
+        [np.zeros_like(x_arr), np.zeros_like(x_arr)],
+    )[deriv]
+    cols = list(lead)
     d_last = d(n_knots - 2)
     for k in range(n_knots - 2):
         cols.append(d(k) - d_last)

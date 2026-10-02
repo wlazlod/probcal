@@ -304,3 +304,108 @@ def test_smooth_ece_refactor_bit_identical_on_under_resolved_fallback(
     )
     d = make_pd_portfolio(n=2000, random_state=22)
     assert smooth_ece(d.y, d.scores) == _old_smooth_ece(d.y, d.scores)
+
+
+# ------------------------------------------------------------------ 0.3.4 fixes
+
+
+def test_ecce_invariant_to_tie_order() -> None:
+    # Regression (MET-1): with tied scores the stable sort kept input order,
+    # so permuting tied rows moved stat_max/stat_mean.
+    rng = np.random.default_rng(0)
+    p = np.round(rng.uniform(0.05, 0.6, 2000), 1)
+    y = (rng.random(2000) < p).astype(float)
+    perm = rng.permutation(2000)
+    a, b = ecce(y, p), ecce(y[perm], p[perm])
+    assert a.stat_max == pytest.approx(b.stat_max, rel=1e-12)
+    assert a.stat_mean == pytest.approx(b.stat_mean, rel=1e-12)
+    # Sorting events first vs last inside every block used to change the walk.
+    order_ev_first = np.lexsort((-y, p))
+    order_ev_last = np.lexsort((y, p))
+    first = ecce(y[order_ev_first], p[order_ev_first])
+    last = ecce(y[order_ev_last], p[order_ev_last])
+    assert first.stat_max == pytest.approx(last.stat_max, rel=1e-12)
+
+
+def test_ecce_unchanged_without_ties_and_unit_weights() -> None:
+    y, p = _calibrated(3000)
+    order = np.argsort(p, kind="stable")
+    c = np.cumsum(y[order] - p[order]) / len(p)
+    res = ecce(y, p)
+    assert res.stat_max == float(np.max(np.abs(c)))
+    assert res.stat_mean == float(np.mean(np.abs(c)))
+    assert ecce(y, p, sample_weight=np.ones(len(p))) == res
+
+
+def test_ecce_stat_mean_is_weight_averaged() -> None:
+    # Regression (MET-14): stat_mean averaged over row indices, ignoring weights.
+    p = np.array([0.1, 0.3, 0.5, 0.7])
+    y = np.array([1.0, 0.0, 1.0, 0.0])
+    w = np.array([1.0, 3.0, 1.0, 5.0])
+    c = np.cumsum(w * (y - p)) / w.sum()
+    res = ecce(y, p, sample_weight=w)
+    assert res.stat_mean == pytest.approx(float(np.sum(w * np.abs(c)) / w.sum()))
+    # Duplicating rows equals integer weights.
+    rep = np.repeat(np.arange(4), w.astype(int))
+    dup = ecce(y[rep], p[rep])
+    assert res.stat_max == pytest.approx(dup.stat_max)
+    assert res.stat_mean == pytest.approx(dup.stat_mean)
+
+
+def test_ecce_presorted_keyword_deprecated() -> None:
+    y, p = _calibrated(500)
+    order = np.argsort(p)
+    with pytest.warns(DeprecationWarning, match="presorted"):
+        res = ecce(y[order], p[order], presorted=True)
+    assert res == ecce(y, p)
+
+
+def test_spiegelhalter_zero_variance_is_nan() -> None:
+    # Regression (MET-3): all p = 0.5 gives a zero null variance -> 0/0.
+    y = np.array([0.0, 1.0, 1.0, 0.0])
+    res = spiegelhalter_z(y, np.full(4, 0.5))
+    assert math.isnan(res.z) and math.isnan(res.p_value)
+
+
+def test_spiegelhalter_kish_weights() -> None:
+    y, p = _calibrated(4000)
+    base = spiegelhalter_z(y, p)
+    assert spiegelhalter_z(y, p, sample_weight=np.ones(len(y))) == base
+    # Constant weights are unit weights (0.3.x divided z by sqrt(c): w in the
+    # numerator, w**2 in the variance).
+    assert spiegelhalter_z(y, p, sample_weight=np.full(len(y), 5.0)).z == pytest.approx(
+        base.z, rel=1e-12
+    )
+    w = np.random.default_rng(1).uniform(0.2, 3.0, len(y))
+    we = w * w.sum() / np.dot(w, w)
+    a = 1.0 - 2.0 * p
+    z_want = np.sum(we * (y - p) * a) / np.sqrt(np.sum(we * a**2 * p * (1.0 - p)))
+    assert spiegelhalter_z(y, p, sample_weight=w).z == pytest.approx(z_want, rel=1e-12)
+    assert spiegelhalter_z(y, p, sample_weight=10 * w).z == pytest.approx(z_want, rel=1e-12)
+
+
+def test_spiegelhalter_p_value_tail_accurate() -> None:
+    # Regression (MET-5): 2 * (1 - Phi(|z|)) rounds to 0 beyond |z| ~ 8.3.
+    rng = np.random.default_rng(5)
+    p = expit(rng.normal(-0.8, 1.2, 8000))
+    y = (rng.random(8000) < p).astype(float)
+    res = spiegelhalter_z(y, expit(1.3 * logit(p)))
+    assert abs(res.z) > 9.0
+    assert 0.0 < res.p_value < 1e-17
+
+
+def test_emax_validates_weights() -> None:
+    # Regression (MET-28): emax accepted any sample_weight without looking at it.
+    y, p = _calibrated(500)
+    with pytest.raises(ValueError, match="sample_weight"):
+        emax(y, p, sample_weight=np.ones(3))
+    assert emax(y, p, sample_weight=np.full(len(y), 2.0)) == emax(y, p)
+
+
+def test_ici_family_single_prep_matches_public() -> None:
+    from probcal.metrics.smooth import _ici_family
+
+    d = make_pd_portfolio(n=1500, random_state=2)
+    y, p, _ = _prep(d.y, d.scores, None)
+    fam = _ici_family(y, p, None, ("ici", "e50", "e90", "emax"))
+    assert fam == {"ici": ici(y, p), "e50": e50(y, p), "e90": e90(y, p), "emax": emax(y, p)}

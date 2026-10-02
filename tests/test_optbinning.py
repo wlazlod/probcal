@@ -127,3 +127,74 @@ def test_masterscale_method_accepts_masterscale_object(fitted) -> None:
     cs, _, _, _ = fitted
     ms = Masterscale({"A": (0.0, 0.01), "B": (0.01, 0.05), "C": (0.05, 1.0)})
     assert cs.masterscale(ms) == cs.masterscale(ms.bands)
+
+
+# ---------------------------------------------------------------- 0.3.4 regressions
+
+
+class _ConstantScorecard:
+    """A degenerate scorecard: one probability and one score for every row."""
+
+    def predict_proba(self, X):
+        n = len(X)
+        return np.column_stack([np.full(n, 0.9), np.full(n, 0.1)])
+
+    def score(self, X):
+        return np.full(len(X), 500.0)
+
+    def table(self, style="detailed"):  # noqa: ARG002
+        return pd.DataFrame({"Variable": ["a"], "Points": [500.0]})
+
+
+def test_constant_model_probability_refuses_points_map() -> None:
+    # MON-16: np.polyfit through a single distinct log-odds value used to
+    # return arbitrary coefficients that then drove masterscale().
+    X = np.zeros((300, 1))
+    y = (np.arange(300) % 10 == 0).astype(int)
+    with pytest.warns(UserWarning, match="unidentifiable"):
+        cs = calibrate_scorecard(_ConstantScorecard(), X, y, calibrator=PlattCalibrator())
+    assert cs.points_affine_coeffs_ is None
+    with pytest.raises(RuntimeError):
+        cs.masterscale({"A": (0.0, 0.05), "B": (0.05, 1.0)})
+
+
+def test_scorecard_fingerprint_does_not_depend_on_csv_formatting(fitted, monkeypatch) -> None:
+    # MON-17: the fingerprint used to hash DataFrame.to_csv() text, whose
+    # float formatting is a pandas implementation detail.
+    cs, _, _, _ = fitted
+    before = cs.scorecard_fingerprint()
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("to_csv must not be part of the fingerprint")
+
+    monkeypatch.setattr(pd.DataFrame, "to_csv", _boom)
+    assert cs.scorecard_fingerprint() == before
+
+
+def test_legacy_csv_fingerprint_payload_still_loads(fitted) -> None:
+    import hashlib
+
+    cs, sc, X_cal, _ = fitted
+    d = cs.to_dict()
+    legacy = hashlib.sha256(
+        sc.table(style="detailed").to_csv(index=False).encode("utf-8")
+    ).hexdigest()
+    d["state"]["scorecard_fingerprint"] = legacy
+    loaded = CalibratedScorecard.from_dict(d, scorecard=sc)
+    np.testing.assert_array_equal(loaded.predict_proba(X_cal), cs.predict_proba(X_cal))
+    d["state"]["scorecard_fingerprint"] = "0" * 64
+    with pytest.raises(ValueError, match="fingerprint"):
+        CalibratedScorecard.from_dict(d, scorecard=sc)
+
+
+def test_from_json_round_trip_with_scorecard(fitted, tmp_path) -> None:
+    # MON-25: to_json existed without a from_json counterpart.
+    cs, sc, X_cal, _ = fitted
+    path = tmp_path / "layer.json"
+    cs.to_json(path)
+    loaded = CalibratedScorecard.from_json(path, scorecard=sc)
+    np.testing.assert_array_equal(loaded.predict_proba(X_cal), cs.predict_proba(X_cal))
+    assert loaded.fingerprint() == cs.fingerprint()
+    assert CalibratedScorecard.from_json(cs.to_json(), scorecard=sc).fingerprint() == (
+        cs.fingerprint()
+    )

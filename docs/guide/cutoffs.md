@@ -89,7 +89,7 @@ print(jeffreys_grade_test(y_cal, p_cal, ms))     # the backtest, best to worst
 
 raw_bands = calibrated_bands_to_raw(cal, ms, space="logit")
 for grade, (band_lo, band_hi) in raw_bands.items():
-    print(f"{grade}: raw margin in [{band_lo:.4f}, {band_hi:.4f}]")
+    print(f"{grade}: raw margin in [{band_lo:.4f}, {band_hi:.4f})")   # top band closed
 
 ms.to_json("masterscale.json")                   # versioned, fingerprinted
 print(ms.fingerprint()[:12])
@@ -98,16 +98,19 @@ print(ms.fingerprint()[:12])
 One convention, stated once: `assign` is half-open, `lo <= p < hi`, with
 the top band closed at its upper edge, so every probability belongs to
 exactly one grade and a value sitting on a shared edge goes to the worse
-grade. The inverted bands above are closed intervals, since a boundary
-point has measure zero on the raw scale. A validator reconciling counts
-against the table uses the assignment rule. Adjacent grades share their
-edge exactly, so the translated ladder covers the raw line without gaps or
-overlaps; store the output next to the calibrator's fingerprint, policy
-fixed, mapping versioned ([Auditability](auditability.md)).
+grade. The inverted bands above follow the same rule on the raw scale:
+each is half-open, `[inf{s : g(s) >= lo}, inf{s : g(s) >= hi})`, and the top
+band is closed at `sup{s : g(s) <= hi}`. Adjacent raw bands share their edge,
+so the translated ladder partitions the raw line without gaps or overlaps,
+and counting raw scores per raw band reproduces `assign`'s counts exactly,
+plateaus of a step calibrator (isotonic, histogram) included. (Before 0.3.4
+the raw bands were closed, and a plateau sitting on a grade edge was counted
+in both neighbouring grades.) Store the output next to the calibrator's
+fingerprint, policy fixed, mapping versioned ([Auditability](auditability.md)).
 
 The same object feeds the scorecard translation (`cs.masterscale(ms)`, see
 [optbinning scorecards](optbinning.md)), the monitor
-(`mon.update(y, p, grade=ms)`), the report
+(`CalibrationMonitor(grades=ms.names).update(y, p, grade=ms)`), the report
 (`validation_report(y, p, grades=ms)`), and treecf
 (`Target.bands(ms.bands, space="calibrated", calibrator=cal)`).
 

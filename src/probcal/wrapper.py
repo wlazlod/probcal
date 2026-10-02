@@ -5,24 +5,29 @@ variant is the recommended default): ``docs/concepts/data-splitting.md``.
 """
 
 import copy
+import inspect
 import json
-import os
+import warnings
 from datetime import UTC, datetime
 from typing import Any, Self
 
 import numpy as np
 
-from ._math import expit, logit
+from ._math import expit
 from ._registry import register
 from ._results import Interpretation
-from ._serialize import SCHEMA_VERSION, check_schema, data_fingerprint, fingerprint_of_dict
-from ._validation import validate_binary_y, validate_weights
-from .base import BaseCalibrator, UnattainableTargetError
+from ._serialize import JsonIO, check_payload, data_fingerprint, encode_value, envelope
+from ._validation import stratified_folds, validate_binary_y, validate_cv, validate_weights
+from .base import BaseCalibrator, clone_unfitted
+from .chain import Chain, _concat_interpretations
 from .offset import LogitOffset
 
 
-def _model_scores(model: Any, X: np.ndarray) -> np.ndarray:
-    """Duck-typed score extraction: predict_proba column 1, else expit(margin)."""
+def _model_scores(model: Any, X: object) -> np.ndarray:
+    """Duck-typed score extraction: predict_proba column 1, else expit(margin).
+
+    ``X`` is handed to the model untouched (a DataFrame stays a DataFrame).
+    """
     if hasattr(model, "predict_proba"):
         out = np.asarray(model.predict_proba(X), dtype=np.float64)
         if out.ndim == 2:
@@ -31,7 +36,42 @@ def _model_scores(model: Any, X: np.ndarray) -> np.ndarray:
     if hasattr(model, "decision_function"):
         return expit(np.asarray(model.decision_function(X), dtype=np.float64))
     raise TypeError(
-        "model must expose predict_proba(X) or decision_function(X); " f"got {type(model).__name__}"
+        f"model must expose predict_proba(X) or decision_function(X); got {type(model).__name__}"
+    )
+
+
+def _n_rows(X: object) -> int:
+    """Row count of ``X`` without converting it (``shape[0]``, else ``len``)."""
+    shape = getattr(X, "shape", None)
+    if shape is not None and len(shape) > 0:
+        return int(shape[0])
+    return len(X)  # type: ignore[arg-type]
+
+
+def _take_rows(X: object, mask: np.ndarray) -> object:
+    """Rows of ``X`` selected by a boolean mask, keeping its type where possible.
+
+    pandas objects go through ``.iloc``; anything array-like with a
+    ``shape`` (ndarrays, scipy sparse) is indexed directly; a plain sequence
+    becomes an ndarray with numpy's own dtype inference first (strings stay
+    strings — no float coercion).
+    """
+    idx = np.flatnonzero(mask)
+    if hasattr(X, "iloc"):
+        return X.iloc[idx]
+    if hasattr(X, "shape") and hasattr(X, "__getitem__"):
+        return X[idx]
+    return np.asarray(X)[idx]
+
+
+def _accepts_sample_weight(fit: Any) -> bool:
+    """Whether ``fit`` takes a ``sample_weight`` keyword (named or via ``**kwargs``)."""
+    try:
+        params = inspect.signature(fit).parameters
+    except (TypeError, ValueError):
+        return False
+    return "sample_weight" in params or any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
     )
 
 
@@ -46,7 +86,7 @@ def _clone(model: Any) -> Any:
 
 
 @register
-class CalibratedModel:
+class CalibratedModel(JsonIO):
     """Wrap any scoring model with a probcal calibrator (and optional offsets).
 
     Parameters
@@ -54,6 +94,8 @@ class CalibratedModel:
     model : object
         Duck-typed model with ``predict_proba(X)`` or ``decision_function(X)``.
         For ``flow="cv"`` it must also have ``fit(X, y)`` and be clonable.
+        ``X`` is always passed to the model as given (never converted), so
+        DataFrames, column transformers, and string features work.
     calibrator : BaseCalibrator
         Unfitted calibrator instance (its parameters are cloned per fold in
         the cv flow via ``get_params``).
@@ -64,7 +106,7 @@ class CalibratedModel:
         fold; every observation is scored by a model that did not train on
         it.
     cv : int
-        Fold count for the cv flow (stratified, seeded).
+        Fold count for the cv flow (stratified, seeded); an integer ``>= 2``.
     ensemble : bool
         ``False`` (recommended default): one calibrator on pooled
         out-of-fold scores, final model refit on all data — a single
@@ -85,6 +127,8 @@ class CalibratedModel:
     offsets_ : list[LogitOffset]
         Appended offset stages, each separately inspectable.
     """
+
+    _weight_warned: bool = False
 
     def __init__(
         self,
@@ -112,13 +156,17 @@ class CalibratedModel:
 
         Parameters
         ----------
-        X : array_like
-            Calibration-set inputs, passed to the model (``flow="cv"``) or
+        X : array_like, DataFrame, or any model input
+            Calibration-set inputs, passed untouched to the model
+            (``flow="cv"``: row subsets via ``.iloc`` or numpy indexing) or
             scored directly by the already-trained model (``flow="prefit"``).
         y : array_like
             Binary outcomes in ``{0, 1}``; both classes must be present.
         sample_weight : array_like or None
-            Positive observation weights.
+            Positive observation weights. Always used by the calibrator; in
+            the cv flow also forwarded to ``model.fit`` when its signature
+            accepts ``sample_weight`` (otherwise a ``UserWarning`` says the
+            model is trained unweighted).
 
         Returns
         -------
@@ -128,24 +176,28 @@ class CalibratedModel:
         Raises
         ------
         ValueError
-            If ``flow`` is not ``"prefit"`` or ``"cv"``.
+            If ``flow`` is not ``"prefit"`` or ``"cv"``, ``cv`` is not an
+            integer ``>= 2`` (or a class has fewer than 2 members), or ``X``
+            and ``y`` differ in length.
         TypeError
             If ``flow="cv"`` and the model has no ``fit(X, y)`` method.
         """
         if self.flow not in ("prefit", "cv"):
             raise ValueError(f"flow must be 'prefit' or 'cv', got {self.flow!r}")
-        X_arr = np.asarray(X, dtype=np.float64)
         y_arr = validate_binary_y(y)
+        if _n_rows(X) != len(y_arr):
+            raise ValueError(f"X has {_n_rows(X)} rows but y has {len(y_arr)}")
         w_arr = validate_weights(sample_weight, len(y_arr))
         self.offsets_: list[LogitOffset] = []
         self.ensemble_: list[tuple[Any, BaseCalibrator]] = []
         if self.flow == "prefit":
             self.model_ = self.model
-            s = _model_scores(self.model_, X_arr)
+            s = _model_scores(self.model_, X)
             self.calibrator_ = self._fresh_calibrator().fit(s, y_arr, sample_weight=w_arr)
             self._cal_scores = s
         else:
-            self._fit_cv(X_arr, y_arr, w_arr)
+            cv = validate_cv(self.cv, y_arr)
+            self._fit_cv(X, y_arr, w_arr if sample_weight is not None else None, cv)
         self.fit_meta_ = {
             "n_obs": int(len(y_arr)),
             "n_events": float(np.sum(w_arr * y_arr)),
@@ -157,37 +209,52 @@ class CalibratedModel:
         return self
 
     def _fresh_calibrator(self) -> BaseCalibrator:
-        return type(self.calibrator)(**self.calibrator.get_params())
+        return clone_unfitted(self.calibrator)  # type: ignore[return-value]
 
-    def _fit_cv(self, X: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
+    def _fit_model(self, model: Any, X: object, y: np.ndarray, w: np.ndarray | None) -> None:
+        """``model.fit(X, y[, sample_weight=w])``; warns once when weights are dropped."""
+        if w is None:
+            model.fit(X, y)
+        elif _accepts_sample_weight(model.fit):
+            model.fit(X, y, sample_weight=w)
+        else:
+            if not self._weight_warned:
+                warnings.warn(
+                    f"{type(model).__name__}.fit does not accept sample_weight; the model is "
+                    "trained unweighted (the calibrator still uses the weights)",
+                    UserWarning,
+                    stacklevel=4,
+                )
+                self._weight_warned = True
+            model.fit(X, y)
+
+    def _fit_cv(self, X: object, y: np.ndarray, w: np.ndarray | None, cv: int) -> None:
         if not hasattr(self.model, "fit"):
             raise TypeError("flow='cv' requires a model with fit(X, y)")
-        rng = np.random.default_rng(self.random_state)
-        folds = np.empty(len(y), dtype=np.int64)
-        for cls in (0.0, 1.0):
-            idx = np.flatnonzero(y == cls)
-            perm = rng.permutation(idx)
-            folds[perm] = np.arange(len(perm)) % self.cv
+        self._weight_warned = False
+        w_cal = w if w is not None else np.ones(len(y))
+        folds = stratified_folds(y, cv, self.random_state)
         oof_scores = np.empty(len(y))
-        for k in range(self.cv):
+        for k in range(cv):
             train, held = folds != k, folds == k
             fold_model = _clone(self.model)
-            fold_model.fit(X[train], y[train])
-            s_held = _model_scores(fold_model, X[held])
+            self._fit_model(
+                fold_model, _take_rows(X, train), y[train], None if w is None else w[train]
+            )
+            s_held = _model_scores(fold_model, _take_rows(X, held))
             oof_scores[held] = s_held
             if self.ensemble:
                 fold_cal = self._fresh_calibrator()
-                fold_cal.fit(s_held, y[held], sample_weight=w[held])
+                fold_cal.fit(s_held, y[held], sample_weight=w_cal[held])
                 self.ensemble_.append((fold_model, fold_cal))
+        self._cal_scores = oof_scores
         if self.ensemble:
             self.model_ = None
             self.calibrator_ = None  # type: ignore[assignment]
-            self._cal_scores = oof_scores
         else:
-            self.calibrator_ = self._fresh_calibrator().fit(oof_scores, y, sample_weight=w)
+            self.calibrator_ = self._fresh_calibrator().fit(oof_scores, y, sample_weight=w_cal)
             self.model_ = _clone(self.model)
-            self.model_.fit(X, y)
-            self._cal_scores = oof_scores
+            self._fit_model(self.model_, X, y, w)
 
     # ------------------------------------------------------------------ prediction
 
@@ -199,7 +266,7 @@ class CalibratedModel:
         """Fitted state for sklearn >= 1.6 (model and calibrator both fitted)."""
         return bool(getattr(self, "fitted_", False))
 
-    def _base_predict(self, X: np.ndarray) -> np.ndarray:
+    def _base_predict(self, X: object) -> np.ndarray:
         if self.ensemble_:
             preds = [cal.predict_proba(_model_scores(model, X)) for model, cal in self.ensemble_]
             return np.mean(preds, axis=0)
@@ -210,9 +277,9 @@ class CalibratedModel:
 
         Parameters
         ----------
-        X : array_like
-            New inputs, passed to the deployed model (or every ensemble
-            fold's model, averaged).
+        X : array_like, DataFrame, or any model input
+            New inputs, passed untouched to the deployed model (or every
+            ensemble fold's model, averaged).
 
         Returns
         -------
@@ -220,7 +287,7 @@ class CalibratedModel:
             Calibrated probabilities, after any appended offset stages.
         """
         self._check_fitted()
-        p = self._base_predict(np.asarray(X, dtype=np.float64))
+        p = self._base_predict(X)
         for off in self.offsets_:
             p = off.transform(p)
         return p
@@ -234,6 +301,7 @@ class CalibratedModel:
 
     def offset_to(
         self,
+        *args: object,
         target_mean: float | None = None,
         delta: float | None = None,
         X: object = None,
@@ -245,15 +313,19 @@ class CalibratedModel:
         calibration scores. The offset is never folded into
         the calibrator's parameters.
 
+        Positional use (``offset_to(0.03)``, the 0.3 signature
+        ``(target_mean, delta, X)``) still works but emits a
+        ``DeprecationWarning``; it will be removed in 0.4.0.
+
         Parameters
         ----------
-        target_mean : float or None
+        target_mean : float or None, keyword-only
             Mode B: desired post-shift portfolio mean; mutually exclusive
             with ``delta`` (enforced by :class:`LogitOffset`).
-        delta : float or None
+        delta : float or None, keyword-only
             Mode A: the log-odds shift to apply directly; mutually exclusive
             with ``target_mean``.
-        X : array_like or None
+        X : array_like or None, keyword-only
             Inputs to compute the current pipeline output on; ``None`` uses
             the stored calibration scores instead.
 
@@ -262,6 +334,19 @@ class CalibratedModel:
         Self
             The wrapper, with the new offset appended to ``offsets_``.
         """
+        if args:
+            if len(args) > 3:
+                raise TypeError("offset_to takes at most 3 positional arguments (deprecated)")
+            warnings.warn(
+                "positional arguments to CalibratedModel.offset_to are deprecated and will "
+                "be removed in 0.4.0; use offset_to(target_mean=..., delta=..., X=...)",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            given = dict(zip(("target_mean", "delta", "X"), args, strict=False))
+            target_mean = given.get("target_mean", target_mean)  # type: ignore[assignment]
+            delta = given.get("delta", delta)  # type: ignore[assignment]
+            X = given.get("X", X)
         self._check_fitted()
         if X is not None:
             p_now = self.predict_proba(X)
@@ -277,6 +362,39 @@ class CalibratedModel:
         self.offsets_.append(off)
         return self
 
+    def with_offset(self, offset: LogitOffset) -> "CalibratedModel":
+        """A deep copy of this wrapper with an already-fitted offset appended.
+
+        Needs no data: unlike :meth:`offset_to`, nothing is fitted — the
+        given offset (e.g. from :func:`probcal.offset_from_estimate` or a
+        monitor recommendation) is copied and appended as the last stage.
+        ``self`` is left untouched.
+
+        Parameters
+        ----------
+        offset : LogitOffset
+            A fitted offset.
+
+        Returns
+        -------
+        CalibratedModel
+            The new wrapper (``offsets_ == [*self.offsets_, offset]``, copied).
+
+        Raises
+        ------
+        TypeError
+            If ``offset`` is not a :class:`LogitOffset`.
+        RuntimeError
+            If this wrapper or the offset is not fitted.
+        """
+        self._check_fitted()
+        if not isinstance(offset, LogitOffset):
+            raise TypeError(f"offset must be a LogitOffset, got {type(offset).__name__}")
+        offset._check_fitted()
+        new = copy.deepcopy(self)
+        new.offsets_.append(copy.deepcopy(offset))
+        return new
+
     def _base_predict_from_scores(self, s: np.ndarray) -> np.ndarray:
         if self.ensemble_:
             preds = [cal.predict_proba(s) for _, cal in self.ensemble_]
@@ -288,13 +406,25 @@ class CalibratedModel:
         return p
 
     # ------------------------------------------------------------------ protocol
+    # Everything below delegates to the equivalent Chain (calibrator + offsets);
+    # the ensemble flow (K distinct maps) has no single chain.
+
+    def _require_chain(self, what: str) -> Chain:
+        self._check_fitted()
+        if self.ensemble_:
+            raise NotImplementedError(
+                f"{what} is not defined for the ensemble flow (K distinct maps); "
+                "use ensemble=False for threshold translation"
+            )
+        return self.chain_
 
     @property
     def is_monotone_(self) -> bool:
         """Monotone iff the calibrator stage is (offsets always are)."""
+        self._check_fitted()
         if self.ensemble_:
             return all(cal.is_monotone_ for _, cal in self.ensemble_)
-        return self.calibrator_.is_monotone_
+        return self.chain_.is_monotone_
 
     @property
     def affine_logit_coeffs_(self) -> tuple[float, float] | None:
@@ -302,11 +432,7 @@ class CalibratedModel:
         self._check_fitted()
         if self.ensemble_:
             return None
-        coeffs = self.calibrator_.affine_logit_coeffs_
-        if coeffs is None:
-            return None
-        a, b = coeffs
-        return (a, b + sum(off.delta_ for off in self.offsets_))
+        return self.chain_.affine_logit_coeffs_
 
     def interval_inverse(
         self,
@@ -318,10 +444,11 @@ class CalibratedModel:
     ) -> tuple[float, float]:
         """Preimage of a calibrated interval through the full pipeline.
 
-        Composes right-to-left: the buffer shrinks the final interval, each
-        offset subtracts its delta on the logit scale, and the calibrator's
-        own inverse finishes the job. Returns bounds on the model's
-        probability output (``space="probability"``) or their logits.
+        Delegates to :meth:`Chain.interval_inverse` on :attr:`chain_`: the
+        buffer shrinks the final interval, each offset subtracts its delta
+        on the logit scale, and the calibrator's own inverse finishes the
+        job. Returns bounds on the model's probability output
+        (``space="probability"``) or their logits.
 
         Parameters
         ----------
@@ -351,31 +478,21 @@ class CalibratedModel:
         ValueError
             If ``lo``, ``hi`` are not ordered in ``[0, 1]``.
         """
-        self._check_fitted()
-        if self.ensemble_:
-            raise NotImplementedError(
-                "interval_inverse is not defined for the ensemble flow (K distinct maps); "
-                "use ensemble=False for threshold translation"
-            )
-        if not 0.0 <= lo <= hi <= 1.0:
-            raise ValueError(f"need 0 <= lo <= hi <= 1, got lo={lo}, hi={hi}")
-        lo_b, hi_b = float(lo), float(hi)
-        if buffer_logit > 0.0:
-            if lo > 0.0:
-                lo_b = float(expit(np.array([logit(np.array([lo]))[0] + buffer_logit]))[0])
-            if hi < 1.0:
-                hi_b = float(expit(np.array([logit(np.array([hi]))[0] - buffer_logit]))[0])
-            if lo_b > hi_b:
-                raise UnattainableTargetError(
-                    f"buffer_logit={buffer_logit} empties the calibrated interval [{lo}, {hi}]"
-                )
-        total_delta = sum(off.delta_ for off in self.offsets_)
-        if total_delta != 0.0:
-            if lo_b > 0.0:
-                lo_b = float(expit(np.array([logit(np.array([lo_b]))[0] - total_delta]))[0])
-            if hi_b < 1.0:
-                hi_b = float(expit(np.array([logit(np.array([hi_b]))[0] - total_delta]))[0])
-        return self.calibrator_.interval_inverse(lo_b, hi_b, space=space, buffer_logit=0.0)
+        chain = self._require_chain("interval_inverse")
+        return chain.interval_inverse(lo, hi, space=space, buffer_logit=buffer_logit)
+
+    def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
+        """Exact preimage of pipeline probabilities (see :meth:`Chain.point_inverse`).
+
+        Raises
+        ------
+        NotImplementedError
+            For the ensemble flow, or a calibrator without an exact inverse.
+        UnattainableTargetError
+            If a target lies outside ``(0, 1)`` or is not representable.
+        """
+        chain = self._require_chain("point_inverse")
+        return chain.point_inverse(p, space=space)
 
     def interpret(self) -> Interpretation:
         """Concatenated interpretation of the calibrator and every offset stage.
@@ -389,25 +506,13 @@ class CalibratedModel:
         self._check_fitted()
         if self.ensemble_:
             parts = [cal.interpret() for _, cal in self.ensemble_]
+            parts += [off.interpret() for off in self.offsets_]
         else:
-            parts = [self.calibrator_.interpret()]
-        parts += [off.interpret() for off in self.offsets_]
-        names: tuple[str, ...] = ()
-        values: tuple[float, ...] = ()
-        messages: tuple[str, ...] = ()
-        for part in parts:
-            names += part.param_names
-            values += part.param_values
-            messages += part.messages
-        return Interpretation(
-            method=f"CalibratedModel[{', '.join(p.method for p in parts)}]",
-            param_names=names,
-            param_values=values,
-            messages=messages,
-        )
+            parts = [stage.interpret() for stage in self.chain_.stages]  # type: ignore[attr-defined]
+        return _concat_interpretations("CalibratedModel", parts, qualify=False)
 
     @property
-    def chain_(self) -> "object":
+    def chain_(self) -> Chain:
         """The equivalent model-free :class:`probcal.Chain` (calibrator + offsets).
 
         Hand this to a recourse engine when the base model stays behind:
@@ -422,8 +527,6 @@ class CalibratedModel:
         self._check_fitted()
         if self.ensemble_:
             raise NotImplementedError("the ensemble flow has no single equivalent chain")
-        from .chain import Chain
-
         return Chain([self.calibrator_, *self.offsets_])
 
     # ------------------------------------------------------------------ serialization
@@ -451,29 +554,25 @@ class CalibratedModel:
                 "the ensemble flow holds K fold models that cannot be referenced; "
                 "serialize a pooled (ensemble=False) or prefit wrapper instead"
             )
-        from . import __version__
-
         ref_model = self.model_ if self.model_ is not None else self.model
         model_params: object = None
         if hasattr(ref_model, "get_params"):
             try:
                 candidate = ref_model.get_params()
-                json.dumps(candidate)
+                json.dumps(candidate, allow_nan=False)
                 model_params = candidate
             except (TypeError, ValueError):
                 model_params = None
-        return {
-            "probcal_schema": SCHEMA_VERSION,
-            "probcal_version": __version__,
-            "class": type(self).__name__,
-            "params": {
+        return envelope(
+            self,
+            params={
                 "flow": self.flow,
                 "cv": self.cv,
                 "ensemble": self.ensemble,
                 "random_state": self.random_state,
                 "model_id": self.model_id,
             },
-            "state": {
+            state={
                 "calibrator": self.calibrator_.to_dict(),
                 "offsets": [off.to_dict() for off in self.offsets_],
                 "model_ref": {
@@ -482,8 +581,8 @@ class CalibratedModel:
                     "params": model_params,
                 },
             },
-            "fit_meta": dict(getattr(self, "fit_meta_", {})),
-        }
+            fit_meta=encode_value(dict(getattr(self, "fit_meta_", {}))),
+        )
 
     @classmethod
     def from_dict(cls, d: dict, model: Any = None) -> "CalibratedModel":
@@ -504,9 +603,7 @@ class CalibratedModel:
         ValueError
             If the schema version is unknown or the payload class differs.
         """
-        check_schema(d)
-        if d.get("class") != cls.__name__:
-            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
+        check_payload(cls, d)
         from ._registry import load
 
         params = d.get("params", {})
@@ -530,26 +627,7 @@ class CalibratedModel:
         obj.fitted_ = True
         return obj
 
-    def to_json(
-        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
-    ) -> str | None:
-        """Serialize to JSON text, or to ``path`` when given (returns None then)."""
-        text = json.dumps(self.to_dict(), indent=indent)
-        if path is None:
-            return text
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        return None
-
     @classmethod
-    def from_json(cls, path_or_str: object, model: Any = None) -> "CalibratedModel":
+    def from_json(cls, path_or_str: object, model: Any = None) -> Self:  # type: ignore[override]
         """Load from a JSON string or a filesystem path (see :meth:`from_dict`)."""
-        text = str(path_or_str)
-        if not text.lstrip().startswith("{"):
-            with open(text, encoding="utf-8") as fh:
-                text = fh.read()
-        return cls.from_dict(json.loads(text), model=model)
-
-    def fingerprint(self) -> str:
-        """SHA-256 of the canonical serialized form, version- and timestamp-blind."""
-        return fingerprint_of_dict(self.to_dict())
+        return super().from_json(path_or_str, model=model)

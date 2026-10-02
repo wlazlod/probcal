@@ -6,6 +6,8 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+  # publish.yml calls this whole workflow as its release gate.
+  workflow_call:
 
 jobs:
   changes:
@@ -23,15 +25,17 @@ jobs:
         id: classify
         env:
           EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD: ${{ github.sha }}
         run: |
           # Docs-only changes (docs/, mkdocs.yml, README, CHANGELOG, CITATION) skip the
           # test matrix and the pinned-dependency jobs; the docs job covers them instead.
-          # Anything else, an unknown base, or a manual run counts as a code change.
+          # Anything else, an unknown base, a tag (release gate) or a manual run counts
+          # as a code change.
           code=true
           notebooks=false
-          if [ "$EVENT" != "workflow_dispatch" ] && [ -n "$BASE" ] && ! echo "$BASE" | grep -q '^0*$' && git cat-file -e "$BASE" 2>/dev/null; then
+          if [ "$EVENT" != "workflow_dispatch" ] && [ "$REF_TYPE" != "tag" ] && [ -n "$BASE" ] && ! echo "$BASE" | grep -q '^0*$' && git cat-file -e "$BASE" 2>/dev/null; then
             git diff --name-only "$BASE" "$HEAD" > changed.txt
             echo "changed files:"; cat changed.txt
             non_docs=$(grep -vE '^(docs/|mkdocs\.yml$|README\.md$|CHANGELOG\.md$|CITATION\.cff$)' changed.txt || true)
@@ -67,6 +71,9 @@ jobs:
 
       - name: Lint
         run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
 
       - name: Build docs
         run: mkdocs build --strict
@@ -104,16 +111,44 @@ jobs:
       - name: Lint
         run: ruff check .
 
-      - name: Type-check
+      - name: Format check
         if: matrix.python-version == '3.12'
+        run: ruff format --check .
+
+      # mypy targets the running interpreter: the 3.11 leg guards the floor
+      # (DECISIONS #1), the 3.12 leg the development version.
+      - name: Type-check
+        if: matrix.python-version == '3.11' || matrix.python-version == '3.12'
         run: mypy
 
-      - name: Run tests
-        run: pytest -q
+      - name: Run tests (slow tests run once, in the `slow` job)
+        run: pytest -q -m "not slow"
 
       - name: Build docs
         if: matrix.python-version == '3.12'
         run: mkdocs build --strict
+
+  slow:
+    name: Slow tests (bootstrap/CV-heavy) on Python 3.12
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev,viz]"
+
+      - name: Run the slow tests
+        run: pytest -q -m slow
 
   sklearn-min:
     name: sklearn adapter on the pinned minimum (1.4)
@@ -134,8 +169,11 @@ jobs:
       - name: Install dependencies with the oldest supported scikit-learn
         run: uv pip install --system -e ".[dev,viz]" "scikit-learn==1.4.2"
 
+      # Every tests/test_sklearn*.py module (new adapter suites are picked up
+      # automatically) plus the import-footprint guard (the sklearn duck hooks
+      # must not import sklearn), re-checked against the oldest sklearn.
       - name: Run the sklearn adapter suite
-        run: pytest -q tests/test_sklearn.py tests/test_sklearn_offset.py tests/test_sklearn_routing.py tests/test_sklearn_mirror_checks.py tests/test_import_footprint.py tests/test_sklearn_duck.py tests/test_sklearn_guide_snippets.py
+        run: pytest -q tests/test_sklearn*.py tests/test_import_footprint.py
 
   integrations:
     name: optbinning + lightgbm integrations on pinned versions

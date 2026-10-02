@@ -2,7 +2,7 @@
 
 `sklearn.utils.estimator_checks` generates multi-column feature matrices of
 arbitrary reals, which no score-level estimator can accept — those checks are
-declared inapplicable in `probcal.sklearn._compat`, each with its own reason.
+declared inapplicable in `probcal.sklearn._xfail`, each with its own reason.
 This module re-implements the ones that *do* have a score-level analogue, on
 valid `(n,)` probability data, against the adapter (`SklearnCalibrator`) and
 the bare core (`BetaCalibrator`); `SklearnOffset` has its own mirrors for the
@@ -68,7 +68,7 @@ from probcal import BetaCalibrator, make_pd_portfolio  # noqa: E402
 from probcal._registry import SERIALIZABLE  # noqa: E402
 from probcal.base import BaseCalibrator  # noqa: E402
 from probcal.sklearn import SklearnCalibrator, SklearnOffset  # noqa: E402
-from probcal.sklearn._compat import (  # noqa: E402
+from probcal.sklearn._xfail import (  # noqa: E402
     CALIBRATOR_XFAIL_CHECKS,
     CLASSIFIER_XFAIL_CHECKS,
     OFFSET_XFAIL_CHECKS,
@@ -160,7 +160,7 @@ _WEIGHT_DUPLICATION_TOLERANCE: dict[str, tuple[float, str]] = {
     ),
     "CrossVennAbersCalibrator": (
         2e-2,
-        "cross Venn-Abers averages over folds whose assignment depends on n; " "measured 8.8e-3",
+        "cross Venn-Abers averages over folds whose assignment depends on n; measured 8.8e-3",
     ),
     "HistogramBinningCalibrator": (
         1.5e-1,
@@ -170,7 +170,7 @@ _WEIGHT_DUPLICATION_TOLERANCE: dict[str, tuple[float, str]] = {
     ),
     "PlattCalibrator": (
         1e-12,
-        "weighted and duplicated IRLS differ in floating point only; measured " "2.5e-16",
+        "weighted and duplicated IRLS differ in floating point only; measured 2.5e-16",
     ),
     "ScalingBinningCalibrator": (
         1.2e-1,
@@ -179,7 +179,7 @@ _WEIGHT_DUPLICATION_TOLERANCE: dict[str, tuple[float, str]] = {
     ),
     "SegmentedCalibrator": (
         1e-12,
-        "delegates to the pooled base calibrator; IRLS floating point only, " "measured 1.3e-14",
+        "delegates to the pooled base calibrator; IRLS floating point only, measured 1.3e-14",
     ),
     "SplineCalibrator": (
         2.5e-1,

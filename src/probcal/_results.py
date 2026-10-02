@@ -3,11 +3,23 @@
 All results are immutable dataclasses of numpy arrays (no pandas), each with an
 ``as_dict()`` accessor and a readable aligned-table ``__repr__``. Field sets here
 are the initial minimum and may be extended by later releases.
+
+Results are *reports*, not serializable artifacts: ``as_dict()`` returns the
+fields as they are (numpy arrays included) for inspection or a DataFrame,
+whereas the fitted objects' ``to_dict()`` returns a versioned, JSON-native
+payload that ``from_dict`` reads back. The two names are deliberately
+different because the two contracts are.
+
+Equality is array-aware: two results compare equal when every field is equal,
+arrays by value (``nan`` equal to ``nan``). Results holding arrays are
+unhashable (``__hash__ = None``), like the arrays themselves.
 """
 
 import dataclasses
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import ClassVar
 
 import numpy as np
 
@@ -33,12 +45,80 @@ def _aligned_table(headers: tuple[str, ...], rows: Sequence[Sequence[object]]) -
     return "\n".join(lines)
 
 
+def _values_equal(a: object, b: object) -> bool:
+    """Field equality that understands numpy arrays (``nan == nan``) and nests."""
+    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+        a_arr, b_arr = np.asarray(a), np.asarray(b)
+        if a_arr.shape != b_arr.shape:
+            return False
+        try:
+            return bool(np.array_equal(a_arr, b_arr, equal_nan=True))
+        except TypeError:  # non-numeric dtype: nan-equality is meaningless
+            return bool(np.array_equal(a_arr, b_arr))
+    if isinstance(a, (tuple, list)) and isinstance(b, (tuple, list)):
+        return (
+            type(a) is type(b)
+            and len(a) == len(b)
+            and all(_values_equal(x, y) for x, y in zip(a, b, strict=True))
+        )
+    if isinstance(a, float) and isinstance(b, float) and a != a and b != b:
+        return True
+    return bool(a == b)
+
+
+def fields_equal(a: object, b: object) -> bool:
+    """``True`` iff ``a`` and ``b`` are the same dataclass type with equal fields.
+
+    Arrays compare by value (shape and elements, ``nan`` equal to ``nan``).
+    The shared ``__eq__`` of every result dataclass holding arrays.
+    """
+    if type(a) is not type(b) or not dataclasses.is_dataclass(a):
+        return False
+    return all(_values_equal(getattr(a, f.name), getattr(b, f.name)) for f in dataclasses.fields(a))
+
+
 class _ResultBase:
-    """Shared ``as_dict`` for frozen result dataclasses."""
+    """Shared ``as_dict``, array-aware ``__eq__``, and table ``__repr__``.
+
+    Subclasses holding arrays are declared ``@dataclass(frozen=True,
+    eq=False, repr=False)`` so they inherit the methods below (a dataclass
+    with ``eq=True`` would generate an ``__eq__`` that raises on arrays).
+
+    The table mechanism: ``_TABLE`` names the column headers and
+    :meth:`_rows` returns one tuple per row (by default the fields named in
+    ``_TABLE``, zipped); ``__repr__`` renders ``_title()`` above the aligned
+    table, and the HTML/markdown report renders the very same rows.
+    """
+
+    _TABLE: ClassVar[tuple[str, ...]] = ()
 
     def as_dict(self) -> dict[str, object]:
-        """Return the result's fields as a plain dict."""
+        """Return the result's fields as a plain dict (arrays as-is; not JSON)."""
         return {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}  # type: ignore[arg-type]
+
+    def _rows(self) -> list[tuple[object, ...]]:
+        """One tuple per table row, aligned with ``_TABLE``."""
+        cols = [getattr(self, h) for h in self._TABLE]
+        return [tuple(r) for r in zip(*cols, strict=True)]
+
+    def _headers(self) -> tuple[str, ...]:
+        """Column headers of the table (``_TABLE`` unless a subclass varies them)."""
+        return self._TABLE
+
+    def _title(self) -> str:
+        return type(self).__name__
+
+    def __repr__(self) -> str:
+        if not self._headers():
+            return object.__repr__(self)
+        return f"{self._title()}\n{_aligned_table(self._headers(), self._rows())}"
+
+    def __eq__(self, other: object) -> bool:
+        if type(other) is not type(self):
+            return NotImplemented
+        return fields_equal(self, other)
+
+    __hash__ = None  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -71,7 +151,7 @@ class Interpretation(_ResultBase):
         return f"Interpretation[{self.method}]\n{table}\n{notes}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False, repr=False)
 class ReliabilityCurve(_ResultBase):
     """Binned or smoothed reliability curve on both probability and logit scales.
 
@@ -96,23 +176,13 @@ class ReliabilityCurve(_ResultBase):
     ci_high: np.ndarray
     pred_mean_logit: np.ndarray
 
-    def __repr__(self) -> str:
-        rows = [
-            (p, e, c, lo, hi)
-            for p, e, c, lo, hi in zip(
-                self.pred_mean,
-                self.event_rate,
-                self.count,
-                self.ci_low,
-                self.ci_high,
-                strict=True,
-            )
-        ]
-        table = _aligned_table(("pred_mean", "event_rate", "count", "ci_low", "ci_high"), rows)
-        return f"ReliabilityCurve ({len(rows)} bins)\n{table}"
+    _TABLE: ClassVar[tuple[str, ...]] = ("pred_mean", "event_rate", "count", "ci_low", "ci_high")
+
+    def _title(self) -> str:
+        return f"ReliabilityCurve ({len(self.pred_mean)} bins)"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False, repr=False)
 class MetricReport(_ResultBase):
     """Named metric values with bootstrap percentile confidence intervals.
 
@@ -131,16 +201,13 @@ class MetricReport(_ResultBase):
     ci_low: np.ndarray
     ci_high: np.ndarray
 
-    def __repr__(self) -> str:
-        rows = [
-            (n, v, lo, hi)
-            for n, v, lo, hi in zip(self.names, self.values, self.ci_low, self.ci_high, strict=True)
-        ]
-        table = _aligned_table(("metric", "value", "ci_low", "ci_high"), rows)
-        return f"MetricReport\n{table}"
+    _TABLE: ClassVar[tuple[str, ...]] = ("metric", "value", "ci_low", "ci_high")
+
+    def _rows(self) -> list[tuple[object, ...]]:
+        return list(zip(self.names, self.values, self.ci_low, self.ci_high, strict=True))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False, repr=False)
 class GroupedMetricReport(_ResultBase):
     """Per-group metric reports plus a pooled report, from ``metrics.evaluate(by=...)``.
 
@@ -164,13 +231,11 @@ class GroupedMetricReport(_ResultBase):
     reports: tuple[MetricReport, ...]
     counts: np.ndarray
 
-    def _rows(self) -> list[tuple[str, str, float, float, float]]:
+    _TABLE: ClassVar[tuple[str, ...]] = ("group", "metric", "value", "ci_low", "ci_high")
+
+    def _rows(self) -> list[tuple[object, ...]]:
         panels = (("pooled", self.pooled), *zip(self.groups, self.reports, strict=True))
-        return [
-            (group, n, v, lo, hi)
-            for group, rep in panels
-            for n, v, lo, hi in zip(rep.names, rep.values, rep.ci_low, rep.ci_high, strict=True)
-        ]
+        return [(group, *row) for group, rep in panels for row in rep._rows()]
 
     def to_frame(self) -> object:
         """Rows as a list of dicts, or a pandas DataFrame when pandas is importable.
@@ -190,12 +255,11 @@ class GroupedMetricReport(_ResultBase):
             return rows
         return pd.DataFrame(rows)
 
-    def __repr__(self) -> str:
-        table = _aligned_table(("group", "metric", "value", "ci_low", "ci_high"), self._rows())
-        return f"GroupedMetricReport ({len(self.groups)} groups)\n{table}"
+    def _title(self) -> str:
+        return f"GroupedMetricReport ({len(self.groups)} groups)"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False, repr=False)
 class SelectionReport(_ResultBase):
     """Ranked outcome of automatic calibrator selection.
 
@@ -234,43 +298,30 @@ class SelectionReport(_ResultBase):
     dsc: np.ndarray | None = None
     unc: float | None = None
 
-    def __repr__(self) -> str:
-        has_corp = self.mcb is not None and self.dsc is not None
-        headers: tuple[str, ...]
-        rows: list[tuple[object, ...]]
-        if has_corp:
-            headers = ("method", self.criterion, "sd", "guardrails", "chosen", "mcb", "dsc")
-            rows = [
-                (m, sm, sd, bool(g), "*" if c else "", mc, ds)
-                for m, sm, sd, g, c, mc, ds in zip(
-                    self.methods,
-                    self.score_mean,
-                    self.score_sd,
-                    self.guardrails_ok,
-                    self.chosen,
-                    self.mcb,  # type: ignore[arg-type]
-                    self.dsc,  # type: ignore[arg-type]
-                    strict=True,
-                )
-            ]
-        else:
-            headers = ("method", self.criterion, "sd", "guardrails", "chosen")
-            rows = [
-                (m, sm, sd, bool(g), "*" if c else "")
-                for m, sm, sd, g, c in zip(
-                    self.methods,
-                    self.score_mean,
-                    self.score_sd,
-                    self.guardrails_ok,
-                    self.chosen,
-                    strict=True,
-                )
-            ]
-        table = _aligned_table(headers, rows)
-        return f"SelectionReport (criterion: {self.criterion})\n{table}"
+    def _has_corp(self) -> bool:
+        return self.mcb is not None and self.dsc is not None
+
+    def _headers(self) -> tuple[str, ...]:
+        base = ("method", self.criterion, "sd", "guardrails", "chosen")
+        return (*base, "mcb", "dsc") if self._has_corp() else base
+
+    def _rows(self) -> list[tuple[object, ...]]:
+        cols: list[object] = [
+            self.methods,
+            self.score_mean,
+            self.score_sd,
+            [bool(g) for g in self.guardrails_ok],
+            ["*" if c else "" for c in self.chosen],
+        ]
+        if self._has_corp():
+            cols += [self.mcb, self.dsc]
+        return [tuple(r) for r in zip(*cols, strict=True)]  # type: ignore[call-overload]
+
+    def _title(self) -> str:
+        return f"SelectionReport (criterion: {self.criterion})"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class BeltResult(_ResultBase):
     """GiViTI-style calibration belt: bands, polynomial degree, and test p-value.
 
@@ -278,8 +329,11 @@ class BeltResult(_ResultBase):
     ----------
     grid_p, grid_logit : numpy.ndarray
         Evaluation grid on the probability and logit scales.
-    lower_80, upper_80, lower_95, upper_95 : numpy.ndarray
-        Pointwise confidence band bounds at the two default levels.
+    levels : tuple of float
+        The two confidence levels requested (``confidence=`` argument).
+    bands : dict
+        ``{level: (lower, upper)}`` band bounds on the probability scale,
+        one entry per level in ``levels``.
     degree : int
         Polynomial degree selected by forward likelihood-ratio testing.
     p_value : float
@@ -288,21 +342,50 @@ class BeltResult(_ResultBase):
 
     grid_p: np.ndarray
     grid_logit: np.ndarray
-    lower_80: np.ndarray
-    upper_80: np.ndarray
-    lower_95: np.ndarray
-    upper_95: np.ndarray
+    levels: tuple[float, float]
+    bands: dict[float, tuple[np.ndarray, np.ndarray]]
     degree: int
     p_value: float
+
+    def _legacy(self, which: int, side: int, name: str) -> np.ndarray:
+        level = self.levels[which]
+        warnings.warn(
+            f"BeltResult.{name} is deprecated and will be removed in 0.4.0; use "
+            f"belt.bands[{level!r}][{side}] (it holds the confidence={level!r} band, "
+            "whatever the attribute name says)",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return self.bands[level][side]
+
+    @property
+    def lower_80(self) -> np.ndarray:
+        """Deprecated: ``bands[levels[0]][0]``."""
+        return self._legacy(0, 0, "lower_80")
+
+    @property
+    def upper_80(self) -> np.ndarray:
+        """Deprecated: ``bands[levels[0]][1]``."""
+        return self._legacy(0, 1, "upper_80")
+
+    @property
+    def lower_95(self) -> np.ndarray:
+        """Deprecated: ``bands[levels[1]][0]``."""
+        return self._legacy(1, 0, "lower_95")
+
+    @property
+    def upper_95(self) -> np.ndarray:
+        """Deprecated: ``bands[levels[1]][1]``."""
+        return self._legacy(1, 1, "upper_95")
 
     def __repr__(self) -> str:
         return (
             f"BeltResult(degree={self.degree}, p_value={self.p_value:.4g}, "
-            f"grid of {len(self.grid_p)} points)"
+            f"levels={self.levels}, grid of {len(self.grid_p)} points)"
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class SmoothReliabilityCurve(_ResultBase):
     """Smoothed reliability curve evaluated on a grid, on both scales.
 
@@ -322,7 +405,7 @@ class SmoothReliabilityCurve(_ResultBase):
         return f"SmoothReliabilityCurve (grid of {len(self.grid_p)} points)"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class KernelReliabilityCurve(_ResultBase):
     """smECE-consistent kernel reliability curve (``curves.reliability_smooth``).
 
@@ -363,7 +446,7 @@ class KernelReliabilityCurve(_ResultBase):
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class CorpResult(_ResultBase):
     """CORP reliability fit: PAV recalibration with the MCB-DSC-UNC decomposition.
 
@@ -416,16 +499,14 @@ class CorpResult(_ResultBase):
     n: int
     events: int
 
+    _TABLE: ClassVar[tuple[str, ...]] = ("block_lo", "block_hi", "block_level", "block_weight")
+
+    def _title(self) -> str:
+        return f"CorpResult (n={self.n}, events={self.events})"
+
     def __repr__(self) -> str:
-        rows = [
-            (lo, hi, lvl, wt)
-            for lo, hi, lvl, wt in zip(
-                self.block_lo, self.block_hi, self.block_level, self.block_weight, strict=True
-            )
-        ]
-        table = _aligned_table(("block_lo", "block_hi", "block_level", "block_weight"), rows)
         return (
-            f"CorpResult (n={self.n}, events={self.events})\n{table}\n"
+            f"{super().__repr__()}\n"
             f"Brier: {self.brier:.6g} = MCB {self.brier_mcb:.6g} - DSC {self.brier_dsc:.6g} "
             f"+ UNC {self.brier_unc:.6g}\n"
             f"Log loss: {self.log_loss:.6g} = MCB {self.log_loss_mcb:.6g} - "

@@ -13,7 +13,8 @@ from __future__ import annotations
 import numpy as np
 
 from ._math import pava
-from .isotonic import _aggregate_ties
+from ._steps import aggregate_ties
+from ._steps import eval_step as _eval_step
 
 _CLIP = 1e-12
 """Log-loss clip for degenerate PAV levels (exact 0 or 1 blocks)."""
@@ -44,8 +45,7 @@ def corp_fit(
     pav : numpy.ndarray
         PAV fit expanded to observations, in the original input order.
     """
-    order = np.argsort(p, kind="stable")
-    s_u, ybar_u, w_u = _aggregate_ties(p[order], y[order], w[order])
+    s_u, ybar_u, w_u = aggregate_ties(p, y, w)
     res = pava(ybar_u, w_u)
     starts = res.block_start
     ends = np.append(starts[1:], len(s_u))
@@ -95,44 +95,6 @@ def decompose(
     s_pav = _mean_score(y, pav, w, score)
     unc = _mean_score(y, np.full_like(p, ybar), w, score)
     return s_p, s_p - s_pav, unc - s_pav, unc
-
-
-def eval_step(lo: np.ndarray, hi: np.ndarray, level: np.ndarray, grid: np.ndarray) -> np.ndarray:
-    """Value of a PAV block fit at each grid point.
-
-    Right-continuous step function: a grid point below the first block's
-    left edge takes the first block's level.
-
-    Parameters
-    ----------
-    lo : numpy.ndarray
-        Left edge of each block (``corp_fit``'s ``block_lo``).
-    hi : numpy.ndarray
-        Right edge of each block (``corp_fit``'s ``block_hi``); unused, kept
-        for symmetry with ``block_lo``/``block_hi`` call sites.
-    level : numpy.ndarray
-        Fitted level of each block (``corp_fit``'s ``block_level``).
-    grid : numpy.ndarray
-        Points at which to evaluate the step function.
-
-    Returns
-    -------
-    numpy.ndarray
-        ``level`` indexed by the block containing (or preceding) each grid
-        point, same shape as ``grid``.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> lo = np.array([0.1, 0.5])
-    >>> hi = np.array([0.4, 0.9])
-    >>> level = np.array([0.2, 0.7])
-    >>> eval_step(lo, hi, level, np.array([0.0, 0.3, 0.6]))
-    array([0.2, 0.2, 0.7])
-    """
-    idx = np.searchsorted(lo, grid, side="right") - 1
-    idx = np.clip(idx, 0, len(level) - 1)
-    return level[idx]
 
 
 def corp_bands(
@@ -195,10 +157,10 @@ def corp_bands(
     for b in range(n_resamples):
         if bands == "consistency":
             y_b = (rng.random(p.size) < p).astype(float)
-            lo, hi, lev, _, _ = corp_fit(y_b, p, w)
+            lo, _, lev, _, _ = corp_fit(y_b, p, w)
         else:  # "confidence"
             idx = rng.integers(0, p.size, p.size)
-            lo, hi, lev, _, _ = corp_fit(y[idx], p[idx], w[idx])
-        sims[b] = eval_step(lo, hi, lev, grid)
+            lo, _, lev, _, _ = corp_fit(y[idx], p[idx], w[idx])
+        sims[b] = _eval_step(lo, lev, grid)
     a = (1.0 - level) / 2.0
     return grid, np.quantile(sims, a, axis=0), np.quantile(sims, 1.0 - a, axis=0)

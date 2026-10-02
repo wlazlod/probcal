@@ -295,10 +295,10 @@ def _compliance_estimators():
     return [SklearnCalibrator(input="logit"), CalibratedClassifier(), SklearnOffset(delta=0.1)]
 
 
-# Expected-failure tables live in probcal.sklearn._compat (one source of
+# Expected-failure tables live in probcal.sklearn._xfail (one source of
 # truth for the >=1.6 expected_failed_checks mechanism and the <1.6
 # _xfail_checks tag).
-from probcal.sklearn._compat import (  # noqa: E402
+from probcal.sklearn._xfail import (  # noqa: E402
     CALIBRATOR_XFAIL_CHECKS,
     CLASSIFIER_XFAIL_CHECKS,
     OFFSET_XFAIL_CHECKS,
@@ -323,6 +323,13 @@ try:
     )
 except TypeError:  # pragma: no cover - sklearn < 1.6 reads _xfail_checks tags instead
     _checks_decorator = parametrize_with_checks(_compliance_estimators())
+
+# parametrize_with_checks hands pytest a generator of (estimator, check) pairs,
+# which pytest deprecates (PytestRemovedIn10Warning); materialise it as a list.
+_checks_argnames, _checks_argvalues = _checks_decorator.args
+_checks_decorator = pytest.mark.parametrize(
+    _checks_argnames, list(_checks_argvalues), **_checks_decorator.kwargs
+)
 
 
 @_checks_decorator

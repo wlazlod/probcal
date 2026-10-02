@@ -17,9 +17,7 @@ def _data(n=2000, seed=17):
 
 
 def test_plot_corp_draws_step_bands_and_box():
-    import matplotlib
 
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     from probcal.curves import corp_reliability
@@ -37,9 +35,7 @@ def test_plot_corp_draws_step_bands_and_box():
 
 
 def test_plot_mcb_dsc_places_one_point_per_candidate():
-    import matplotlib
 
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     from probcal.plots import plot_mcb_dsc
@@ -83,9 +79,7 @@ def test_plot_mcb_dsc_places_one_point_per_candidate():
 
 
 def test_plot_mcb_dsc_rejects_mismatched_weighted_mean_y():
-    import matplotlib
 
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     from probcal.plots import plot_mcb_dsc
@@ -98,9 +92,7 @@ def test_plot_mcb_dsc_rejects_mismatched_weighted_mean_y():
 
 
 def test_plot_attributes_draws_reference_lines_and_shading():
-    import matplotlib
 
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     from probcal.plots import plot_attributes
@@ -114,9 +106,7 @@ def test_plot_attributes_draws_reference_lines_and_shading():
 
 
 def test_plot_attributes_both_methods_render():
-    import matplotlib
 
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     from probcal.plots import plot_attributes
@@ -133,9 +123,7 @@ def test_plot_attributes_both_methods_render():
 
 
 def test_plot_attributes_logit_scale_renders():
-    import matplotlib
 
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     from probcal.plots import plot_attributes
@@ -155,9 +143,7 @@ def test_plot_attributes_rejects_bad_method():
 
 
 def test_plot_murphy_mapping_without_diff_rejects_non_murphy_curve_values():
-    import matplotlib
 
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     from probcal.plots import plot_murphy
@@ -166,3 +152,35 @@ def test_plot_murphy_mapping_without_diff_rejects_non_murphy_curve_values():
     with pytest.raises(ValueError, match="mapping values must be MurphyCurve"):
         plot_murphy({"a": (y, p), "b": (y, p)})
     plt.close("all")
+
+
+def test_plot_murphy_validates_before_creating_a_figure():
+    import matplotlib.pyplot as plt
+
+    from probcal.metrics import murphy_curve
+    from probcal.plots import plot_murphy
+
+    y, p = _data(400)
+    before = set(plt.get_fignums())
+    with pytest.raises(ValueError, match="exactly two"):
+        plot_murphy({"a": (y, p)}, diff=True)
+    with pytest.raises(ValueError, match="exactly two"):
+        plot_murphy(murphy_curve(y, p), diff=True)
+    with pytest.raises(ValueError, match="MurphyCurve"):
+        plot_murphy({"a": (y, p)})
+    assert set(plt.get_fignums()) == before
+
+
+def test_plot_corp_logit_and_user_axes_style():
+    import matplotlib.pyplot as plt
+
+    from probcal.curves import corp_reliability
+    from probcal.plots import plot_corp
+
+    y, p = _data()
+    with plt.rc_context({"axes.grid": False}):
+        _, ax = plt.subplots()
+    plot_corp(corp_reliability(y, p, n_resamples=10), scale="logit", ax=ax)
+    assert not ax.spines["top"].get_visible()
+    assert all(gl.get_visible() for gl in ax.xaxis.get_gridlines())
+    assert ax.get_xlabel().endswith("(logit scale)")

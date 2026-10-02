@@ -33,7 +33,7 @@ from probcal import BetaCalibrator
 from probcal.monitor import CalibrationMonitor
 
 deployed = BetaCalibrator().fit(s_cal, y_cal)   # the map actually in production
-mon = CalibrationMonitor(alpha=0.05)
+mon = CalibrationMonitor(alpha=0.05, grades=ms.names)   # fixed grade universe
 
 # Each time a cohort's outcomes mature (arrival order — never reordered).
 # The monitor watches the *calibrated* forecast, never the raw score:
@@ -66,6 +66,14 @@ line.
 Passing a `Masterscale` as `grade` assigns the labels from the calibrated
 probabilities and records the scale's fingerprint on first use; a different
 scale later raises, since it would change the grade universe mid-stream.
+Declare that universe at construction (`grades=ms.names`): only declared
+grades enter the alarm statistic, from the first batch on (a grade with no
+data yet contributes `e = 1`), and a label outside the declaration raises.
+Without `grades=`, per-grade e-values and confidence sequences are still
+reported as diagnostics, but they stay out of `e_global` and the monitor
+warns once. The reason is anytime validity: a mixture whose components change
+mid-stream is no longer an e-process
+([Monitoring](../concepts/monitoring.md#components)).
 
 Three operational rules. Persist the state instead of recomputing from raw
 data; predictability is what makes the guarantee hold. A portfolio-wide

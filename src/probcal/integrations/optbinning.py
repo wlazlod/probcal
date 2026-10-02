@@ -8,8 +8,7 @@ the fitted logistic regression's log-odds unless ``rounding=True``.
 """
 
 import hashlib
-import json
-import os
+import math
 import warnings
 
 import numpy as np
@@ -23,15 +22,50 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
     ) from exc
 
 from .._math import logit
-from .._serialize import SCHEMA_VERSION, fingerprint_of_dict
+from .._serialize import JsonIO, canonical_json, check_payload, encode_value, envelope, sha256_hex
 from ..base import BaseCalibrator
 from ..parametric import BetaCalibrator
+from ..sklearn._protocol import CalibratorProtocolMixin
 from ..thresholds import calibrated_bands_to_raw
 
 _AFFINE_ATOL = 1e-6  # measured residual is ~1e-13; rounding=True measures ~1.4
+_FP_DIGITS = 12  # significant digits kept per float in the scorecard-table fingerprint
 
 
-class CalibratedScorecard:
+def _canonical_cell(v: object) -> object:
+    """A table cell as a version-stable JSON value (floats to 12 significant digits)."""
+    if isinstance(v, (list, tuple, np.ndarray)):
+        return [_canonical_cell(x) for x in v]
+    if isinstance(v, (bool, np.bool_)):
+        return bool(v)
+    if isinstance(v, (int, np.integer)):
+        return int(v)
+    if isinstance(v, (float, np.floating)):
+        f = float(v)
+        return encode_value(float(f"{f:.{_FP_DIGITS}g}") if math.isfinite(f) else f)
+    if v is None:
+        return None
+    return str(v)
+
+
+def _table_fingerprint(table: object) -> str:
+    """SHA-256 of the canonical JSON of a scorecard table (pandas-version-blind)."""
+    payload = {
+        "columns": [str(c) for c in table.columns],  # type: ignore[attr-defined]
+        "rows": [
+            [_canonical_cell(v) for v in row]
+            for row in table.itertuples(index=False, name=None)  # type: ignore[attr-defined]
+        ],
+    }
+    return sha256_hex(canonical_json(payload))
+
+
+def _legacy_table_fingerprint(table: object) -> str:
+    """The pre-0.3.4 fingerprint (``to_csv`` text; pandas-version-dependent)."""
+    return hashlib.sha256(table.to_csv(index=False).encode("utf-8")).hexdigest()  # type: ignore[attr-defined]
+
+
+class CalibratedScorecard(JsonIO, CalibratorProtocolMixin):
     """An optbinning ``Scorecard`` with a probcal calibration layer on top.
 
     Built by :func:`calibrate_scorecard`. Points (``score``) are unchanged —
@@ -40,6 +74,14 @@ class CalibratedScorecard:
     ``point_inverse``, ...) operates on the scorecard's model-probability
     scale, so calibrated policies translate to raw probabilities and — via
     ``points_affine_coeffs_`` — exactly to the points scale.
+
+    ``predict_proba`` returns the 1-D calibrated PD (the probcal calibrator
+    convention), not sklearn's ``(n, 2)`` matrix: a scorecard is not an
+    sklearn estimator, and the 1-D form feeds ``probcal.metrics`` directly.
+    Persist with :meth:`to_json` and reload with
+    ``CalibratedScorecard.from_json(path, scorecard=...)``; the class is not
+    in the generic ``probcal`` load registry because a payload cannot be
+    rebuilt without the scorecard object, which optbinning persists itself.
 
     Attributes
     ----------
@@ -76,31 +118,9 @@ class CalibratedScorecard:
         """Unchanged scorecard points — the deployed artifact is untouched."""
         return np.asarray(self.scorecard_.score(X))  # type: ignore[attr-defined]
 
-    def interpret(self):  # noqa: ANN201 - probcal Interpretation
-        """The calibration layer's plain-language reading."""
-        return self.calibrator_.interpret()
-
-    # ------------------------------------------------------------------ protocol
-
-    @property
-    def is_monotone_(self) -> bool:
-        """Whether the calibration layer preserves the scorecard's ranking."""
-        return bool(self.calibrator_.is_monotone_)
-
-    @property
-    def affine_logit_coeffs_(self) -> tuple[float, float] | None:
-        """The calibration layer's affine-logit coefficients, if any."""
-        return self.calibrator_.affine_logit_coeffs_
-
-    def interval_inverse(
-        self, lo: float, hi: float, *, space: str = "probability", buffer_logit: float = 0.0
-    ) -> tuple[float, float]:
-        """Preimage of a calibrated PD interval on the model-probability scale."""
-        return self.calibrator_.interval_inverse(lo, hi, space=space, buffer_logit=buffer_logit)
-
-    def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
-        """Exact preimage of calibrated PDs on the model-probability scale."""
-        return self.calibrator_.point_inverse(p, space=space)
+    # The calibrator protocol (is_monotone_, affine_logit_coeffs_,
+    # interval_inverse, point_inverse, interpret) is delegated to
+    # calibrator_ by CalibratorProtocolMixin, on the model-probability scale.
 
     def masterscale(self, bands: object) -> dict[str, tuple[float, float]]:
         """Calibrated PD bands -> scorecard point cut-offs, exactly.
@@ -165,17 +185,13 @@ class CalibratedScorecard:
 
         The scorecard object itself is not serialized (it is optbinning's
         artifact); rebuild with ``CalibratedScorecard.from_dict(d,
-        scorecard=...)`` after loading the scorecard through optbinning's
-        own ``save``/``load``.
+        scorecard=...)`` (or ``from_json(path, scorecard=...)``) after
+        loading the scorecard through optbinning's own ``save``/``load``.
         """
-        from .. import __version__
-
-        return {
-            "probcal_schema": SCHEMA_VERSION,
-            "probcal_version": __version__,
-            "class": type(self).__name__,
-            "params": {},
-            "state": {
+        return envelope(
+            self,
+            params={},
+            state={
                 "calibrator": self.calibrator_.to_dict(),
                 "points_affine_coeffs": (
                     list(self.points_affine_coeffs_)
@@ -184,12 +200,17 @@ class CalibratedScorecard:
                 ),
                 "scorecard_fingerprint": self.scorecard_fingerprint(),
             },
-            "fit_meta": {},
-        }
+            fit_meta={},
+        )
 
     @classmethod
     def from_dict(cls, d: dict, scorecard: object) -> "CalibratedScorecard":
         """Rebuild around a scorecard loaded through optbinning's own tooling.
+
+        The stored scorecard-table fingerprint must match ``scorecard``.
+        Payloads written before 0.3.4 stored a ``to_csv``-based fingerprint;
+        it is still accepted when it matches (re-saving writes the new,
+        pandas-version-independent form).
 
         Raises
         ------
@@ -198,11 +219,8 @@ class CalibratedScorecard:
             fingerprint does not match the stored one.
         """
         from .._registry import load
-        from .._serialize import check_schema
 
-        check_schema(d)
-        if d.get("class") != cls.__name__:
-            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
+        check_payload(cls, d)
         state = d["state"]
         coeffs = state.get("points_affine_coeffs")
         obj = cls(
@@ -212,31 +230,22 @@ class CalibratedScorecard:
         )
         stored = state.get("scorecard_fingerprint")
         if stored is not None and obj.scorecard_fingerprint() != stored:
-            raise ValueError(
-                "the supplied scorecard's table fingerprint does not match the stored "
-                "one — this calibration layer was fitted against a different scorecard"
-            )
+            table = scorecard.table(style="detailed")  # type: ignore[attr-defined]
+            if _legacy_table_fingerprint(table) != stored:
+                raise ValueError(
+                    "the supplied scorecard's table fingerprint does not match the stored "
+                    "one — this calibration layer was fitted against a different scorecard"
+                )
         return obj
 
     def scorecard_fingerprint(self) -> str:
-        """SHA-256 of the scorecard table (CSV form) — names the deployed artifact."""
-        table = self.scorecard_.table(style="detailed")  # type: ignore[attr-defined]
-        return hashlib.sha256(table.to_csv(index=False).encode("utf-8")).hexdigest()
+        """SHA-256 of the scorecard table — names the deployed artifact.
 
-    def fingerprint(self) -> str:
-        """SHA-256 over the calibration layer and the scorecard-table fingerprint."""
-        return fingerprint_of_dict(self.to_dict())
-
-    def to_json(
-        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
-    ) -> str | None:
-        """Serialize the calibration layer (see :meth:`to_dict`)."""
-        text = json.dumps(self.to_dict(), indent=indent)
-        if path is None:
-            return text
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        return None
+        Computed over a canonical JSON form of the detailed table (column
+        names, and every cell with floats kept to 12 significant digits),
+        so it does not depend on the pandas version's CSV formatting.
+        """
+        return _table_fingerprint(self.scorecard_.table(style="detailed"))  # type: ignore[attr-defined]
 
 
 def calibrate_scorecard(
@@ -261,6 +270,14 @@ def calibrate_scorecard(
     sample_weight : array_like or None, keyword-only
         Positive observation weights for the calibration fit.
 
+    Warns
+    -----
+    UserWarning
+        When the points are not affine in log-odds (``rounding=True``), or
+        the scorecard's probability is constant on ``X_cal`` (the points map
+        is then unidentifiable); ``points_affine_coeffs_`` is ``None`` in
+        both cases.
+
     Returns
     -------
     CalibratedScorecard
@@ -275,9 +292,20 @@ def calibrate_scorecard(
 
     points = np.asarray(scorecard.score(X_cal), dtype=np.float64)  # type: ignore[attr-defined]
     z = logit(p_model)
+    coeffs: tuple[float, float] | None = None
+    if np.ptp(z) == 0.0:
+        # One distinct log-odds value: the points map is unidentifiable (any
+        # slope through the single point fits), so no masterscale is offered.
+        warnings.warn(
+            "the scorecard assigns one probability to every calibration row; the "
+            "points-to-log-odds map is unidentifiable and masterscale is unavailable",
+            UserWarning,
+            stacklevel=2,
+        )
+        return CalibratedScorecard(scorecard, cal, coeffs)
     b_pts, a_pts = np.polyfit(z, points, 1)
     resid = float(np.max(np.abs(points - (a_pts + b_pts * z))))
-    coeffs: tuple[float, float] | None = (float(a_pts), float(b_pts))
+    coeffs = (float(a_pts), float(b_pts))
     if resid > _AFFINE_ATOL:
         warnings.warn(
             f"scorecard points are not affine in log-odds (max residual {resid:.3g}, "

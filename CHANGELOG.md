@@ -7,6 +7,163 @@ Each release opens with a short summary; the itemized entries sit under *Details
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-10-03
+
+A correctness release from a full-package review. Inverse maps are exact and agree with
+`Masterscale` (step calibrators no longer give overlapping raw bands), `is_monotone_` is
+truthful, the monitor's global alarm keeps its anytime-valid guarantee when grades appear
+mid-stream, metric weights follow one convention, and tail p-values no longer round to 0.
+Serialization output is strict JSON. Every schema-1 artifact still loads. Deprecated names
+warn and are removed in 0.4.0; numerically visible changes are listed with their size below.
+
+<details markdown="1">
+<summary>Details</summary>
+
+### Fixed
+
+- **Inverse maps and thresholds.**
+  - `calibrated_bands_to_raw` returns half-open raw intervals that partition the raw axis
+    exactly like `Masterscale.assign`; plateaus of isotonic/histogram maps used to land in
+    two bands.
+  - `IsotonicCalibrator(interpolation="linear").interval_inverse` inverted the step map,
+    not the interpolated one.
+  - `ScalingBinningCalibrator` never set `is_monotone_` (a decreasing Platt stage gave
+    `lo > hi`), and its right bound could fall outside the preimage.
+  - `is_monotone_` for BBQ and Spline is checked exactly over the whole domain (a fixed
+    probe grid missed low-PD regions); Segmented and Selector keep it across JSON.
+  - `CalibratorSelector` delegates the full protocol (`point_inverse`, exact
+    `interval_inverse`, `affine_logit_coeffs_`, `complexity_rank`) to its winner.
+- **Monitoring.**
+  - The global e-mixture has a fixed component set. Declared `grades=` are in it from the
+    first batch and undeclared labels raise; with `grades=None` per-grade processes are
+    reported but kept out of the alarm (warned once). Previously a grade entering
+    mid-stream joined at e = 1, which could raise `e_global` without evidence.
+  - Empty batches, `plug_in_window=0` and a negative `min_history` are rejected; grade
+    labels `1` and `1.0` are one grade; the onset series counts only active components;
+    `report()` no longer prints `nan`.
+  - `apply_recommendation(target=CalibratedModel)` works on a model loaded from JSON.
+- **Metrics.**
+  - `ecce` depended on the row order of tied scores.
+  - `jeffreys_upper_bands` could lower an upper bound and produce a zero-width band (now a
+    running maximum, like `pluto_tasche`).
+  - p-values below ~1e-16 no longer round to 0 (Hosmer-Lemeshow, `calibration_test`,
+    belt, Spiegelhalter, SKCE, binomial grade test).
+  - `spiegelhalter_z` with constant p = 0.5, `hosmer_lemeshow` with fewer than 3 groups
+    (was a fake df = 1), `evaluate(n_boot=0)`, and grade tests with mismatched lengths now
+    give NaN or a clear error.
+  - `reliability_smooth` reports NaN in data gaps instead of a rate of 0 with a [0, 0] band.
+  - `evaluate(by=)` no longer merges the labels `1` and `"1"`.
+  - `emax(sample_weight=)` and `reliability_loess(sample_weight=)` were silently ignored.
+- **Wrappers and adapters.**
+  - `CalibratedModel` and `CalibratedClassifier` pass `X` to the model untouched
+    (DataFrames, string features, `ColumnTransformer`); `CalibratedModel` validates `cv`
+    and forwards `sample_weight` to `model.fit` in the cv flow.
+  - `CalibratedClassifier(stratify=False)` really uses shuffled `KFold` (it stratified and
+    ignored `random_state`); `cv` accepts any splitter; prefit checks `classes_`.
+  - The sklearn adapters reject negative `sample_weight` instead of dropping those rows.
+  - `adjust_attributions` accepts a `CalibratedModel`; the affine target is exact.
+- **Objects and serialization.**
+  - `Masterscale` supports `copy.deepcopy` and pickle; its provenance is deep-frozen.
+  - Result dataclasses holding arrays compare by value instead of raising.
+  - `to_json` writes strict JSON: non-finite floats are tagged `{"__float__": "inf"}`
+    instead of `Infinity`/`NaN` tokens. Constructor parameters given as lists stay lists.
+  - A Segmented model with a custom-candidate Selector base serializes.
+- **Numerics.** `irls_logistic` no longer reports convergence after a stalled line search
+  under quasi-separation; Spline uses the same safeguarded solver.
+- **Other.**
+  - `make_pd_portfolio(intercept=)` had no effect, and the identity case ignored
+    `event_rate`. The default portfolio is unchanged.
+  - `validation_report` validates `y`/`p` up front and orders every grade table by mean PD.
+  - `LogitOffset` with an unattainable `target_mean` raises `UnattainableTargetError`
+    naming the attainable range.
+  - Negative `buffer_logit` and unknown `space` raise everywhere.
+  - Plots:
+    - `plot_comparison` legend colours;
+    - `plot_reliability(by=)` forwards `stats`/`annotate`/`counts`/`rug`;
+    - logit scale with no finite bin no longer crashes;
+    - `plot_interval` handles unsorted scores;
+    - `plot_murphy` leaks no figure on error;
+    - the grades panel stays inside the figure;
+    - a caller-supplied `ax` gets the same styling.
+
+### Changed (numerically visible)
+
+- **Venn-Abers** pools tied calibration scores, so predictions no longer depend on row
+  order. Only tied scores or queries equal to a calibration score move: up to 2.5e-2
+  in-sample, mean 5.6e-4 on 3-dp tied data. Payloads saved before 0.3.4 keep their old
+  tables (`ties_pooled_=False`).
+- **Equal-mass bins honour `sample_weight`** (Histogram, ScalingBinning, BBQ). Weighted
+  fits move by up to ~6e-2; unweighted fits are bit-identical.
+- **Weights are relative frequency weights.** Sample-size-dependent statistics use Kish's
+  effective n: Spiegelhalter, `ece_debiased`, the Murphy bias correction, Hosmer-Lemeshow,
+  `calibration_test`, the calibration belt, and the ECCE null envelope. Unit weights give
+  identical numbers. With U(0.5, 2) weights, HL and LR statistics scale by about 0.72.
+- **`ece_sweep`** follows Roelofs et al. (2022) and stops at the first non-monotone bin
+  count. The chosen count changed in about half of synthetic test sets, with values moving
+  ≤ 0.012 at n = 500 and ≤ 0.003 at n = 1e4. It is about 5x faster. `rule="largest"`
+  restores 0.3.x.
+- **ECCE** reads the cumulative walk at the end of tied-score blocks and weights
+  `stat_mean`. Results are unchanged without ties.
+- **`skce_test`** bootstrap replicates use the observed statistic's scale.
+- **`calibration_belt`** fits on centred, scaled logits (bands move ≤ 3e-13). It is
+  documented as a simultaneous Wald approximation whose p-value ignores degree selection.
+- **`CalibratedClassifier(stratify=False)`** fold assignment changed (see Fixed).
+
+### Changed
+
+- `Masterscale` equality and hash include provenance, so two scales are equal exactly when
+  their fingerprints match. `interpret()` lists `lo`/`hi` per grade.
+- `plot_reliability(by=)` panels follow the single-panel defaults; `ax=`/`smooth=` with
+  `by=` raise. `plot_belt` draws from `BeltResult.bands`.
+- Internals:
+  - One JSON-IO mixin and payload envelope for every serializable object.
+  - Shared step-function, binning and fold helpers (`_steps`, `_validation`).
+  - `metrics/__init__` is split into private modules (`__all__` unchanged).
+  - The monitor is split into `_processes` (`ConfidenceSequence`), `_diagnostics` and
+    `_actions`.
+  - The sklearn adapters share base and protocol mixins; the estimator-check tables live
+    in `probcal.sklearn._xfail`.
+  - `bern_log_lr`/`logsumexp` live in `_math`, so metrics no longer import the monitor.
+  - Dead private helpers are removed (`newton_1d`, `norm_ppf`, `erf_vec`, the scalar LOESS
+    path).
+- Tooling:
+  - The version is single-sourced from `probcal.__version__`.
+  - `black` is replaced by `ruff format`, enforced in CI.
+  - CI runs slow tests once and mypy on 3.11 and 3.12; docs deploy only after green CI;
+    the release workflow runs the full CI first.
+  - Plot regression tests compare structural snapshots instead of pixel hashes.
+
+### Added
+
+- `BeltResult.levels` and `BeltResult.bands` (`{level: (lower, upper)}`).
+- `CalibratedModel.with_offset(offset)` and `CalibratedModel.point_inverse`.
+- `Masterscale.from_edges(..., provenance=)`.
+- `ece_sweep(rule=, max_bins=)` and `order=` on `binomial_grade_test`/`jeffreys_grade_test`.
+- `BinomialGradeResult.p_value`, `CalibrationTestResult.intercept`/`.slope`.
+- `evaluate(random_state=)`, `hosmer_lemeshow(n_bins=)`, and `confidence=` on
+  `jeffreys_upper_bands`, `reliability_smooth` and `corp_reliability`.
+- `SplineCalibrator.converged_`/`knots_`/`theta_`; `model_weights_` on BBQ and ENIR;
+  `scores_`/`ties_pooled_` on Venn-Abers; `CrossVennAbersCalibrator.ivaps_`.
+- `SklearnCalibrator` exposes the calibrator protocol and JSON surface.
+- `CalibratedScorecard.from_json(..., scorecard=)`. The scorecard fingerprint no longer
+  depends on pandas CSV formatting; old fingerprints still verify.
+- `validate_binary_y(require_both_classes=)`.
+
+### Deprecated (removed in 0.4.0)
+
+- `adaptive_ece` → `ece(strategy="mass")`.
+- `ecce(presorted=)`.
+- `evaluate(seed=)` → `random_state=`.
+- `hosmer_lemeshow(g=)` → `n_bins=`.
+- `level=` on `jeffreys_upper_bands`, `reliability_smooth` and `corp_reliability` →
+  `confidence=`.
+- `BeltResult.lower_80`/`upper_80`/`lower_95`/`upper_95` → `bands[level]`.
+- `BBQCalibrator.weights_` and `ENIRCalibrator.weights_` → `model_weights_`.
+- Positional arguments to `CalibratedModel.offset_to` (use keywords).
+- Positional `sample_weight` in `LogitOffset.fit`.
+
+</details>
+
 ## [0.3.3] - 2026-09-08
 
 A masterscale is one object. `Masterscale` holds the grade ladder, assigns grades under one boundary convention (`lo <= p < hi`, top band closed), and serializes with a fingerprint; every grade-taking function, the monitor, the report, and the band translators accept it, and `build_masterscale` designs one from data. Every example now builds grades through it. No breaking changes: label arrays and band dicts behave exactly as before.
@@ -280,7 +437,8 @@ First public release on PyPI: thirteen binary calibrators from Platt to Venn–A
 
 </details>
 
-[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/wlazlod/probcal/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/wlazlod/probcal/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/wlazlod/probcal/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/wlazlod/probcal/compare/v0.3.0...v0.3.1

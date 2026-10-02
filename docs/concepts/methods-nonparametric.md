@@ -54,7 +54,9 @@ ENIR, and Venn–Abers.
 **Using the fit.** `IsotonicCalibrator` predicts by locating a new score among the fitted
 blocks: a step function, constant within each block. Scores outside the calibration range
 clamp to the first or last block level. An optional `interpolation="linear"` mode joins block
-midpoints to remove the discontinuities. `interpret()` reports the number of blocks (the
+midpoints to remove the discontinuities; its `interval_inverse` inverts that interpolated map
+(the exact crossing on the bracketing segment, nudged by a few ulps so the bounds lie inside
+the preimage), not the underlying step map as before 0.3.4. `interpret()` reports the number of blocks (the
 effective complexity actually estimated from the data), and flat steps translate into tied
 predictions downstream.
 
@@ -92,7 +94,10 @@ indefensible 0 and 1.
 The single knob \( B \) is a transparent bias–variance dial: few bins, stable but coarse; many
 bins, sharp but noisy. Equal-mass binning is the recommended default: it equalizes the
 variance of the per-bin estimates and avoids empty bins where the score distribution is
-sparse, which for low-PD portfolios is most of \( (0,1) \). Unlike isotonic regression,
+sparse, which for low-PD portfolios is most of \( (0,1) \). With `sample_weight`, equal-mass
+edges are weighted quantiles, so each bin holds equal *weight* rather than an equal row count
+(the same holds for scaling-binning and BBQ; unweighted fits are unchanged). Unlike isotonic
+regression,
 binning does not even assume monotonicity, so a non-monotone fitted map is possible and is
 worth reading as a diagnostic of noise rather than signal.
 
@@ -123,8 +128,11 @@ Beta–Binomial marginal has a closed form, computed with log-gamma functions
 weight on one \( B \) says the data speak clearly about their own resolution; diffuse weight
 says they do not, and
 the averaging is doing real work. `BBQCalibrator.interpret()` reports the top three models by
-weight. The averaged map is smoother than any single binning and typically monotone in
-practice, though nothing enforces it.
+weight (`model_weights_`; the 0.3.x name `weights_` is a deprecated alias until 0.4.0). The
+averaged map is smoother than any single binning and typically monotone in practice, though
+nothing enforces it. `is_monotone_` is checked exactly: the averaged map is a step function
+that can change only at the union of all candidate edges, so evaluating it there decides
+monotonicity over the whole domain.
 
 ## Ensemble of near-isotonic regressions (ENIR)
 
@@ -140,8 +148,9 @@ the point where all violations vanish, the solutions trace a path (computable by
 PAVA that merges blocks at known breakpoints) that interpolates between the raw data and the
 fully isotonic fit. ENIR (Naeini and Cooper, 2016) fits the whole path and combines the
 solutions along it, weighted by BIC. The ensemble inherits flexibility from the low-\( \lambda \)
-end and stability from the isotonic end, and the BIC weights again say where along that
-spectrum the data place their trust.
+end and stability from the isotonic end, and the BIC weights (`model_weights_`; `weights_` is
+a deprecated alias until 0.4.0) again say where along that spectrum the data place their
+trust.
 
 The practical caveat: the combined map may be **non-monotone**. `ENIRCalibrator` sets
 `is_monotone_ = False`, and consumers that require order preservation (counterfactual
@@ -183,7 +192,11 @@ found nothing a parametric family could not, while 6 degrees of freedom says the
 real. Regions where the fitted curve runs steeper than the identity are regions of local
 underconfidence; shallower, local overconfidence. Smoothness makes the spline the most
 pleasant map to invert and to explain, with one caveat: the penalty does not enforce
-monotonicity, so probcal checks the fitted curve and flags the rare non-monotone outcome.
+monotonicity, so probcal checks the fitted curve exactly (the logit-scale slope at every knot,
+which covers both linear tails, and at each interior extremum of the slope between knots) and
+flags the rare non-monotone outcome. The fit runs through the package's safeguarded IRLS core;
+`converged_` records whether it converged (a non-converged fit warns), and `knots_` and
+`theta_` expose the knots and coefficients.
 
 ## Properties at a glance
 

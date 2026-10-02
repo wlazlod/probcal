@@ -118,7 +118,28 @@ probcal calibrator protocol on the result (`interpret()`, `to_json()`,
 (the calibrator absorbs the monotone distortion this introduces). The
 probcal calibrator protocol is delegated straight through: hand a fitted
 `clf` to treecf's `Target.calibrated` the same way you would a bare
-calibrator.
+calibrator. With `cv="prefit"`, an estimator that carries `classes_` must
+have the same classes as `y`; a mismatch raises `ValueError` naming both.
+
+**Folds and data.** `cv` takes what `CalibratedClassifierCV` takes: an
+integer ≥ 2, any sklearn splitter (`GroupKFold`, `TimeSeriesSplit`, ...) or
+iterable of `(train, test)` index pairs, or `"prefit"`. `stratify` applies
+only to an integer `cv`: `True` (the default) uses
+`StratifiedKFold(cv, shuffle=True, random_state=random_state)`, `False` uses
+`KFold(cv, shuffle=True, random_state=random_state)` (before 0.3.4,
+`stratify=False` silently fell back to an unshuffled stratified split and
+ignored `random_state`). `X` reaches the wrapped estimator untouched, as in
+`CalibratedClassifierCV`: DataFrames with string columns feeding a
+`ColumnTransformer`, and sparse matrices, work, and `n_features_in_` and
+`feature_names_in_` are copied from the fitted estimator.
+
+**Against `CalibratedModel(flow="cv")`.** The numpy-only deployment wrapper
+runs the same out-of-fold protocol without sklearn. Its folds are always
+class-stratified and drawn with numpy's `default_rng(random_state)`, so the
+same seed assigns different folds than `StratifiedKFold`, and it alone
+offers `ensemble=True` (one calibrator per fold). Use `CalibratedClassifier`
+inside sklearn pipelines and searches, `CalibratedModel` for a deployment
+object with no sklearn dependency.
 
 ### Grid search over the calibration map
 
@@ -215,6 +236,11 @@ Both estimators declare `sample_weight` in `fit`, so the weights always reach
 the probcal calibrator. What depends on `enable_metadata_routing` is how they
 reach the *wrapped* classifier.
 
+Weights must be non-negative: a negative `sample_weight` raises
+`ValueError` in all three adapters. Zero weights mean "excluded", as in
+sklearn: those rows are dropped before the probcal calibrator is fitted
+(probcal's own calibrators require strictly positive weights).
+
 **Routing off (sklearn's default).** Weights are handed down directly:
 `CalibratedClassifier` forwards them to `cross_val_predict`'s fold fits and to
 the full-data refit whenever the base estimator's `fit` takes a
@@ -268,10 +294,13 @@ depends on.
 
 Both estimators run `sklearn.utils.estimator_checks.parametrize_with_checks`
 in CI on the pinned minimum (1.4) and the latest release.
-`CalibratedClassifier` passes the full corpus except the sample-weight ≡
-duplication equivalence, which cannot hold through a CV split whose fold
-assignment depends on n (sklearn's own CV wrappers share this; declared via
-`expected_failed_checks`). `SklearnCalibrator`'s one-column contract is
+`CalibratedClassifier` passes the full corpus. On sklearn ≥ 1.6 that includes
+`check_sample_weight_equivalence_on_dense_data`, which hands in explicit
+splits and so now runs live; the older `check_sample_weights_invariance`
+(sklearn < 1.6) is still declared, since weight ≡ duplication cannot hold
+through an integer-`cv` split whose fold assignment depends on n (sklearn's
+own CV wrappers share this). The declarations live in the data-only module
+`probcal.sklearn._xfail`. `SklearnCalibrator`'s one-column contract is
 inapplicable to the generic multi-feature checks. Those are declared through
 sklearn's `expected_failed_checks`, each entry naming the data that check
 generates and the part of the score-level contract it violates, the same

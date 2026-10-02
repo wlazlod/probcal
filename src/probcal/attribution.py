@@ -22,13 +22,14 @@ from typing import Any
 import numpy as np
 
 from ._math import expit, logit
+from ._results import _ResultBase
 
 _DEGENERATE_EPS = 1e-8
 _CENTRAL_DIFF_H = 1e-4
 
 
-@dataclass(frozen=True)
-class AdjustedAttribution:
+@dataclass(frozen=True, eq=False)
+class AdjustedAttribution(_ResultBase):
     """Attributions rescaled to the calibrated output scale.
 
     Attributes
@@ -90,9 +91,12 @@ def adjust_attributions(
         ``base_value`` is then ignored.
     base_value : float or array_like of shape (n,)
         SHAP base value(s) on the same scale as ``phi``.
-    calibrator : fitted calibrator
-        Any object with ``predict_proba``; ``affine_logit_coeffs_`` (when not
-        None) enables the exact affine path.
+    calibrator : fitted calibrator, Chain, or CalibratedModel
+        Any object with ``predict_proba`` on model probabilities;
+        ``affine_logit_coeffs_`` (when not None) enables the exact affine
+        path. A :class:`~probcal.CalibratedModel` is read through its
+        model-free :attr:`~probcal.CalibratedModel.chain_` (its own
+        ``predict_proba`` takes features, not scores).
     scale : {"logit", "probability"}
         Working scale of the attributions. Affine-exactness exists only on
         the logit scale.
@@ -114,6 +118,10 @@ def adjust_attributions(
         raise ValueError(f"scale must be 'logit' or 'probability', got {scale!r}")
     if method not in ("auto", "affine", "aumann-shapley"):
         raise ValueError(f"unknown method {method!r}")
+    from .wrapper import CalibratedModel
+
+    if isinstance(calibrator, CalibratedModel):
+        calibrator = calibrator.chain_
     phi_arr, base_arr = _extract(phi, base_value)
     s = base_arr + phi_arr.sum(axis=1)
 
@@ -136,15 +144,17 @@ def adjust_attributions(
         def g_work(t: np.ndarray) -> np.ndarray:
             return calibrator.predict_proba(np.clip(t, 1e-12, 1.0 - 1e-12))
 
-    target = g_work(s)
-
     if use_affine:
         assert coeffs is not None
         a, b = coeffs
+        # Exact on the logit scale: no round trip through predict_proba,
+        # whose probability clip would truncate |a * s + b| > logit(1 - 1e-12).
+        target = a * s + b
         phi_adj = a * phi_arr
         base_adj = a * base_arr + b
         method_used = "affine-exact"
     else:
+        target = g_work(s)
         g_s0 = g_work(base_arr)
         diff = s - base_arr
         multiplier = np.empty(len(s))

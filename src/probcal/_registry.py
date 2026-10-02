@@ -11,7 +11,22 @@ SERIALIZABLE: dict[str, type] = {}
 
 
 def register(cls: T) -> T:
-    """Class decorator: make ``cls`` loadable by name through :func:`load`."""
+    """Class decorator: make ``cls`` loadable by name through :func:`load`.
+
+    Raises
+    ------
+    ValueError
+        If a *different* class is already registered under the same name
+        (payloads carry only the class name, so a collision is ambiguous).
+    """
+    existing = SERIALIZABLE.get(cls.__name__)
+    if existing is not None and existing.__qualname__ + existing.__module__ != (
+        cls.__qualname__ + cls.__module__
+    ):
+        raise ValueError(
+            f"serializable class name {cls.__name__!r} already registered by "
+            f"{existing.__module__}.{existing.__qualname__}"
+        )
     SERIALIZABLE[cls.__name__] = cls
     return cls
 

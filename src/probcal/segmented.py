@@ -17,7 +17,7 @@ from ._math import expit, logit
 from ._registry import SERIALIZABLE, register
 from ._results import Interpretation
 from ._validation import validate_scores
-from .base import BaseCalibrator
+from .base import BaseCalibrator, clone_unfitted
 from .chain import Chain
 from .offset import LogitOffset, estimate_offset
 from .parametric import BetaCalibrator
@@ -113,7 +113,7 @@ class SegmentedCalibrator(BaseCalibrator):
         Per-segment shrunk offset, ``delta_hat * shrink``: the offset
         actually applied at predict time.
     is_monotone_ : bool
-        ``base_.is_monotone_``.
+        ``base_.is_monotone_`` (read through, so it survives serialization).
 
     Examples
     --------
@@ -193,8 +193,7 @@ class SegmentedCalibrator(BaseCalibrator):
             seg_arr = _coerce_segments(raw_segments, s.shape[0])
 
         base_obj = self.base if self.base is not None else BetaCalibrator()
-        self.base_ = type(base_obj)(**base_obj.get_params()).fit(s, y, sample_weight=w)
-        self.is_monotone_ = self.base_.is_monotone_
+        self.base_ = clone_unfitted(base_obj).fit(s, y, sample_weight=w)  # type: ignore[attr-defined]
         p0 = self.base_.predict_proba(s)
 
         labels = tuple(sorted(set(seg_arr.tolist())))
@@ -297,6 +296,24 @@ class SegmentedCalibrator(BaseCalibrator):
         return self.base_.predict_proba(s)
 
     # ------------------------------------------------------------- protocol
+
+    @property  # type: ignore[override]
+    def is_monotone_(self) -> bool:  # type: ignore[override]
+        """The fitted base map's ``is_monotone_`` (``True`` before fitting).
+
+        A per-segment logit shift is increasing, so it cannot break
+        monotonicity; the base map alone decides.
+        """
+        base = self.__dict__.get("base_")
+        return True if base is None else bool(base.is_monotone_)
+
+    @property
+    def complexity_rank(self) -> float:
+        """The base map's parsimony rank (fitted ``base_``, else the prototype)."""
+        base = self.__dict__.get("base_")
+        if base is None:
+            base = self.base if self.base is not None else BetaCalibrator()
+        return float(getattr(base, "complexity_rank", 100.0))
 
     @property
     def affine_logit_coeffs_(self) -> tuple[float, float] | None:
@@ -425,7 +442,7 @@ class SegmentedCalibrator(BaseCalibrator):
                 f"unseen segments at predict/inverse time raise ValueError (unseen={self.unseen!r})"
             )
         return Interpretation(
-            method="SegmentedCalibrator",
+            method=type(self).__name__,
             param_names=param_names,
             param_values=param_values,
             messages=tuple(messages),
@@ -434,9 +451,22 @@ class SegmentedCalibrator(BaseCalibrator):
     # ------------------------------------------------------------- serialization
 
     def _params_for_dict(self) -> dict[str, object]:
+        """Encode the ``base`` prototype by registry name and its own param hook.
+
+        Going through the prototype's ``_params_for_dict`` lets a base whose
+        parameters are not JSON-native (e.g. a ``CalibratorSelector`` with
+        custom candidates) serialize; an unregistered base class raises
+        ``ValueError`` naming it.
+        """
         base_spec = None
         if self.base is not None:
-            base_spec = {"class": type(self.base).__name__, "params": self.base.get_params()}
+            cls_name = type(self.base).__name__
+            if SERIALIZABLE.get(cls_name) is not type(self.base):
+                raise ValueError(
+                    f"cannot serialize base {cls_name}: it is not a registered probcal class"
+                )
+            to_params = getattr(self.base, "_params_for_dict", self.base.get_params)
+            base_spec = {"class": cls_name, "params": to_params()}
         return {"base": base_spec, "unseen": self.unseen}
 
     @classmethod
@@ -446,9 +476,12 @@ class SegmentedCalibrator(BaseCalibrator):
             base_obj = None
         else:
             base_cls = SERIALIZABLE[base_spec["class"]]  # type: ignore[index]
-            base_obj = base_cls(**base_spec["params"])  # type: ignore[index]
+            from_params = getattr(base_cls, "_params_from_dict", dict)
+            base_obj = base_cls(**from_params(dict(base_spec["params"])))  # type: ignore[index]
         return {"base": base_obj, "unseen": params.get("unseen", "global")}
 
     def _set_state(self, state: dict[str, object]) -> None:
+        state = dict(state)
+        state.pop("is_monotone_", None)  # read through base_, never stored
         super()._set_state(state)
         self.segments_ = tuple(self.segments_)

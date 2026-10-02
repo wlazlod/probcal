@@ -78,8 +78,23 @@ and the changelog. Behavioral changes that alter numbers ship with a
 detailed changelog entry and, where feasible, a parameter that
 recovers the old values.
 
-No symbol currently carries a `DeprecationWarning`; the changelog lists
-any release in which one does.
+Deprecated in 0.3.4, all removed in 0.4.0 (each warns with a
+`DeprecationWarning` naming its replacement; until then the old spelling
+behaves as before):
+
+| Deprecated | Replacement |
+|---|---|
+| `metrics.adaptive_ece(...)` | `metrics.ece(..., strategy="mass")` |
+| `metrics.ecce(..., presorted=...)` | drop the argument (it is still honoured) |
+| `metrics.evaluate(..., seed=...)` | `random_state=` (passing both raises `TypeError`) |
+| `metrics.hosmer_lemeshow(..., g=...)` | `n_bins=` |
+| `level=` on `metrics.jeffreys_upper_bands`, `curves.reliability_smooth`, `curves.corp_reliability` | `confidence=` (`CorpResult.level` keeps its name) |
+| `BeltResult.lower_80` / `upper_80` / `lower_95` / `upper_95` | `belt.bands[level]`, with the levels in `belt.levels` |
+| `BBQCalibrator.weights_`, `ENIRCalibrator.weights_` | `model_weights_` |
+| positional `CalibratedModel.offset_to(...)` | keywords `target_mean=` / `delta=` / `X=` |
+| positional `LogitOffset.fit(p, sample_weight)` | `LogitOffset.fit(p, sample_weight=...)` |
+
+The changelog lists every release that adds or removes a deprecation.
 
 ## scikit-learn estimator checks
 
@@ -91,7 +106,13 @@ are declared inapplicable through sklearn's own mechanism
 (`expected_failed_checks` on 1.6+, `_more_tags()["_xfail_checks"]` below it),
 each entry naming the data that check generates and which part of the
 score-level contract it violates. They are inapplicable, not known failures;
-the checks whose data the contract does admit run live and pass.
+the checks whose data the contract does admit run live and pass. The
+declarations are data in `probcal.sklearn._xfail` (imported lazily by the
+adapters' `_more_tags()`, since sklearn < 1.6 reads them from the estimator
+at runtime, and directly by the tests). `CalibratedClassifier` declares only
+sklearn < 1.6's `check_sample_weights_invariance` (weight ≡ duplication cannot
+hold through an integer-`cv` split); on 1.6+ its
+`check_sample_weight_equivalence_on_dense_data` runs live and passes.
 
 Every inapplicable check with a score-level analogue is re-implemented on
 valid `(n,)` probability data in `tests/test_sklearn_mirror_checks.py`: fit

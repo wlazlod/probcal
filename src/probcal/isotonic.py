@@ -13,19 +13,15 @@ import numpy as np
 from ._math import pava
 from ._registry import register
 from ._results import Interpretation
+from ._steps import (
+    aggregate_ties,
+    eval_step,
+    linear_inverse_left,
+    linear_inverse_right,
+    step_inverse_left,
+    step_inverse_right,
+)
 from .base import BaseCalibrator
-
-
-def _aggregate_ties(
-    s: np.ndarray, y: np.ndarray, w: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Sort by score and pool tied scores into weighted means."""
-    order = np.argsort(s, kind="stable")
-    s_sorted, y_sorted, w_sorted = s[order], y[order], w[order]
-    s_unique, start = np.unique(s_sorted, return_index=True)
-    w_sum = np.add.reduceat(w_sorted, start)
-    wy_sum = np.add.reduceat(w_sorted * y_sorted, start)
-    return s_unique, wy_sum / w_sum, w_sum
 
 
 @register
@@ -78,26 +74,23 @@ class IsotonicCalibrator(BaseCalibrator):
             raise ValueError(
                 f"interpolation must be 'none' or 'linear', got {self.interpolation!r}"
             )
-        s_u, y_u, w_u = _aggregate_ties(s, y, w)
+        s_u, y_u, w_u = aggregate_ties(s, y, w)
         res = pava(y_u, w_u)
         starts = res.block_start
         ends = np.append(starts[1:], len(s_u)) - 1
         self.block_mean_ = res.block_mean
         self.block_first_s_ = s_u[starts]
         self.block_last_s_ = s_u[ends]
-        centers = np.empty(len(starts))
-        for j, (a, b) in enumerate(zip(starts, ends + 1, strict=True)):
-            centers[j] = float(np.average(s_u[a:b], weights=w_u[a:b]))
-        self.block_center_s_ = centers
+        self.block_center_s_ = np.add.reduceat(w_u * s_u, starts) / np.add.reduceat(w_u, starts)
         self.n_blocks_ = int(len(starts))
+
+    def _block_mid(self) -> np.ndarray:
+        return 0.5 * (self.block_first_s_ + self.block_last_s_)
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         if self.interpolation == "linear":
-            mid = 0.5 * (self.block_first_s_ + self.block_last_s_)
-            return np.interp(s, mid, self.block_mean_)
-        idx = np.searchsorted(self.block_first_s_, s, side="right") - 1
-        idx = np.clip(idx, 0, self.n_blocks_ - 1)
-        return self.block_mean_[idx]
+            return np.interp(s, self._block_mid(), self.block_mean_)
+        return eval_step(self.block_first_s_, self.block_mean_, s)
 
     @property
     def complexity_rank(self) -> float:
@@ -108,18 +101,22 @@ class IsotonicCalibrator(BaseCalibrator):
         return float(self.block_mean_[0]), float(self.block_mean_[-1])
 
     def _inverse_left(self, t: float) -> float:
+        if self.interpolation == "linear":
+            # The interpolated map is continuous: invert it on the bracketing
+            # segment between block midpoints, not through the step blocks.
+            return linear_inverse_left(self._block_mid(), self.block_mean_, t, self._predict_scalar)
         # Left edge of the first block whose level reaches t (spec block-edge semantics).
-        j = int(np.searchsorted(self.block_mean_, t, side="left"))
-        return float(self.block_first_s_[j])
+        return step_inverse_left(self.block_mean_, self.block_first_s_, t)
 
     def _inverse_right(self, t: float) -> float:
+        if self.interpolation == "linear":
+            return linear_inverse_right(
+                self._block_mid(), self.block_mean_, t, self._predict_scalar
+            )
         # Largest raw score whose level stays within t: one float below the
         # next block's left edge, so the returned bound is itself in the
         # preimage — consumers may treat both bounds as closed.
-        j = int(np.searchsorted(self.block_mean_, t, side="right")) - 1
-        if j >= self.n_blocks_ - 1:
-            return 1.0
-        return float(np.nextafter(self.block_first_s_[j + 1], 0.0))
+        return step_inverse_right(self.block_mean_, self.block_first_s_, t)
 
     def interpret(self) -> Interpretation:
         """Read the block structure as effective complexity and local event rates."""
@@ -186,20 +183,10 @@ class CenteredIsotonicCalibrator(IsotonicCalibrator):
         return np.interp(s, self.block_center_s_, self.block_mean_)
 
     def _inverse_left(self, t: float) -> float:
-        m, c = self.block_mean_, self.block_center_s_
-        j = int(np.searchsorted(m, t, side="left"))
-        if j == 0:
-            return 0.0
-        frac = (t - m[j - 1]) / (m[j] - m[j - 1])
-        return float(c[j - 1] + frac * (c[j] - c[j - 1]))
+        return linear_inverse_left(self.block_center_s_, self.block_mean_, t, self._predict_scalar)
 
     def _inverse_right(self, t: float) -> float:
-        m, c = self.block_mean_, self.block_center_s_
-        j = int(np.searchsorted(m, t, side="right")) - 1
-        if j >= len(m) - 1:
-            return 1.0
-        frac = (t - m[j]) / (m[j + 1] - m[j])
-        return float(c[j] + frac * (c[j + 1] - c[j]))
+        return linear_inverse_right(self.block_center_s_, self.block_mean_, t, self._predict_scalar)
 
     def interpret(self) -> Interpretation:
         """Isotonic reading plus the strictness property CIR adds."""

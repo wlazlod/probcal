@@ -10,16 +10,13 @@ documentation.
 
 import numpy as np
 
+from ._math import expit1, logit1
 from ._registry import register
 from ._results import Interpretation
+from ._steps import bin_sums, equal_mass_edges, step_inverse_left, step_inverse_right
+from ._validation import validate_positive_int
 from .base import BaseCalibrator
 from .parametric import PlattCalibrator
-
-
-def _equal_mass_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
-    """Interior quantile edges, deduplicated (ties can collapse bins)."""
-    qs = np.linspace(0.0, 1.0, n_bins + 1)[1:-1]
-    return np.unique(np.quantile(values, qs))
 
 
 @register
@@ -31,8 +28,9 @@ class HistogramBinningCalibrator(BaseCalibrator):
     n_bins : int
         Requested number of bins ``B`` — the bias–variance dial.
     strategy : {"mass", "width"}
-        ``"mass"`` (equal-count, recommended default: lower estimator bias,
-        no empty bins) or ``"width"`` (equal-width over [0, 1]).
+        ``"mass"`` (equal-mass, recommended default: lower estimator bias,
+        no empty bins; with ``sample_weight`` the bins carry equal weight)
+        or ``"width"`` (equal-width over [0, 1]).
     shrinkage : {"jeffreys", None}
         ``"jeffreys"`` replaces the raw rate ``k/n`` with ``(k + 1/2)/(n + 1)``
         — the posterior mean under the Beta(1/2, 1/2) prior — keeping small
@@ -61,30 +59,22 @@ class HistogramBinningCalibrator(BaseCalibrator):
         self.shrinkage = shrinkage
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
+        n_bins = validate_positive_int(self.n_bins, "n_bins")
         if self.strategy not in ("mass", "width"):
             raise ValueError(f"strategy must be 'mass' or 'width', got {self.strategy!r}")
         if self.shrinkage not in ("jeffreys", None):
             raise ValueError(f"shrinkage must be 'jeffreys' or None, got {self.shrinkage!r}")
         if self.strategy == "mass":
-            edges = _equal_mass_edges(s, self.n_bins)
+            edges = equal_mass_edges(s, n_bins, w)
         else:
-            edges = np.linspace(0.0, 1.0, self.n_bins + 1)[1:-1]
+            edges = np.linspace(0.0, 1.0, n_bins + 1)[1:-1]
         idx = np.searchsorted(edges, s, side="right")
-        n_bins_eff = len(edges) + 1
-        k = np.bincount(idx, weights=w * y, minlength=n_bins_eff)
-        n = np.bincount(idx, weights=w, minlength=n_bins_eff)
-        global_rate = float(np.average(y, weights=w))
-        if self.shrinkage == "jeffreys":
-            rate = (k + 0.5) / (n + 1.0)
-        else:
-            with np.errstate(invalid="ignore", divide="ignore"):
-                rate = np.where(n > 0, k / np.maximum(n, 1e-300), np.nan)
-        # Empty bins (possible under "width"): fall back to the global rate.
-        empty = n == 0
-        if self.shrinkage == "jeffreys":
-            rate = np.where(empty, global_rate, rate)
-        else:
-            rate = np.where(empty | ~np.isfinite(rate), global_rate, rate)
+        k, n = bin_sums(idx, y, w, len(edges) + 1)
+        prior = 0.5 if self.shrinkage == "jeffreys" else 0.0
+        # Empty bins (possible under "width") fall back to the global rate.
+        rate = np.full(len(n), float(np.average(y, weights=w)))
+        filled = n > 0
+        rate[filled] = (k[filled] + prior) / (n[filled] + 2.0 * prior)
         self.edges_ = edges
         self.bin_rate_ = rate
         self.bin_weight_ = n
@@ -101,17 +91,16 @@ class HistogramBinningCalibrator(BaseCalibrator):
     def _output_range(self) -> tuple[float, float]:
         return float(self.bin_rate_[0]), float(self.bin_rate_[-1])
 
+    def _bin_starts(self) -> np.ndarray:
+        return np.concatenate([[0.0], self.edges_])
+
     def _inverse_left(self, t: float) -> float:
-        j = int(np.searchsorted(self.bin_rate_, t, side="left"))
-        return 0.0 if j == 0 else float(self.edges_[j - 1])
+        return step_inverse_left(self.bin_rate_, self._bin_starts(), t)
 
     def _inverse_right(self, t: float) -> float:
         # One float below the next bin's edge: the bound is in the preimage,
         # so closed-bound consumers cannot overshoot a plateau.
-        j = int(np.searchsorted(self.bin_rate_, t, side="right")) - 1
-        if j >= len(self.bin_rate_) - 1:
-            return 1.0
-        return float(np.nextafter(self.edges_[j], 0.0))
+        return step_inverse_right(self.bin_rate_, self._bin_starts(), t)
 
     def interpret(self) -> Interpretation:
         """Read bin rates as local event frequencies and B as the complexity dial."""
@@ -150,7 +139,8 @@ class ScalingBinningCalibrator(BaseCalibrator):
     Parameters
     ----------
     n_bins : int
-        Requested number of equal-mass bins of the Platt-fitted values.
+        Requested number of equal-mass bins of the Platt-fitted values (equal
+        weight under ``sample_weight``).
 
     Attributes
     ----------
@@ -160,6 +150,11 @@ class ScalingBinningCalibrator(BaseCalibrator):
         Interior quantile edges of the Platt-fitted values.
     bin_value_ : numpy.ndarray
         Mean Platt-fitted value per bin (the calibrated output for that bin).
+    is_monotone_ : bool
+        Derived from the fitted state: ``True`` when the Platt stage is
+        increasing (``a > 0``) — the bin means are then non-decreasing by
+        construction. A decreasing Platt stage makes the composite map
+        decreasing, and ``interval_inverse`` refuses it.
 
     References
     ----------
@@ -172,23 +167,27 @@ class ScalingBinningCalibrator(BaseCalibrator):
         self.n_bins = n_bins
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
+        n_bins = validate_positive_int(self.n_bins, "n_bins")
         self.platt_ = PlattCalibrator()
         self.platt_.fit(s, y, sample_weight=w)
         g = self.platt_.predict_proba(s)
-        edges = _equal_mass_edges(g, self.n_bins)
+        edges = equal_mass_edges(g, n_bins, w)
         idx = np.searchsorted(edges, g, side="right")
-        n_bins_eff = len(edges) + 1
-        sums = np.bincount(idx, weights=w * g, minlength=n_bins_eff)
-        cnts = np.bincount(idx, weights=w, minlength=n_bins_eff)
-        with np.errstate(invalid="ignore", divide="ignore"):
-            means = np.where(cnts > 0, sums / np.maximum(cnts, 1e-300), np.nan)
-        # Empty bins cannot arise under equal-mass edges built from g itself,
-        # except through extreme ties; fall back to interpolation between neighbors.
-        if np.any(~np.isfinite(means)):
-            valid = np.isfinite(means)
-            means = np.interp(np.arange(n_bins_eff), np.flatnonzero(valid), means[valid])
+        sums, cnts = bin_sums(idx, g, w, len(edges) + 1)
+        # Deduplicated edges drawn from g itself leave no bin empty; the guard
+        # interpolates between neighbours should rounding ever produce one.
+        filled = cnts > 0
+        means = np.interp(np.arange(len(cnts)), np.flatnonzero(filled), sums[filled] / cnts[filled])
         self.edges_ = edges
         self.bin_value_ = means
+
+    @property  # type: ignore[override]
+    def is_monotone_(self) -> bool:  # type: ignore[override]
+        """``True`` iff the Platt stage is increasing (see class docstring)."""
+        platt = self.__dict__.get("platt_")
+        if platt is None:
+            return True
+        return bool(platt.is_monotone_) and bool(np.all(np.diff(self.bin_value_) >= 0.0))
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         g = self.platt_.predict_proba(s)
@@ -203,17 +202,25 @@ class ScalingBinningCalibrator(BaseCalibrator):
         return float(self.bin_value_[0]), float(self.bin_value_[-1])
 
     def _pullback(self, platt_value: float) -> float:
-        return self.platt_._closed_inverse(platt_value)
+        """Raw score whose Platt value is ``platt_value`` (closed form)."""
+        return expit1((logit1(platt_value) - self.platt_.b_) / self.platt_.a_)
+
+    def _platt_forward(self, x: float) -> float:
+        return float(self.platt_.predict_proba(np.array([x]))[0])
 
     def _inverse_left(self, t: float) -> float:
-        j = int(np.searchsorted(self.bin_value_, t, side="left"))
-        return 0.0 if j == 0 else self._pullback(float(self.edges_[j - 1]))
+        starts = np.concatenate([[0.0], self.edges_])
+        return step_inverse_left(
+            self.bin_value_, starts, t, forward=self._platt_forward, pullback=self._pullback
+        )
 
     def _inverse_right(self, t: float) -> float:
-        j = int(np.searchsorted(self.bin_value_, t, side="right")) - 1
-        if j >= len(self.bin_value_) - 1:
-            return 1.0
-        return self._pullback(float(self.edges_[j]))
+        # The pulled-back edge is nudged below the bin boundary, so the bound
+        # is itself in the preimage (closed-bound consumers cannot overshoot).
+        starts = np.concatenate([[0.0], self.edges_])
+        return step_inverse_right(
+            self.bin_value_, starts, t, forward=self._platt_forward, pullback=self._pullback
+        )
 
     def interpret(self) -> Interpretation:
         """Two-stage reading: Platt map, then the error-measurability discretization."""

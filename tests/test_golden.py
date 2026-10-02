@@ -25,7 +25,7 @@ _GOLDEN_FILES = sorted(_GOLDEN_DIR.glob("*.json"))
 class _StubModel:
     """Mirrors tests/golden/_generate.py — keep the two definitions identical."""
 
-    def fit(self, X, y):  # noqa: ARG002
+    def fit(self, X, y):
         return self
 
     def predict_proba(self, X):

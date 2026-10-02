@@ -80,7 +80,7 @@ def test_corp_level_must_be_in_unit_interval():
 
     y, p = _calibrated(200)
     for level in (0.0, 1.0, -0.1, 1.5):
-        with pytest.raises(ValueError, match="level"):
+        with pytest.raises(ValueError, match="level|confidence"):
             corp_reliability(y, p, bands=None, level=level)
 
 
@@ -99,10 +99,10 @@ def test_consistency_bands_are_seeded_and_contain_identity_mostly():
 
 
 def test_confidence_bands_bracket_the_fit():
-    from probcal._corp import eval_step
+    from probcal._steps import eval_step
     from probcal.curves import corp_reliability
 
     y, p = _calibrated(3000)
     r = corp_reliability(y, p, bands="confidence", n_resamples=50, random_state=5)
-    fit = eval_step(r.block_lo, r.block_hi, r.block_level, r.band_grid)
+    fit = eval_step(r.block_lo, r.block_level, r.band_grid)
     assert np.mean((fit >= r.band_low - 1e-12) & (fit <= r.band_high + 1e-12)) > 0.9

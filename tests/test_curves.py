@@ -71,11 +71,11 @@ def test_belt_calibrated_data() -> None:
     assert isinstance(belt, BeltResult)
     assert belt.p_value > 0.01
     assert 1 <= belt.degree <= 4
-    inside = (belt.lower_95 <= belt.grid_p) & (belt.grid_p <= belt.upper_95)
+    inside = (belt.bands[0.95][0] <= belt.grid_p) & (belt.grid_p <= belt.bands[0.95][1])
     assert inside.mean() >= 0.9
-    assert np.all(belt.lower_80 >= belt.lower_95 - 1e-12)
-    assert np.all(belt.upper_80 <= belt.upper_95 + 1e-12)
-    assert np.all(belt.lower_95 <= belt.upper_95)
+    assert np.all(belt.bands[0.8][0] >= belt.bands[0.95][0] - 1e-12)
+    assert np.all(belt.bands[0.8][1] <= belt.bands[0.95][1] + 1e-12)
+    assert np.all(belt.bands[0.95][0] <= belt.bands[0.95][1])
 
 
 def test_belt_rejects_distortion() -> None:
@@ -83,7 +83,7 @@ def test_belt_rejects_distortion() -> None:
     p_bad = expit(0.5 * logit(p) - 0.7)
     belt = calibration_belt(y, p_bad)
     assert belt.p_value < 1e-4
-    outside = (belt.grid_p < belt.lower_95) | (belt.grid_p > belt.upper_95)
+    outside = (belt.grid_p < belt.bands[0.95][0]) | (belt.grid_p > belt.bands[0.95][1])
     assert outside.any()
 
 
@@ -103,7 +103,7 @@ def test_belt_separated_data_stops_extension() -> None:
     with pytest.warns(UserWarning, match="[Ss]eparation"):
         belt = calibration_belt(y, p)
     assert belt.degree == 1
-    assert np.all(np.isfinite(belt.lower_95)) and np.all(np.isfinite(belt.upper_95))
+    assert np.all(np.isfinite(belt.bands[0.95][0])) and np.all(np.isfinite(belt.bands[0.95][1]))
     assert 0.0 <= belt.p_value <= 1.0
 
 
@@ -121,14 +121,18 @@ def test_wilson_ci_contains_rate_with_empty_event_bins() -> None:
 
 
 def test_ecce_curve_hand_case() -> None:
-    # 4 points already sorted by p. Residuals: -0.2, -0.4, 0.6, 0.2.
+    # 4 points already sorted by p. Residuals: -0.2, -0.4, 0.6, 0.2; the two
+    # tied p=0.4 rows form one block, so the walk is read at indices 0, 2, 3.
     y = np.array([0.0, 0.0, 1.0, 1.0])
     p = np.array([0.2, 0.4, 0.4, 0.8])
     c = ecce_curve(y, p)
     assert isinstance(c, EcceCurve)
-    np.testing.assert_allclose(c.frac, [0.25, 0.5, 0.75, 1.0], atol=1e-12)
-    np.testing.assert_allclose(c.cumdev, np.cumsum([-0.2, -0.4, 0.6, 0.2]) / 4.0, atol=1e-12)
-    var = np.cumsum([0.2 * 0.8, 0.4 * 0.6, 0.4 * 0.6, 0.8 * 0.2])
+    ends = [0, 2, 3]
+    np.testing.assert_allclose(c.frac, [0.25, 0.75, 1.0], atol=1e-12)
+    np.testing.assert_allclose(
+        c.cumdev, (np.cumsum([-0.2, -0.4, 0.6, 0.2]) / 4.0)[ends], atol=1e-12
+    )
+    var = np.cumsum([0.2 * 0.8, 0.4 * 0.6, 0.4 * 0.6, 0.8 * 0.2])[ends]
     np.testing.assert_allclose(c.sd_null, np.sqrt(var) / 4.0, atol=1e-12)
     assert abs(c.stat_max - np.max(np.abs(c.cumdev))) < 1e-15
     assert c.argmax_frac == c.frac[int(np.argmax(np.abs(c.cumdev)))]
@@ -208,10 +212,14 @@ def test_reliability_smooth_no_bootstrap_collapses_band() -> None:
 
 def test_reliability_smooth_rejects_bad_level() -> None:
     y, p = _calibrated(500)
-    with pytest.raises(ValueError, match="level"):
-        reliability_smooth(y, p, level=0.0)
-    with pytest.raises(ValueError, match="level"):
-        reliability_smooth(y, p, level=1.0)
+    with pytest.raises(ValueError, match="confidence"):
+        reliability_smooth(y, p, confidence=0.0)
+    with pytest.raises(ValueError, match="confidence"):
+        reliability_smooth(y, p, confidence=1.0)
+    with pytest.warns(DeprecationWarning, match="confidence"):
+        a = reliability_smooth(y, p, level=0.8, n_boot=5)
+    b = reliability_smooth(y, p, confidence=0.8, n_boot=5)
+    np.testing.assert_array_equal(a.ci_low, b.ci_low)
 
 
 def test_reliability_smooth_grid_scales_consistent() -> None:
@@ -219,3 +227,147 @@ def test_reliability_smooth_grid_scales_consistent() -> None:
     curve = reliability_smooth(y, p, n_boot=0)
     np.testing.assert_allclose(curve.grid_logit, logit(curve.grid_p), atol=1e-12)
     assert len(curve.grid_p) == 200
+
+
+# ------------------------------------------------------------------ 0.3.4 fixes
+
+
+def _gap_data() -> tuple[np.ndarray, np.ndarray]:
+    rng = np.random.default_rng(12)
+    p = np.concatenate([rng.uniform(0.01, 0.03, 1500), rng.uniform(0.5, 0.9, 1500)])
+    y = (rng.random(3000) < p).astype(float)
+    return y, p
+
+
+@pytest.mark.parametrize("bins", [8192, None])
+def test_reliability_smooth_is_nan_in_data_gaps(bins: int | None) -> None:
+    # Regression (MET-9): the lattice path reported rate 0 with a [0, 0]
+    # ribbon where no data were within reach of the kernel.
+    y, p = _gap_data()
+    curve = reliability_smooth(y, p, n_boot=20, bins=bins)
+    t = logit(p)
+    near = np.min(np.abs(curve.grid_logit[:, None] - t[None, :]), axis=1)
+    gap = near > 5.0 * curve.sigma_star + 0.05
+    assert gap.any()
+    assert np.all(np.isnan(curve.event_rate[gap]))
+    assert np.all(np.isnan(curve.ci_low[gap])) and np.all(np.isnan(curve.ci_high[gap]))
+    covered = near < 1.0 * curve.sigma_star
+    assert np.all(np.isfinite(curve.event_rate[covered]))
+    ok = np.isfinite(curve.event_rate)
+    assert np.all(curve.ci_low[ok] <= curve.event_rate[ok])
+    assert np.all(curve.event_rate[ok] <= curve.ci_high[ok])
+
+
+def test_reliability_smooth_without_gaps_has_no_nan() -> None:
+    y, p = _calibrated(2000)
+    curve = reliability_smooth(y, p, n_boot=10)
+    assert np.all(np.isfinite(curve.event_rate))
+    assert np.all(np.isfinite(curve.ci_low)) and np.all(np.isfinite(curve.ci_high))
+
+
+def _old_belt(y: np.ndarray, p: np.ndarray) -> tuple[int, float]:
+    """0.3.x degree selection and p-value (uncentred design)."""
+    from probcal._math import chi2_sf, irls_logistic
+
+    z = logit(p)
+
+    def design(deg: int) -> np.ndarray:
+        return np.column_stack([z**k for k in range(deg + 1)])
+
+    def ll(beta: np.ndarray, deg: int) -> float:
+        prob = np.clip(expit(design(deg) @ beta), 1e-12, 1 - 1e-12)
+        return float(np.sum(y * np.log(prob) + (1 - y) * np.log1p(-prob)))
+
+    degree, fit = 1, irls_logistic(design(1), y)
+    cur = ll(fit.beta, 1)
+    while degree < 4:
+        cand = irls_logistic(design(degree + 1), y)
+        new = ll(cand.beta, degree + 1)
+        if chi2_sf(max(2 * (new - cur), 0.0), 1.0) >= 0.05:
+            break
+        degree, cur = degree + 1, new
+    ll0 = float(np.sum(y * np.log(p) + (1 - y) * np.log1p(-p)))
+    return degree, chi2_sf(max(2 * (cur - ll0), 0.0), degree + 1.0)
+
+
+def test_belt_centring_keeps_the_model() -> None:
+    # MET-13: centring/scaling logit(p) is a reparametrisation of the same
+    # polynomial; degree and p-value agree with the raw design.
+    y, p = _calibrated(4000)
+    p_bad = expit(0.8 * logit(p) + 0.3 * logit(p) ** 2 / 4)
+    for pp in (p, p_bad):
+        belt = calibration_belt(y, pp)
+        degree, p_value = _old_belt(y, pp)
+        assert belt.degree == degree
+        assert belt.p_value == pytest.approx(p_value, rel=1e-6, abs=1e-300)
+
+
+def test_belt_bands_follow_requested_levels() -> None:
+    # MET-13: bands are keyed by the requested levels.
+    y, p = _calibrated(3000)
+    wide = calibration_belt(y, p, confidence=(0.9, 0.99))
+    std = calibration_belt(y, p)
+    assert wide.levels == (0.9, 0.99)
+    assert np.all(wide.bands[0.9][1] >= std.bands[0.8][1] - 1e-12)
+    assert np.all(wide.bands[0.99][1] >= std.bands[0.95][1] - 1e-12)
+    with pytest.raises(ValueError, match="confidence"):
+        calibration_belt(y, p, confidence=(0.8, 1.2))
+
+
+def test_belt_weights_are_relative() -> None:
+    y, p = _calibrated(3000)
+    w = np.random.default_rng(3).uniform(0.5, 2.0, len(y))
+    a = calibration_belt(y, p, sample_weight=w)
+    b = calibration_belt(y, p, sample_weight=10.0 * w)
+    assert a.degree == b.degree
+    assert a.p_value == pytest.approx(b.p_value, rel=1e-6)
+    np.testing.assert_allclose(a.bands[0.95][1], b.bands[0.95][1], rtol=1e-6)
+
+
+def test_reliability_loess_uses_weights() -> None:
+    # Regression (MET-28): sample_weight was validated and then ignored.
+    y, p = _calibrated(3000)
+    base = reliability_loess(y, p)
+    same = reliability_loess(y, p, sample_weight=np.full(len(y), 3.0))
+    np.testing.assert_array_equal(same.event_rate, base.event_rate)
+    w = np.where(y == 1.0, 5.0, 1.0)
+    up = reliability_loess(y, p, sample_weight=w)
+    assert np.mean(up.event_rate) > np.mean(base.event_rate) + 0.02
+
+
+def test_weighted_local_linear_matches_loess_on_unit_weights() -> None:
+    from probcal._math import loess
+    from probcal.curves import _weighted_local_linear
+
+    rng = np.random.default_rng(6)
+    x = np.sort(rng.uniform(0, 1, 400))
+    yv = (rng.random(400) < x).astype(float)
+    grid = np.linspace(0.05, 0.95, 25)
+    np.testing.assert_allclose(
+        _weighted_local_linear(x, yv, np.ones(400), grid, 0.5),
+        loess(x, yv, frac=0.5, xeval=grid),
+        atol=1e-10,
+    )
+
+
+def test_ecce_curve_weights_sd_kish() -> None:
+    y, p = _calibrated(1000)
+    w = np.random.default_rng(2).uniform(0.5, 2.0, len(y))
+    a, b = ecce_curve(y, p, sample_weight=w), ecce_curve(y, p, sample_weight=4.0 * w)
+    np.testing.assert_allclose(a.sd_null, b.sd_null, rtol=1e-12)
+    np.testing.assert_allclose(a.cumdev, b.cumdev, rtol=1e-12, atol=1e-15)
+    unit = ecce_curve(y, p)
+    np.testing.assert_array_equal(
+        ecce_curve(y, p, sample_weight=np.ones(len(y))).sd_null, unit.sd_null
+    )
+
+
+def test_corp_level_keyword_deprecated() -> None:
+    from probcal.curves import corp_reliability
+
+    y, p = _calibrated(300)
+    with pytest.warns(DeprecationWarning, match="confidence"):
+        old = corp_reliability(y, p, level=0.8, n_resamples=10)
+    new = corp_reliability(y, p, confidence=0.8, n_resamples=10)
+    assert old.level == new.level == 0.8
+    np.testing.assert_array_equal(old.band_low, new.band_low)

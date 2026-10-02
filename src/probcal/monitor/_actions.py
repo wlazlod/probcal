@@ -1,18 +1,17 @@
-"""Margin-of-conservatism (MoC) offsets, and ``AppliedAction``.
+"""Margin-of-conservatism (MoC) offsets, ``apply_recommendation``, ``AppliedAction``.
 
 Theory: ``docs/concepts/monitoring.md``.
 """
 
-import json
-import os
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
 from .._math import beta_ppf, expit
 from .._registry import load, register
-from .._serialize import SCHEMA_VERSION, check_schema, fingerprint_of_dict
+from .._serialize import JsonIO, check_payload, envelope
 from ..metrics.scores import _prep
 from ..offset import LogitOffset
 from ._monitor import CalibrationMonitor, MonitorReport, MonitorStep
@@ -85,10 +84,12 @@ def moc_offset(
     >>> from probcal.datasets import make_pd_portfolio
     >>> from probcal.monitor import CalibrationMonitor, moc_offset
     >>> mon = CalibrationMonitor(alpha=0.05)
+    >>> from probcal import expit, logit
     >>> for seed in range(3):
     ...     d = make_pd_portfolio(n=500, random_state=seed)
     ...     rng = np.random.default_rng(seed)
-    ...     y = (rng.random(500) < d.scores).astype(float)  # drift injected
+    ...     true_pd = expit(logit(d.scores) + 0.3)  # +0.3 log-odds drift injected
+    ...     y = (rng.random(500) < true_pd).astype(float)
     ...     _ = mon.update(y, d.scores, label=f"b{seed}")
     >>> off = moc_offset(mon)
     >>> off.delta_ >= mon.steps_[-1].delta_hat
@@ -128,8 +129,7 @@ def moc_offset(
             )
         if not 0.0 < level < 1.0:
             raise ValueError("level must lie in (0, 1)")
-        threshold = -np.log(1.0 - level)
-        surviving = mon._cs_grid[mon._cs_max < threshold]
+        surviving = mon._cs.surviving(-np.log(1.0 - level))
         if surviving.size == 0:
             raise ValueError("moc_offset: no grid nulls survive at this level; widen delta_ci_grid")
         hi = float(surviving.max())
@@ -197,9 +197,101 @@ def moc_offset_from_counts(
     return LogitOffset(target_mean=q).fit(p_arr, sample_weight=w_arr)
 
 
+def _audit(
+    rep: MonitorReport,
+    old_fp: str,
+    old_target_fp: str | None,
+    *,
+    new_fp: str | None = None,
+    offset_fp: str | None = None,
+    new_target_fp: str | None = None,
+    delta: float | None = None,
+    se: float | None = None,
+) -> dict[str, Any]:
+    """The audit trail; defaults describe "nothing changed"."""
+    return {
+        "alarm_at": rep.alarm_at,
+        "onset_label": rep.onset_label,
+        "old_monitor_fingerprint": old_fp,
+        "new_monitor_fingerprint": new_fp if new_fp is not None else old_fp,
+        "offset_fingerprint": offset_fp,
+        "old_target_fingerprint": old_target_fp,
+        "new_target_fingerprint": new_target_fp if new_target_fp is not None else old_target_fp,
+        "delta": delta,
+        "se": se,
+    }
+
+
+def apply_recommendation(mon: CalibrationMonitor, target: object = None) -> "AppliedAction":
+    """Implementation of :meth:`CalibrationMonitor.apply_recommendation` (see there)."""
+    from ..chain import Chain
+    from ..offset import estimate_offset
+    from ..wrapper import CalibratedModel
+
+    if target is not None and not isinstance(target, (Chain, CalibratedModel)):
+        raise TypeError(
+            f"target must be None, a Chain, or a CalibratedModel, got {type(target).__name__}"
+        )
+    old_target_fp = target.fingerprint() if target is not None else None
+    rep = mon.report()
+    kind = rep.recommendation
+    old_fp = mon.fingerprint()
+    if kind == "none":
+        return AppliedAction(
+            kind=kind,
+            offset=None,
+            composed=None,
+            monitor=None,
+            window=(),
+            audit=_audit(rep, old_fp, old_target_fp),
+        )
+
+    # By index, not label: labels are opaque and may repeat (_onset_index).
+    start = mon._recommendation_window_start(mon._onset_index())
+    labels = tuple(s.label for s in mon.steps_[start:])
+    if kind == "re-fit":
+        return AppliedAction(
+            kind=kind,
+            offset=None,
+            composed=None,
+            monitor=None,
+            window=labels,
+            audit=_audit(rep, old_fp, old_target_fp),
+        )
+
+    # kind == "re-offset"
+    z_w, y_w, w_w = mon._since(start)
+    p_w = expit(z_w)
+    est = estimate_offset(y_w, p_w, sample_weight=w_w)
+    offset = LogitOffset(delta=est.delta).fit(p_w)
+    composed: Any = None
+    if isinstance(target, Chain):
+        composed = Chain([target.calibrator_, *target.offsets_, offset])
+    elif isinstance(target, CalibratedModel):
+        composed = target.with_offset(offset)
+    fresh = type(mon)(**mon._ctor_params())
+    return AppliedAction(
+        kind=kind,
+        offset=offset,
+        composed=composed,
+        monitor=fresh,
+        window=labels,
+        audit=_audit(
+            rep,
+            old_fp,
+            old_target_fp,
+            new_fp=fresh.fingerprint(),
+            offset_fp=offset.fingerprint(),
+            new_target_fp=composed.fingerprint() if composed is not None else None,
+            delta=float(est.delta),
+            se=float(est.se),
+        ),
+    )
+
+
 @register
 @dataclass(frozen=True)
-class AppliedAction:
+class AppliedAction(JsonIO):
     """The result of :meth:`CalibrationMonitor.apply_recommendation`.
 
     Attributes
@@ -262,14 +354,10 @@ class AppliedAction:
         ``AppliedAction.from_dict(d, model=...)`` -- see
         ``CalibratedModel.to_dict``.
         """
-        from .. import __version__
-
-        return {
-            "probcal_schema": SCHEMA_VERSION,
-            "probcal_version": __version__,
-            "class": type(self).__name__,
-            "params": {},
-            "state": {
+        return envelope(
+            self,
+            params={},
+            state={
                 "kind": self.kind,
                 "offset": self.offset.to_dict() if self.offset is not None else None,
                 "composed": (
@@ -281,12 +369,12 @@ class AppliedAction:
                 "window": list(self.window),
                 "audit": dict(self.audit),
             },
-            "fit_meta": {},
-        }
+            fit_meta={},
+        )
 
     @classmethod
     def from_dict(cls, d: dict, *, model: object = None) -> "AppliedAction":
-        """Rebuild from :meth:`to_dict` output.
+        """Rebuild from :meth:`to_dict` output (``from_json`` forwards ``model=``).
 
         Parameters
         ----------
@@ -302,9 +390,7 @@ class AppliedAction:
         ValueError
             If the schema version is unknown or the payload class differs.
         """
-        check_schema(d)
-        if d.get("class") != cls.__name__:
-            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
+        check_payload(cls, d)
         st = d["state"]
         offset = LogitOffset.from_dict(st["offset"]) if st["offset"] is not None else None
         composed: object | None = None
@@ -324,27 +410,3 @@ class AppliedAction:
             window=tuple(st["window"]),
             audit=dict(st["audit"]),
         )
-
-    def to_json(
-        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
-    ) -> str | None:
-        """Serialize to JSON text, or to ``path`` when given (returns None then)."""
-        text = json.dumps(self.to_dict(), indent=indent)
-        if path is None:
-            return text
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        return None
-
-    @classmethod
-    def from_json(cls, path_or_str: object, *, model: object = None) -> "AppliedAction":
-        """Load from a JSON string or a filesystem path (see :meth:`from_dict`)."""
-        text = str(path_or_str)
-        if not text.lstrip().startswith("{"):
-            with open(text, encoding="utf-8") as fh:
-                text = fh.read()
-        return cls.from_dict(json.loads(text), model=model)
-
-    def fingerprint(self) -> str:
-        """SHA-256 of the canonical serialized form (version/timestamp blind)."""
-        return fingerprint_of_dict(self.to_dict())

@@ -17,8 +17,9 @@ reported, not gated.
 
 import numpy as np
 
-from probcal._corp import corp_bands, corp_fit, eval_step
+from probcal._corp import corp_bands, corp_fit
 from probcal._math import expit
+from probcal._steps import eval_step
 
 
 def _draw(n: int, seed: int) -> tuple[np.ndarray, np.ndarray]:
@@ -36,8 +37,8 @@ def coverage(n: int, runs: int, n_resamples: int, level: float, seed: int) -> di
         y, p = _draw(n, seed=seed * 1_000_003 + r)
         w = np.ones(n)
         grid, lo, hi = corp_bands(y, p, w, "consistency", level, n_resamples, seed + r)
-        block_lo, block_hi, block_level, _, _ = corp_fit(y, p, w)
-        fit = eval_step(block_lo, block_hi, block_level, grid)
+        block_lo, _, block_level, _, _ = corp_fit(y, p, w)
+        fit = eval_step(block_lo, block_level, grid)
         inside = (fit >= lo) & (fit <= hi)
         pointwise[r] = inside.mean()
         uniform[r] = bool(inside.all())

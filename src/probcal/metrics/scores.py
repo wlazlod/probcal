@@ -9,16 +9,11 @@ import numpy as np
 
 from .._math import loess
 from .._results import _ResultBase
-from .._validation import validate_binary_y, validate_scores, validate_weights
+from .._validation import EPS
+from ._binstats import bin_stats
 
-
-def _prep(y: object, p: object, sample_weight: object) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    y_arr = validate_binary_y(y)
-    p_arr = validate_scores(p, name="p")
-    w_arr = validate_weights(sample_weight, len(p_arr))
-    if len(y_arr) != len(p_arr):
-        raise ValueError("y and p must have equal length")
-    return y_arr, p_arr, w_arr
+# Re-exported: offset, monitor and the plotting helpers import ``_prep`` from here.
+from ._common import _prep as _prep
 
 
 def log_loss(y: object, p: object, *, sample_weight: object = None) -> float:
@@ -33,7 +28,7 @@ def log_loss(y: object, p: object, *, sample_weight: object = None) -> float:
     p : array_like
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
@@ -55,7 +50,7 @@ def brier_score(y: object, p: object, *, sample_weight: object = None) -> float:
     p : array_like
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
@@ -78,7 +73,7 @@ def brier_skill_score(y: object, p: object, *, sample_weight: object = None) -> 
     p : array_like
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
@@ -144,8 +139,11 @@ def murphy_decomposition(
     bias_corrected : bool, keyword-only
         If ``True`` (default ``False``), apply the Ferro & Fricker (2012)
         within-bin variance correction to the reliability and resolution terms.
+        The variance uses each bin's effective count (sum of the
+        Kish-rescaled weights, see :mod:`probcal.metrics._common`; the raw
+        count for unit weights).
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
@@ -153,33 +151,27 @@ def murphy_decomposition(
         Reliability, resolution, and uncertainty terms.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    from .binned import _bin_index
-
-    idx, m = _bin_index(p_arr, n_bins, strategy)
-    w_tot = float(w.sum())
+    bs = bin_stats(y_arr, p_arr, w, n_bins, strategy)
+    share = bs.w_sum / float(w.sum())
     y_bar = float(np.average(y_arr, weights=w))
-    rel = res = 0.0
-    for b in range(m):
-        mask = idx == b
-        if not np.any(mask):
-            continue
-        wb = float(w[mask].sum())
-        pb = float(np.average(p_arr[mask], weights=w[mask]))
-        yb = float(np.average(y_arr[mask], weights=w[mask]))
-        nb = int(np.sum(mask))
-        rel_term = (pb - yb) ** 2
-        res_term = (yb - y_bar) ** 2
-        if bias_corrected and nb > 1:
-            var_yb = yb * (1.0 - yb) / (nb - 1)
-            rel_term = max(rel_term - var_yb, 0.0)
-            res_term = max(res_term - var_yb, 0.0)
-        rel += (wb / w_tot) * rel_term
-        res += (wb / w_tot) * res_term
+    yb = bs.rate
+    rel_term = (bs.p_mean - yb) ** 2
+    res_term = (yb - y_bar) ** 2
+    if bias_corrected:
+        # Effective bin counts under the package weight convention
+        # (Kish-rescaled weights; raw counts for unit weights).
+        n_eff = bs.w_sum * (float(w.sum()) / float(np.dot(w, w)))
+        multi = n_eff > 1.0
+        var_yb = yb * (1.0 - yb) / np.where(multi, n_eff - 1.0, 1.0)
+        rel_term = np.where(multi, np.maximum(rel_term - var_yb, 0.0), rel_term)
+        res_term = np.where(multi, np.maximum(res_term - var_yb, 0.0), res_term)
+    rel = float(np.sum(share * rel_term))
+    res = float(np.sum(share * res_term))
     unc = y_bar * (1.0 - y_bar)
     return MurphyDecomposition(reliability=rel, resolution=res, uncertainty=unc)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class MurphyCurve(_ResultBase):
     """Murphy diagram: mean elementary score of the binary mean functional across thresholds.
 
@@ -255,7 +247,7 @@ def murphy_curve(
         or an explicit 1-D array of thresholds in ``[0, 1]`` (sorted
         internally).
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
@@ -347,7 +339,7 @@ def logloss_calibration_refinement(
     frac : float, keyword-only
         LOESS smoothing fraction passed through to the recalibration curve.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
@@ -355,7 +347,7 @@ def logloss_calibration_refinement(
         Calibration and refinement terms.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    c = np.clip(loess(p_arr, y_arr, frac=frac), 1e-12, 1.0 - 1e-12)
+    c = np.clip(loess(p_arr, y_arr, frac=frac), EPS, 1.0 - EPS)
     kl = c * (np.log(c) - np.log(p_arr)) + (1.0 - c) * (np.log1p(-c) - np.log1p(-p_arr))
     ent = -(c * np.log(c) + (1.0 - c) * np.log1p(-c))
     return LogLossDecomposition(

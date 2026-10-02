@@ -92,3 +92,80 @@ def test_scaling_binning_interpret_two_stages() -> None:
     interp = cal.interpret()
     assert "a" in interp.param_names and "b" in interp.param_names
     assert "n_bins" in interp.param_names
+
+
+# ---------------------------------------------------------------- 0.3.4 regressions
+
+
+def test_scaling_binning_decreasing_platt_is_not_monotone() -> None:
+    """CAL-2: a decreasing Platt stage makes the composite decreasing; 0.3.x
+    still claimed is_monotone_=True and interval_inverse returned lo > hi."""
+    import pytest
+
+    s, y = _sample(2000)
+    cal = ScalingBinningCalibrator(n_bins=5).fit(s, 1.0 - y)  # labels reversed
+    assert cal.platt_.a_ < 0.0
+    assert cal.is_monotone_ is False
+    with pytest.raises(NotImplementedError, match="monotone"):
+        cal.interval_inverse(0.2, 0.6)
+    again = ScalingBinningCalibrator.from_json(cal.to_json())
+    assert again.is_monotone_ is False
+
+
+def test_scaling_binning_inverse_bounds_stay_in_preimage() -> None:
+    """CAL-11: both bounds are inside the preimage even at bin-level targets."""
+    cal = ScalingBinningCalibrator(n_bins=12).fit(*_sample(3000))
+    levels = cal.bin_value_
+    for j in range(1, len(levels) - 1):
+        for lo, hi in ((levels[0], levels[j]), (levels[j], levels[-1]), (levels[j], levels[j])):
+            raw_lo, raw_hi = cal.interval_inverse(float(lo), float(hi))
+            p = cal.predict_proba(np.array([raw_lo, raw_hi]))
+            assert lo <= p[0] <= hi and lo <= p[1] <= hi, (j, lo, hi, p)
+
+
+def test_histogram_inverse_bounds_stay_in_preimage() -> None:
+    s, y = _sample(4000)
+    cal = HistogramBinningCalibrator(n_bins=4, shrinkage=None).fit(np.sort(s), np.sort(y))
+    assert cal.is_monotone_
+    levels = cal.bin_rate_
+    for j in range(len(levels)):
+        raw_lo, raw_hi = cal.interval_inverse(float(levels[j]), float(levels[j]))
+        p = cal.predict_proba(np.array([raw_lo, raw_hi]))
+        np.testing.assert_array_equal(p, [levels[j], levels[j]])
+
+
+def test_equal_mass_edges_use_sample_weights() -> None:
+    """CAL-8: "mass" bins carry equal *weight*; 0.3.x ignored the weights."""
+    s = np.linspace(0.01, 0.99, 400)
+    y = (RNG.random(400) < s).astype(float)
+    w = np.where(s < 0.5, 9.0, 1.0)  # 90% of the weight below 0.5
+    cal = HistogramBinningCalibrator(n_bins=4).fit(s, y, sample_weight=w)
+    mass = cal.bin_weight_ / cal.bin_weight_.sum()
+    np.testing.assert_allclose(mass, 0.25, atol=0.02)
+    unit = HistogramBinningCalibrator(n_bins=4).fit(s, y)
+    np.testing.assert_array_equal(unit.edges_, np.quantile(s, [0.25, 0.5, 0.75]))
+
+
+def test_scaling_binning_weighted_edges() -> None:
+    s = np.linspace(0.01, 0.99, 400)
+    y = (RNG.random(400) < s).astype(float)
+    w = np.where(s < 0.5, 9.0, 1.0)
+    cal = ScalingBinningCalibrator(n_bins=4).fit(s, y, sample_weight=w)
+    g = cal.platt_.predict_proba(s)
+    idx = np.searchsorted(cal.edges_, g, side="right")
+    mass = np.bincount(idx, weights=w, minlength=4) / w.sum()
+    np.testing.assert_allclose(mass, 0.25, atol=0.02)
+
+
+def test_n_bins_validated_at_fit_not_init() -> None:
+    """CAL-25: sklearn convention — construction never raises."""
+    import pytest
+
+    s, y = _sample(200)
+    for bad in (0, -3, 2.5, True, None):
+        hist = HistogramBinningCalibrator(n_bins=bad)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="n_bins"):
+            hist.fit(s, y)
+        sb = ScalingBinningCalibrator(n_bins=bad)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="n_bins"):
+            sb.fit(s, y)

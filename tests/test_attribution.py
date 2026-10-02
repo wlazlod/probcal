@@ -130,3 +130,52 @@ def test_export() -> None:
     import probcal
 
     assert "adjust_attributions" in probcal.__all__
+
+
+class _ProbaModel:
+    """Model whose first feature is already its probability."""
+
+    def predict_proba(self, X):
+        s = np.asarray(X, dtype=float)[:, 0]
+        return np.column_stack([1.0 - s, s])
+
+
+def test_calibrated_model_is_read_through_its_chain() -> None:
+    # OFF-9: a CalibratedModel used to be called with scores as features (IndexError).
+    from probcal.wrapper import CalibratedModel
+
+    s = expit(RNG.normal(-1.0, 1.4, 3000))
+    y = (RNG.random(3000) < expit(0.8 * logit(s) - 0.4)).astype(float)
+    wrapped = CalibratedModel(_ProbaModel(), PlattCalibrator()).fit(s[:, None], y)
+    wrapped.offset_to(delta=0.25)
+    phi, base, _ = _shap_setup()
+    res = adjust_attributions(phi, base, wrapped)
+    ref = adjust_attributions(phi, base, wrapped.chain_)
+    assert res.method_used == "affine-exact"
+    np.testing.assert_allclose(res.phi_adj, ref.phi_adj, atol=0.0)
+    iso = CalibratedModel(_ProbaModel(), IsotonicCalibrator()).fit(s[:, None], y)
+    assert adjust_attributions(phi, base, iso).method_used == "aumann-shapley"
+
+
+def test_affine_target_is_exact_beyond_the_probability_clip() -> None:
+    # OFF-10: the affine target went through predict_proba, clipped at
+    # logit(1 - 1e-12) ~ 27.6, so huge margins did not reconstruct.
+    cal = _fitted_platt()
+    a, b = cal.affine_logit_coeffs_
+    phi = np.array([[20.0, 25.0], [-30.0, -15.0]])
+    res = adjust_attributions(phi, 0.0, cal)
+    z = phi.sum(axis=1)
+    np.testing.assert_allclose(res.target, a * z + b, rtol=1e-14)
+    assert res.max_reconstruction_error < 1e-12
+
+
+def test_adjusted_attribution_equality_is_array_aware() -> None:
+    # OFF-3: the frozen dataclass's generated __eq__ raised on arrays.
+    phi, base, _ = _shap_setup()
+    cal = _fitted_platt()
+    r1 = adjust_attributions(phi, base, cal)
+    r2 = adjust_attributions(phi, base, cal)
+    assert r1 == r2
+    assert r1 != adjust_attributions(phi * 2.0, base, cal)
+    with pytest.raises(TypeError):
+        hash(r1)

@@ -4,11 +4,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ._math import bisect, expit
+from ._math import bisect, expit, logit
+from ._results import _ResultBase
 
 
-@dataclass(frozen=True)
-class PdPortfolio:
+@dataclass(frozen=True, eq=False)
+class PdPortfolio(_ResultBase):
     """Synthetic PD portfolio: model scores, outcomes, and the true probabilities.
 
     Attributes
@@ -19,7 +20,8 @@ class PdPortfolio:
     y : numpy.ndarray
         Bernoulli outcomes drawn from ``p_true``.
     p_true : numpy.ndarray
-        True conditional probabilities (mean anchored at ``event_rate``).
+        True conditional probabilities (mean anchored at ``event_rate``
+        when ``intercept=0``).
     """
 
     scores: np.ndarray
@@ -48,10 +50,18 @@ def make_pd_portfolio(
     with ``a_lo = slope * (1 + asymmetry)`` (low-PD tail) and ``a_hi = slope``
     (high tail), so ``asymmetry != 0`` produces exactly the one-sided tail
     distortion low-event-rate portfolios exhibit, and `BetaCalibrator` can
-    recover the generative exponents. ``c`` absorbs ``intercept`` plus a
-    portfolio-level anchor solved so that ``mean(p_true) == event_rate``
-    (unique by monotonicity, via bisection). With ``slope=1, asymmetry=0,
-    intercept=0`` the scores are exactly calibrated.
+    recover the generative exponents. ``c = c_anchor + intercept``:
+    ``c_anchor`` is solved so that the undistorted-by-intercept portfolio
+    has ``mean(p_true) == event_rate`` (unique by monotonicity, via
+    bisection), and ``intercept`` is then added on top — a deliberate
+    calibration-in-the-large error of the scores (the true mean moves away
+    from ``event_rate``; the scores do not).
+
+    The identity distortion (``slope=1, asymmetry=0``) anchors the *scores*
+    instead: their logits are shifted so that ``mean(scores) ==
+    event_rate``, and ``p_true = sigma(logit(scores) + intercept)``. With
+    ``intercept=0`` too, the scores are exactly calibrated and the
+    portfolio mean is ``event_rate``.
 
     Parameters
     ----------
@@ -63,7 +73,10 @@ def make_pd_portfolio(
         Base exponent of the distortion; ``< 1`` means the model's scores are
         too spread out (overconfident).
     intercept : float
-        Additional log-odds shift applied before the mean anchor is solved.
+        Log-odds shift of ``p_true`` applied *after* the mean anchor:
+        ``intercept > 0`` means the scores underestimate risk
+        (calibration-in-the-large error). Until 0.3 it was applied before the
+        anchor and therefore had no effect.
     asymmetry : float
         Relative extra distortion of the low-PD tail (``a_lo/a_hi - 1``).
     score_location, score_scale : float
@@ -81,17 +94,15 @@ def make_pd_portfolio(
     s = expit(rng.normal(score_location, score_scale, n))
     a_lo = slope * (1.0 + asymmetry)
     a_hi = slope
-    core = a_lo * np.log(s) - a_hi * np.log1p(-s) + intercept
+    identity_case = slope == 1.0 and asymmetry == 0.0
+    core = logit(s) if identity_case else a_lo * np.log(s) - a_hi * np.log1p(-s)
 
-    identity_case = slope == 1.0 and asymmetry == 0.0 and intercept == 0.0
+    def gap(c: float) -> float:
+        return float(np.mean(expit(core + c))) - event_rate
+
+    anchored = core + bisect(gap, -60.0, 60.0, tol=1e-14)
     if identity_case:
-        p_true = s.copy()
-    else:
-
-        def gap(c: float) -> float:
-            return float(np.mean(expit(core + c))) - event_rate
-
-        c_anchor = bisect(gap, -60.0, 60.0, tol=1e-14)
-        p_true = expit(core + c_anchor)
+        s = expit(anchored)
+    p_true = expit(anchored + intercept)
     y = (rng.random(n) < p_true).astype(np.float64)
     return PdPortfolio(scores=s, y=y, p_true=p_true)

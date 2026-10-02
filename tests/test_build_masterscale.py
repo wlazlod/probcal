@@ -14,9 +14,19 @@ from probcal import (
     make_pd_portfolio,
 )
 from probcal.metrics import jeffreys_grade_test, pluto_tasche_from_arrays
-from probcal.thresholds import _prebin, _segment_objective
+from probcal.thresholds import _prebin
 
 PORT = make_pd_portfolio(n=8000, random_state=42)
+
+
+def _segment_objective(w, e, w_total, objective, target):
+    """Scalar reference objective of one grade, written independently of the DP."""
+    if objective == "likelihood":
+        if w <= 0 or e <= 0 or e >= w:
+            return 0.0
+        r = e / w
+        return e * np.log(r) + (w - e) * np.log1p(-r)
+    return -((w / w_total - target) ** 2)
 
 
 def _brute_force(y, p, k, objective, min_count, min_events, prebins, target=None):
@@ -134,3 +144,22 @@ def test_weights_names_and_speed() -> None:
     t0 = time.perf_counter()
     build_masterscale(PORT.y, PORT.scores, n_grades=8)
     assert time.perf_counter() - t0 < 2.0
+
+
+@pytest.mark.parametrize("bad", [0, -1, 2.5, True, "3"])
+def test_n_grades_and_prebins_must_be_positive_ints(bad) -> None:
+    # OFF-18: these used to fall through to a numpy error deep in the DP.
+    with pytest.raises(ValueError, match="n_grades must be a positive integer"):
+        build_masterscale(PORT.y, PORT.scores, n_grades=bad)
+    with pytest.raises(ValueError, match="prebins must be a positive integer"):
+        build_masterscale(PORT.y, PORT.scores, n_grades=3, prebins=bad)
+
+
+def test_from_edges_carries_provenance() -> None:
+    # OFF-23: build_masterscale builds the scale once, via from_edges(provenance=).
+    ms = Masterscale.from_edges([0.1], provenance={"source": "test", "edges": [0.1]})
+    assert ms.provenance == {"source": "test", "edges": [0.1]}
+    built = build_masterscale(PORT.y, PORT.scores, n_grades=3)
+    assert built == Masterscale.from_edges(
+        built.edges[1:-1], names=built.names, provenance=built.provenance
+    )

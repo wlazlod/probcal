@@ -29,7 +29,7 @@ g(s) = \sigma\bigl(a z + b\bigr), \qquad z = \operatorname{logit}(s),
 with slope \( a \) and intercept \( b \) fitted by maximum likelihood, an ordinary logistic
 regression of the outcome on a single covariate. `PlattCalibrator` fits it with the shared IRLS
 core (`probcal._math.irls_logistic`), whose step-halved Newton iteration decreases the objective
-at every step (see [Separation, steep maps, and convergence](#separation-steep-maps-and-convergence)).
+at every step and declares convergence on the size of the *full* Newton step (see [Separation, steep maps, and convergence](#separation-steep-maps-and-convergence)).
 
 **Fitting targets.** Platt's original recipe does not regress on the hard labels
 \( y \in \{0, 1\} \). To keep the fitted sigmoid away from degenerate solutions when one class
@@ -74,9 +74,12 @@ g(s) = \sigma\!\left(\frac{z}{T}\right), \qquad T > 0 .
 
 The single parameter \( T \) is fitted by minimizing the negative log-likelihood on the
 calibration set. The objective is smooth and, on the reparameterization \( u = 1/T \), convex.
-`TemperatureCalibrator` solves it with a guarded one-dimensional Newton iteration
-(`probcal._math.newton_1d`) and falls back to bisection when the Newton step leaves the
-bracket.
+`TemperatureCalibrator` solves the score equation in \( u \) by bisection on a fixed bracket:
+the score is non-decreasing in \( u \) because the objective is convex, so a sign change
+brackets the unique root (`parametric._fit_logit_scale`, shared with the beta variant
+`"a"`). Without a sign change, or when the score vanishes exactly at a bracket end (a
+saturated sigmoid on separated data), there is no interior minimum: the fit clamps to the
+boundary and warns.
 
 **Interpretation.** \( T > 1 \) divides every logit by more than one, pulling probabilities
 toward \( 1/2 \): the model was overconfident and is being softened. \( T < 1 \) sharpens an
@@ -239,6 +242,13 @@ any true slope above about 1.1 pushes fitted log-odds past 30 at the extremes. V
 data with a true slope of 1.5, Platt reported \( a \approx 1.18 \) alongside a misleading
 separation warning. The current core instead halves each Newton step until the objective
 decreases, so steep maps are simply fitted.
+
+Convergence is judged on the **full** Newton step, `max|H⁻¹g| < tol · (1 + max|β|)`, not on
+the step-halved one. A line search that stalls (no strict decrease is possible) counts as
+converged only if that full step is already below 10⁻⁵ relative, the floating-point floor.
+Along a quasi-separation ray the gradient can vanish while the full step stays large; since
+0.3.4 that case reports `converged=False`, warns, and returns the ridge refit instead of
+claiming convergence.
 
 What to check after fitting: `converged_` on `PlattCalibrator` and `BetaCalibrator` records
 whether IRLS converged (an unconverged fit warns at fit time and is noted by `interpret()`), and

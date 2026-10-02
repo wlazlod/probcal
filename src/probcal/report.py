@@ -38,9 +38,11 @@ from typing import Any
 import numpy as np
 
 from . import __version__
-from ._results import _format_cell
+from ._results import _format_cell, _ResultBase
 from ._serialize import data_fingerprint
+from ._validation import validate_binary_y, validate_scores
 from .curves import corp_reliability, reliability_binned, reliability_smooth
+from .masterscale import Masterscale
 from .metrics import (
     evaluate,
     jeffreys_grade_test,
@@ -160,6 +162,11 @@ def _table(fmt: str, headers: "tuple[str, ...]", rows: "list[tuple[Any, ...]]") 
     return "\n".join([header_line, sep_line, *body_lines]) + "\n"
 
 
+def _result_table(fmt: str, result: _ResultBase) -> str:
+    """Render a result's own table rows (the ones its ``repr`` prints)."""
+    return _table(fmt, result._headers(), result._rows())
+
+
 def _kv(fmt: str, pairs: "Sequence[tuple[str, object]]") -> str:
     if fmt == "html":
         items = "".join(
@@ -237,10 +244,8 @@ def _section_reliability(
 def _section_evaluate(
     fmt: str, y_arr: np.ndarray, p_arr: np.ndarray, *, n_boot: int, seed: int
 ) -> str:
-    report = evaluate(y_arr, p_arr, n_boot=n_boot, seed=seed)
-    headers = ("metric", "value", "ci_low", "ci_high")
-    rows = list(zip(report.names, report.values, report.ci_low, report.ci_high, strict=True))
-    return _section(fmt, "Metric report", _table(fmt, headers, rows))
+    report = evaluate(y_arr, p_arr, n_boot=n_boot, random_state=seed)
+    return _section(fmt, "Metric report", _result_table(fmt, report))
 
 
 def _section_corp_decomposition(fmt: str, corp: Any) -> str:
@@ -254,23 +259,22 @@ def _section_corp_decomposition(fmt: str, corp: Any) -> str:
     return _section(fmt, "CORP decomposition", _table(fmt, headers, rows) + note_html)
 
 
-def _grade_order(p_arr: np.ndarray, grades: object) -> "tuple[str, ...]":
-    """Grade labels sorted best to worst by mean predicted probability (ascending)."""
-    g_arr = np.array([str(x) for x in np.asarray(grades)])
-    labels = sorted(set(g_arr.tolist()))
-    mean_p = {lab: float(np.mean(p_arr[g_arr == lab])) for lab in labels}
-    return tuple(sorted(labels, key=lambda lab: mean_p[lab]))
-
-
 def _section_grades(
     fmt: str, y_arr: np.ndarray, p_arr: np.ndarray, grades: object, *, sink: _FigureSink
 ) -> str:
     from .metrics.grade import _resolve_grades
 
-    is_scale = hasattr(grades, "assign") and hasattr(grades, "table")
+    is_scale = isinstance(grades, Masterscale)
     labels, scale_order = _resolve_grades(grades, p_arr)
-    order = scale_order if scale_order is not None else _grade_order(p_arr, labels)
-    backtest = jeffreys_grade_test(y_arr, p_arr, grades)
+    if scale_order is not None:
+        order = scale_order
+    else:  # best to worst by mean predicted probability; ties by label
+        present = sorted(set(labels.tolist()))
+        mean_p = {lab: float(np.mean(p_arr[labels == lab])) for lab in present}
+        order = tuple(sorted(present, key=lambda lab: mean_p[lab]))
+    # One order for every table: the backtest must not fall back to sorting
+    # the labels lexicographically ("10" before "2").
+    backtest = jeffreys_grade_test(y_arr, p_arr, grades, order=order)
 
     def draw() -> Any:
         from .plots import plot_grade_backtest
@@ -310,22 +314,9 @@ def _section_grades(
         order_note_block = f"\n{order_note}\n"
 
     table_block = ""
-    if is_scale:
-        tab = grades.table(y_arr, p_arr)  # type: ignore[attr-defined]
-        t_headers = ("grade", "lo", "hi", "n", "events", "mean_pd", "observed_rate")
-        t_rows = list(
-            zip(
-                tab.grades,
-                tab.lo,
-                tab.hi,
-                tab.n,
-                tab.events,
-                tab.mean_pd,
-                tab.observed_rate,
-                strict=True,
-            )
-        )
-        table_block = _subheading(fmt, "Grade table") + _table(fmt, t_headers, t_rows)
+    if isinstance(grades, Masterscale):
+        tab = grades.table(y_arr, p_arr)
+        table_block = _subheading(fmt, "Grade table") + _result_table(fmt, tab)
 
     body = (
         order_note_block
@@ -351,21 +342,14 @@ def _section_groups(
     seed: int,
     sink: _FigureSink,
 ) -> str:
-    grouped = evaluate(y_arr, p_arr, n_boot=n_boot, seed=seed, by=by)
+    grouped = evaluate(y_arr, p_arr, n_boot=n_boot, random_state=seed, by=by)
 
     def draw() -> Any:
         from .plots import plot_reliability
 
         return plot_reliability(reliability_binned(y_arr, p_arr), y=y_arr, p=p_arr, by=by)
 
-    headers = ("group", "metric", "value", "ci_low", "ci_high")
-    panels = [("pooled", grouped.pooled), *zip(grouped.groups, grouped.reports, strict=True)]
-    rows = [
-        (label, n, v, lo, hi)
-        for label, rep in panels
-        for n, v, lo, hi in zip(rep.names, rep.values, rep.ci_low, rep.ci_high, strict=True)
-    ]
-    body = sink.figure(draw, "groups_panel") + _table(fmt, headers, rows)
+    body = sink.figure(draw, "groups_panel") + _result_table(fmt, grouped)
     return _section(fmt, "Grouped evaluation", body)
 
 
@@ -484,8 +468,10 @@ def validation_report(
     Raises
     ------
     ValueError
-        If ``format`` is not ``"html"`` or ``"markdown"``, or if
-        ``format="markdown"`` is given without ``path``.
+        If ``format`` is not ``"html"`` or ``"markdown"``, if
+        ``format="markdown"`` is given without ``path``, or if ``y``/``p``
+        fail validation (non-binary ``y``, ``p`` outside ``[0, 1]``,
+        unequal lengths) — checked once, before anything is rendered.
     ImportError
         If matplotlib is not installed (every section renders at least one
         figure); names the ``probcal[viz]`` extra.
@@ -504,8 +490,10 @@ def validation_report(
     if format == "markdown" and path is None:
         raise ValueError('format="markdown" requires path (figures are written next to it)')
 
-    y_arr = np.asarray(y, dtype=np.float64)
-    p_arr = np.asarray(p, dtype=np.float64)
+    y_arr = validate_binary_y(y)
+    p_arr = validate_scores(p, name="p")
+    if len(y_arr) != len(p_arr):
+        raise ValueError(f"y and p must have equal length, got {len(y_arr)} and {len(p_arr)}")
     sink = _FigureSink(format, path)
 
     page_title = title if title is not None else "probcal validation report"
@@ -519,8 +507,8 @@ def validation_report(
         fp_pairs.append(("calibrator", calibrator.fingerprint()))
     if monitor is not None:
         fp_pairs.append(("monitor", monitor.fingerprint()))
-    if grades is not None and hasattr(grades, "fingerprint") and hasattr(grades, "assign"):
-        fp_pairs.append(("masterscale", grades.fingerprint()))  # type: ignore[attr-defined]
+    if isinstance(grades, Masterscale):
+        fp_pairs.append(("masterscale", grades.fingerprint()))
     fingerprints = _kv(format, fp_pairs)
 
     corp = corp_reliability(y_arr, p_arr, n_resamples=n_boot, random_state=seed)

@@ -34,7 +34,7 @@ _REQUIRES_RE = re.compile(r"<!--\s*docs:\s*requires\s+([^>]*?)\s*-->")
 class _StubModel:
     """Sklearn-free stand-in for a scoring model (mirrors tests/test_golden.py)."""
 
-    def fit(self, X, y):  # noqa: ARG002
+    def fit(self, X, y):
         return self
 
     def predict_proba(self, X):
@@ -59,7 +59,7 @@ def _make_vocabulary() -> dict:
     p_cal = BetaCalibrator().fit(s_cal, y_cal).predict_proba(s_cal)
     ms = Masterscale.from_edges([0.01, 0.05], names=["G1", "G2", "G3"])
     grades = ms.assign(p_cal)
-    mon = CalibrationMonitor(alpha=0.05)
+    mon = CalibrationMonitor(alpha=0.05, grades=ms.names)
     for k in range(3):
         idx = slice(k * 300, (k + 1) * 300)
         mon.update(y_cal[idx], p_cal[idx], grade=grades[idx], label=f"batch-{k}")

@@ -42,8 +42,8 @@ def test_evaluate_by_none_is_byte_identical_to_0_2_0_fixture() -> None:
 
 def test_evaluate_by_none_matches_omitting_the_argument() -> None:
     d = make_pd_portfolio(n=400, random_state=3)
-    a = evaluate(d.y, d.scores, n_boot=40, seed=7, metrics=("brier", "ece"))
-    b = evaluate(d.y, d.scores, n_boot=40, seed=7, metrics=("brier", "ece"), by=None)
+    a = evaluate(d.y, d.scores, n_boot=40, random_state=7, metrics=("brier", "ece"))
+    b = evaluate(d.y, d.scores, n_boot=40, random_state=7, metrics=("brier", "ece"), by=None)
     assert isinstance(a, MetricReport)
     assert isinstance(b, MetricReport)
     assert a.names == b.names
@@ -55,7 +55,7 @@ def test_evaluate_by_none_matches_omitting_the_argument() -> None:
 def test_evaluate_by_returns_grouped_report_in_sorted_order() -> None:
     y, p = _calibrated(900)
     by = np.where(p < 0.3, "low", np.where(p < 0.6, "mid", "high"))
-    rep = evaluate(y, p, n_boot=30, seed=11, metrics=("brier", "log_loss"), by=by)
+    rep = evaluate(y, p, n_boot=30, random_state=11, metrics=("brier", "log_loss"), by=by)
     assert isinstance(rep, GroupedMetricReport)
     assert rep.groups == ("high", "low", "mid")  # sorted lexicographically
     assert len(rep.reports) == 3
@@ -69,10 +69,12 @@ def test_evaluate_by_group_values_match_direct_call_with_offset_seed() -> None:
     seed = 11
     n_boot = 25
     names = ("brier", "log_loss")
-    grouped = evaluate(y, p, n_boot=n_boot, seed=seed, metrics=names, by=by)
+    grouped = evaluate(y, p, n_boot=n_boot, random_state=seed, metrics=names, by=by)
     for i, g in enumerate(grouped.groups):
         mask = by == g
-        direct = evaluate(y[mask], p[mask], n_boot=n_boot, seed=seed + 1000 * i, metrics=names)
+        direct = evaluate(
+            y[mask], p[mask], n_boot=n_boot, random_state=seed + 1000 * i, metrics=names
+        )
         rep = grouped.reports[i]
         assert rep.names == direct.names
         np.testing.assert_array_equal(rep.values, direct.values)
@@ -86,8 +88,8 @@ def test_evaluate_by_pooled_matches_direct_call_with_seed_unchanged() -> None:
     seed = 5
     n_boot = 20
     names = ("brier",)
-    grouped = evaluate(y, p, n_boot=n_boot, seed=seed, metrics=names, by=by)
-    direct = evaluate(y, p, n_boot=n_boot, seed=seed, metrics=names)
+    grouped = evaluate(y, p, n_boot=n_boot, random_state=seed, metrics=names, by=by)
+    direct = evaluate(y, p, n_boot=n_boot, random_state=seed, metrics=names)
     np.testing.assert_array_equal(grouped.pooled.values, direct.values)
     np.testing.assert_array_equal(grouped.pooled.ci_low, direct.ci_low)
     np.testing.assert_array_equal(grouped.pooled.ci_high, direct.ci_high)
@@ -132,3 +134,19 @@ def test_evaluate_by_repr_smoke() -> None:
     assert "GroupedMetricReport" in text
     assert "pooled" in text
     assert "low" in text and "high" in text
+
+
+def test_evaluate_by_groups_raw_values_and_rejects_display_clash() -> None:
+    # Regression (MET-29): labels were stringified before grouping, so the
+    # integer 1 and the string "1" were silently merged into one group.
+    y, p = _calibrated(400)
+    mixed = [1 if i % 2 else "1" for i in range(400)]
+    with pytest.raises(ValueError, match="both display as '1'"):
+        evaluate(y, p, n_boot=5, metrics=("brier",), by=mixed)
+    ints = np.where(p < 0.3, 10, 2)
+    rep = evaluate(y, p, n_boot=5, metrics=("brier",), by=ints)
+    assert rep.groups == ("10", "2")  # display-name order, as before
+    assert list(rep.counts) == [int((ints == 10).sum()), int((ints == 2).sum())]
+    as_list = evaluate(y, p, n_boot=5, metrics=("brier",), by=ints.tolist())
+    assert as_list.groups == rep.groups
+    np.testing.assert_array_equal(as_list.reports[0].values, rep.reports[0].values)

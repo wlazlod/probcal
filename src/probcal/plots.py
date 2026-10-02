@@ -4,7 +4,12 @@ All computation lives in ``probcal.curves`` and ``probcal.metrics``; this
 module only renders. The logit-scale views are the flagship for low-PD
 portfolios: axis ticks sit at logit positions but are labeled in
 probabilities, so the low-probability region stays readable. Styling is
-applied per call via ``rc_context`` — global ``rcParams`` are never touched.
+applied per call via ``rc_context`` — global ``rcParams`` are never touched —
+and the axes-level part of it (spines, grid) is applied explicitly as well, so
+a caller-supplied ``ax`` is styled the same as one created here. Figures this
+module creates are made through ``pyplot`` (so ``plt.show()`` and notebook
+display work) and are therefore registered in pyplot's figure manager; close
+them with ``plt.close(fig)`` when rendering many in a loop.
 Theory: ``docs/concepts/visualization.md``.
 """
 
@@ -14,26 +19,26 @@ from typing import Any
 import numpy as np
 
 from ._math import logit
-
-# _HAS_MPL, _RUG_MAX, _TICK_PROBS: unused directly here, re-exported so
-# `probcal.plots._STYLE`-style attribute access keeps working post-split.
 from ._plots_common import (
     _AMBER,
     _BLUE,
-    _BOX,
+    _CI_CLIP_EPS,
+    _DEFAULT_LOGIT_SPAN,
     _GREEN,
     _GREY,
-    _HAS_MPL,  # noqa: F401
     _ORANGE,
     _RED,
-    _RUG_MAX,  # noqa: F401
     _STYLE,
-    _TICK_PROBS,  # noqa: F401
-    _logit_axis,
+    _get_axes,
     _plt,
     _require_mpl,
     _rug_subsample,
+    _scale_axis_labels,
+    _style_axes,
+    _text_box,
+    _tr,
 )
+from ._plots_diag import plot_attributes, plot_corp, plot_mcb_dsc, plot_murphy
 from ._results import (
     BeltResult,
     KernelReliabilityCurve,
@@ -44,6 +49,7 @@ from ._results import (
 )
 from .curves import EcceCurve, reliability_binned
 from .metrics import brier_score, reliability_summary, smooth_ece
+from .metrics.grade import JeffreysGradeResult
 
 # Names shown, in order, by `stats=<MetricReport>` when present in the report.
 _STATS_REPORT_NAMES = ("intercept", "slope", "ici", "smooth_ece", "brier")
@@ -60,31 +66,32 @@ def _draw_kernel_curve(ax: Any, curve: KernelReliabilityCurve, scale: str) -> No
     ribbon, and the ``smECE`` readout.
 
     Points whose event rate is exactly 0 or 1 have no finite logit and are
-    dropped on ``scale="logit"`` (mirrors the binned-point layer above).
+    dropped on ``scale="logit"`` (mirrors the binned-point layer); bootstrap
+    bounds at 0/1 are clipped to ``[1e-6, 1 - 1e-6]`` first. With fewer than
+    two drawable points only the readout is drawn.
     """
     from matplotlib.collections import LineCollection
 
     if scale == "logit":
         keep = (curve.event_rate > 0.0) & (curve.event_rate < 1.0)
         grid = curve.grid_logit[keep]
-        rate = logit(curve.event_rate[keep])
-        ci_low = logit(curve.ci_low[keep])
-        ci_high = logit(curve.ci_high[keep])
-        density = curve.density[keep]
     else:
+        keep = np.ones(len(curve.event_rate), dtype=bool)
         grid = curve.grid_p
-        rate = curve.event_rate
-        ci_low = curve.ci_low
-        ci_high = curve.ci_high
-        density = curve.density
+    rate = _tr(curve.event_rate[keep], scale)
+    ci_low = _tr(curve.ci_low[keep], scale, _CI_CLIP_EPS)
+    ci_high = _tr(curve.ci_high[keep], scale, _CI_CLIP_EPS)
+    density = curve.density[keep]
 
-    points = np.column_stack([grid, rate])
-    segments = np.stack([points[:-1], points[1:]], axis=1)
-    linewidths = 0.5 + 4.0 * density[:-1] / density.max()
-    lc = LineCollection(list(segments), linewidths=linewidths, colors=_ORANGE, label="smoothed")
-    ax.add_collection(lc)
-    ax.fill_between(grid, grid, rate, alpha=0.12, color=_ORANGE)
-    ax.fill_between(grid, ci_low, ci_high, alpha=0.15, color=_ORANGE)
+    if len(grid) >= 2:
+        points = np.column_stack([grid, rate])
+        segments = np.stack([points[:-1], points[1:]], axis=1)
+        peak = float(density.max()) or 1.0
+        linewidths = 0.5 + 4.0 * density[:-1] / peak
+        lc = LineCollection(list(segments), linewidths=linewidths, colors=_ORANGE, label="smoothed")
+        ax.add_collection(lc)
+        ax.fill_between(grid, grid, rate, alpha=0.12, color=_ORANGE)
+        ax.fill_between(grid, ci_low, ci_high, alpha=0.15, color=_ORANGE)
     ax.text(
         0.97,
         0.03,
@@ -113,7 +120,7 @@ def _draw_split_risk_dist(ax: Any, y_arr: np.ndarray, p_arr: np.ndarray, scale: 
     ev_heights = ev_counts / peak * _SPLIT_BASELINE
     ne_heights = ne_counts / peak * _SPLIT_BASELINE
 
-    x_edges = logit(edges) if scale == "logit" else edges
+    x_edges = _tr(edges, scale)
     widths = np.diff(x_edges)
     tf = ax.get_xaxis_transform()
     ax.bar(
@@ -126,35 +133,43 @@ def _draw_split_risk_dist(ax: Any, y_arr: np.ndarray, p_arr: np.ndarray, scale: 
     )  # fmt: skip
 
 
-def _stats_box_text(stats: bool | MetricReport, y_arr: np.ndarray, p_arr: np.ndarray) -> str:
-    """Build the ``stats`` box text: fixed n/events/intercept/slope/ICI/smECE/Brier
-    for ``stats=True``, or ``name = value [ci_low, ci_high]`` for the
-    ``_STATS_REPORT_NAMES`` present in a given ``MetricReport`` (plus n/events
-    from ``y``).
+def _stats_box_text(
+    stats: bool | MetricReport, annotate: bool, y_arr: np.ndarray, p_arr: np.ndarray
+) -> str | None:
+    """Text of the top-left box, or ``None`` for no box.
+
+    ``stats=True``: fixed n/events/intercept/slope/ICI/smECE/Brier.
+    ``stats=<MetricReport>``: ``name = value [ci_low, ci_high]`` for the
+    ``_STATS_REPORT_NAMES`` present in the report (plus n/events from ``y``).
+    Otherwise, with ``annotate=True``: the classic
+    :func:`probcal.metrics.reliability_summary` box.
     """
-    if not isinstance(stats, MetricReport):
-        s = reliability_summary(y_arr, p_arr)
+    if isinstance(stats, MetricReport):
+        lines = [f"n = {len(y_arr):,}", f"events = {int(y_arr.sum()):,}"]
+        for name in _STATS_REPORT_NAMES:
+            if name in stats.names:
+                i = stats.names.index(name)
+                lines.append(
+                    f"{name} = {stats.values[i]:.3f} "
+                    f"[{stats.ci_low[i]:.3f}, {stats.ci_high[i]:.3f}]"
+                )
+        return "\n".join(lines)
+    if not stats and not annotate:
+        return None
+    s = reliability_summary(y_arr, p_arr)
+    head = (
+        f"n = {s.n:,}\n"
+        f"events = {s.events:,}\n"
+        f"intercept = {s.intercept:+.3f}\n"
+        f"slope = {s.slope:.3f}\n"
+    )
+    if stats:
         sece = smooth_ece(y_arr, p_arr)
         brier = brier_score(y_arr, p_arr)
-        return (
-            f"n = {s.n:,}\n"
-            f"events = {s.events:,}\n"
-            f"intercept = {s.intercept:+.3f}\n"
-            f"slope = {s.slope:.3f}\n"
-            f"ICI = {s.ici:.3f}\n"
-            f"smECE = {sece:.3f}\n"
-            f"Brier = {brier:.3f}"
-        )
-    lines = [f"n = {len(y_arr):,}", f"events = {int(y_arr.sum()):,}"]
-    present = set(stats.names)
-    for name in _STATS_REPORT_NAMES:
-        if name not in present:
-            continue
-        i = stats.names.index(name)
-        lines.append(
-            f"{name} = {stats.values[i]:.3f} [{stats.ci_low[i]:.3f}, {stats.ci_high[i]:.3f}]"
-        )
-    return "\n".join(lines)
+        return head + f"ICI = {s.ici:.3f}\nsmECE = {sece:.3f}\nBrier = {brier:.3f}"
+    return head + (
+        f"ICI = {s.ici:.4f}\nE90 = {s.e90:.4f}\nSpiegelhalter p = {s.spiegelhalter_p:.3f}"
+    )
 
 
 def plot_reliability(
@@ -181,6 +196,8 @@ def plot_reliability(
     view for PD portfolios. Bins whose event rate is exactly 0 or 1 have no
     finite logit and are omitted from the logit-scale point layer; they remain
     visible in the risk distribution (or the ``counts=True`` margin).
+    Confidence bounds at exactly 0 or 1 are clipped to ``[1e-6, 1 - 1e-6]``
+    before the logit transform.
 
     Passing a :class:`probcal.curves.KernelReliabilityCurve` (from
     :func:`probcal.curves.reliability_smooth`) as ``smooth`` renders the
@@ -220,11 +237,13 @@ def plot_reliability(
     :func:`probcal.curves.reliability_binned` panel built from that group's
     slice of ``y``/``p`` — the given ``curve`` is ignored for the panels
     (it would otherwise be ambiguous which group it represents). ``y`` and
-    ``p`` are required in this mode. Each panel is drawn by a recursive
-    call with ``rug=False, annotate=False`` (light default panels; pass
-    ``stats=True`` for a per-panel stats box), sharing x/y limits across
-    the grid; the function then returns the **Figure**, not an ``Axes``
-    (unlike the ``by=None`` default, matching :func:`plot_comparison`).
+    ``p`` are required in this mode. Every panel honours ``scale``,
+    ``annotate``, ``stats``, ``rug``, ``risk_dist`` and ``counts`` exactly as
+    the single-panel diagram does (pass ``annotate=False, rug=False`` for
+    light panels), sharing x/y limits across the grid; the function then
+    returns the **Figure**, not an ``Axes`` (unlike the ``by=None`` default,
+    matching :func:`plot_comparison`). ``ax`` and ``smooth`` are not
+    supported with ``by`` and raise ``ValueError``.
     ``"pooled"`` is a reserved panel title: a group of your own by that name
     is indistinguishable from the pooled panel. Group-conditional
     statistical *testing* is out of scope here — see
@@ -255,8 +274,8 @@ def plot_reliability(
         If ``True``, add a twin-axis bar strip of per-bin counts.
     ax : matplotlib.axes.Axes or None, keyword-only
         Axes to draw on; a new figure and axes are created if ``None``.
-        Ignored when ``by`` is given (a new figure of panels is always
-        created).
+        Must be ``None`` when ``by`` is given (a new figure of panels is
+        always created).
     stats : bool or MetricReport, keyword-only
         If truthy and ``y``/``p`` are given, draw the ``n, events,
         intercept, slope, ICI, smECE, Brier`` stats box (``True``) or a
@@ -279,7 +298,8 @@ def plot_reliability(
     ValueError
         If ``y``/``p`` are not given together, or ``risk_dist`` is not one
         of ``"rug"``, ``"split"``, ``None``; or if ``by`` is given without
-        both ``y`` and ``p``, or with a length that does not match ``y``.
+        both ``y`` and ``p``, with a length that does not match ``y``, or
+        together with ``ax`` or ``smooth``.
 
     Examples
     --------
@@ -302,103 +322,141 @@ def plot_reliability(
     if by is not None:
         if y is None or p is None:
             raise ValueError("by requires y and p")
-        return _plot_reliability_faceted(y, p, by, scale=scale)
+        if ax is not None:
+            raise ValueError(
+                "ax is not supported with by= (a new figure of panels is always created); "
+                "draw each group on your own axes with by=None instead"
+            )
+        if smooth is not None:
+            raise ValueError(
+                "smooth is not supported with by= (one smooth curve cannot describe every "
+                "group); draw each group with by=None and its own smooth curve instead"
+            )
+        return _plot_reliability_faceted(
+            y,
+            p,
+            by,
+            scale=scale,
+            annotate=annotate,
+            rug=rug,
+            counts=counts,
+            stats=stats,
+            risk_dist=risk_dist,
+        )
+    y_arr = None if y is None else np.asarray(y, dtype=np.float64)
+    p_arr = None if p is None else np.asarray(p, dtype=np.float64)
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(6.5, 6))
-        if scale == "logit":
-            keep = (curve.event_rate > 0.0) & (curve.event_rate < 1.0)
-            x, ylo = curve.pred_mean_logit[keep], logit(curve.ci_low[keep])
-            yv, yhi = logit(curve.event_rate[keep]), logit(curve.ci_high[keep])
-            diag = np.linspace(x.min() - 0.5, x.max() + 0.5, 50)
-            ax.plot(diag, diag, ls="--", c=_GREY, lw=1, label="identity")
-            ax.errorbar(
-                x,
-                yv,
-                yerr=[np.maximum(yv - ylo, 0.0), np.maximum(yhi - yv, 0.0)],
-                fmt="o",
-                ms=4,
-                capsize=2,
-                color=_BLUE,
-                label="binned",
-            )
-            if isinstance(smooth, KernelReliabilityCurve):
-                _draw_kernel_curve(ax, smooth, "logit")
-            elif smooth is not None:
-                ax.plot(
-                    smooth.grid_logit, logit(smooth.event_rate), lw=1.5, c=_ORANGE, label="smoothed"
-                )
-            _logit_axis(ax)
-            ax.set_xlabel("predicted probability (logit scale)")
-            ax.set_ylabel("event rate (logit scale)")
-        else:
-            ax.plot([0, 1], [0, 1], ls="--", c=_GREY, lw=1, label="identity")
-            ax.errorbar(
-                curve.pred_mean,
-                curve.event_rate,
-                yerr=[curve.event_rate - curve.ci_low, curve.ci_high - curve.event_rate],
-                fmt="o",
-                ms=4,
-                capsize=2,
-                color=_BLUE,
-                label="binned",
-            )
-            if isinstance(smooth, KernelReliabilityCurve):
-                _draw_kernel_curve(ax, smooth, "probability")
-            elif smooth is not None:
-                ax.plot(smooth.grid_p, smooth.event_rate, lw=1.5, c=_ORANGE, label="smoothed")
-            ax.set_xlabel("predicted probability")
-            ax.set_ylabel("event rate")
-
-        boxed = False
-        if y is not None and p is not None:
-            y_arr = np.asarray(y, dtype=np.float64)
-            p_arr = np.asarray(p, dtype=np.float64)
-            show_density = rug and risk_dist is not None
-            if show_density and risk_dist == "rug":
-                ev = _rug_subsample(p_arr[y_arr == 1.0])
-                ne = _rug_subsample(p_arr[y_arr == 0.0])
-                if scale == "logit":
-                    ev, ne = logit(ev), logit(ne)
-                tf = ax.get_xaxis_transform()
-                ax.plot(
-                    ev, np.full(len(ev), 0.99), transform=tf,
-                    ls="none", marker="|", ms=7, c=_RED, alpha=0.25,
-                )  # fmt: skip
-                ax.plot(
-                    ne, np.full(len(ne), 0.01), transform=tf,
-                    ls="none", marker="|", ms=7, c="#777777", alpha=0.18,
-                )  # fmt: skip
-            elif show_density and risk_dist == "split":
-                _draw_split_risk_dist(ax, y_arr, p_arr, scale)
-            if stats:
-                txt = _stats_box_text(stats, y_arr, p_arr)
-                ax.text(0.03, 0.97, txt, transform=ax.transAxes, va="top", fontsize=9, bbox=_BOX)
-                boxed = True
-            elif annotate:
-                s = reliability_summary(y_arr, p_arr)
-                txt = (
-                    f"n = {s.n:,}\n"
-                    f"events = {s.events:,}\n"
-                    f"intercept = {s.intercept:+.3f}\n"
-                    f"slope = {s.slope:.3f}\n"
-                    f"ICI = {s.ici:.4f}\n"
-                    f"E90 = {s.e90:.4f}\n"
-                    f"Spiegelhalter p = {s.spiegelhalter_p:.3f}"
-                )
-                ax.text(0.03, 0.97, txt, transform=ax.transAxes, va="top", fontsize=9, bbox=_BOX)
-                boxed = True
-        if counts:
-            # Count margin as a twin bar strip along the x-axis.
-            ax2 = ax.twinx()
-            xs = curve.pred_mean_logit if scale == "logit" else curve.pred_mean
-            ax2.bar(xs, curve.count, width=np.ptp(xs) / (3 * len(xs) + 1), alpha=0.15, color=_GREY)
-            ax2.set_yticks([])
-        ax.legend(loc="lower right" if boxed else "upper left")
+        ax = _get_axes(ax, (6.5, 6))
+        _draw_reliability(
+            ax,
+            curve,
+            smooth=smooth,
+            scale=scale,
+            y_arr=y_arr,
+            p_arr=p_arr,
+            annotate=annotate,
+            rug=rug,
+            counts=counts,
+            stats=stats,
+            risk_dist=risk_dist,
+        )
         return ax
 
 
-def _plot_reliability_faceted(y: object, p: object, by: object, *, scale: str) -> Any:
+def _draw_reliability(
+    ax: Any,
+    curve: ReliabilityCurve,
+    *,
+    smooth: SmoothReliabilityCurve | KernelReliabilityCurve | None = None,
+    scale: str = "probability",
+    y_arr: np.ndarray | None = None,
+    p_arr: np.ndarray | None = None,
+    annotate: bool = True,
+    rug: bool = True,
+    counts: bool = False,
+    stats: bool | MetricReport = False,
+    risk_dist: str | None = "rug",
+    color: str = _BLUE,
+) -> None:
+    """Body of :func:`plot_reliability` on a given (styled) ``ax``; ``color``
+    is the binned series' color (``plot_comparison`` uses before/after colors,
+    so the legend matches the points)."""
+    if scale == "logit":
+        keep = (curve.event_rate > 0.0) & (curve.event_rate < 1.0)
+        x = curve.pred_mean_logit[keep]
+        anchor = x if len(x) else curve.pred_mean_logit[np.isfinite(curve.pred_mean_logit)]
+        lo, hi = (anchor.min(), anchor.max()) if len(anchor) else _DEFAULT_LOGIT_SPAN
+        diag: Any = np.linspace(lo - 0.5, hi + 0.5, 50)
+    else:
+        keep = np.ones(len(curve.event_rate), dtype=bool)
+        x = curve.pred_mean
+        diag = [0, 1]
+    yv = _tr(curve.event_rate[keep], scale)
+    ylo = _tr(curve.ci_low[keep], scale, _CI_CLIP_EPS)
+    yhi = _tr(curve.ci_high[keep], scale, _CI_CLIP_EPS)
+    ax.plot(diag, diag, ls="--", c=_GREY, lw=1, label="identity")
+    ax.errorbar(
+        x,
+        yv,
+        yerr=[np.maximum(yv - ylo, 0.0), np.maximum(yhi - yv, 0.0)],
+        fmt="o",
+        ms=4,
+        capsize=2,
+        color=color,
+        label="binned",
+    )
+    if isinstance(smooth, KernelReliabilityCurve):
+        _draw_kernel_curve(ax, smooth, scale)
+    elif smooth is not None:
+        grid = smooth.grid_logit if scale == "logit" else smooth.grid_p
+        ax.plot(grid, _tr(smooth.event_rate, scale), lw=1.5, c=_ORANGE, label="smoothed")
+    _scale_axis_labels(ax, scale, "predicted probability", "event rate")
+
+    boxed = False
+    if y_arr is not None and p_arr is not None:
+        show_density = rug and risk_dist is not None
+        if show_density and risk_dist == "rug":
+            ev = _tr(_rug_subsample(p_arr[y_arr == 1.0]), scale)
+            ne = _tr(_rug_subsample(p_arr[y_arr == 0.0]), scale)
+            tf = ax.get_xaxis_transform()
+            ax.plot(
+                ev, np.full(len(ev), 0.99), transform=tf,
+                ls="none", marker="|", ms=7, c=_RED, alpha=0.25,
+            )  # fmt: skip
+            ax.plot(
+                ne, np.full(len(ne), 0.01), transform=tf,
+                ls="none", marker="|", ms=7, c="#777777", alpha=0.18,
+            )  # fmt: skip
+        elif show_density and risk_dist == "split":
+            _draw_split_risk_dist(ax, y_arr, p_arr, scale)
+        txt = _stats_box_text(stats, annotate, y_arr, p_arr)
+        if txt is not None:
+            _text_box(ax, txt)
+            boxed = True
+    if counts and len(curve.count):
+        # Count margin as a twin bar strip along the x-axis.
+        ax2 = ax.twinx()
+        ax2.grid(False)
+        xs = curve.pred_mean_logit if scale == "logit" else curve.pred_mean
+        span = float(np.ptp(xs))
+        width = span / (3 * len(xs) + 1) if span > 0 else (0.2 if scale == "logit" else 0.02)
+        ax2.bar(xs, curve.count, width=width, alpha=0.15, color=_GREY)
+        ax2.set_yticks([])
+    ax.legend(loc="lower right" if boxed else "upper left")
+
+
+def _plot_reliability_faceted(
+    y: object,
+    p: object,
+    by: object,
+    *,
+    scale: str,
+    annotate: bool,
+    rug: bool,
+    counts: bool,
+    stats: bool | MetricReport,
+    risk_dist: str | None,
+) -> Any:
     """``plot_reliability(..., by=...)``: a pooled panel plus one panel per
     sorted group, each built fresh from that group's slice of ``y``/``p``
     (``curve`` is not used here — see the docstring above)."""
@@ -421,14 +479,18 @@ def _plot_reliability_faceted(y: object, p: object, by: object, *, scale: str) -
         )
         axes_flat = axes.ravel()
         for ax, (label, yy, pp) in zip(axes_flat, panels, strict=False):
-            plot_reliability(
+            _style_axes(ax)
+            _draw_reliability(
+                ax,
                 reliability_binned(yy, pp),
                 scale=scale,
-                y=yy,
-                p=pp,
-                ax=ax,
-                rug=False,
-                annotate=False,
+                y_arr=yy,
+                p_arr=pp,
+                annotate=annotate,
+                rug=rug,
+                counts=counts,
+                stats=stats,
+                risk_dist=risk_dist,
             )
             ax.set_title(label)
         for ax in axes_flat[n_panels:]:
@@ -454,27 +516,20 @@ def plot_belt(belt: BeltResult, *, scale: str = "probability", ax: Any = None) -
         The axes the belt was drawn on.
     """
     _require_mpl()
+
+    def _band(bound: np.ndarray) -> np.ndarray:
+        return _tr(bound, scale, _CI_CLIP_EPS)
+
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(6.5, 6))
-        if scale == "logit":
-            x = belt.grid_logit
-            ax.plot(x, x, ls="--", c=_GREY, lw=1)
-            ax.fill_between(
-                x, logit(belt.lower_95), logit(belt.upper_95), color=_BLUE, alpha=0.2, label="95%"
-            )
-            ax.fill_between(
-                x, logit(belt.lower_80), logit(belt.upper_80), color=_BLUE, alpha=0.35, label="80%"
-            )
-            _logit_axis(ax)
-        else:
-            x = belt.grid_p
-            ax.plot(x, x, ls="--", c=_GREY, lw=1)
-            ax.fill_between(x, belt.lower_95, belt.upper_95, color=_BLUE, alpha=0.2, label="95%")
-            ax.fill_between(x, belt.lower_80, belt.upper_80, color=_BLUE, alpha=0.35, label="80%")
+        ax = _get_axes(ax, (6.5, 6))
+        x = belt.grid_logit if scale == "logit" else belt.grid_p
+        ax.plot(x, x, ls="--", c=_GREY, lw=1)
+        # Widest level first so the narrower band sits on top of it.
+        for level, alpha in zip(sorted(belt.levels, reverse=True), (0.2, 0.35), strict=True):
+            lo, hi = belt.bands[level]
+            ax.fill_between(x, _band(lo), _band(hi), color=_BLUE, alpha=alpha, label=f"{level:.0%}")
         ax.set_title(f"calibration belt (degree {belt.degree}, p = {belt.p_value:.3g})")
-        ax.set_xlabel("predicted probability")
-        ax.set_ylabel("event rate")
+        _scale_axis_labels(ax, scale, "predicted probability", "event rate")
         ax.legend(loc="upper left")
         return ax
 
@@ -509,14 +564,10 @@ def plot_comparison(
         for ax, curve, label, color in zip(
             axes, (before, after), labels, panel_colors, strict=True
         ):
-            plot_reliability(curve, scale=scale, ax=ax)
-            # Recolor the binned series to the panel's before/after semantics.
-            for line in ax.lines:
-                if line.get_label() == "binned":
-                    line.set_color(color)
-            for container in ax.containers:
-                for artist in container.get_children():
-                    artist.set_color(color)
+            # The binned series takes the panel's before/after color at draw
+            # time, so the legend handle matches the points.
+            _style_axes(ax)
+            _draw_reliability(ax, curve, scale=scale, color=color)
             ax.set_title(label)
         return fig
 
@@ -530,7 +581,8 @@ def plot_interval(intervals: np.ndarray, s: np.ndarray, *, ax: Any = None) -> An
         ``(p0, p1)`` Venn–Abers interval bounds per score, e.g. from
         :meth:`probcal.vennabers.CrossVennAbersCalibrator.predict_interval`.
     s : numpy.ndarray of shape (n,)
-        Scores the intervals are plotted against.
+        Scores the intervals are plotted against; need not be sorted (the
+        pairs are drawn in ascending order of ``s``).
     ax : matplotlib.axes.Axes or None, keyword-only
         Axes to draw on; a new figure and axes are created if ``None``.
 
@@ -541,11 +593,14 @@ def plot_interval(intervals: np.ndarray, s: np.ndarray, *, ax: Any = None) -> An
     """
     _require_mpl()
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(6.5, 4.5))
-        p0, p1 = intervals[:, 0], intervals[:, 1]
-        ax.fill_between(s, p0, p1, color=_BLUE, alpha=0.3, label="Venn–Abers interval")
-        ax.plot(s, p1 / (1.0 - p0 + p1), lw=1.2, c=_ORANGE, label="scalarized")
+        ax = _get_axes(ax, (6.5, 4.5))
+        s_arr = np.asarray(s, dtype=np.float64)
+        order = np.argsort(s_arr, kind="stable")
+        s_arr = s_arr[order]
+        p0 = np.asarray(intervals, dtype=np.float64)[order, 0]
+        p1 = np.asarray(intervals, dtype=np.float64)[order, 1]
+        ax.fill_between(s_arr, p0, p1, color=_BLUE, alpha=0.3, label="Venn–Abers interval")
+        ax.plot(s_arr, p1 / (1.0 - p0 + p1), lw=1.2, c=_ORANGE, label="scalarized")
         ax.set_xlabel("score")
         ax.set_ylabel("calibrated probability")
         ax.legend(loc="upper left")
@@ -570,8 +625,7 @@ def plot_selection(report: SelectionReport, *, ax: Any = None) -> Any:
     """
     _require_mpl()
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(6.5, 0.6 * len(report.methods) + 1.5))
+        ax = _get_axes(ax, (6.5, 0.6 * len(report.methods) + 1.5))
         order = np.argsort(report.score_mean)
         ys = np.arange(len(order))
         for rank, i in enumerate(order):
@@ -633,8 +687,7 @@ def plot_ecce(
         labels = [f"curve {i + 1}" for i in range(len(curves))]
     palette = [_RED, _GREEN, _BLUE, _ORANGE]
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(7.5, 4.8))
+        ax = _get_axes(ax, (7.5, 4.8))
         if show_band:
             c0 = curves[0]
             ax.fill_between(
@@ -687,13 +740,12 @@ def plot_grade_backtest(result: Any, *, log_scale: bool = True, ax: Any = None) 
     """
     _require_mpl()
     light_color = {"green": _GREEN, "yellow": _AMBER, "amber": _AMBER, "red": _RED}
-    name = "Jeffreys" if hasattr(result, "p_value") else "exact binomial"
+    name = "Jeffreys" if isinstance(result, JeffreysGradeResult) else "exact binomial"
     x = np.arange(len(result.grades))
     rate = result.k / result.n
     colors = [light_color.get(li, _GREY) for li in result.light]
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(1.1 * len(x) + 3.0, 4.8))
+        ax = _get_axes(ax, (1.1 * len(x) + 3.0, 4.8))
         ax.scatter(x, result.pd, marker="_", s=500, c=_BLUE, zorder=2, label="assigned PD")
         ax.errorbar(
             x,
@@ -763,8 +815,7 @@ def plot_offset_audit(offset: Any, *, ax: Any = None) -> Any:
     lp = float(logit(np.array([offset.pre_mean_]))[0])
     lq = float(logit(np.array([offset.post_mean_]))[0])
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(6.5, 6))
+        ax = _get_axes(ax, (6.5, 6))
         ax.plot(t, t, ls="--", c=_GREY, lw=1, label="identity")
         ax.plot(t, t + offset.delta_, c=_BLUE, lw=1.6, label="offset map")
         if offset.target_mean is not None:
@@ -791,10 +842,8 @@ def plot_offset_audit(offset: Any, *, ax: Any = None) -> Any:
             f"post mean = {offset.post_mean_:.4%}\n"
             f"fitted {offset.timestamp_}"
         )
-        ax.text(0.03, 0.97, txt, transform=ax.transAxes, va="top", fontsize=9, bbox=_BOX)
-        _logit_axis(ax)
-        ax.set_xlabel("input probability (logit scale)")
-        ax.set_ylabel("shifted probability (logit scale)")
+        _text_box(ax, txt)
+        _scale_axis_labels(ax, "logit", "input probability", "shifted probability")
         ax.set_title("logit offset audit")
         ax.legend(loc="lower right")
         return ax
@@ -810,8 +859,13 @@ def plot_e_process(report: Any, *, grades_panel: bool = False, ax: Any = None) -
     grades_panel : bool, default False
         Add a second, shorter axes below the main plot showing each grade's
         offset confidence-sequence band (``MonitorStep.grade_delta_ci``)
-        across steps. Additive: the default (``False``) call is
-        pixel-identical to 0.2.0, pinned by ``tests/test_plots_regression.py``.
+        across steps. The panel is carved out of the main axes' own area
+        (``mpl_toolkits.axes_grid1`` divider, shared x-axis), so it stays
+        inside the figure and inside a caller-supplied ``ax``'s slot; the
+        step labels then move to the panel. When this function creates the
+        figure, it is made taller (7.5 x 6.5 in) to fit the panel. Additive:
+        the default (``False``) output is pinned by
+        ``tests/test_plots_regression.py``.
     ax : matplotlib.axes.Axes or None, keyword-only
         Axes to draw on; a new figure and axes are created if ``None``.
 
@@ -823,8 +877,7 @@ def plot_e_process(report: Any, *, grades_panel: bool = False, ax: Any = None) -
     """
     _require_mpl()
     with _plt.rc_context(_STYLE):
-        if ax is None:
-            _, ax = _plt.subplots(figsize=(7.5, 4.2))
+        ax = _get_axes(ax, (7.5, 6.5) if grades_panel else (7.5, 4.2))
         steps = report.steps
         x = np.arange(1, len(steps) + 1)
         series = [
@@ -869,7 +922,11 @@ def _draw_grades_panel(ax: Any, steps: Any, x: np.ndarray) -> None:
     grade_names = sorted({g for s in steps for g in s.grade_delta_ci})
     if not grade_names:
         return
-    gax = ax.figure.add_axes([0.15, -0.35, 0.75, 0.25])
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    gax = make_axes_locatable(ax).append_axes("bottom", size="55%", pad=0.55, sharex=ax)
+    _style_axes(gax)
+    ax.tick_params(axis="x", labelbottom=False)
     palette = (_BLUE, _ORANGE, _GREEN, _RED, _AMBER)
     for i, g in enumerate(grade_names):
         lo = np.array(
@@ -887,8 +944,6 @@ def _draw_grades_panel(ax: Any, steps: Any, x: np.ndarray) -> None:
     gax.set_title("per-grade confidence sequences")
     gax.legend(loc="upper left", fontsize=8)
 
-
-from ._plots_diag import plot_attributes, plot_corp, plot_mcb_dsc, plot_murphy  # noqa: E402
 
 __all__ = [
     "plot_reliability",

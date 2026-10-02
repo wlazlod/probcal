@@ -6,22 +6,51 @@ inspectable. ``CalibratedModel.chain_`` builds the equivalent chain for users
 who fitted through the wrapper and want to hand it on without the model.
 """
 
-import json
-import os
 from collections.abc import Sequence
 
 import numpy as np
 
-from ._math import expit, logit
+from ._math import expit, expit1, logit, logit1
 from ._registry import load, register
 from ._results import Interpretation
-from ._serialize import SCHEMA_VERSION, check_schema, fingerprint_of_dict
-from .base import BaseCalibrator, _check_representable, _validate_point_targets
+from ._serialize import JsonIO, check_payload, envelope
+from ._validation import validate_space
+from .base import (
+    BaseCalibrator,
+    _check_representable,
+    _validate_point_targets,
+    shrink_interval,
+    validate_interval,
+)
 from .offset import LogitOffset
 
 
+def _concat_interpretations(
+    method: str, parts: "list[Interpretation]", *, qualify: bool
+) -> Interpretation:
+    """One :class:`Interpretation` from several stages, in application order.
+
+    ``qualify=True`` prefixes each parameter name with its stage's method.
+    """
+    names: tuple[str, ...] = ()
+    values: tuple[float, ...] = ()
+    messages: tuple[str, ...] = ()
+    for part in parts:
+        names += (
+            tuple(f"{part.method}.{n}" for n in part.param_names) if qualify else part.param_names
+        )
+        values += part.param_values
+        messages += part.messages
+    return Interpretation(
+        method=f"{method}[{', '.join(p.method for p in parts)}]",
+        param_names=names,
+        param_values=values,
+        messages=messages,
+    )
+
+
 @register
-class Chain:
+class Chain(JsonIO):
     """A calibrator followed by zero or more ``LogitOffset`` stages.
 
     Exposes the full calibrator protocol — forward map, exact inverse maps,
@@ -101,7 +130,7 @@ class Chain:
         self.calibrator_.fit(s, y, sample_weight=sample_weight)
         p = self.calibrator_.predict_proba(s)
         for off in self.offsets_:
-            off.fit(p, sample_weight=sample_weight, y=y)
+            off.fit(p, y=y, sample_weight=sample_weight)
             p = off.transform(p)
         self.fitted_ = True
         return self
@@ -199,7 +228,7 @@ class Chain:
             return 0.0
         if not is_lower and value >= 1.0:
             return 1.0
-        return float(expit(np.array([logit(np.array([value]))[0] - self.delta_]))[0])
+        return expit1(logit1(value) - self.delta_)
 
     def interval_inverse(
         self,
@@ -238,20 +267,9 @@ class Chain:
             chain's output range.
         """
         self._check_fitted()
-        from .base import UnattainableTargetError
-
-        if not 0.0 <= lo <= hi <= 1.0:
-            raise ValueError(f"need 0 <= lo <= hi <= 1, got lo={lo}, hi={hi}")
-        lo_b, hi_b = float(lo), float(hi)
-        if buffer_logit > 0.0:
-            if lo > 0.0:
-                lo_b = float(expit(np.array([logit(np.array([lo]))[0] + buffer_logit]))[0])
-            if hi < 1.0:
-                hi_b = float(expit(np.array([logit(np.array([hi]))[0] - buffer_logit]))[0])
-            if lo_b > hi_b:
-                raise UnattainableTargetError(
-                    f"buffer_logit={buffer_logit} empties the calibrated interval [{lo}, {hi}]"
-                )
+        validate_interval(lo, hi)
+        validate_space(space)
+        lo_b, hi_b = shrink_interval(lo, hi, buffer_logit)
         lo_c = self._shift_bound(lo_b, is_lower=True)
         hi_c = self._shift_bound(hi_b, is_lower=False)
         return self.calibrator_.interval_inverse(lo_c, hi_c, space=space, buffer_logit=0.0)
@@ -272,6 +290,7 @@ class Chain:
             representable.
         """
         self._check_fitted()
+        validate_space(space)
         arr = _validate_point_targets(p)
         shifted_z = logit(arr) - self.delta_
         _check_representable(shifted_z, "probability")  # the intermediate must round-trip
@@ -283,67 +302,25 @@ class Chain:
         """Concatenated interpretation of every stage."""
         self._check_fitted()
         parts = [self.calibrator_.interpret()] + [off.interpret() for off in self.offsets_]
-        names: tuple[str, ...] = ()
-        values: tuple[float, ...] = ()
-        messages: tuple[str, ...] = ()
-        for part in parts:
-            names += tuple(f"{part.method}.{n}" for n in part.param_names)
-            values += part.param_values
-            messages += part.messages
-        return Interpretation(
-            method=f"Chain[{', '.join(p.method for p in parts)}]",
-            param_names=names,
-            param_values=values,
-            messages=messages,
-        )
+        return _concat_interpretations("Chain", parts, qualify=True)
 
     # ------------------------------------------------------------------ serialization
 
     def to_dict(self) -> dict[str, object]:
         """Versioned snapshot: the stages' own envelopes, in order."""
         self._check_fitted()
-        from . import __version__
-
-        return {
-            "probcal_schema": SCHEMA_VERSION,
-            "probcal_version": __version__,
-            "class": type(self).__name__,
-            "params": {},
-            "state": {
+        return envelope(
+            self,
+            params={},
+            state={
                 "stages": [self.calibrator_.to_dict()] + [off.to_dict() for off in self.offsets_],
             },
-            "fit_meta": {},
-        }
+            fit_meta={},
+        )
 
     @classmethod
     def from_dict(cls, d: dict) -> "Chain":
         """Rebuild the chain by loading every stage through the registry."""
-        check_schema(d)
-        if d.get("class") != cls.__name__:
-            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
+        check_payload(cls, d)
         stages = [load(sd) for sd in d["state"]["stages"]]
         return cls(stages)
-
-    def to_json(
-        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
-    ) -> str | None:
-        """Serialize to JSON text, or to ``path`` when given (returns None then)."""
-        text = json.dumps(self.to_dict(), indent=indent)
-        if path is None:
-            return text
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        return None
-
-    @classmethod
-    def from_json(cls, path_or_str: object) -> "Chain":
-        """Load from a JSON string or a filesystem path."""
-        text = str(path_or_str)
-        if not text.lstrip().startswith("{"):
-            with open(text, encoding="utf-8") as fh:
-                text = fh.read()
-        return cls.from_dict(json.loads(text))
-
-    def fingerprint(self) -> str:
-        """SHA-256 of the canonical serialized form (stages included)."""
-        return fingerprint_of_dict(self.to_dict())

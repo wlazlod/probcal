@@ -103,3 +103,38 @@ def test_exports() -> None:
         "CrossVennAbersCalibrator",
     ):
         assert name in probcal.__all__
+
+
+# ---------------------------------------------------------------- 0.3.4 regressions
+
+
+def test_ivap_ties_pooled_and_order_invariant() -> None:
+    """CAL-6: tied calibration scores are pooled; row order cannot move the output."""
+    s, y = _sample(400)
+    s = np.round(s, 1)
+    perm = RNG.permutation(len(s))
+    a = VennAbersCalibrator().fit(s, y)
+    b = VennAbersCalibrator().fit(s[perm], y[perm])
+    np.testing.assert_array_equal(a.predict_interval(GRID), b.predict_interval(GRID))
+    np.testing.assert_array_equal(a.predict_interval(s[:20]), b.predict_interval(s[:20]))
+    assert len(a.scores_) == len(np.unique(s))
+    assert len(a.F0_) == len(a.scores_) + 1
+
+
+def test_ivap_state_drops_unused_labels_and_weights() -> None:
+    """CAL-23: only the distinct scores and the two tables are serialized."""
+    cal = VennAbersCalibrator().fit(*_sample(200))
+    state = cal.to_dict()["state"]
+    assert set(state) == {"scores_", "F0_", "F1_", "ties_pooled_"}
+    again = VennAbersCalibrator.from_json(cal.to_json())
+    np.testing.assert_array_equal(again.predict_interval(GRID), cal.predict_interval(GRID))
+
+
+def test_cvap_public_state_and_cv_validation() -> None:
+    s, y = _sample(300)
+    cal = CrossVennAbersCalibrator(cv=3).fit(s, y)
+    assert len(cal.ivaps_) == 3
+    assert set(cal.to_dict()["state"]) == {"ivaps_"}
+    for bad in (1, 2.5, True):
+        with pytest.raises(ValueError, match="cv"):
+            CrossVennAbersCalibrator(cv=bad).fit(s, y)  # type: ignore[arg-type]

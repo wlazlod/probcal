@@ -11,7 +11,13 @@ it designs the bands from data.
 
 import numpy as np
 
-from ._validation import validate_binary_y, validate_scores, validate_weights
+from ._validation import (
+    validate_binary_y,
+    validate_positive_int,
+    validate_scores,
+    validate_weights,
+)
+from .base import UnattainableTargetError, shrink_interval
 from .masterscale import Masterscale
 
 
@@ -58,6 +64,23 @@ def calibrated_bands_to_raw(
     Grade edges are policy artifacts that outlive model versions; this
     translation is what changes when the calibrator is refitted.
 
+    The raw intervals follow the masterscale's half-open convention
+    (``lo <= p < hi``, top band closed): for a non-decreasing fitted map
+    ``g``, band ``[lo, hi)`` becomes
+
+    ``[raw_lo, raw_hi) = [inf{s : g(s) >= lo}, inf{s : g(s) >= hi})``,
+
+    and the top band (the one with the largest ``hi``) becomes the closed
+    ``[inf{s : g(s) >= lo}, sup{s : g(s) <= hi}]``. Adjacent bands therefore
+    share their raw edge and the intervals partition the raw axis: a raw
+    score ``s`` lies in the interval of exactly the grade that
+    ``Masterscale.assign(g(s))`` gives it — also for step calibrators
+    (isotonic, histogram binning), where a calibrated edge sitting on a
+    plateau carries positive raw-score mass. (Until 0.3 every band was
+    inverted as a closed interval, so such plateaus were counted in two
+    adjacent grades.) For a single interval with closed-bound semantics use
+    :func:`calibrated_interval_to_raw`.
+
     Parameters
     ----------
     calibrator : fitted calibrator
@@ -66,28 +89,42 @@ def calibrated_bands_to_raw(
         ``is_monotone_``.
     bands : dict or Masterscale
         Mapping of grade label to ``(lo, hi)`` calibrated-probability bounds,
-        or a :class:`probcal.Masterscale` (its ``bands`` are read). Bands are
-        inverted as closed intervals; the scale's own ``assign`` is half-open
-        (``lo <= p < hi``), which differs only at a shared edge.
+        or a :class:`probcal.Masterscale` (its ``bands`` are read).
     space : {"probability", "logit"}, keyword-only
         Scale of the returned bounds.
     buffer_logit : float, keyword-only
-        Robustness margin applied in logit space before inversion.
+        Robustness margin applied in logit space before inversion: each band
+        shrinks to ``[lo', hi')`` first, so buffered bands no longer touch.
 
     Returns
     -------
     dict
         Mapping of grade label to ``(raw_lo, raw_hi)`` bounds, on the scale
-        requested by ``space``.
+        requested by ``space``: ``raw_lo <= s < raw_hi`` (``<= raw_hi`` for
+        the top band).
+
+    Raises
+    ------
+    UnattainableTargetError
+        If a band does not intersect the calibrator's output range.
     """
-    if hasattr(bands, "bands"):  # a Masterscale
-        bands = bands.bands  # type: ignore[attr-defined]
-    return {
-        grade: calibrated_interval_to_raw(
-            calibrator, lo, hi, space=space, buffer_logit=buffer_logit
-        )
-        for grade, (lo, hi) in bands.items()  # type: ignore[attr-defined]
-    }
+    if isinstance(bands, Masterscale):
+        bands = bands.bands
+    items = list(bands.items())  # type: ignore[attr-defined]
+    top_hi = max(float(hi) for _, (_, hi) in items) if items else 1.0
+    inv = calibrator.interval_inverse  # type: ignore[attr-defined]
+    out: dict = {}
+    for grade, (lo, hi) in items:
+        raw_lo, raw_hi = inv(lo, hi, space=space, buffer_logit=buffer_logit)
+        if float(hi) < top_hi:
+            # Exclusive upper bound: the left inverse of the (buffered) hi.
+            hi_b = shrink_interval(lo, hi, buffer_logit)[1]
+            try:
+                raw_hi = inv(hi_b, 1.0, space=space)[0]
+            except UnattainableTargetError:
+                pass  # hi above the output range: no score reaches it; keep sup
+        out[grade] = (raw_lo, raw_hi)
+    return out
 
 
 # ------------------------------------------------------------ build_masterscale
@@ -127,15 +164,6 @@ def _segment_objective_vec(
         out[inner] = e[inner] * np.log(r) + (w[inner] - e[inner]) * np.log1p(-r)
         return out
     return -((w / w_total - float(target)) ** 2)  # type: ignore[arg-type]
-
-
-def _segment_objective(
-    w: float, e: float, w_total: float, objective: str, target: float | None
-) -> float:
-    """Scalar form of :func:`_segment_objective_vec` (used by the brute-force test)."""
-    return float(
-        _segment_objective_vec(np.array([w]), np.array([e]), w_total, objective, target)[0]
-    )
 
 
 def _solve(
@@ -211,7 +239,7 @@ def build_masterscale(
     y, p : array_like
         Outcomes and calibrated probabilities.
     n_grades : int, keyword-only
-        Number of grades.
+        Number of grades (a positive integer).
     min_count, min_events : float, keyword-only
         Floors per grade on the (weighted) observation and event counts.
     objective : {"likelihood", "target_shares"}, keyword-only
@@ -223,7 +251,8 @@ def build_masterscale(
         Required with ``objective="target_shares"``: one share per grade,
         best to worst, summing to 1.
     prebins : int, keyword-only
-        Pre-bin count (an upper bound on the number of candidate edges).
+        Pre-bin count (a positive integer; an upper bound on the number of
+        candidate edges).
     sample_weight : array_like or None, keyword-only
         Weights; counts become weighted sums.
     names : sequence of str or None, keyword-only
@@ -239,15 +268,16 @@ def build_masterscale(
     ------
     ValueError
         If no partition satisfies the floors (the message names the binding
-        floor), or on an invalid ``objective``, ``target_shares``, or ``names``.
+        floor), or on an invalid ``objective``, ``target_shares``, ``names``,
+        ``n_grades``, or ``prebins``.
     """
     y_arr = validate_binary_y(y)
     p_arr = validate_scores(p, name="p")
     if len(y_arr) != len(p_arr):
         raise ValueError("y and p must have equal length")
     w_arr = validate_weights(sample_weight, len(p_arr))
-    if n_grades < 1:
-        raise ValueError("n_grades must be >= 1")
+    n_grades = validate_positive_int(n_grades, "n_grades")
+    prebins = validate_positive_int(prebins, "prebins")
     if objective not in ("likelihood", "target_shares"):
         raise ValueError(f'objective must be "likelihood" or "target_shares", got {objective!r}')
     target: np.ndarray | None = None
@@ -263,7 +293,7 @@ def build_masterscale(
     if labels is not None and len(labels) != n_grades:
         raise ValueError(f"names must have {n_grades} entries, got {len(labels)}")
 
-    W, E, cuts = _prebin(p_arr, y_arr, w_arr, int(prebins))
+    W, E, cuts = _prebin(p_arr, y_arr, w_arr, prebins)
     mc, me = float(min_count), float(min_events)
     solved = _solve(W, E, n_grades, objective, target, mc, me)
     if solved is None:
@@ -303,4 +333,4 @@ def build_masterscale(
         "target_shares": None if target is None else [float(x) for x in target],
         "binding": binding_at_opt,
     }
-    return Masterscale(Masterscale.from_edges(edges, names=labels).bands, provenance=provenance)
+    return Masterscale.from_edges(edges, names=labels, provenance=provenance)

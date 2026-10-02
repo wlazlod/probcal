@@ -8,25 +8,58 @@ and :class:`Masterscale` is the single place both shapes come from.
 Boundary convention, stated once: :meth:`Masterscale.assign` is half-open,
 ``lo <= p < hi``, with the top band closed at its upper edge, so every ``p``
 in ``[edges[0], edges[-1]]`` belongs to exactly one grade. Band inversion
-(:func:`probcal.thresholds.calibrated_bands_to_raw`) keeps closed intervals,
-since boundary points have measure zero on the raw scale; a validator
-reconciling counts uses the assignment rule above.
+(:func:`probcal.thresholds.calibrated_bands_to_raw`) follows the same rule on
+the raw axis: band ``[lo, hi)`` maps to ``[inf{s: g(s) >= lo}, inf{s: g(s) >=
+hi})``, top band closed, so the raw intervals partition the raw axis and
+counting raw scores per interval reproduces :meth:`Masterscale.assign`
+counts exactly — also for step calibrators (isotonic, histogram binning),
+whose plateaus give a shared edge positive raw-score mass.
 """
 
-import json
-import os
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
+from typing import ClassVar
 
 import numpy as np
 
 from ._registry import register
-from ._results import Interpretation
-from ._serialize import SCHEMA_VERSION, check_schema, fingerprint_of_dict
+from ._results import Interpretation, _ResultBase
+from ._serialize import JsonIO, canonical_json, check_payload, decode_value, encode_value, envelope
 from ._validation import validate_binary_y, validate_scores, validate_weights
 
 
-@dataclass(frozen=True)
-class GradeTable:
+def _freeze(v: object) -> object:
+    """Deep-immutable copy: dicts become read-only mappings, lists tuples."""
+    if isinstance(v, Mapping):
+        return MappingProxyType({str(k): _freeze(x) for k, x in v.items()})
+    if isinstance(v, (list, tuple)):
+        return tuple(_freeze(x) for x in v)
+    if isinstance(v, np.ndarray):
+        return tuple(_freeze(x) for x in v.tolist())
+    if isinstance(v, (np.floating, np.integer, np.bool_)):
+        return v.item()
+    return v
+
+
+def _thaw(v: object) -> object:
+    """Inverse of :func:`_freeze`: a fresh, mutable, JSON-shaped copy."""
+    if isinstance(v, Mapping):
+        return {k: _thaw(x) for k, x in v.items()}
+    if isinstance(v, tuple):
+        return [_thaw(x) for x in v]
+    return v
+
+
+def _masterscale_from_state(
+    bands: dict[str, tuple[float, float]], provenance: dict | None
+) -> "Masterscale":
+    """Pickle/deepcopy reconstructor (see :meth:`Masterscale.__reduce__`)."""
+    return Masterscale(bands, provenance=provenance)
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class GradeTable(_ResultBase):
     """Per-grade counts against a masterscale: the standard grade table.
 
     Attributes
@@ -53,23 +86,33 @@ class GradeTable:
     mean_pd: np.ndarray
     observed_rate: np.ndarray
 
-    def __str__(self) -> str:
-        width = max(5, *(len(g) for g in self.grades))
-        head = (
-            f"{'grade':<{width}}  {'lo':>8}  {'hi':>8}  {'n':>10}  {'events':>10}  "
-            f"{'mean_pd':>9}  {'observed_rate':>13}"
-        )
-        rows = [head, "-" * len(head)]
-        for i, g in enumerate(self.grades):
-            rows.append(
-                f"{g:<{width}}  {self.lo[i]:>8.4f}  {self.hi[i]:>8.4f}  {self.n[i]:>10.1f}  "
-                f"{self.events[i]:>10.1f}  {self.mean_pd[i]:>9.5f}  {self.observed_rate[i]:>13.5f}"
+    _TABLE: ClassVar[tuple[str, ...]] = (
+        "grade",
+        "lo",
+        "hi",
+        "n",
+        "events",
+        "mean_pd",
+        "observed_rate",
+    )
+
+    def _rows(self) -> list[tuple[object, ...]]:
+        return list(
+            zip(
+                self.grades,
+                self.lo,
+                self.hi,
+                self.n,
+                self.events,
+                self.mean_pd,
+                self.observed_rate,
+                strict=True,
             )
-        return "\n".join(rows)
+        )
 
 
 @register
-class Masterscale:
+class Masterscale(JsonIO):
     """Frozen grade ladder on the calibrated-probability scale.
 
     Parameters
@@ -83,8 +126,9 @@ class Masterscale:
     provenance : dict or None, keyword-only
         Optional record of how the scale was built (set by
         :func:`probcal.thresholds.build_masterscale`); ``None`` for a
-        hand-built scale. Serialized with the object and shown by
-        :meth:`interpret`.
+        hand-built scale. Deep-frozen on construction (later changes to the
+        dict passed in do not reach the scale), serialized with the object,
+        and shown by :meth:`interpret`. Values must be JSON-encodable.
 
     Attributes
     ----------
@@ -102,8 +146,13 @@ class Masterscale:
     is expected to cover ``[0, 1]`` (pass ``lo`` and ``hi`` to
     :meth:`from_edges` explicitly if yours does not, or accept the error).
     Band inversion through :func:`probcal.thresholds.calibrated_bands_to_raw`
-    keeps closed intervals; the two conventions differ only at a shared
-    edge, which has measure zero on the raw scale.
+    uses the same half-open rule on the raw axis, so raw-interval counts and
+    :meth:`assign` counts agree exactly.
+
+    Equality and hashing cover the bands *and* the provenance, so
+    ``a == b`` exactly when ``a.fingerprint() == b.fingerprint()``; compare
+    ``a.bands == b.bands`` for "same ladder, however built". Instances are
+    immutable and support :func:`copy.deepcopy` and pickling.
 
     Examples
     --------
@@ -116,7 +165,7 @@ class Masterscale:
     _bands: tuple[tuple[str, tuple[float, float]], ...]
     _edges: np.ndarray
     _names: tuple[str, ...]
-    _provenance: dict | None
+    _provenance: "MappingProxyType[str, object] | None"
 
     def __init__(
         self, bands: dict[str, tuple[float, float]], *, provenance: dict | None = None
@@ -146,18 +195,29 @@ class Masterscale:
         object.__setattr__(self, "_bands", tuple((n, (lo, hi)) for lo, hi, n in items))
         object.__setattr__(self, "_edges", np.array([t[0] for t in items] + [items[-1][1]]))
         object.__setattr__(self, "_names", names)
-        object.__setattr__(
-            self, "_provenance", dict(provenance) if provenance is not None else None
-        )
+        frozen = None if provenance is None else _freeze(dict(provenance))
+        object.__setattr__(self, "_provenance", frozen)
 
     def __setattr__(self, name: str, value: object) -> None:
         raise AttributeError("Masterscale is immutable")
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError("Masterscale is immutable")
+
+    def __reduce__(self) -> tuple[object, tuple[object, ...]]:
+        return (_masterscale_from_state, (self.bands, self.provenance))
 
     # ------------------------------------------------------------ constructors
 
     @classmethod
     def from_edges(
-        cls, edges: object, names: object = None, lo: float = 0.0, hi: float = 1.0
+        cls,
+        edges: object,
+        names: object = None,
+        lo: float = 0.0,
+        hi: float = 1.0,
+        *,
+        provenance: dict | None = None,
     ) -> "Masterscale":
         """Build from interior edges: ``len(edges) + 1`` grades on ``[lo, hi]``.
 
@@ -169,6 +229,8 @@ class Masterscale:
             One name per grade, best to worst; ``None`` gives ``"G1"``, ``"G2"``, ...
         lo, hi : float
             Outer bounds, ``0.0`` and ``1.0`` by default.
+        provenance : dict or None, keyword-only
+            Passed to the constructor (see :class:`Masterscale`).
         """
         inner = sorted(float(e) for e in np.asarray(edges, dtype=np.float64).reshape(-1))
         full = [float(lo), *inner, float(hi)]
@@ -181,7 +243,7 @@ class Masterscale:
             raise ValueError(f"{n} grades from {len(inner)} edges, but {len(labels)} names given")
         if len(set(labels)) != n:
             raise ValueError(f"grade names must be unique, got {tuple(labels)}")
-        return cls({labels[i]: (full[i], full[i + 1]) for i in range(n)})
+        return cls({labels[i]: (full[i], full[i + 1]) for i in range(n)}, provenance=provenance)
 
     # ---------------------------------------------------------------- readers
 
@@ -207,8 +269,8 @@ class Masterscale:
 
     @property
     def provenance(self) -> dict | None:
-        """How the scale was built (``None`` for a hand-built scale)."""
-        return None if self._provenance is None else dict(self._provenance)
+        """How the scale was built (``None`` for a hand-built scale); a fresh copy."""
+        return None if self._provenance is None else _thaw(self._provenance)  # type: ignore[return-value]
 
     def index(self, p: object) -> np.ndarray:
         """Zero-based grade index per observation, ``lo <= p < hi``, top band closed.
@@ -268,7 +330,12 @@ class Masterscale:
         )
 
     def interpret(self) -> Interpretation:
-        """The band table in words, with the boundary convention and provenance."""
+        """The band table in words, with the boundary convention and provenance.
+
+        ``param_names``/``param_values`` list each grade's band as two
+        entries, ``"<grade>.lo"`` and ``"<grade>.hi"`` (until 0.3 only the
+        upper edges were listed, under the bare grade names).
+        """
         last = self.n_grades - 1
         messages = [
             f"{n}: {lo:.6g} <= p < {hi:.6g}" + (" (top band, closed at hi)" if i == last else "")
@@ -278,15 +345,15 @@ class Masterscale:
             "assignment is half-open, lo <= p < hi, with the top band closed at its upper "
             "edge; band inversion keeps closed intervals"
         )
-        if self._provenance is not None:
+        prov = self.provenance
+        if prov is not None:
             messages.append(
-                "built by build_masterscale: "
-                + ", ".join(f"{k}={v}" for k, v in self._provenance.items())
+                "built by build_masterscale: " + ", ".join(f"{k}={v}" for k, v in prov.items())
             )
         return Interpretation(
             method="Masterscale",
-            param_names=self._names,
-            param_values=tuple(float(hi) for _, (_, hi) in self._bands),
+            param_names=tuple(f"{n}.{side}" for n in self._names for side in ("lo", "hi")),
+            param_values=tuple(float(b) for _, (lo, hi) in self._bands for b in (lo, hi)),
             messages=tuple(messages),
         )
 
@@ -294,16 +361,12 @@ class Masterscale:
 
     def to_dict(self) -> dict[str, object]:
         """Versioned JSON-native snapshot (schema 1, the envelope every class uses)."""
-        from . import __version__
-
-        return {
-            "probcal_schema": SCHEMA_VERSION,
-            "probcal_version": __version__,
-            "class": type(self).__name__,
-            "params": {"bands": {n: [lo, hi] for n, (lo, hi) in self._bands}},
-            "state": {"provenance": self._provenance},
-            "fit_meta": {},
-        }
+        return envelope(
+            self,
+            params={"bands": {n: [lo, hi] for n, (lo, hi) in self._bands}},
+            state={"provenance": encode_value(self.provenance)},
+            fit_meta={},
+        )
 
     @classmethod
     def from_dict(cls, d: dict) -> "Masterscale":
@@ -314,45 +377,23 @@ class Masterscale:
         ValueError
             If the schema version is unknown or the payload class differs.
         """
-        check_schema(d)
-        if d.get("class") != cls.__name__:
-            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
+        check_payload(cls, d)
         bands = {str(n): (float(b[0]), float(b[1])) for n, b in d["params"]["bands"].items()}
-        return cls(bands, provenance=d.get("state", {}).get("provenance"))
-
-    def to_json(
-        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
-    ) -> str | None:
-        """Serialize to JSON text, or to ``path`` when given (returns None then)."""
-        text = json.dumps(self.to_dict(), indent=indent)
-        if path is None:
-            return text
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        return None
-
-    @classmethod
-    def from_json(cls, path_or_str: object) -> "Masterscale":
-        """Load from a JSON string or a filesystem path."""
-        text = str(path_or_str)
-        if not text.lstrip().startswith("{"):
-            with open(text, encoding="utf-8") as fh:
-                text = fh.read()
-        return cls.from_dict(json.loads(text))
-
-    def fingerprint(self) -> str:
-        """SHA-256 of the canonical serialized form, blind to the writing version."""
-        return fingerprint_of_dict(self.to_dict())
+        prov = decode_value(d.get("state", {}).get("provenance"), arrays=False)
+        return cls(bands, provenance=prov)  # type: ignore[arg-type]
 
     # ---------------------------------------------------------------- dunder
+
+    def _key(self) -> tuple[object, str]:
+        return (self._bands, canonical_json(encode_value(self.provenance)))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Masterscale):
             return NotImplemented
-        return self._bands == other._bands
+        return self._key() == other._key()
 
     def __hash__(self) -> int:
-        return hash(self._bands)
+        return hash(self._key())
 
     def __repr__(self) -> str:
         body = ", ".join(f"{n}: [{lo:g}, {hi:g})" for n, (lo, hi) in self._bands)

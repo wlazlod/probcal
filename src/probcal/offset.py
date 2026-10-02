@@ -9,20 +9,33 @@ King & Zeng (2001); Elkan (2001); Tasche (2013) — full records in the
 documentation.
 """
 
-import inspect
-import json
-import os
+import warnings
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Self
 
 import numpy as np
 
-from ._math import _LOGIT_CLIP, bisect, expit, logit
+from ._math import _LOGIT_CLIP, bisect, expit, expit1, logit, logit1
 from ._registry import register
 from ._results import Interpretation, OffsetEstimate
-from ._serialize import SCHEMA_VERSION, check_schema, data_fingerprint, fingerprint_of_dict
-from ._validation import validate_scores, validate_weights
+from ._serialize import (
+    JsonIO,
+    check_payload,
+    data_fingerprint,
+    decode_value,
+    encode_value,
+    envelope,
+)
+from ._validation import validate_scores, validate_space, validate_weights
+from .base import (
+    BaseCalibrator,
+    UnattainableTargetError,
+    _check_representable,
+    _validate_point_targets,
+    shrink_interval,
+    validate_interval,
+)
 from .metrics.regression import GuardrailReport, calibration_guardrails
 from .metrics.scores import _prep
 
@@ -67,8 +80,39 @@ class AuditReport:
         return "\n".join(lines)
 
 
+_NOT_FITTED = "{name} is not fitted; call fit() first"
+
+
+def _solve_delta(z: np.ndarray, w: np.ndarray, target: float) -> float:
+    """The ``delta`` with ``mean_w(sigma(z + delta)) == target``, by bisection.
+
+    The weighted mean is strictly increasing in ``delta``, so the root is
+    unique. Shared by :meth:`LogitOffset.fit` (mode B) and
+    :func:`_offset_mle`, so the two stay bit-identical.
+
+    Raises
+    ------
+    UnattainableTargetError
+        If ``target`` lies outside the means attainable for ``delta`` in
+        ``[-40, 40]`` (e.g. a target of 0.5 for a portfolio whose scores
+        all sit at the ``1e-12`` clip); the message names that range.
+    """
+
+    def gap(d: float) -> float:
+        return float(np.average(expit(z + d), weights=w)) - target
+
+    g_lo, g_hi = gap(-_DELTA_BRACKET), gap(_DELTA_BRACKET)
+    if g_lo > 0.0 or g_hi < 0.0:
+        raise UnattainableTargetError(
+            f"target mean {target:.6g} is unattainable by a logit offset: shifts in "
+            f"[-{_DELTA_BRACKET:g}, {_DELTA_BRACKET:g}] reach portfolio means "
+            f"[{g_lo + target:.6g}, {g_hi + target:.6g}] only"
+        )
+    return bisect(gap, -_DELTA_BRACKET, _DELTA_BRACKET, tol=1e-14)
+
+
 @register
-class LogitOffset:
+class LogitOffset(JsonIO):
     """Uniform log-odds shift: ``p' = sigma(logit(p) + delta)``.
 
     Mode A takes ``delta`` explicitly; mode B takes ``target_mean`` and
@@ -108,23 +152,48 @@ class LogitOffset:
         self.delta = delta
         self.target_mean = target_mean
 
-    def fit(self, p: object, sample_weight: object = None, *, y: object = None) -> Self:
+    def _check_fitted(self) -> None:
+        if not self.fitted_:
+            raise RuntimeError(_NOT_FITTED.format(name=type(self).__name__))
+
+    def fit(self, p: object, *args: object, y: object = None, sample_weight: object = None) -> Self:
         """Fix ``delta`` (mode A) or solve it against the target mean (mode B).
 
         Parameters
         ----------
         p : array_like
             Current calibrated probabilities of the portfolio.
-        sample_weight : array_like or None
-            Weights for the portfolio mean.
         y : array_like or None, keyword-only
             Ignored; accepted for compatibility with the chain fit protocol.
+        sample_weight : array_like or None, keyword-only
+            Weights for the portfolio mean. Passing it positionally (the
+            0.3 signature ``fit(p, sample_weight)``) still works but emits a
+            ``DeprecationWarning``; it will be removed in 0.5.0.
 
         Returns
         -------
         Self
             The fitted offset.
+
+        Raises
+        ------
+        ValueError
+            If not exactly one of ``delta``/``target_mean`` is set, or
+            ``target_mean`` is outside ``(0, 1)``.
+        UnattainableTargetError
+            If ``target_mean`` cannot be reached by any shift in
+            ``[-40, 40]``; the message names the attainable range.
         """
+        if args:
+            if len(args) > 1 or sample_weight is not None:
+                raise TypeError("LogitOffset.fit takes p plus keyword-only y and sample_weight")
+            warnings.warn(
+                "passing sample_weight positionally to LogitOffset.fit is deprecated and "
+                "will be removed in 0.5.0; use fit(p, sample_weight=...)",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            sample_weight = args[0]
         if (self.delta is None) == (self.target_mean is None):
             raise ValueError("LogitOffset: give exactly one of delta or target_mean")
         p_arr = validate_scores(p, name="p")
@@ -137,11 +206,7 @@ class LogitOffset:
             target = float(self.target_mean)  # type: ignore[arg-type]
             if not 0.0 < target < 1.0:
                 raise ValueError("target_mean must lie in (0, 1)")
-
-            def gap(d: float) -> float:
-                return float(np.average(expit(z + d), weights=w)) - target
-
-            self.delta_ = bisect(gap, -_DELTA_BRACKET, _DELTA_BRACKET, tol=1e-14)
+            self.delta_ = _solve_delta(z, w, target)
         self.post_mean_ = float(np.average(expit(z + self.delta_), weights=w))
         self.timestamp_ = datetime.now(UTC).isoformat(timespec="seconds")
         self.fit_meta_ = {
@@ -155,8 +220,7 @@ class LogitOffset:
 
     def transform(self, p: object) -> np.ndarray:
         """Apply the fitted shift to probabilities."""
-        if not self.fitted_:
-            raise RuntimeError("LogitOffset is not fitted; call fit() first")
+        self._check_fitted()
         return expit(logit(validate_scores(p, name="p")) + self.delta_)
 
     predict_proba = transform
@@ -165,43 +229,20 @@ class LogitOffset:
         """Fitted state for sklearn >= 1.6 (``delta_`` fixed or solved)."""
         return bool(self.fitted_)
 
-    # ------------------------------------------------------------- parameters
-    # Same manual sklearn-compatible convention as BaseCalibrator.get_params
-    # / set_params: LogitOffset is not a BaseCalibrator subclass, so it is
-    # duplicated here rather than shared.
-
-    def get_params(self, deep: bool = True) -> dict[str, object]:
-        """Constructor parameters as a dict (manual sklearn-compatible clone info)."""
-        sig = inspect.signature(type(self).__init__)
-        return {
-            name: getattr(self, name)
-            for name in sig.parameters
-            if name not in ("self", "args", "kwargs")
-        }
-
-    def set_params(self, **params: object) -> Self:
-        """Set constructor parameters; unknown names raise ``ValueError``."""
-        valid = self.get_params()
-        for key, value in params.items():
-            if key not in valid:
-                raise ValueError(
-                    f"unknown parameter {key!r} for {type(self).__name__}; "
-                    f"valid: {sorted(valid)}"
-                )
-            setattr(self, key, value)
-        return self
+    # Same manual sklearn-compatible convention as BaseCalibrator (shared
+    # implementation: both read the constructor signature).
+    get_params = BaseCalibrator.get_params
+    set_params = BaseCalibrator.set_params
 
     @property
     def affine_logit_coeffs_(self) -> tuple[float, float]:
         """``(1, delta)``: the offset is affine on the logit scale."""
-        if not self.fitted_:
-            raise RuntimeError("LogitOffset is not fitted; call fit() first")
+        self._check_fitted()
         return (1.0, self.delta_)
 
     def interpret(self) -> Interpretation:
         """Read delta in log-odds, odds-factor, and central-tendency terms."""
-        if not self.fitted_:
-            raise RuntimeError("LogitOffset is not fitted; call fit() first")
+        self._check_fitted()
         return Interpretation(
             method=type(self).__name__,
             param_names=("delta",),
@@ -240,7 +281,7 @@ class LogitOffset:
             Scale of the returned raw bounds.
         buffer_logit : float, keyword-only
             Shrink the calibrated interval by this margin in logit space
-            before inverting.
+            before inverting (must be finite and ``>= 0``).
 
         Returns
         -------
@@ -258,24 +299,13 @@ class LogitOffset:
             collapse to the full-range sentinels (0/1, ±inf) instead of raw
             values below the clip that ``transform`` could not round-trip.
         ValueError
-            If ``lo``, ``hi`` are not ordered in ``[0, 1]``.
+            If ``lo``, ``hi`` are not ordered in ``[0, 1]``, ``space`` is
+            unknown, or ``buffer_logit`` is negative.
         """
-        if not self.fitted_:
-            raise RuntimeError("LogitOffset is not fitted; call fit() first")
-        if not 0.0 <= lo <= hi <= 1.0:
-            raise ValueError(f"need 0 <= lo <= hi <= 1, got lo={lo}, hi={hi}")
-        from .base import UnattainableTargetError
-
-        lo_b, hi_b = float(lo), float(hi)
-        if buffer_logit > 0.0:
-            if lo > 0.0:
-                lo_b = float(expit(np.array([logit(np.array([lo]))[0] + buffer_logit]))[0])
-            if hi < 1.0:
-                hi_b = float(expit(np.array([logit(np.array([hi]))[0] - buffer_logit]))[0])
-            if lo_b > hi_b:
-                raise UnattainableTargetError(
-                    f"buffer_logit={buffer_logit} empties the calibrated interval [{lo}, {hi}]"
-                )
+        self._check_fitted()
+        validate_interval(lo, hi)
+        validate_space(space)
+        lo_b, hi_b = shrink_interval(lo, hi, buffer_logit)
         # Representable output range: raw scores are clipped to
         # [1e-12, 1 - 1e-12] by every forward entry point, so the shifted map
         # attains only [sigma(delta - _LOGIT_CLIP), sigma(delta + _LOGIT_CLIP)].
@@ -283,29 +313,27 @@ class LogitOffset:
         # -inf/+inf) exactly as in BaseCalibrator.interval_inverse; a raw
         # bound below the clip (e.g. 4.5e-14) could not round-trip through
         # transform — the silent break the no-silent-clamp doctrine forbids.
-        gmin = float(expit(np.array([self.delta_ - _LOGIT_CLIP]))[0])
-        gmax = float(expit(np.array([self.delta_ + _LOGIT_CLIP]))[0])
+        gmin = expit1(self.delta_ - _LOGIT_CLIP)
+        gmax = expit1(self.delta_ + _LOGIT_CLIP)
         if lo_b > gmax or hi_b < gmin:
             raise UnattainableTargetError(
                 f"calibrated target [{lo_b:.6g}, {hi_b:.6g}] does not intersect the "
                 f"offset map's representable output range [{gmin:.6g}, {gmax:.6g}]"
             )
-        lo_z = -np.inf if lo_b <= gmin else float(logit(np.array([lo_b]))[0]) - self.delta_
-        hi_z = np.inf if hi_b >= gmax else float(logit(np.array([hi_b]))[0]) - self.delta_
+        lo_z = -np.inf if lo_b <= gmin else logit1(lo_b) - self.delta_
+        hi_z = np.inf if hi_b >= gmax else logit1(hi_b) - self.delta_
         if space == "logit":
             return lo_z, hi_z
-        raw_lo = 0.0 if np.isneginf(lo_z) else float(expit(np.array([lo_z]))[0])
-        raw_hi = 1.0 if np.isposinf(hi_z) else float(expit(np.array([hi_z]))[0])
+        raw_lo = 0.0 if np.isneginf(lo_z) else expit1(lo_z)
+        raw_hi = 1.0 if np.isposinf(hi_z) else expit1(hi_z)
         return raw_lo, raw_hi
 
     def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
         """Raw scores whose shifted probabilities equal ``p`` (exact preimage).
 
-        Closed form: subtract ``delta`` on the logit scale. Same protocol as
-        :meth:`BaseCalibrator.point_inverse` — ``LogitOffset`` is not a
-        ``BaseCalibrator`` subclass, so the fit-guard and validation are
-        duplicated here rather than shared (the existing ``offset.py``
-        precedent, e.g. :meth:`interval_inverse`).
+        Closed form: subtract ``delta`` on the logit scale. Same protocol
+        and boundary doctrine as :meth:`BaseCalibrator.point_inverse`
+        (shared validation helpers).
 
         Parameters
         ----------
@@ -335,12 +363,8 @@ class LogitOffset:
             probability representation would round to 0.0/1.0 and silently
             fail to round-trip; ``space="logit"`` is exact there.
         """
-        if not self.fitted_:
-            raise RuntimeError("LogitOffset is not fitted; call fit() first")
-        if space not in ("probability", "logit"):
-            raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
-        from .base import _check_representable, _validate_point_targets
-
+        self._check_fitted()
+        validate_space(space)
         arr = _validate_point_targets(p)
         z = logit(arr) - self.delta_
         _check_representable(z, space)
@@ -348,8 +372,7 @@ class LogitOffset:
 
     def audit_report(self, y: object, p: object, *, sample_weight: object = None) -> AuditReport:
         """Pre/post guardrail comparison for the validator's one-table view."""
-        if not self.fitted_:
-            raise RuntimeError("LogitOffset is not fitted; call fit() first")
+        self._check_fitted()
         before = calibration_guardrails(y, p, sample_weight=sample_weight)
         after = calibration_guardrails(y, self.transform(p), sample_weight=sample_weight)
         return AuditReport(
@@ -362,34 +385,30 @@ class LogitOffset:
         )
 
     # ------------------------------------------------------------- serialization
-    # LogitOffset is not a BaseCalibrator subclass, so the protocol is
-    # implemented here with the shared _serialize helpers (the existing
-    # offset.py duplication precedent, e.g. interval_inverse's fit guard).
 
     def to_dict(self) -> dict[str, object]:
         """Versioned JSON-native snapshot (see ``BaseCalibrator.to_dict``).
 
         ``fit_meta`` records ``n_obs``, ``weight_sum``, ``fitted_at_utc``,
         and the ``data_fingerprint`` of the ``(p, w)`` pair — no ``n_events``
-        because the offset is fitted on probabilities alone.
+        because the offset is fitted on probabilities alone. ``fingerprint``
+        is blind to the audit ``timestamp_``: identical fits fingerprint
+        identically.
         """
-        if not self.fitted_:
-            raise RuntimeError("LogitOffset is not fitted; call fit() first")
-        from . import __version__
-
-        return {
-            "probcal_schema": SCHEMA_VERSION,
-            "probcal_version": __version__,
-            "class": type(self).__name__,
-            "params": {"delta": self.delta, "target_mean": self.target_mean},
-            "state": {
-                "delta_": self.delta_,
-                "pre_mean_": self.pre_mean_,
-                "post_mean_": self.post_mean_,
-                "timestamp_": self.timestamp_,
-            },
-            "fit_meta": dict(getattr(self, "fit_meta_", {})),
-        }
+        self._check_fitted()
+        return envelope(
+            self,
+            params=encode_value({"delta": self.delta, "target_mean": self.target_mean}),
+            state=encode_value(
+                {
+                    "delta_": self.delta_,
+                    "pre_mean_": self.pre_mean_,
+                    "post_mean_": self.post_mean_,
+                    "timestamp_": self.timestamp_,
+                }
+            ),
+            fit_meta=encode_value(dict(getattr(self, "fit_meta_", {}))),
+        )
 
     @classmethod
     def from_dict(cls, d: dict) -> "LogitOffset":
@@ -400,55 +419,27 @@ class LogitOffset:
         ValueError
             If the schema version is unknown or the payload class differs.
         """
-        check_schema(d)
-        if d.get("class") != cls.__name__:
-            raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
-        params = d.get("params", {})
-        obj = cls(delta=params.get("delta"), target_mean=params.get("target_mean"))
+        check_payload(cls, d)
+        params = decode_value(d.get("params", {}), arrays=False)
+        obj = cls(delta=params.get("delta"), target_mean=params.get("target_mean"))  # type: ignore[attr-defined]
         for key, value in d.get("state", {}).items():
-            setattr(obj, key, value)
-        obj.fit_meta_ = dict(d.get("fit_meta", {}))
+            setattr(obj, key, decode_value(value, arrays=False))
+        obj.fit_meta_ = dict(decode_value(d.get("fit_meta", {}), arrays=False))  # type: ignore[call-overload]
         obj.fitted_ = True
         return obj
-
-    def to_json(
-        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
-    ) -> str | None:
-        """Serialize to JSON text, or to ``path`` when given (returns None then)."""
-        text = json.dumps(self.to_dict(), indent=indent)
-        if path is None:
-            return text
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        return None
-
-    @classmethod
-    def from_json(cls, path_or_str: object) -> "LogitOffset":
-        """Load from a JSON string or a filesystem path."""
-        text = str(path_or_str)
-        if not text.lstrip().startswith("{"):
-            with open(text, encoding="utf-8") as fh:
-                text = fh.read()
-        return cls.from_dict(json.loads(text))
-
-    def fingerprint(self) -> str:
-        """SHA-256 of the canonical serialized form, blind to versions and
-        to the audit ``timestamp_`` — identical fits fingerprint identically."""
-        return fingerprint_of_dict(self.to_dict())
 
 
 def _offset_mle(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
     """Offset-only logistic MLE: root of the score equation on already-valid inputs.
 
     Solves ``mean_w(sigma(z + delta)) = mean_w(y)`` by bisection in
-    ``[-40, 40]`` — the mean-matching root of ``LogitOffset(target_mean=...)``
-    and, equivalently, the unique root of the offset-only logistic score
-    equation ``sum(w * (y - sigma(z + delta))) = 0``. Callers are
-    responsible for degenerate cases (empty input, a target outside
-    ``(0, 1)``); this function assumes a valid bracket and is shared,
-    unchanged, by :func:`estimate_offset` and
-    ``probcal.monitor._processes.plug_in_delta`` so the two stay
-    bit-identical.
+    ``[-40, 40]`` (:func:`_solve_delta`, the same root-finder as
+    ``LogitOffset(target_mean=...)``) — equivalently, the unique root of the
+    offset-only logistic score equation ``sum(w * (y - sigma(z + delta))) = 0``.
+    Callers are responsible for degenerate cases (empty input, a target
+    outside ``(0, 1)``); this function is shared, unchanged, by
+    :func:`estimate_offset` and ``probcal.monitor._processes.plug_in_delta``
+    so the two stay bit-identical.
 
     Parameters
     ----------
@@ -464,12 +455,7 @@ def _offset_mle(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
     float
         The fitted log-odds shift ``delta``.
     """
-    target = float(np.average(y, weights=w))
-
-    def gap(d: float) -> float:
-        return float(np.average(expit(z + d), weights=w)) - target
-
-    return bisect(gap, -_DELTA_BRACKET, _DELTA_BRACKET, tol=1e-14)
+    return _solve_delta(z, w, float(np.average(y, weights=w)))
 
 
 def estimate_offset(y: object, p: object, *, sample_weight: object = None) -> OffsetEstimate:

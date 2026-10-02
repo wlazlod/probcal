@@ -162,3 +162,57 @@ def test_fit_accepts_and_ignores_y() -> None:
     b = LogitOffset(delta=0.3).fit(p, y=y)
     assert a.delta_ == b.delta_
     np.testing.assert_array_equal(a.transform(p), b.transform(p))
+
+
+def test_interval_inverse_validates_space_and_buffer() -> None:
+    # OFF-11 / CORE-5: an unknown space silently returned probabilities; a
+    # negative buffer was silently ignored.
+    off = LogitOffset(delta=0.3).fit(np.array([0.1, 0.2]))
+    with pytest.raises(ValueError, match="space"):
+        off.interval_inverse(0.1, 0.2, space="logits")
+    with pytest.raises(ValueError, match="buffer_logit"):
+        off.interval_inverse(0.1, 0.2, buffer_logit=-0.1)
+    lo, hi = off.interval_inverse(0.1, 0.2, space="logit", buffer_logit=0.05)
+    assert lo == pytest.approx(logit(np.array([0.1]))[0] + 0.05 - 0.3, abs=1e-12)
+    assert hi == pytest.approx(logit(np.array([0.2]))[0] - 0.05 - 0.3, abs=1e-12)
+
+
+def test_unattainable_target_mean_names_the_attainable_range() -> None:
+    # OFF-17: used to surface as a bare bisection-bracket error.
+    from probcal import UnattainableTargetError
+
+    p = np.full(5, 1e-12)
+    with pytest.raises(UnattainableTargetError, match="reach portfolio means"):
+        LogitOffset(target_mean=1.0 - 1e-9).fit(p)
+
+
+def test_positional_sample_weight_is_deprecated_but_works() -> None:
+    # OFF-26: sample_weight is keyword-only; the 0.3 positional form warns.
+    p = np.array([0.05, 0.1, 0.3])
+    w = np.array([1.0, 2.0, 3.0])
+    ref = LogitOffset(target_mean=0.12).fit(p, sample_weight=w)
+    with pytest.warns(DeprecationWarning, match="removed in 0.5.0"):
+        old = LogitOffset(target_mean=0.12).fit(p, w)
+    assert old.delta_ == ref.delta_
+    with pytest.raises(TypeError):
+        LogitOffset(target_mean=0.12).fit(p, w, sample_weight=w)
+
+
+def test_fit_mode_b_and_offset_mle_share_the_root_finder() -> None:
+    # OFF-20: one _solve_delta behind both entry points.
+    rng = np.random.default_rng(3)
+    p = expit(rng.normal(-2.0, 1.0, 300))
+    y = (rng.random(300) < p).astype(float)
+    w = np.ones(300)
+    off = LogitOffset(target_mean=float(y.mean())).fit(p)
+    assert off.delta_ == _offset_mle(logit(p), y, w)
+
+
+def test_json_round_trip_uses_shared_protocol() -> None:
+    off = LogitOffset(delta=0.2).fit(np.array([0.1, 0.4]))
+    back = LogitOffset.from_json(off.to_json())
+    assert back.delta_ == off.delta_ and back.fingerprint() == off.fingerprint()
+    assert back.get_params() == {"delta": 0.2, "target_mean": None}
+    assert back.set_params(delta=0.5).delta == 0.5
+    with pytest.raises(ValueError, match="unknown parameter"):
+        back.set_params(nope=1)

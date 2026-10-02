@@ -151,8 +151,7 @@ def test_path_writes_html_file(tmp_path) -> None:
 
 def test_import_report_module_stays_matplotlib_free() -> None:
     code = (
-        "import sys, probcal.report\n"
-        "assert 'matplotlib' not in sys.modules, sorted(sys.modules)\n"
+        "import sys, probcal.report\nassert 'matplotlib' not in sys.modules, sorted(sys.modules)\n"
     )
     result = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, check=False
@@ -209,3 +208,49 @@ def test_markdown_table_survives_pipe_in_group_label(tmp_path) -> None:
         assert len(_gfm_cells(ln)) == header_cols, ln
     assert "a\\|b" in text
     assert "c\\|d" in text
+
+
+# ---------------------------------------------------------------- 0.4.0 fixes
+
+
+@pytest.mark.parametrize(
+    ("y_bad", "p_bad", "match"),
+    [
+        (None, "matrix", "two-column"),
+        ("nonbinary", None, "binary"),
+        (None, "short", "equal length"),
+        (None, "range", r"\[0, 1\]"),
+    ],
+)
+def test_inputs_validated_once_at_entry(y_bad, p_bad, match) -> None:
+    # OFF-15: an (n, 2) matrix or a non-binary y crashed deep in a section.
+    y, p, _ = _portfolio(200)
+    if p_bad == "matrix":
+        p = np.column_stack([p, p])  # rows do not sum to 1
+    elif p_bad == "short":
+        p = p[:-1]
+    elif p_bad == "range":
+        p = p * 3.0
+    if y_bad == "nonbinary":
+        y = y * 2.0
+    with pytest.raises(ValueError, match=match):
+        validation_report(y, p, n_boot=5)
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_predict_proba_matrix_accepted() -> None:
+    y, p, _ = _portfolio(300)
+    html = validation_report(y, np.column_stack([1.0 - p, p]), n_boot=5)
+    assert "Metric report" in html
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_backtest_follows_the_numeric_grade_order() -> None:
+    # OFF-5: the Jeffreys table sorted labels lexicographically ("10" < "2").
+    y, p, _ = _portfolio(1200)
+    edges = np.quantile(p, np.linspace(0, 1, 12)[1:-1])
+    grades = (np.searchsorted(edges, p) + 1).astype(str)  # "1".."11", by risk
+    html = validation_report(y, p, grades=grades, n_boot=5)
+    section = html.split("Per-grade backtest (Jeffreys)")[1].split("Pluto-Tasche")[0]
+    rows = re.findall(r"<tr><td>([^<]+)</td>", section)
+    assert rows == [str(i) for i in range(1, 12)]

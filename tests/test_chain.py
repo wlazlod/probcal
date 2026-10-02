@@ -192,3 +192,19 @@ def test_fit_propagates_sample_weight_to_every_stage() -> None:
     manual = Chain([cal, off])
     np.testing.assert_array_equal(chain.predict_proba(_Q), manual.predict_proba(_Q))
     assert chain.offsets_[0].delta_ == off.delta_
+
+
+def test_chain_validates_space_and_buffer() -> None:
+    # CORE-5 / OFF-20: Chain uses the shared validation and buffer helpers.
+    from probcal import Chain, LogitOffset, PlattCalibrator, make_pd_portfolio
+
+    d = make_pd_portfolio(n=2000, random_state=4)
+    chain = Chain([PlattCalibrator(), LogitOffset(delta=0.2)]).fit(d.scores, d.y)
+    with pytest.raises(ValueError, match="space"):
+        chain.point_inverse(np.array([0.1]), space="raw")
+    with pytest.raises(ValueError, match="space"):
+        chain.interval_inverse(0.01, 0.1, space="raw")
+    with pytest.raises(ValueError, match="buffer_logit"):
+        chain.interval_inverse(0.01, 0.1, buffer_logit=-0.5)
+    back = Chain.from_json(chain.to_json())
+    assert back.fingerprint() == chain.fingerprint()

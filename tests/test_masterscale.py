@@ -141,7 +141,10 @@ def test_interpret_states_the_convention() -> None:
     ms = Masterscale(BANDS)
     interp = ms.interpret()
     assert interp.method == "Masterscale"
-    assert interp.param_names == ms.names
+    # 0.4.0: each band contributes its (lo, hi) pair, not just its upper edge.
+    assert interp.param_names[:4] == ("A.lo", "A.hi", "B.lo", "B.hi")
+    assert interp.param_values[:4] == (0.0, 0.01, 0.01, 0.02)
+    assert len(interp.param_values) == 2 * ms.n_grades
     assert any("lo <= p < hi" in m for m in interp.messages)
     assert any("A" in m and "0.01" in m for m in interp.messages)
 
@@ -341,3 +344,55 @@ def test_validation_report_with_masterscale(tmp_path, monkeypatch) -> None:
     # A label array keeps today's wording.
     html_labels = validation_report(P_TEST.y, p, grades=MS.assign(p), n_boot=20, seed=1)
     assert "by mean predicted probability" in html_labels and "Grade table" not in html_labels
+
+
+# ---------------------------------------------------------------- 0.4.0 fixes
+
+
+def test_deepcopy_and_pickle_round_trip() -> None:
+    # OFF-2: both raised "Masterscale is immutable".
+    import copy
+    import pickle
+
+    ms = Masterscale(BANDS, provenance={"objective": "likelihood", "binding": ["min_count"]})
+    for clone in (copy.deepcopy(ms), copy.copy(ms), pickle.loads(pickle.dumps(ms))):
+        assert clone == ms and clone.provenance == ms.provenance
+        assert clone.fingerprint() == ms.fingerprint()
+    with pytest.raises(AttributeError, match="immutable"):
+        ms._bands = ()  # type: ignore[misc]
+
+
+def test_provenance_is_deep_frozen() -> None:
+    # OFF-12: the provenance was copied one level deep only.
+    src = {"objective": "likelihood", "binding": ["min_count"], "nested": {"k": [1, 2]}}
+    ms = Masterscale(BANDS, provenance=src)
+    src["binding"].append("min_events")
+    src["nested"]["k"].append(3)
+    got = ms.provenance
+    assert got == {"objective": "likelihood", "binding": ["min_count"], "nested": {"k": [1, 2]}}
+    got["binding"].append("x")  # the returned copy is the caller's to mutate
+    assert ms.provenance["binding"] == ["min_count"]
+
+
+def test_equality_and_fingerprint_follow_one_rule() -> None:
+    # OFF-13: __eq__ ignored provenance while fingerprint covered it.
+    plain = Masterscale(BANDS)
+    built = Masterscale(BANDS, provenance={"objective": "likelihood"})
+    assert plain.bands == built.bands
+    assert plain != built and plain.fingerprint() != built.fingerprint()
+    twin = Masterscale(dict(reversed(list(BANDS.items()))), provenance={"objective": "likelihood"})
+    assert twin == built and hash(twin) == hash(built)
+    assert twin.fingerprint() == built.fingerprint()
+    assert len({plain, built, twin}) == 2
+
+
+def test_grade_table_equality_and_repr() -> None:
+    # OFF-3 / OFF-21: array-aware equality; repr is the generic result table.
+    ms = Masterscale.from_edges([0.5, 0.9])
+    y, p = np.array([0.0, 1.0, 1.0]), np.array([0.1, 0.2, 0.6])
+    t1, t2 = ms.table(y, p), ms.table(y, p)
+    assert t1 == t2  # nan observed_rate in the empty grade compares equal
+    assert t1 != ms.table(y, np.array([0.1, 0.6, 0.6]))
+    with pytest.raises(TypeError):
+        hash(t1)
+    assert repr(t1).startswith("GradeTable\ngrade")

@@ -57,3 +57,27 @@ def test_export() -> None:
     import probcal
 
     assert "make_pd_portfolio" in probcal.__all__
+
+
+def test_intercept_shifts_true_probabilities_after_anchoring() -> None:
+    # OFF-4: the intercept was absorbed by the mean anchor (no effect at all).
+    base = make_pd_portfolio(n=5000, random_state=2)
+    shifted = make_pd_portfolio(n=5000, intercept=0.5, random_state=2)
+    np.testing.assert_array_equal(base.scores, shifted.scores)
+    from probcal._math import logit
+
+    np.testing.assert_allclose(logit(shifted.p_true) - logit(base.p_true), 0.5, atol=1e-9)
+    assert shifted.p_true.mean() > 0.03
+
+
+def test_identity_case_honours_event_rate() -> None:
+    # OFF-4: slope=1, asymmetry=0 ignored event_rate entirely.
+    port = make_pd_portfolio(n=20000, slope=1.0, asymmetry=0.0, event_rate=0.1, random_state=5)
+    assert abs(port.scores.mean() - 0.1) < 1e-9
+    np.testing.assert_array_equal(port.scores, port.p_true)
+
+
+def test_portfolio_equality_is_array_aware() -> None:
+    # OFF-3
+    assert make_pd_portfolio(n=100, random_state=1) == make_pd_portfolio(n=100, random_state=1)
+    assert make_pd_portfolio(n=100, random_state=1) != make_pd_portfolio(n=100, random_state=2)

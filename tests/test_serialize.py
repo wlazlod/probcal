@@ -80,7 +80,7 @@ _Q = make_pd_portfolio(n=400, random_state=8).scores  # held-out query
 class _StubModel:
     """Deterministic sklearn-free model over a single score column."""
 
-    def fit(self, X, y):  # noqa: ARG002 - signature parity for the cv flow
+    def fit(self, X, y):  # signature parity for the cv flow
         return self
 
     def predict_proba(self, X):

@@ -31,7 +31,7 @@ class _StubModel:
     Mirrored in tests/test_golden.py — keep the two definitions identical.
     """
 
-    def fit(self, X, y):  # noqa: ARG002
+    def fit(self, X, y):
         return self
 
     def predict_proba(self, X):

@@ -34,7 +34,7 @@ _REQUIRES_RE = re.compile(r"<!--\s*docs:\s*requires\s+([^>]*?)\s*-->")
 class _StubModel:
     """Sklearn-free stand-in for a scoring model (mirrors tests/test_golden.py)."""
 
-    def fit(self, X, y):  # noqa: ARG002
+    def fit(self, X, y):
         return self
 
     def predict_proba(self, X):

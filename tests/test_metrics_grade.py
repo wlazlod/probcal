@@ -105,7 +105,7 @@ def test_binomial_exact_vs_scipy() -> None:
     np.testing.assert_allclose(res.p_exact, [expected], atol=1e-10)
 
 
-# ------------------------------------------------------------------ 0.4.0 fixes
+# ------------------------------------------------------------------ 0.3.4 fixes
 
 
 def test_grades_length_validated() -> None:

@@ -126,7 +126,7 @@ integer ≥ 2, any sklearn splitter (`GroupKFold`, `TimeSeriesSplit`, ...) or
 iterable of `(train, test)` index pairs, or `"prefit"`. `stratify` applies
 only to an integer `cv`: `True` (the default) uses
 `StratifiedKFold(cv, shuffle=True, random_state=random_state)`, `False` uses
-`KFold(cv, shuffle=True, random_state=random_state)` (before 0.4.0,
+`KFold(cv, shuffle=True, random_state=random_state)` (before 0.3.4,
 `stratify=False` silently fell back to an unshuffled stratified split and
 ignored `random_state`). `X` reaches the wrapped estimator untouched, as in
 `CalibratedClassifierCV`: DataFrames with string columns feeding a

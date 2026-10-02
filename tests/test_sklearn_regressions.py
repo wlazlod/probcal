@@ -1,4 +1,4 @@
-"""Regression tests for the 0.4.0 sklearn-adapter fixes (MON-* review items)."""
+"""Regression tests for the 0.3.4 sklearn-adapter fixes (MON-* review items)."""
 
 import numpy as np
 import pytest

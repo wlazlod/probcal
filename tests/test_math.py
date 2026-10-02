@@ -492,7 +492,7 @@ def test_loess_window_starts_match_the_two_pointer_loop(p: np.ndarray, y: np.nda
 
 
 def test_loess_per_observation_matches_the_retired_loop() -> None:
-    """0.4.0 routes every evaluation through the blocked engine; on data points
+    """0.3.4 routes every evaluation through the blocked engine; on data points
     it agrees with the retired loop to a few ulps."""
     for n, rnd in ((300, None), (2000, 2), (2000, 3)):
         d = make_pd_portfolio(n=n, random_state=5)
@@ -607,7 +607,7 @@ def test_loess_rank_deficient_windows_do_not_reach_reported_values() -> None:
     assert np.max(np.abs(fast - slow)) <= 1e-12
 
 
-# ------------------------------------------------- IRLS convergence criterion (0.4.0)
+# ------------------------------------------------- IRLS convergence criterion (0.3.4)
 
 
 def test_irls_unconverged_iteration_cap_is_reported() -> None:

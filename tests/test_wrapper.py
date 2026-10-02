@@ -156,7 +156,7 @@ def test_export() -> None:
     assert "CalibratedModel" in probcal.__all__
 
 
-# ---------------------------------------------------------------- 0.4.0 fixes
+# ---------------------------------------------------------------- 0.3.4 fixes
 
 
 class LookupModel:

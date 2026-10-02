@@ -228,7 +228,7 @@ def test_interpret_reports_tau2_and_per_segment_row() -> None:
         assert any(repr(g) in m for m in result.messages)
 
 
-# ---------------------------------------------------------------- 0.4.0 regressions
+# ---------------------------------------------------------------- 0.3.4 regressions
 
 
 def test_is_monotone_survives_serialization() -> None:

@@ -283,7 +283,7 @@ def test_public_exports() -> None:
         assert getattr(probcal, name) is not None
 
 
-# ---------------------------------------------------------------- 0.4.0 regressions
+# ---------------------------------------------------------------- 0.3.4 regressions
 
 
 def test_beta_a_boundary_clamp_warns_like_temperature() -> None:

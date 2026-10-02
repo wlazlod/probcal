@@ -306,7 +306,7 @@ def test_smooth_ece_refactor_bit_identical_on_under_resolved_fallback(
     assert smooth_ece(d.y, d.scores) == _old_smooth_ece(d.y, d.scores)
 
 
-# ------------------------------------------------------------------ 0.4.0 fixes
+# ------------------------------------------------------------------ 0.3.4 fixes
 
 
 def test_ecce_invariant_to_tie_order() -> None:

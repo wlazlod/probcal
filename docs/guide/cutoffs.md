@@ -103,7 +103,7 @@ each is half-open, `[inf{s : g(s) >= lo}, inf{s : g(s) >= hi})`, and the top
 band is closed at `sup{s : g(s) <= hi}`. Adjacent raw bands share their edge,
 so the translated ladder partitions the raw line without gaps or overlaps,
 and counting raw scores per raw band reproduces `assign`'s counts exactly,
-plateaus of a step calibrator (isotonic, histogram) included. (Before 0.4.0
+plateaus of a step calibrator (isotonic, histogram) included. (Before 0.3.4
 the raw bands were closed, and a plateau sitting on a grade edge was counted
 in both neighbouring grades.) Store the output next to the calibrator's
 fingerprint, policy fixed, mapping versioned ([Auditability](auditability.md)).

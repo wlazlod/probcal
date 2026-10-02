@@ -38,7 +38,7 @@ weights as obligor and default counts (an integer weight equals row duplication)
 `CalibrationMonitor`. The per-grade binomial and Jeffreys tests use raw integer counts and
 ignore weights.
 
-0.4.0 introduced this convention. Before it, test statistics treated `sum(w)` as the sample
+0.3.4 introduced this convention. Before it, test statistics treated `sum(w)` as the sample
 size: Hosmer–Lemeshow and the calibration LR test scaled with a constant weight `c`, and
 Spiegelhalter's z was divided by `sqrt(c)`. For weights drawn from U(0.5, 2) the HL and LR
 statistics now come out smaller by the factor `n_eff / sum(w)` (about 0.72).
@@ -296,7 +296,7 @@ The **calibration test** is the likelihood-ratio test of \( (\alpha, \beta) = (0
 jointly, on 2 degrees of freedom: the Cox-framed "weak calibration" test, in the lineage
 running through Miller, Hui and Tierney (1991). Its χ² p-value comes from
 `probcal._math.chi2_sf`, an upper-tail evaluation that keeps the runtime numpy-only and stays
-accurate deep in the tail (since 0.4.0, every χ² and normal p-value in the package, including
+accurate deep in the tail (since 0.3.4, every χ² and normal p-value in the package, including
 Hosmer–Lemeshow, the belt, Spiegelhalter and SKCE, is computed this way, so tiny p-values are
 reported as such instead of rounding to exactly 0).
 
@@ -495,7 +495,7 @@ O(bins · taps) per bisection step, where taps is the truncated-Gaussian kernel 
 Each replicate is sorted by prediction once (`np.argsort(..., kind="stable")`), and the LOESS
 fit and the ECCE walk reuse that order. The LOESS anchors are fitted in cache-sized blocks of
 whole windows rather than one Python iteration each (`_math._loess_fit_sorted_vec`, the only
-LOESS engine since 0.4.0; it matches the former per-point loop to ≤ 4.3×10⁻¹⁵ on fitted values
+LOESS engine since 0.3.4; it matches the former per-point loop to ≤ 4.3×10⁻¹⁵ on fitted values
 and is tested against it). Reported **point estimates** come off the unsorted path; the
 bootstrap replicates' reordered sums move percentile CI bounds only in their last bits.
 
@@ -518,7 +518,7 @@ Measured on the dev host at n=10⁴, one full-catalog replicate costs about 28 m
 a `metrics=` subset, or both.
 
 `docs/scripts/benchmarks.py` measures single calls on demand. Measured on the dev host
-(0.4.0):
+(0.3.4):
 
 | n | call | wall time (s) |
 | --- | --- | --- |

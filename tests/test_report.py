@@ -210,7 +210,7 @@ def test_markdown_table_survives_pipe_in_group_label(tmp_path) -> None:
     assert "c\\|d" in text
 
 
-# ---------------------------------------------------------------- 0.4.0 fixes
+# ---------------------------------------------------------------- 0.3.4 fixes
 
 
 @pytest.mark.parametrize(

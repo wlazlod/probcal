@@ -128,7 +128,7 @@ def test_enir_fit_no_scale_warning_below_threshold() -> None:
     assert not any("quadratic in unique scores" in str(w.message) for w in rec)
 
 
-# ---------------------------------------------------------------- 0.4.0 regressions
+# ---------------------------------------------------------------- 0.3.4 regressions
 
 
 def _low_tail_inversion(seed: int = 0) -> tuple[np.ndarray, np.ndarray]:

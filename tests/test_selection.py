@@ -219,7 +219,7 @@ def test_selection_report_has_mcb_dsc_columns() -> None:
     assert sel2.report_.unc == pytest.approx(rep.unc)
 
 
-# ---------------------------------------------------------------- 0.4.0 regressions
+# ---------------------------------------------------------------- 0.3.4 regressions
 
 
 def test_selector_delegates_the_inverse_protocol_to_its_winner() -> None:

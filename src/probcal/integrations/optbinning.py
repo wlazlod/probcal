@@ -61,7 +61,7 @@ def _table_fingerprint(table: object) -> str:
 
 
 def _legacy_table_fingerprint(table: object) -> str:
-    """The pre-0.4.0 fingerprint (``to_csv`` text; pandas-version-dependent)."""
+    """The pre-0.3.4 fingerprint (``to_csv`` text; pandas-version-dependent)."""
     return hashlib.sha256(table.to_csv(index=False).encode("utf-8")).hexdigest()  # type: ignore[attr-defined]
 
 
@@ -208,7 +208,7 @@ class CalibratedScorecard(JsonIO, CalibratorProtocolMixin):
         """Rebuild around a scorecard loaded through optbinning's own tooling.
 
         The stored scorecard-table fingerprint must match ``scorecard``.
-        Payloads written before 0.4.0 stored a ``to_csv``-based fingerprint;
+        Payloads written before 0.3.4 stored a ``to_csv``-based fingerprint;
         it is still accepted when it matches (re-saving writes the new,
         pandas-version-independent form).
 

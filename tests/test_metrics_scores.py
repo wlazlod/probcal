@@ -91,7 +91,7 @@ def test_scores_vs_sklearn() -> None:
     assert abs(brier_score(y, p) - skm.brier_score_loss(y, p)) < 1e-10
 
 
-# ------------------------------------------------------------------ 0.4.0 fixes
+# ------------------------------------------------------------------ 0.3.4 fixes
 
 
 def _old_murphy(y: np.ndarray, p: np.ndarray, n_bins: int = 10, bias_corrected: bool = False):

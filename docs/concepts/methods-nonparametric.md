@@ -56,7 +56,7 @@ blocks: a step function, constant within each block. Scores outside the calibrat
 clamp to the first or last block level. An optional `interpolation="linear"` mode joins block
 midpoints to remove the discontinuities; its `interval_inverse` inverts that interpolated map
 (the exact crossing on the bracketing segment, nudged by a few ulps so the bounds lie inside
-the preimage), not the underlying step map as before 0.4.0. `interpret()` reports the number of blocks (the
+the preimage), not the underlying step map as before 0.3.4. `interpret()` reports the number of blocks (the
 effective complexity actually estimated from the data), and flat steps translate into tied
 predictions downstream.
 

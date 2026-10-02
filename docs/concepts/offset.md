@@ -194,7 +194,7 @@ result, a policy `LogitOffset(delta=...)`), `CalibratedModel.with_offset(offset)
 copy of the wrapped model with a copy of the fitted offset appended. It needs no calibration
 data, so unlike the argument-less `offset_to()` it also works on a model loaded from JSON; the
 original is not mutated. `offset_to` takes keyword arguments only (`target_mean=`, `delta=`,
-`X=`); positional use is deprecated in 0.4.0 and removed in 0.5.0.
+`X=`); positional use is deprecated in 0.3.4 and removed in 0.5.0.
 
 The same discipline holds when a `Chain` is fit directly rather than built by
 `offset_to`. `Chain.fit(s, y, sample_weight=None)` refits every stage in sequence on the same

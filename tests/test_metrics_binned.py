@@ -85,7 +85,7 @@ def test_hl_pvalue_vs_scipy_chi2() -> None:
     assert abs(res.p_value - expected) < 1e-9
 
 
-# ------------------------------------------------------------------ 0.4.0 fixes
+# ------------------------------------------------------------------ 0.3.4 fixes
 
 
 def _old_hosmer_lemeshow(y: np.ndarray, p: np.ndarray, g: int = 10) -> tuple[float, int]:

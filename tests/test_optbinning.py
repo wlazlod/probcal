@@ -129,7 +129,7 @@ def test_masterscale_method_accepts_masterscale_object(fitted) -> None:
     assert cs.masterscale(ms) == cs.masterscale(ms.bands)
 
 
-# ---------------------------------------------------------------- 0.4.0 regressions
+# ---------------------------------------------------------------- 0.3.4 regressions
 
 
 class _ConstantScorecard:

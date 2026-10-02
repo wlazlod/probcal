@@ -259,7 +259,7 @@ class CalibrationMonitor(JsonIO):
     Notes
     -----
     Anytime validity needs the global mixture's components and weights to
-    be fixed in advance. Before 0.4.0 a grade first seen mid-stream joined
+    be fixed in advance. Before 0.3.4 a grade first seen mid-stream joined
     the average with ``e = 1``, re-weighting the existing components — the
     global value could then jump toward 1 without any evidence. Declaring
     ``grades`` fixes the universe up front; without it the per-grade
@@ -841,7 +841,7 @@ class CalibrationMonitor(JsonIO):
     def from_dict(cls, d: dict) -> "CalibrationMonitor":
         """Rebuild a monitor mid-stream; the trajectory continues bit-for-bit.
 
-        Payloads written before 0.4.0 keyed float grade labels as
+        Payloads written before 0.3.4 keyed float grade labels as
         ``"1.0"``; those keys are renamed to the normalized ``"1"`` on load
         so new batches continue the same per-grade processes.
 
@@ -902,7 +902,7 @@ class CalibrationMonitor(JsonIO):
 def _legacy_rekey(d: dict, grades: tuple | None) -> Any:
     """Key renaming for payloads written before grade-label normalization.
 
-    Before 0.4.0 declared grades were keyed ``str(g)`` and data labels
+    Before 0.3.4 declared grades were keyed ``str(g)`` and data labels
     ``np.asarray(grade).astype(str)``, so a float label ``1.0`` was keyed
     ``"1.0"``. For such payloads, keys of declared grades map to
     :func:`grade_key`, and undeclared ``"<int>.0"`` keys (float arrays) map

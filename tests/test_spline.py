@@ -92,7 +92,7 @@ def test_export() -> None:
     assert "SplineCalibrator" in probcal.__all__
 
 
-# ---------------------------------------------------------------- 0.4.0 regressions
+# ---------------------------------------------------------------- 0.3.4 regressions
 
 
 def _far_tail_inversion() -> tuple[np.ndarray, np.ndarray]:

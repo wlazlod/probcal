@@ -327,7 +327,7 @@ def test_evaluate_accepts_single_column_p() -> None:
     assert np.array_equal(col.ci_high, flat.ci_high)
 
 
-# ------------------------------------------------------------------ 0.4.0 fixes
+# ------------------------------------------------------------------ 0.3.4 fixes
 
 
 def test_evaluate_n_boot_zero_gives_point_estimates_only() -> None:

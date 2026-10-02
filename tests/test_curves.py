@@ -229,7 +229,7 @@ def test_reliability_smooth_grid_scales_consistent() -> None:
     assert len(curve.grid_p) == 200
 
 
-# ------------------------------------------------------------------ 0.4.0 fixes
+# ------------------------------------------------------------------ 0.3.4 fixes
 
 
 def _gap_data() -> tuple[np.ndarray, np.ndarray]:

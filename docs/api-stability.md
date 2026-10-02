@@ -78,7 +78,7 @@ and the changelog. Behavioral changes that alter numbers ship with a
 detailed changelog entry and, where feasible, a parameter that
 recovers the old values.
 
-Deprecated in 0.4.0, all removed in 0.5.0 (each warns with a
+Deprecated in 0.3.4, all removed in 0.5.0 (each warns with a
 `DeprecationWarning` naming its replacement; until then the old spelling
 behaves as before):
 

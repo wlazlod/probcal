@@ -100,7 +100,7 @@ def test_belt_result_fields() -> None:
         np.testing.assert_array_equal(belt.lower_80, np.array([0.005, 0.015]))
 
 
-# ---------------------------------------------------------------- 0.4.0 fixes
+# ---------------------------------------------------------------- 0.3.4 fixes
 
 
 def _metric_report(v: float = 0.131) -> MetricReport:

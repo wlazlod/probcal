@@ -105,7 +105,7 @@ rather than \( O(mn) \). The brute-force refit is retained in the test suite as 
 correctness reference the precomputation is checked against.
 
 **Ties.** Isotonic regression pools equal scores, and the augmented fits must do the same.
-Since 0.4.0 the IVAP pools tied calibration scores into one point (weights summed) before
+Since 0.3.4 the IVAP pools tied calibration scores into one point (weights summed) before
 building the tables, and a test score equal to a calibration score joins that point rather
 than being inserted beside it. The lookup reads `F1_` at `searchsorted(..., side="left")` and
 `F0_` at `side="right"`: a test point labelled 1 (or 0) strictly between two calibration scores
@@ -114,7 +114,7 @@ therefore invariant to the row order of the calibration data, bit for bit, and t
 reference is the literal pooled definition (two PAVA refits per query on the pooled set).
 On tie-free data with queries away from the calibration scores nothing changes; in-sample
 queries and rounded scores move by up to a few 10⁻² in probability (`ties_pooled_` records the
-behaviour; payloads saved before 0.4.0 keep their tables and their old lookup).
+behaviour; payloads saved before 0.3.4 keep their tables and their old lookup).
 
 ## The cross Venn–Abers predictor (CVAP)
 

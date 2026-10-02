@@ -94,7 +94,7 @@ def test_scaling_binning_interpret_two_stages() -> None:
     assert "n_bins" in interp.param_names
 
 
-# ---------------------------------------------------------------- 0.4.0 regressions
+# ---------------------------------------------------------------- 0.3.4 regressions
 
 
 def test_scaling_binning_decreasing_platt_is_not_monotone() -> None:

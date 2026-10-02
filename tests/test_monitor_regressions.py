@@ -1,4 +1,4 @@
-"""Regression tests for the 0.4.0 monitor fixes (MON-* review items)."""
+"""Regression tests for the 0.3.4 monitor fixes (MON-* review items)."""
 
 import json
 import warnings
@@ -57,7 +57,7 @@ def test_empty_batch_raises_a_clear_error() -> None:
 
 
 def _old_e_global(step, n_components=2) -> float:
-    """The pre-0.4.0 rule: every grade seen so far joined the average."""
+    """The pre-0.3.4 rule: every grade seen so far joined the average."""
     parts = [step.e_offset, step.e_shape][:n_components]
     if step.e_grades:
         parts.append(float(np.mean(list(step.e_grades.values()))))
@@ -91,7 +91,7 @@ def test_undeclared_grade_warning_fires_once_and_survives_persistence() -> None:
 def test_null_stream_e_global_never_jumps_when_grades_appear_mid_stream() -> None:
     # Under H0, the global e-value at the batch where grades first appear
     # must be exactly what the same stream without grade arrays gives. The
-    # pre-0.4.0 rule (a new component entering at e = 1) instead pulled a
+    # pre-0.3.4 rule (a new component entering at e = 1) instead pulled a
     # below-1 global value up toward 1 with no evidence at all.
     runs, appear = 40, 3
     jumped_before = 0

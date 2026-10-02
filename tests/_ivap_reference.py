@@ -1,7 +1,7 @@
 """Brute-force IVAP pair refit: the equivalence gate's ground truth for the
 Vovk-Petej precomputation.
 
-Since 0.4.0 the definition pools tied calibration scores into one point (weights
+Since 0.3.4 the definition pools tied calibration scores into one point (weights
 summed, weighted-mean label) and merges a query whose score equals a calibration
 score into that point, so the result is invariant to row order. Up to 0.3.x the
 reference (and the calibrator) inserted the query at ``searchsorted(...,

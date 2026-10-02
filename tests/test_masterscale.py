@@ -141,7 +141,7 @@ def test_interpret_states_the_convention() -> None:
     ms = Masterscale(BANDS)
     interp = ms.interpret()
     assert interp.method == "Masterscale"
-    # 0.4.0: each band contributes its (lo, hi) pair, not just its upper edge.
+    # 0.3.4: each band contributes its (lo, hi) pair, not just its upper edge.
     assert interp.param_names[:4] == ("A.lo", "A.hi", "B.lo", "B.hi")
     assert interp.param_values[:4] == (0.0, 0.01, 0.01, 0.02)
     assert len(interp.param_values) == 2 * ms.n_grades
@@ -346,7 +346,7 @@ def test_validation_report_with_masterscale(tmp_path, monkeypatch) -> None:
     assert "by mean predicted probability" in html_labels and "Grade table" not in html_labels
 
 
-# ---------------------------------------------------------------- 0.4.0 fixes
+# ---------------------------------------------------------------- 0.3.4 fixes
 
 
 def test_deepcopy_and_pickle_round_trip() -> None:

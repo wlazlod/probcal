@@ -713,7 +713,7 @@ def _loess_fit_sorted_vec(
 ) -> np.ndarray:
     """LOESS at sorted eval points: tricube-weighted local fits on r-windows.
 
-    The single LOESS engine (0.4.0 retired the per-point Python loop it was
+    The single LOESS engine (0.3.4 retired the per-point Python loop it was
     once the "vectorized twin" of). Anchors are processed in blocks of
     ``_LOESS_BLOCK // r`` so the gathered (block x r) window matrix stays
     cache-resident; every window has exactly ``r`` points, so the gather is

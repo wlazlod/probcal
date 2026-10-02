@@ -267,7 +267,7 @@ def test_skce_test_validation() -> None:
     assert isinstance(res, SkceTestResult)
 
 
-# ------------------------------------------------------------------ 0.4.0 fixes
+# ------------------------------------------------------------------ 0.3.4 fixes
 
 
 def test_bootstrap_replicates_on_the_statistic_scale() -> None:

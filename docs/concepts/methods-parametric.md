@@ -247,7 +247,7 @@ Convergence is judged on the **full** Newton step, `max|H⁻¹g| < tol · (1 + m
 the step-halved one. A line search that stalls (no strict decrease is possible) counts as
 converged only if that full step is already below 10⁻⁵ relative, the floating-point floor.
 Along a quasi-separation ray the gradient can vanish while the full step stays large; since
-0.4.0 that case reports `converged=False`, warns, and returns the ridge refit instead of
+0.3.4 that case reports `converged=False`, warns, and returns the ridge refit instead of
 claiming convergence.
 
 What to check after fitting: `converged_` on `PlattCalibrator` and `BetaCalibrator` records

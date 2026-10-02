@@ -31,7 +31,7 @@ from .thresholds import build_masterscale, calibrated_bands_to_raw, calibrated_i
 from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
 from .wrapper import CalibratedModel
 
-__version__ = "0.4.0.dev0"
+__version__ = "0.3.4"
 
 __all__: list[str] = [
     "AdjustedAttribution",

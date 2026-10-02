@@ -54,7 +54,7 @@ def test_guardrails_fail_on_distorted() -> None:
     assert not g.slope_ok
 
 
-# ------------------------------------------------------------------ 0.4.0 fixes
+# ------------------------------------------------------------------ 0.3.4 fixes
 
 
 def _old_calibration_test_lr(y: np.ndarray, p: np.ndarray, w: np.ndarray) -> float:

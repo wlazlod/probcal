@@ -105,7 +105,7 @@ def test_exports() -> None:
         assert name in probcal.__all__
 
 
-# ---------------------------------------------------------------- 0.4.0 regressions
+# ---------------------------------------------------------------- 0.3.4 regressions
 
 
 def test_ivap_ties_pooled_and_order_invariant() -> None:

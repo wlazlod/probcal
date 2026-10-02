@@ -101,7 +101,7 @@ def test_cir_interpret_mentions_strictness() -> None:
     assert any("strict" in m.lower() for m in interp.messages)
 
 
-# ---------------------------------------------------------------- 0.4.0 regressions
+# ---------------------------------------------------------------- 0.3.4 regressions
 
 
 def _fitted_variants() -> list[object]:

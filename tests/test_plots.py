@@ -400,7 +400,7 @@ def test_plot_reliability_by_length_mismatch_raises() -> None:
         plot_reliability(curve, y=y, p=p, by=np.array(["low", "high"]))
 
 
-# ---------------------------------------------------------------- 0.4.0 fixes (PLT-1..9)
+# ---------------------------------------------------------------- 0.3.4 fixes (PLT-1..9)
 
 
 @pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")

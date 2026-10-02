@@ -1,6 +1,6 @@
 [project]
 name = "probcal"
-version = "0.3.3"
+dynamic = ["version"]
 description = "Universal post-hoc probability calibration for binary classifiers: methods, metrics, diagnostics, and auditable offsetting — numpy-only."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -41,8 +41,7 @@ bench = ["scikit-learn>=1.4", "netcal>=1.3.5", "betacal>=1.1.0", "pandas>=2"]
 all = ["matplotlib>=3.8", "scikit-learn>=1.4", "optbinning>=0.21", "treecf>=0.2.4"]
 dev = [
     "pytest>=8",
-    "ruff>=0.4",
-    "black>=24",
+    "ruff>=0.4",            # lint + format (ruff format replaces black)
     "mypy>=1.10",
     "scipy>=1.11",          # reference for tests ONLY — never imported by src/probcal
     "scikit-learn>=1.4",    # reference for tests ONLY
@@ -60,6 +59,10 @@ docs = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.version]
+# Single source of truth: probcal.__version__ (importlib.metadata reads it back).
+path = "src/probcal/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/probcal"]
 
@@ -70,11 +73,12 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
-[tool.black]
-line-length = 100
-
 [tool.mypy]
-python_version = "3.12"
+# No python_version pin: mypy targets the interpreter it runs on. The 3.11 floor
+# (DECISIONS #1) is guarded by running mypy on the CI 3.11 leg, which installs a
+# 3.11-compatible numpy. A pin of "3.11" cannot be used from a 3.12+ environment:
+# numpy >= 2.5 (Python >= 3.12 only) ships stubs with PEP 695 `type` statements,
+# which mypy refuses to parse for a 3.11 target.
 packages = ["probcal"]
 ignore_missing_imports = true
 

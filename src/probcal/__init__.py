@@ -31,15 +31,15 @@ from .thresholds import build_masterscale, calibrated_bands_to_raw, calibrated_i
 from .vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
 from .wrapper import CalibratedModel
 
-__version__ = "0.3.3"
+__version__ = "0.4.0.dev0"
 
 __all__: list[str] = [
     "AdjustedAttribution",
     "BBQCalibrator",
     "BaseCalibrator",
+    "BetaCalibrator",
     "CalibratedModel",
     "CalibratorSelector",
-    "BetaCalibrator",
     "CenteredIsotonicCalibrator",
     "Chain",
     "CrossVennAbersCalibrator",
@@ -65,15 +65,15 @@ __all__: list[str] = [
     "corp_reliability",
     "estimate_offset",
     "expit",
+    "logit",
+    "make_pd_portfolio",
     "metrics",
+    "moc_offset",
+    "moc_offset_from_counts",
     "monitor",
     "offset_from_estimate",
     "reliability_binned",
     "reliability_loess",
     "reliability_smooth",
     "reliability_spline",
-    "logit",
-    "make_pd_portfolio",
-    "moc_offset",
-    "moc_offset_from_counts",
 ]

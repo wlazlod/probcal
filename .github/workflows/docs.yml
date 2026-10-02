@@ -1,15 +1,13 @@
 name: Deploy Documentation
 
+# Deploys only what CI has already passed: runs after the CI workflow completes
+# successfully for a push to main (never for PRs), building the exact commit CI
+# tested. Manual runs stay available.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'docs/**'
-      - 'mkdocs.yml'
-      - 'src/probcal/**'
-      - 'tests/test_sklearn_guide_snippets.py'
-      - 'CHANGELOG.md'
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -17,9 +15,15 @@ permissions:
 
 jobs:
   deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v7

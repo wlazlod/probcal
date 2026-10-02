@@ -18,7 +18,6 @@ import pathlib
 import re
 import shutil
 import subprocess
-import sys
 
 import pytest
 
@@ -168,19 +167,75 @@ def test_new_workflow_pages_are_in_nav_and_cross_link() -> None:
             assert pathlib.PurePosixPath(other).name in text, f"{page} does not link {other}"
 
 
+def _is_parametrized(func: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    return any("parametrize" in ast.unparse(dec) for dec in func.decorator_list)
+
+
+def _node_id_resolves(node_id: str) -> bool:
+    """Static (no collection) check that a pytest node id names a real test.
+
+    ``path::[Class::]func[param]``: the file exists, the (class and) test function
+    is defined in it, and a ``[param]`` suffix names a parametrized test whose id
+    is spelled in the module (a literal or identifier — ids built from class names
+    or ``ids=[...]``) or is the stem of a data file under ``tests/`` (ids built
+    from file paths, e.g. the golden files).
+    """
+    match = re.fullmatch(r"([^:\[\]]+\.py)((?:::\w+)+)(?:\[(.+)\])?", node_id)
+    if not match:
+        return False
+    path = _ROOT / match.group(1)
+    if not path.is_file():
+        return False
+    source = path.read_text()
+    *classes, func_name = match.group(2).lstrip(":").split("::")
+    body: list[ast.stmt] = ast.parse(source).body
+    for cls_name in classes:
+        cls = next((n for n in body if isinstance(n, ast.ClassDef) and n.name == cls_name), None)
+        if cls is None:
+            return False
+        body = cls.body
+    func = next(
+        (
+            n
+            for n in body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == func_name
+        ),
+        None,
+    )
+    if func is None:
+        return False
+    param = match.group(3)
+    if param is None:
+        return True
+    if not _is_parametrized(func):
+        return False
+    parts = [part for part in re.split(r"[-+]", param) if part]
+    return all(
+        re.search(rf"(?<![\w]){re.escape(part)}(?![\w])", source)
+        or any((_ROOT / "tests").rglob(f"{part}.*"))
+        for part in parts
+    )
+
+
 def test_choosing_page_pinning_ids_resolve() -> None:
     ids = re.findall(r"<!--\s*pinned:\s*(.*?)-->", (_DOCS / "guide" / "choosing.md").read_text())
     node_ids = sorted({part.strip() for entry in ids for part in entry.split(";") if part.strip()})
     assert node_ids, "the catalog rows carry no pinning comments any more"
-
-    collected = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", "tests"],
-        cwd=_ROOT,
-        capture_output=True,
-        text=True,
-    ).stdout
-    missing = [node_id for node_id in node_ids if node_id not in collected]
+    missing = [node_id for node_id in node_ids if not _node_id_resolves(node_id)]
     assert not missing, f"guide/choosing.md cites tests that no longer exist: {missing}"
+
+
+def test_node_id_resolver_rejects_stale_ids() -> None:
+    """The static resolver above must not be vacuous."""
+    here = "tests/test_docs_structure.py"
+    assert _node_id_resolves(f"{here}::test_choosing_page_pinning_ids_resolve")
+    assert not _node_id_resolves(f"{here}::test_no_such_test")
+    assert not _node_id_resolves("tests/test_no_such_file.py::test_x")
+    assert not _node_id_resolves(f"{here}::test_choosing_page_pinning_ids_resolve[x]")
+    assert _node_id_resolves("tests/test_golden.py::test_golden_loads_and_reproduces[Chain]")
+    assert not _node_id_resolves(
+        "tests/test_golden.py::test_golden_loads_and_reproduces[NoSuchCalibrator]"
+    )
 
 
 def _public_names(module_name: str) -> list[str]:

@@ -350,7 +350,7 @@ class BeltResult(_ResultBase):
     def _legacy(self, which: int, side: int, name: str) -> np.ndarray:
         level = self.levels[which]
         warnings.warn(
-            f"BeltResult.{name} is deprecated and will be removed in 0.5.0; use "
+            f"BeltResult.{name} is deprecated and will be removed in 0.4.0; use "
             f"belt.bands[{level!r}][{side}] (it holds the confidence={level!r} band, "
             "whatever the attribute name says)",
             DeprecationWarning,

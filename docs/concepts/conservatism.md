@@ -167,7 +167,7 @@ something. A running maximum only ever *raises* a bound, which is the prudent di
 upper bound. Up to 0.3.x the hull was a weighted isotonic regression (PAVA, weight = grade
 size): the minimum-adjustment fit, but one that could pull a small grade's bound *down* below
 its own posterior quantile when a large, better-performing grade followed it. (`level=` is the
-0.3.x spelling of `confidence=`; it still works with a `DeprecationWarning` until 0.5.0.)
+0.3.x spelling of `confidence=`; it still works with a `DeprecationWarning` until 0.4.0.)
 
 ```python
 # s_cal, y_cal: held-out calibration scores, outcomes

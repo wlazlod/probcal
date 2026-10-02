@@ -168,7 +168,7 @@ class LogitOffset(JsonIO):
         sample_weight : array_like or None, keyword-only
             Weights for the portfolio mean. Passing it positionally (the
             0.3 signature ``fit(p, sample_weight)``) still works but emits a
-            ``DeprecationWarning``; it will be removed in 0.5.0.
+            ``DeprecationWarning``; it will be removed in 0.4.0.
 
         Returns
         -------
@@ -189,7 +189,7 @@ class LogitOffset(JsonIO):
                 raise TypeError("LogitOffset.fit takes p plus keyword-only y and sample_weight")
             warnings.warn(
                 "passing sample_weight positionally to LogitOffset.fit is deprecated and "
-                "will be removed in 0.5.0; use fit(p, sample_weight=...)",
+                "will be removed in 0.4.0; use fit(p, sample_weight=...)",
                 DeprecationWarning,
                 stacklevel=2,
             )

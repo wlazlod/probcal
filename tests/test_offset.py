@@ -191,7 +191,7 @@ def test_positional_sample_weight_is_deprecated_but_works() -> None:
     p = np.array([0.05, 0.1, 0.3])
     w = np.array([1.0, 2.0, 3.0])
     ref = LogitOffset(target_mean=0.12).fit(p, sample_weight=w)
-    with pytest.warns(DeprecationWarning, match="removed in 0.5.0"):
+    with pytest.warns(DeprecationWarning, match="removed in 0.4.0"):
         old = LogitOffset(target_mean=0.12).fit(p, w)
     assert old.delta_ == ref.delta_
     with pytest.raises(TypeError):

@@ -37,7 +37,7 @@ def test_ece_two_bin_hand_case() -> None:
 
 def test_adaptive_ece_is_deprecated_equal_mass_alias() -> None:
     y, p = _calibrated(1000)
-    with pytest.warns(DeprecationWarning, match="removed in 0.5.0"):
+    with pytest.warns(DeprecationWarning, match="removed in 0.4.0"):
         v = adaptive_ece(y, p, n_bins=10)
     assert v == ece(y, p, n_bins=10, strategy="mass")
 

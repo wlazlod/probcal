@@ -379,7 +379,7 @@ def jeffreys_upper_bands(
         or orders label-array grades by their mean ``p``, ascending (lowest
         predicted PD first).
     level : float, keyword-only
-        Deprecated spelling of ``confidence`` (removed in 0.5.0).
+        Deprecated spelling of ``confidence`` (removed in 0.4.0).
 
     Returns
     -------

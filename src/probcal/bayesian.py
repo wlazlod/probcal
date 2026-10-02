@@ -26,7 +26,7 @@ _JEFFREYS = 0.5
 _LOG_BETA_PRIOR = 2.0 * math.lgamma(_JEFFREYS) - math.lgamma(2.0 * _JEFFREYS)
 
 _WEIGHTS_DEPRECATED = (
-    "{cls}.weights_ is deprecated and will be removed in 0.5.0; use model_weights_ "
+    "{cls}.weights_ is deprecated and will be removed in 0.4.0; use model_weights_ "
     "(the ensemble weights, not sample weights)"
 )
 
@@ -59,7 +59,7 @@ class BBQCalibrator(BaseCalibrator):
         Candidate bin counts.
     model_weights_ : numpy.ndarray
         Posterior weights over the candidates (sum to 1). Formerly
-        ``weights_`` (deprecated alias, removed in 0.5.0).
+        ``weights_`` (deprecated alias, removed in 0.4.0).
     model_edges_, model_rates_ : list of numpy.ndarray
         Interior edges and posterior-mean bin rates of each candidate binning.
     is_monotone_ : bool
@@ -79,7 +79,7 @@ class BBQCalibrator(BaseCalibrator):
 
     @property
     def weights_(self) -> np.ndarray:
-        """Deprecated alias of :attr:`model_weights_` (removed in 0.5.0)."""
+        """Deprecated alias of :attr:`model_weights_` (removed in 0.4.0)."""
         return _deprecated_weights(self)
 
     def _set_state(self, state: dict[str, object]) -> None:
@@ -207,7 +207,7 @@ class ENIRCalibrator(BaseCalibrator):
         Indices into ``path_lambdas_`` of the retained breakpoints.
     model_weights_ : numpy.ndarray of shape (K,)
         BIC weights over the retained solutions, renormalized to sum to 1.
-        Formerly ``weights_`` (deprecated alias, removed in 0.5.0).
+        Formerly ``weights_`` (deprecated alias, removed in 0.4.0).
     scores_ : numpy.ndarray of shape (m,)
         Distinct calibration scores: the grid ``path_solutions_`` lives on.
     dropped_weight_ : float
@@ -237,7 +237,7 @@ class ENIRCalibrator(BaseCalibrator):
 
     @property
     def weights_(self) -> np.ndarray:
-        """Deprecated alias of :attr:`model_weights_` (removed in 0.5.0)."""
+        """Deprecated alias of :attr:`model_weights_` (removed in 0.4.0)."""
         return _deprecated_weights(self)
 
     def _set_state(self, state: dict[str, object]) -> None:

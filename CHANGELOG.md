@@ -14,10 +14,7 @@ A correctness release from a full-package review. Inverse maps are exact and agr
 truthful, the monitor's global alarm keeps its anytime-valid guarantee when grades appear
 mid-stream, metric weights follow one convention, and tail p-values no longer round to 0.
 Serialization output is strict JSON. Every schema-1 artifact still loads. Deprecated names
-warn and are removed in 0.5.0; numerically visible changes are listed with their size below.
-No breaking changes: every existing call still works. One behavioural change needs action:
-a `CalibrationMonitor` fed grade arrays should declare `grades=` at construction to keep the
-grades in its alarm (it warns once otherwise).
+warn and are removed in 0.4.0; numerically visible changes are listed with their size below.
 
 <details markdown="1">
 <summary>Details</summary>
@@ -152,7 +149,7 @@ grades in its alarm (it warns once otherwise).
   depends on pandas CSV formatting; old fingerprints still verify.
 - `validate_binary_y(require_both_classes=)`.
 
-### Deprecated (removed in 0.5.0)
+### Deprecated (removed in 0.4.0)
 
 - `adaptive_ece` → `ece(strategy="mass")`.
 - `ecce(presorted=)`.

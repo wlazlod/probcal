@@ -355,7 +355,7 @@ def ecce(
     sample_weight : array_like or None, keyword-only
         Optional positive weights, same length as ``y``.
     presorted : bool, keyword-only
-        Deprecated (removed in 0.5.0): a throughput switch declaring ``p``
+        Deprecated (removed in 0.4.0): a throughput switch declaring ``p``
         already sorted ascending. Still honoured.
 
     Returns

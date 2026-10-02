@@ -148,7 +148,7 @@ non-monotone counts; `ece_sweep(rule="largest")` restores that. On synthetic con
 the chosen \( B \) changes in about half of the cases (usually smaller), the value by at most
 ~0.01 absolute at n=500 and ~0.003 at n=10⁴. `adaptive_ece` is a deprecated alias for
 equal-mass ECE (`ece(strategy="mass")`), kept because the literature uses the name; it warns
-and is removed in 0.5.0.
+and is removed in 0.4.0.
 
 The **Hosmer–Lemeshow test** (Hosmer and Lemeshow, 1980) groups observations into \( g \)
 risk deciles (`hosmer_lemeshow(..., n_bins=10)`; the 0.3.x spelling `g=` is deprecated) and
@@ -365,7 +365,7 @@ instead of a plain `MetricReport`. Groups are formed from the raw label values (
 distinct values that print the same raise `ValueError`. Group `i` (in that order) uses
 `random_state + 1000 * i` rather than reusing `random_state` for every group. (`random_state`
 replaces the 0.3.x keyword `seed`, which still works with a `DeprecationWarning` until
-0.5.0.) The offset is fixed and label-independent, so
+0.4.0.) The offset is fixed and label-independent, so
 reproducibility does not depend on how many groups exist or what they are named, and no two
 groups' bootstrap draws can coincide by construction. This is side-by-side reporting, not a
 test: no comparison across groups is computed, and no multiple-comparison correction is

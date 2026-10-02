@@ -1,8 +1,8 @@
-"""Deprecation helpers for renamed metric keywords and aliases (removal in 0.5.0)."""
+"""Deprecation helpers for renamed metric keywords and aliases (removal in 0.4.0)."""
 
 import warnings
 
-REMOVAL = "0.5.0"
+REMOVAL = "0.4.0"
 
 
 class _Unset:

@@ -319,7 +319,7 @@ def reliability_smooth(
         Lattice bin count passed through to the shared smECE solve; see
         ``metrics.smooth_ece``. ``None`` forces the exact path.
     level : float, keyword-only
-        Deprecated spelling of ``confidence`` (removed in 0.5.0).
+        Deprecated spelling of ``confidence`` (removed in 0.4.0).
 
     Returns
     -------
@@ -443,7 +443,7 @@ def corp_reliability(
     random_state : int, keyword-only
         Seed for ``numpy.random.default_rng``, used by the band resampling.
     level : float, keyword-only
-        Deprecated spelling of ``confidence`` (removed in 0.5.0).
+        Deprecated spelling of ``confidence`` (removed in 0.4.0).
 
     Returns
     -------

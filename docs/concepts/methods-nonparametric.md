@@ -128,7 +128,7 @@ Beta–Binomial marginal has a closed form, computed with log-gamma functions
 weight on one \( B \) says the data speak clearly about their own resolution; diffuse weight
 says they do not, and
 the averaging is doing real work. `BBQCalibrator.interpret()` reports the top three models by
-weight (`model_weights_`; the 0.3.x name `weights_` is a deprecated alias until 0.5.0). The
+weight (`model_weights_`; the 0.3.x name `weights_` is a deprecated alias until 0.4.0). The
 averaged map is smoother than any single binning and typically monotone in practice, though
 nothing enforces it. `is_monotone_` is checked exactly: the averaged map is a step function
 that can change only at the union of all candidate edges, so evaluating it there decides
@@ -149,7 +149,7 @@ PAVA that merges blocks at known breakpoints) that interpolates between the raw 
 fully isotonic fit. ENIR (Naeini and Cooper, 2016) fits the whole path and combines the
 solutions along it, weighted by BIC. The ensemble inherits flexibility from the low-\( \lambda \)
 end and stability from the isotonic end, and the BIC weights (`model_weights_`; `weights_` is
-a deprecated alias until 0.5.0) again say where along that spectrum the data place their
+a deprecated alias until 0.4.0) again say where along that spectrum the data place their
 trust.
 
 The practical caveat: the combined map may be **non-monotone**. `ENIRCalibrator` sets

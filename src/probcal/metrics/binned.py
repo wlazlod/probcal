@@ -216,7 +216,7 @@ def adaptive_ece(
     norm: str = "l1",
     sample_weight: object = None,
 ) -> float:
-    """Deprecated alias of ``ece(strategy="mass")`` (removed in 0.5.0).
+    """Deprecated alias of ``ece(strategy="mass")`` (removed in 0.4.0).
 
     Parameters
     ----------
@@ -289,7 +289,7 @@ def hosmer_lemeshow(
     sample_weight : array_like or None, keyword-only
         Optional positive weights, same length as ``y``.
     g : int, keyword-only
-        Deprecated spelling of ``n_bins`` (removed in 0.5.0).
+        Deprecated spelling of ``n_bins`` (removed in 0.4.0).
 
     Returns
     -------

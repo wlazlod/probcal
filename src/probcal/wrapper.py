@@ -315,7 +315,7 @@ class CalibratedModel(JsonIO):
 
         Positional use (``offset_to(0.03)``, the 0.3 signature
         ``(target_mean, delta, X)``) still works but emits a
-        ``DeprecationWarning``; it will be removed in 0.5.0.
+        ``DeprecationWarning``; it will be removed in 0.4.0.
 
         Parameters
         ----------
@@ -339,7 +339,7 @@ class CalibratedModel(JsonIO):
                 raise TypeError("offset_to takes at most 3 positional arguments (deprecated)")
             warnings.warn(
                 "positional arguments to CalibratedModel.offset_to are deprecated and will "
-                "be removed in 0.5.0; use offset_to(target_mean=..., delta=..., X=...)",
+                "be removed in 0.4.0; use offset_to(target_mean=..., delta=..., X=...)",
                 DeprecationWarning,
                 stacklevel=2,
             )

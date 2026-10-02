@@ -183,7 +183,7 @@ def evaluate(
         multiplicity-adjusted comparisons across groups) is out of scope
         here; see ``docs/guide/groups.md``.
     seed : int, keyword-only
-        Deprecated spelling of ``random_state`` (removed in 0.5.0).
+        Deprecated spelling of ``random_state`` (removed in 0.4.0).
 
     Returns
     -------

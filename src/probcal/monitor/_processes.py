@@ -9,24 +9,8 @@ Accumulation is in log space throughout; mixtures combine with logsumexp.
 
 import numpy as np
 
-from .._math import expit, irls_logistic, logit
+from .._math import bern_log_lr, expit, irls_logistic, logsumexp
 from ..offset import _offset_mle
-
-_CLIP = 1e-12
-
-
-def bern_log_lr(y: np.ndarray, p_null: np.ndarray, q_alt: np.ndarray, w: np.ndarray) -> float:
-    """Weighted log Bernoulli likelihood ratio of ``q_alt`` against ``p_null``."""
-    q = np.clip(q_alt, _CLIP, 1.0 - _CLIP)
-    p = np.clip(p_null, _CLIP, 1.0 - _CLIP)
-    terms = y * (np.log(q) - np.log(p)) + (1.0 - y) * (np.log1p(-q) - np.log1p(-p))
-    return float(np.sum(w * terms))
-
-
-def logsumexp(values: np.ndarray) -> float:
-    """Overflow-safe ``log(sum(exp(values)))``."""
-    m = float(np.max(values))
-    return m + float(np.log(np.sum(np.exp(values - m))))
 
 
 def plug_in_delta(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
@@ -115,7 +99,6 @@ class OffsetProcess:
 __all__ = [
     "OffsetProcess",
     "bern_log_lr",
-    "logit",
     "logsumexp",
     "plug_in_delta",
     "plug_in_shape",

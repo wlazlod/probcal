@@ -12,6 +12,8 @@ from typing import NamedTuple
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
+from ._validation import EPS
+
 _FPMIN = 1e-300
 _CF_EPS = 1e-16
 _CF_MAX_ITER = 500
@@ -32,11 +34,11 @@ def logit(p: object) -> np.ndarray:
     numpy.ndarray
         ``log(p / (1 - p))`` elementwise.
     """
-    arr = np.clip(np.asarray(p, dtype=np.float64), 1e-12, 1.0 - 1e-12)
+    arr = np.clip(np.asarray(p, dtype=np.float64), EPS, 1.0 - EPS)
     return np.log(arr) - np.log1p(-arr)
 
 
-_LOGIT_CLIP = float(logit(1.0 - 1e-12))
+_LOGIT_CLIP = float(logit(1.0 - EPS))
 """``logit`` of the upper clipping bound, ~27.631 (== ``-logit(1e-12)``).
 
 A probability-space result whose raw logit exceeds this magnitude rounds into
@@ -65,6 +67,35 @@ def expit(z: object) -> np.ndarray:
     ez = np.exp(arr[~pos])
     out[~pos] = ez / (1.0 + ez)
     return out
+
+
+def logit1(p: float) -> float:
+    """Scalar :func:`logit` (same clipping), returning a Python float."""
+    q = min(max(float(p), EPS), 1.0 - EPS)
+    return math.log(q) - math.log1p(-q)
+
+
+def expit1(z: float) -> float:
+    """Scalar :func:`expit`, overflow-safe, returning a Python float."""
+    z = float(z)
+    if z >= 0.0:
+        return 1.0 / (1.0 + math.exp(-z))
+    ez = math.exp(z)
+    return ez / (1.0 + ez)
+
+
+def bern_log_lr(y: np.ndarray, p_null: np.ndarray, q_alt: np.ndarray, w: np.ndarray) -> float:
+    """Weighted log Bernoulli likelihood ratio of ``q_alt`` against ``p_null``."""
+    q = np.clip(q_alt, EPS, 1.0 - EPS)
+    p = np.clip(p_null, EPS, 1.0 - EPS)
+    terms = y * (np.log(q) - np.log(p)) + (1.0 - y) * (np.log1p(-q) - np.log1p(-p))
+    return float(np.sum(w * terms))
+
+
+def logsumexp(values: np.ndarray) -> float:
+    """Overflow-safe ``log(sum(exp(values)))``."""
+    m = float(np.max(values))
+    return m + float(np.log(np.sum(np.exp(values - m))))
 
 
 # ------------------------------------------------------------------ 1-D solvers
@@ -269,9 +300,15 @@ def betainc(a: float, b: float, x: object) -> np.ndarray:
     return out.reshape(arr.shape)
 
 
-def _gammainc_lower_scalar(s: float, x: float) -> float:
+def _gammainc_pq_scalar(s: float, x: float) -> tuple[float, float]:
+    """``(P(s, x), Q(s, x))``, each computed directly where it is accurate.
+
+    The series converges for ``x < s + 1`` and yields ``P``; the continued
+    fraction yields ``Q``. The complement is formed by subtraction only on
+    the side where it is not small, so neither tail loses relative precision.
+    """
     if x <= 0.0:
-        return 0.0
+        return 0.0, 1.0
     ln_scale = -x + s * math.log(x) - math.lgamma(s)
     if x < s + 1.0:
         # Series representation of P(s, x).
@@ -284,7 +321,8 @@ def _gammainc_lower_scalar(s: float, x: float) -> float:
             total += term
             if abs(term) < abs(total) * _CF_EPS:
                 break
-        return total * math.exp(ln_scale)
+        p = total * math.exp(ln_scale)
+        return p, 1.0 - p
     # Continued fraction for Q(s, x) (modified Lentz).
     b0 = x + 1.0 - s
     c = 1.0 / _FPMIN
@@ -304,7 +342,12 @@ def _gammainc_lower_scalar(s: float, x: float) -> float:
         h *= delta
         if abs(delta - 1.0) < _CF_EPS:
             break
-    return 1.0 - math.exp(ln_scale) * h
+    q = math.exp(ln_scale) * h
+    return 1.0 - q, q
+
+
+def _gammainc_lower_scalar(s: float, x: float) -> float:
+    return _gammainc_pq_scalar(s, x)[0]
 
 
 def gammainc_lower(s: float, x: object) -> np.ndarray:
@@ -355,6 +398,27 @@ def chi2_ppf(q: float, df: float) -> float:
     return bisect(lambda x: float(gammainc_lower(df / 2.0, x / 2.0)) - q, 0.0, hi, tol=1e-12)
 
 
+def chi2_sf(x: float, df: float) -> float:
+    """Chi-square upper tail ``P(X > x)``, accurate far into the tail.
+
+    Uses the regularized *upper* incomplete gamma ``Q(df/2, x/2)`` directly
+    rather than ``1 - P``, so p-values below ``1e-16`` do not round to 0.
+
+    Parameters
+    ----------
+    x : float
+        Statistic value (``<= 0`` gives 1.0).
+    df : float
+        Positive degrees of freedom.
+
+    Returns
+    -------
+    float
+        Upper-tail probability.
+    """
+    return _gammainc_pq_scalar(float(df) / 2.0, float(x) / 2.0)[1]
+
+
 def beta_ppf(q: float, a: float, b: float) -> float:
     """Beta(a, b) quantile function via bisection on :func:`betainc`.
 
@@ -393,6 +457,11 @@ def norm_cdf(x: object) -> np.ndarray:
     """
     arr = np.asarray(x, dtype=np.float64)
     return 0.5 * np.asarray(_erfc_ufunc(-arr / math.sqrt(2.0)), dtype=np.float64)
+
+
+def norm_sf(x: float) -> float:
+    """Standard normal upper tail ``1 - Phi(x)`` via ``erfc`` (tail-accurate)."""
+    return 0.5 * math.erfc(float(x) / math.sqrt(2.0))
 
 
 # Acklam's rational approximation coefficients for the normal quantile.

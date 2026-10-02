@@ -15,7 +15,13 @@ import numpy as np
 
 from .._math import expit, logit
 from .._registry import register
-from .._serialize import SCHEMA_VERSION, check_schema, fingerprint_of_dict
+from .._serialize import (
+    SCHEMA_VERSION,
+    check_schema,
+    decode_value,
+    encode_value,
+    fingerprint_of_dict,
+)
 from .._validation import validate_scores, validate_weights
 from ..metrics.regression import calibration_slope
 from ._onset import estimate_onset
@@ -851,7 +857,7 @@ class CalibrationMonitor:
                 "plug_in_window": p["plug_in_window"],
                 "recommendation_window": p["recommendation_window"],
             },
-            "state": state,
+            "state": encode_value(state),
             "fit_meta": {
                 "n_batches": len(self._z),
                 "n_obs": int(sum(len(a) for a in self._z)),
@@ -908,7 +914,7 @@ class CalibrationMonitor:
         params["delta_ci_grid"] = tuple(params["delta_ci_grid"])
         params["recommendation_window"] = params.get("recommendation_window", "since_onset")
         mon = cls(**params)
-        st = d["state"]
+        st: dict[str, Any] = decode_value(d["state"], arrays=False)  # type: ignore[assignment]
         mon._z = [np.asarray(a, dtype=np.float64) for a in st["z"]]
         mon._y = [np.asarray(a, dtype=np.float64) for a in st["y"]]
         mon._w = [np.asarray(a, dtype=np.float64) for a in st["w"]]

@@ -27,9 +27,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import expit, logit
+from .._math import bern_log_lr, expit, logit, logsumexp
 from .._results import Interpretation, _ResultBase
-from ..monitor._processes import bern_log_lr, logsumexp
 from .scores import _prep
 
 

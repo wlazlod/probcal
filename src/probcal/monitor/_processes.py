@@ -5,11 +5,24 @@ Every e-process in the monitor multiplies factors
 expectation under the conditional-calibration null is exactly 1 for any
 *predictable* alternative ``q`` — see ``docs/concepts/monitoring.md``.
 Accumulation is in log space throughout; mixtures combine with logsumexp.
+
+Sample weights enter as likelihood-ratio exponents,
+``prod_i LR_i(q)^u_i`` with ``u_i = min(1, w_i / mean(w))`` over the
+observations one factor multiplies (:func:`exponent_weights`). Every
+exponent lies in ``(0, 1]``, and by Jensen's inequality
+``E[LR^u] <= E[LR]^u = 1`` for ``0 < u <= 1``: with outcomes independent
+given the forecasts and the weights fixed before the outcomes, each factor
+is still an e-value, whatever the weights. Unit (or any constant) weights
+give exponents of exactly 1 — the unweighted process. The cap is what
+keeps the guarantee exact: an observation can never count as more than
+one observation's evidence, so above-average weights are flattened to 1
+and below-average ones discount their observation's evidence. Skewed
+weights therefore cost power, never validity.
 """
 
 import numpy as np
 
-from .._math import bern_log_lr, expit, irls_logistic, logsumexp
+from .._math import bern_log_lr, expit, exponent_weights, irls_logistic, logsumexp
 from .._validation import EPS
 from ..offset import _solve_delta
 
@@ -69,19 +82,21 @@ class OffsetProcess:
         Returns
         -------
         float
-            ``bern_log_lr(y, p, sigma(z + delta_hat), w)``, or ``0.0`` when
+            ``bern_log_lr(y, p, sigma(z + delta_hat), exponent_weights(w))``,
+            or ``0.0`` when
             ``delta_hat == 0`` (the plug-in is the identity null). Used by
             :class:`~probcal.monitor.CalibrationMonitor` to accumulate
             ``MonitorStep.log_e_increment`` for drift-onset localization.
         """
         # delta_hat == 0 means the alternative IS the null: the factor is
         # exactly 1, no expit(logit(p)) round-trip noise.
+        u = exponent_weights(w)
         inc = 0.0
         if delta_hat != 0.0:
-            inc = bern_log_lr(y, p, expit(z + delta_hat), w)
+            inc = bern_log_lr(y, p, expit(z + delta_hat), u)
             self.log_plug += inc
         for j, d in enumerate(self.grid):
-            self.log_mix[j] += bern_log_lr(y, p, expit(z + d), w)
+            self.log_mix[j] += bern_log_lr(y, p, expit(z + d), u)
         return inc
 
     def log_e(self) -> float:
@@ -122,7 +137,8 @@ class ConfidenceSequence:
         log_1mq = np.log1p(-q_alt)
         p0 = np.clip(expit(z[None, :] + self.grid[:, None]), EPS, 1.0 - EPS)
         terms = y * (log_q[None, :] - np.log(p0)) + (1.0 - y) * (log_1mq[None, :] - np.log1p(-p0))
-        self.log = self.log + (w[None, :] * terms).sum(axis=1)
+        u = exponent_weights(w)
+        self.log = self.log + (u[None, :] * terms).sum(axis=1)
         self.max = np.maximum(self.max, self.log)
 
     def surviving(self, threshold: float) -> np.ndarray:
@@ -142,6 +158,7 @@ class ConfidenceSequence:
 __all__ = [
     "ConfidenceSequence",
     "OffsetProcess",
+    "exponent_weights",
     "plug_in_delta",
     "plug_in_shape",
 ]

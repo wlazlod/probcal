@@ -7,6 +7,147 @@ Each release opens with a short summary; the itemized entries sit under *Details
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-10-12
+
+A correctness release that finishes the work started in 0.3.4. 0.3.4 used Kish's effective n
+for weighted tests, and that was wrong whenever weights vary with the per-row variance. Every
+weighted statistic now uses its exact variance and still does not depend on the scale of the
+weights. The monitor is anytime-valid for any sample weights. Step calibrators no longer give a
+high PD below a tied minimum score. Raw band edges agree with `Masterscale.assign` to the last
+floating-point step (ulp). Unweighted and unit-weight results are bit-identical to 0.3.4, except
+where the release notes below say otherwise. Every saved artifact still loads.
+
+<details markdown="1">
+<summary>Details</summary>
+
+### Fixed
+
+- **Weighted metrics.** Statistics now use exact weighted variances and stay invariant to
+  rescaling all weights. In 0.3.4 they used Kish-rescaled weights.
+  - `spiegelhalter_z` uses the null variance `sum(w^2 (1-2p)^2 p(1-p))`. When weights
+    correlate with p, its type-I rate was 0.14 at alpha = 0.05; it is now 0.05.
+  - The ECCE null envelope uses the exact prefix SD `sqrt(cumsum(w^2 p(1-p))) / sum(w)`.
+  - `ece_debiased` and `murphy_decomposition(bias_corrected=True)` use each bin's own
+    effective count, `(sum_b w)^2 / sum_b w^2`.
+  - `hosmer_lemeshow` uses the per-group variance `sum_g(w^2) p~(1-p~)`.
+  - `calibration_test` refers the weighted LR to a Rao–Scott corrected chi-square.
+    `CalibrationTestResult` gains a field `df`, which is fractional when weighted.
+  - `calibration_belt` uses weighted ML with sandwich bands and a Rao–Scott p-value.
+  - The monitor's residual-LR diagnostic uses a Rao–Scott correction.
+- **Monitoring.**
+  - Sample weights enter as exponents `min(1, w / mean(w))` per factor, which keeps every
+    factor an e-value for any weights. Before, a constant weight of 10 raised a null alarm in
+    87% of runs with no warning. Constant weights now reproduce the unweighted monitor, and
+    the "non-uniform weights" warning is gone. `metrics.hl_e_test` follows the same rule.
+  - Payloads written by 0.3.4 are no longer re-keyed on load. String grades such as `"1.0"`
+    used to become `"1"`.
+  - The onset estimate never falls after `alarm_at`, ties resolve to the earliest batch, and
+    without plug-in evidence the window is the whole history instead of the last batch.
+  - Vectorised grade keys match `grade_key`: mixed lists, float32 and large integers.
+  - `moc_offset_from_counts` no longer depends on the scale of the weights.
+  - A rejected batch no longer stores its masterscale fingerprint. An empty `mixture_grid`
+    and a `delta_ci_grid` that does not bracket 0 are rejected at construction.
+  - `slope_ci` handles windows with constant logits.
+- **Calibrators and inverse maps.**
+  - When more than 1/B of the calibration mass is tied at the minimum score, equal-mass
+    binning no longer leaves an empty first bin, so scores below the tie no longer get the
+    prior 0.5 (BBQ) or the global rate (Histogram). In the example: 0.065 becomes 0.0025.
+  - Empty bins under `strategy="width"` take their neighbours' rate.
+  - BBQ on constant scores predicts a constant.
+  - Every left and right inverse, both the affine closed form and the bisection path, is
+    corrected to the exact ulp. `calibrated_bands_to_raw` and `calibrated_interval_to_raw`
+    now partition the raw axis exactly like `Masterscale.assign` for Platt, Temperature,
+    Beta, ScalingBinning, linear Isotonic and CIR. Before, up to about 9 ulp could disagree
+    at shared edges.
+- **Metrics, other.**
+  - ICI, E50, E90 and `logloss_calibration_refinement` no longer depend on the row order of
+    tied p (LOESS fits on tie-block means). With constant p, ICI is 0, and the `evaluate`
+    bootstrap CI contains the point estimate.
+  - The weighted quantile is continuous in the weights and equals `np.quantile` for equal
+    weights. Nearly-equal weights used to switch rules and move E90 and bin edges.
+  - `jeffreys_upper_bands` no longer produces zero-width bands. A grade whose bound would not
+    exceed the running maximum is merged into the preceding band (key `"A+B"`, with a
+    `UserWarning`), so every band is strictly increasing and usable by `Masterscale`.
+  - When `logit(p)` is constant, `calibration_slope` returns NaN with a warning instead of
+    a ridge value, and `calibration_test` tests the intercept only (df = 1).
+  - `BeltResult`, `BinomialGradeResult`, `JeffreysGradeResult` and `EcceCurve` compare by
+    value. The 0.3.4 fix had missed these four.
+- **Wrappers and adapters.**
+  - `CalibratedModel(flow="cv")` with a `Pipeline` and `sample_weight` warns and fits the
+    model unweighted, like `CalibratedClassifier`. Before, it raised.
+  - `offset_to(target_mean=)` honours the calibration weights, and takes `sample_weight=`
+    together with `X`.
+  - A model loaded from JSON without its estimator keeps its `model_ref` and fingerprint
+    when saved again.
+  - Prefit `CalibratedModel` checks that the model's `classes_` are `{0, 1}`. A model trained
+    on string labels used to calibrate the wrong column silently.
+  - `CalibratorSelector` and `CalibratedModel(ensemble=True)` require at least `cv` events
+    and non-events, with an actionable error. Before, they failed inside a fold.
+  - `clone_unfitted` clones a `Chain`, and nested candidates, deeply.
+  - `adjust_attributions` accepts `SklearnCalibrator` and `CalibratedClassifier`.
+- **Masterscale and reports.**
+  - `assign`, `index`, `table` and `build_masterscale` use `p` without clipping. `p = 0` or
+    `1` near an edge used to land in the wrong grade, and mass at `p = 1` produced an edge at
+    `0.999999999999`.
+  - A `-0.0` bound gives the same fingerprint as `0.0`.
+  - `interpret()` describes the half-open band inversion.
+  - `corp_reliability(n_resamples=0)` and `validation_report(n_boot=0)` skip the bands
+    instead of crashing.
+- **Plots.**
+  - `plot_reliability(by=, stats=MetricReport)` raises, because it used to print pooled
+    metrics on every group panel. A `GroupedMetricReport` fills each panel.
+  - Group labels `1` and `"1"` raise, as in `evaluate`.
+  - No figure leaks on any error, and an unknown `scale` raises.
+- **Docs.**
+  - Corrected stale outputs (optbinning, offset, cutoffs, conservatism), the logit-axis
+    claim in the README, a reference to a non-existent `probcal.load()`, the SECURITY I/O
+    list, and the pandas note.
+  - `OffsetEstimate` is in the API reference.
+  - Doc snippets' `# -> expected` comments are now checked against actual output.
+
+### Changed (numerically visible)
+
+- **Weighted statistics.** With unit or constant weights nothing moves. With weights
+  independent of p (U(0.5, 2), n = 3000), values move by under 2%. With weights correlated
+  with p:
+  - Spiegelhalter z by about 2%.
+  - Hosmer-Lemeshow by 9-16%.
+  - `calibration_test` by about 6%.
+  - `ece_debiased` by 5-17%.
+  - Murphy reliability by 8-12%.
+  - The ECCE envelope by about 10%.
+  - Belt bands by up to 42% narrower; Kish had overstated their variance.
+- **Monitor with non-constant weights.** E-values, confidence sequences, plug-ins and onset
+  increments all change. Null alarm rates drop to at most alpha, and the cost is power with
+  skewed weights. Onset labels can move earlier.
+- **Weighted equal-mass bins** (Histogram, ScalingBinning, BBQ) move by up to about 3
+  inter-observation gaps under the new weighted quantile. With U(0.5, 2) weights, the median
+  prediction change is about 4e-5, and boundary rows can jump.
+- **Binned calibrators with ties at the minimum score.**
+  - They have fewer bins (see Fixed).
+  - ScalingBinning stores one bin fewer, but its predictions are unchanged.
+- **Inverse-map bounds** move by at most about 9 ulp.
+- **Tied p.** ICI, E90 and the log-loss calibration term move by at most 4e-15 relative.
+- **Monitor grades from float32 data** are keyed as the exact double, matching `grade_key`.
+- **`hl_e_test` with integer weights** no longer equals the e-value of duplicated rows: each
+  row is one draw, and its weight is an exponent `min(1, w / mean(w))` per grade.
+
+### Changed
+
+- **Validation errors.**
+  - A prefit `CalibratedModel` whose model has `classes_` other than `{0, 1}` raises.
+  - A model whose `fit` accepts only `**kwargs` is fitted unweighted with a warning.
+  - A hand-made `Masterscale` whose outer edge lies within 1e-12 of 0 or 1 raises for
+    `p = 0` or `1`. Clipping used to hide this.
+- **Read-only and unhashable results.**
+  - `BeltResult.bands` is a read-only mapping.
+  - The grade and ECCE result classes are unhashable, like the other array-holding results.
+- **New public names.**
+  - `report.py` and `integrations/optbinning.py` define `__all__`.
+  - `CalibratorProtocolMixin` moved to `probcal._protocol`.
+
+</details>
+
 ## [0.3.4] - 2026-10-03
 
 A correctness release from a full-package review. Inverse maps are exact and agree with
@@ -437,7 +578,8 @@ First public release on PyPI: thirteen binary calibrators from Platt to Venn–A
 
 </details>
 
-[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/wlazlod/probcal/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/wlazlod/probcal/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/wlazlod/probcal/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/wlazlod/probcal/compare/v0.3.1...v0.3.2

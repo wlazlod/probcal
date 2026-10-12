@@ -17,6 +17,7 @@ from ._serialize import (
     encode_value,
     envelope,
 )
+from ._steps import refine_lower, refine_upper
 from ._validation import (
     EPS,
     validate_binary_y,
@@ -119,9 +120,30 @@ def validate_interval(lo: float, hi: float) -> None:
         raise ValueError(f"need 0 <= lo <= hi <= 1, got lo={lo}, hi={hi}")
 
 
+def _clone_param(value: object) -> object:
+    """Recursively clone estimator-like parameter values (lists, tuples, dicts too)."""
+    if hasattr(value, "get_params") and not isinstance(value, type):
+        return clone_unfitted(value)
+    if isinstance(value, (list, tuple)):
+        return type(value)(_clone_param(v) for v in value)
+    if isinstance(value, dict):
+        return {k: _clone_param(v) for k, v in value.items()}
+    return value
+
+
 def clone_unfitted(obj: object) -> object:
-    """A fresh, unfitted copy built from ``obj.get_params()``."""
-    return type(obj)(**obj.get_params())  # type: ignore[attr-defined]
+    """A fresh, unfitted copy built from ``obj.get_params(deep=False)``.
+
+    Parameters that are themselves estimators (anything with
+    ``get_params``) — directly or inside a list, tuple, or dict, such as a
+    :class:`probcal.Chain`'s stages or a selector's candidates — are cloned
+    recursively, so the copy never shares a sub-object with ``obj``.
+    """
+    try:
+        params = obj.get_params(deep=False)  # type: ignore[attr-defined]
+    except TypeError:
+        params = obj.get_params()  # type: ignore[attr-defined]
+    return type(obj)(**{k: _clone_param(v) for k, v in params.items()})
 
 
 _NOT_MONOTONE = (
@@ -440,10 +462,15 @@ class BaseCalibrator(JsonIO, ABC):
         return expit1((logit1(t) - b) / a)
 
     def _inverse_left(self, t: float) -> float:
-        """inf{s : g(s) >= t}: closed form when affine, else monotone bisection."""
+        """inf{s : g(s) >= t}: closed form when affine, else monotone bisection.
+
+        Either estimate is then refined by ulps (:func:`probcal._steps.refine_lower`)
+        to the smallest float ``s`` with ``g(s) >= t`` as evaluated, so the
+        bound agrees with grading ``g(s)`` against ``t``.
+        """
         closed = self._affine_inverse(t)
         if closed is not None:
-            return closed
+            return refine_lower(closed, lambda v: self._predict_scalar(v) >= t)
         lo_s, hi_s = EPS, 1.0 - EPS
         if self._predict_scalar(lo_s) >= t:
             return lo_s
@@ -453,13 +480,17 @@ class BaseCalibrator(JsonIO, ABC):
                 hi_s = mid
             else:
                 lo_s = mid
-        return hi_s
+        return refine_lower(hi_s, lambda v: self._predict_scalar(v) >= t)
 
     def _inverse_right(self, t: float) -> float:
-        """sup{s : g(s) <= t}: closed form when affine, else monotone bisection."""
+        """sup{s : g(s) <= t}: closed form when affine, else monotone bisection.
+
+        Refined by ulps (:func:`probcal._steps.refine_upper`) to the largest
+        float ``s`` with ``g(s) <= t`` as evaluated.
+        """
         closed = self._affine_inverse(t)
         if closed is not None:
-            return closed
+            return refine_upper(closed, lambda v: self._predict_scalar(v) <= t)
         lo_s, hi_s = EPS, 1.0 - EPS
         if self._predict_scalar(hi_s) <= t:
             return hi_s
@@ -469,7 +500,7 @@ class BaseCalibrator(JsonIO, ABC):
                 lo_s = mid
             else:
                 hi_s = mid
-        return lo_s
+        return refine_upper(lo_s, lambda v: self._predict_scalar(v) <= t)
 
     # ------------------------------------------------------------- parameters
 

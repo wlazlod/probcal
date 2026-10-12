@@ -71,6 +71,22 @@ pseudo-code, mark it explicitly and say why:
 # docs: no-run — target/treecf stand in for a real Explainer and Target
 ```
 
+A printed result shown in a comment is checked when it uses the `# ->`
+marker, either after the call or on its own line below it:
+
+```python
+# docs: no-run, illustrates the convention, not a runnable snippet
+print(est)                       # -> delta=-0.8765 +/- 0.1144, n=3000, events=82.0
+print(cs.masterscale(ms))
+# -> {'A': (638.68, inf), 'B': (598.96, 638.68), ...}
+```
+
+The text after `->` must appear in what the block printed: `...` matches
+anything, whitespace is flexible, and each number must equal the printed one
+to the precision shown (`0.1144` accepts 0.11443, not 0.1150). Prefer it over
+a free-text comment whenever a block prints a concrete number, so the page
+cannot drift from the code.
+
 Use `# docs: no-run` sparingly: it opts a block out of the tested
 contract, so prefer making the block actually run against the vocabulary
 whenever that is feasible.

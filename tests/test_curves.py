@@ -350,12 +350,15 @@ def test_weighted_local_linear_matches_loess_on_unit_weights() -> None:
     )
 
 
-def test_ecce_curve_weights_sd_kish() -> None:
+def test_ecce_curve_weights_sd_exact() -> None:
     y, p = _calibrated(1000)
     w = np.random.default_rng(2).uniform(0.5, 2.0, len(y))
     a, b = ecce_curve(y, p, sample_weight=w), ecce_curve(y, p, sample_weight=4.0 * w)
     np.testing.assert_allclose(a.sd_null, b.sd_null, rtol=1e-12)
     np.testing.assert_allclose(a.cumdev, b.cumdev, rtol=1e-12, atol=1e-15)
+    o = np.argsort(p, kind="stable")
+    want = np.sqrt(np.cumsum(w[o] ** 2 * p[o] * (1 - p[o]))) / w.sum()
+    np.testing.assert_allclose(a.sd_null, want, rtol=1e-12)
     unit = ecce_curve(y, p)
     np.testing.assert_array_equal(
         ecce_curve(y, p, sample_weight=np.ones(len(y))).sd_null, unit.sd_null

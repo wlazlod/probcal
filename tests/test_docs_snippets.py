@@ -6,8 +6,15 @@ vocabulary the snippet convention documents in docs/README.md. This turns
 the fragment style from a rot risk into a tested contract: a block either
 runs against that vocabulary, reuses a name an earlier block on the same
 page defined, or is marked "# docs: no-run" as deliberate pseudo-code.
+
+Printed results shown in a ``# -> <expected>`` comment are checked too: the
+expected text must appear in what the block printed, with ``...`` matching
+anything and each number matching the printed one to the precision shown
+(``0.1144`` accepts 0.11443..., not 0.1150).
 """
 
+import contextlib
+import io
 import pathlib
 import re
 
@@ -29,6 +36,11 @@ _EXCLUDED_PAGES = {"changelog.md"}
 _NO_RUN_MARKER = "# docs: no-run"
 _CODE_BLOCK_RE = re.compile(r"```python\n(.*?)```", re.S)
 _REQUIRES_RE = re.compile(r"<!--\s*docs:\s*requires\s+([^>]*?)\s*-->")
+_EXPECT_RE = re.compile(r"#\s*->\s*(.*?)\s*$", re.M)
+_NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+_EXPECT_TOKEN_RE = re.compile(
+    rf"(?P<ellipsis>\.\.\.)|(?P<number>{_NUMBER})|(?P<space>\s+)|(?P<other>.)"
+)
 
 
 class _StubModel:
@@ -106,6 +118,65 @@ def _extract_blocks(page: pathlib.Path) -> list[str]:
     return blocks
 
 
+def _expected_outputs(block: str) -> list[str]:
+    """The ``# -> <expected>`` printed-output claims of a block, in order."""
+    return [m for m in _EXPECT_RE.findall(block) if m]
+
+
+def _expectation_pattern(expected: str) -> tuple[re.Pattern[str], list[tuple[float, float]]]:
+    """Regex for ``expected`` plus ``(value, tolerance)`` per number it shows.
+
+    ``...`` matches anything, runs of whitespace match any whitespace, and
+    every number becomes a capture group whose printed value must lie within
+    half a unit of the last digit shown. Padding whitespace is allowed between
+    any two tokens, so numpy's aligned array printing matches too.
+    """
+    parts: list[str] = []
+    numbers: list[tuple[float, float]] = []
+    for tok in _EXPECT_TOKEN_RE.finditer(expected):
+        if tok.group("space"):
+            parts.append(r"\s+")
+            continue
+        if parts and parts[-1] != r"\s+":
+            parts.append(r"\s*")  # printed padding (e.g. numpy's) between any two tokens
+        if tok.group("ellipsis"):
+            parts.append(".*?")
+        elif tok.group("number"):
+            text = tok.group("number")
+            mantissa, _, exponent = text.lower().partition("e")
+            decimals = len(mantissa.partition(".")[2])
+            tol = 0.5 * 10.0 ** (int(exponent or 0) - decimals)
+            numbers.append((float(text), tol))
+            parts.append(f"({_NUMBER})")
+        else:
+            parts.append(re.escape(tok.group("other")))
+    return re.compile("".join(parts), re.S), numbers
+
+
+def _output_matches(expected: str, printed: str) -> bool:
+    """Whether ``printed`` shows ``expected`` (see :func:`_expectation_pattern`)."""
+    pattern, numbers = _expectation_pattern(expected)
+    for m in pattern.finditer(printed):
+        got = [float(g) for g in m.groups()]
+        if all(
+            abs(v - want) <= tol + 1e-9 * abs(want)
+            for v, (want, tol) in zip(got, numbers, strict=True)
+        ):
+            return True
+    return False
+
+
+def test_output_matcher_respects_shown_precision() -> None:
+    printed = "OffsetEstimate(delta=-0.8765 +/- 0.11443, n=3000, events=82.0)\n"
+    assert _output_matches("delta=-0.8765 +/- 0.1144, n=3000, events=82.0", printed)
+    assert _output_matches("delta=-0.88 +/- ..., n=3000", printed)
+    assert not _output_matches("delta=-0.8765 +/- 0.1150", printed)
+    assert not _output_matches("delta=+0.1234", printed)
+    assert _output_matches("{'A': (638.68, inf)", "{'A': (638.677940257227, inf), 'B': ...}")
+    assert _output_matches("[0.00287 0.00328 0.00765]", "[0.00287409 0.003284   0.0076459 ]")
+    assert not _output_matches("[0.00287 0.00329]", "[0.00287409 0.003284 ]")
+
+
 _PAGES = _discover_pages()
 _PAGE_IDS = [str(p.relative_to(_DOCS_DIR)) for p in _PAGES]
 
@@ -123,13 +194,20 @@ def test_docs_page_snippets_execute(page: pathlib.Path, tmp_path, monkeypatch) -
     namespace = _make_vocabulary()
     try:
         for i, block in enumerate(blocks):
+            first_line = block.strip().splitlines()[0]
+            printed = io.StringIO()
             try:
-                exec(compile(block, str(page), "exec"), namespace)  # noqa: S102
+                with contextlib.redirect_stdout(printed):
+                    exec(compile(block, str(page), "exec"), namespace)  # noqa: S102
             except Exception as exc:
-                first_line = block.strip().splitlines()[0]
                 raise AssertionError(
                     f"{page}: block {i} failed (first line: {first_line!r}): "
                     f"{type(exc).__name__}: {exc}"
                 ) from exc
+            for expected in _expected_outputs(block):
+                assert _output_matches(expected, printed.getvalue()), (
+                    f"{page}: block {i} (first line: {first_line!r}) claims output "
+                    f"{expected!r} but printed:\n{printed.getvalue()}"
+                )
     finally:
         plt.close("all")

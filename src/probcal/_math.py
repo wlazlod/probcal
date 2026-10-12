@@ -85,6 +85,19 @@ def expit1(z: float) -> float:
     return ez / (1.0 + ez)
 
 
+def exponent_weights(w: np.ndarray) -> np.ndarray:
+    """Likelihood-ratio exponents ``min(1, w / mean(w))`` of one factor.
+
+    Normalizing to mean 1 makes the exponents invariant to rescaling every
+    weight by a constant; capping at 1 keeps the factor an e-value for any
+    positive weights (by Jensen, ``E[LR**u] <= E[LR]**u = 1``). Constant weights,
+    including unit weights, return exactly ones.
+    """
+    if w.size == 0 or np.all(w == w[0]):
+        return np.ones_like(w)
+    return np.minimum(1.0, w / np.mean(w))
+
+
 def bern_log_lr(y: np.ndarray, p_null: np.ndarray, q_alt: np.ndarray, w: np.ndarray) -> float:
     """Weighted log Bernoulli likelihood ratio of ``q_alt`` against ``p_null``."""
     q = np.clip(q_alt, EPS, 1.0 - EPS)
@@ -780,6 +793,30 @@ def _loess_fit_sorted_vec(
     return out
 
 
+def _tie_means(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
+    """Replace each ``y`` by the mean ``y`` of its block of tied (sorted) ``x``.
+
+    The r-nearest-neighbour window can cut through a block of tied ``x``,
+    and which of the tied rows it keeps would then depend on input order.
+    The local fit is linear in ``y`` with coefficients that depend only on
+    ``x``, so fitting on block means is exactly the average of the fit over
+    every ordering of the tied rows; a block entirely inside the window
+    contributes the same sum either way. Blocks are summed in ``y`` order,
+    so the means do not depend on row order either. Without ties ``ys`` is
+    returned unchanged (the same array).
+    """
+    n = xs.shape[0]
+    if n < 2:
+        return ys
+    brk = xs[1:] != xs[:-1]
+    if bool(brk.all()):
+        return ys
+    starts = np.flatnonzero(np.concatenate(([True], brk)))
+    counts = np.diff(np.append(starts, n))
+    ys_canon = ys[np.lexsort((ys, xs))]
+    return np.repeat(np.add.reduceat(ys_canon, starts) / counts, counts)
+
+
 def loess(
     x: object,
     y: object,
@@ -811,6 +848,11 @@ def loess(
         mirrors R ``stats::lowess``, whose ``delta`` parameter (default
         ``0.01 * diff(range(x))``) likewise fits at spaced points and
         interpolates. ``None`` (default) evaluates exactly at every point.
+
+        Tied ``x`` values are fitted on the mean ``y`` of their tie block, so
+        the result does not depend on the input order of tied rows (the
+        average of the fit over all tie orderings); without ties nothing
+        changes.
     presorted : bool, keyword-only
         Declare that ``x`` is already sorted ascending, so the internal
         ``argsort`` (and the inverse permutation of the fitted values) can be
@@ -831,6 +873,7 @@ def loess(
     r = min(max(int(math.ceil(frac * n)), degree + 1), n)
     order = None if presorted else np.argsort(x_arr, kind="stable")
     xs, ys = (x_arr, y_arr) if order is None else (x_arr[order], y_arr[order])
+    ys = _tie_means(xs, ys)
     if grid_size is not None and ev.shape[0] > grid_size:
         anchors = np.unique(np.quantile(ev, np.linspace(0.0, 1.0, grid_size)))
         return np.interp(ev, anchors, _loess_fit_sorted_vec(xs, ys, anchors, r, degree))
@@ -905,16 +948,18 @@ def natural_cubic_basis(x: object, knots: object, *, deriv: int = 0) -> np.ndarr
 
 
 def weighted_quantile(x: object, q: object, w: object) -> np.ndarray:
-    """Weighted quantiles by linear interpolation of the empirical weighted CDF.
+    """Weighted quantiles: the continuous weighted form of numpy's default rule.
 
-    Positions are ``p_i = (C_i - w_i / 2) / W``, where ``C_i`` is the
-    cumulative weight through the ``i``-th sorted observation and ``W`` is the
-    total weight; ``q`` outside ``[p_1, p_n]`` is clipped to the extremes
-    (``np.interp`` clamps). With equal weights these are the Hazen positions
-    ``(i - 0.5) / n`` — numpy's ``method="hazen"`` — *not* numpy's default
-    quantile method. Callers that must stay bit-identical to ``np.quantile``
-    on unweighted or equal-weight input should short-circuit to
-    ``np.quantile`` themselves rather than rely on this function.
+    Each sorted observation sits at the midpoint ``m_i = C_i - w_i / 2`` of
+    its own weight, where ``C_i`` is the cumulative weight through it; the
+    plotting positions are those midpoints mapped affinely onto ``[0, 1]``,
+    ``p_i = (m_i - m_1) / (m_n - m_1)``, and the quantile at ``q`` linearly
+    interpolates ``(p_i, x_(i))``. With equal weights ``p_i = (i - 1) / (n -
+    1)``, numpy's default ``method="linear"``, and the function returns
+    ``np.quantile(x, q)`` itself (bit for bit). The positions are continuous
+    in ``w``, so nearly equal weights give nearly the ``np.quantile`` answer
+    rather than a different interpolation rule; rescaling ``w`` changes
+    nothing.
 
     Parameters
     ----------
@@ -932,8 +977,11 @@ def weighted_quantile(x: object, q: object, w: object) -> np.ndarray:
     """
     x_arr = np.asarray(x, dtype=np.float64)
     w_arr = np.asarray(w, dtype=np.float64)
+    q_arr = np.asarray(q, dtype=np.float64)
+    if x_arr.shape[0] < 2 or bool(np.all(w_arr == w_arr[0])):
+        return np.asarray(np.quantile(x_arr, q_arr))
     order = np.argsort(x_arr, kind="stable")
     xs, ws = x_arr[order], w_arr[order]
-    cw = np.cumsum(ws)
-    pos = (cw - 0.5 * ws) / cw[-1]
-    return np.interp(np.asarray(q, dtype=np.float64), pos, xs)
+    mid = np.cumsum(ws) - 0.5 * ws
+    pos = (mid - mid[0]) / (mid[-1] - mid[0])
+    return np.asarray(np.interp(q_arr, pos, xs))

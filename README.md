@@ -13,8 +13,9 @@ not produce:
 
 - **Logit-scale diagnostics that keep 1% readable.** `calibration_guardrails`
   reports slope, intercept, and Spiegelhalter's test in log-odds, and every
-  reliability curve draws on the logit axis, so a 3% portfolio is not crushed
-  into the bottom-left corner.
+  reliability plot can draw on a logit axis (`scale="logit"`; the default is
+  `"probability"`), so a 3% portfolio is not crushed into the bottom-left
+  corner.
 - **An auditable offset stage.** A central-tendency adjustment is a
   `LogitOffset` object, not a refit: `audit_report()` records the mean before
   and after, the guardrails before and after, a timestamp, and a fingerprint.

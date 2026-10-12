@@ -125,7 +125,7 @@ def test_murphy_vectorized_matches_old_loop(bias_corrected: bool) -> None:
     assert got.resolution == pytest.approx(res, rel=1e-12, abs=1e-16)
 
 
-def test_murphy_bias_correction_uses_kish_counts() -> None:
+def test_murphy_bias_correction_uses_per_bin_effective_counts() -> None:
     # Regression (MET-7): the correction used raw counts whatever the weights.
     rng = np.random.default_rng(9)
     p = expit(rng.normal(-1.0, 1.0, 2000))
@@ -137,7 +137,7 @@ def test_murphy_bias_correction_uses_kish_counts() -> None:
     from probcal.metrics._binstats import bin_stats
 
     bs = bin_stats(y, p, w, 10, "mass")
-    n_eff = bs.w_sum * w.sum() / np.dot(w, w)
+    n_eff = bs.w_sum**2 / bs.w2_sum
     var = bs.rate * (1 - bs.rate) / (n_eff - 1)
     want = np.sum(bs.w_sum / w.sum() * np.maximum((bs.p_mean - bs.rate) ** 2 - var, 0.0))
     assert a.reliability == pytest.approx(want, rel=1e-12)

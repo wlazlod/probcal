@@ -16,10 +16,10 @@ from ._plots_common import (
     _BLUE,
     _GREEN,
     _GREY,
-    _STYLE,
+    _check_scale,
     _get_axes,
     _pav_step_xy,
-    _plt,
+    _plot_context,
     _require_mpl,
     _scale_axis_labels,
     _text_box,
@@ -75,7 +75,8 @@ def plot_corp(
     >>> ax = plot_corp(corp_reliability(y, p, n_resamples=20))  # doctest: +SKIP
     """
     _require_mpl()
-    with _plt.rc_context(_STYLE):
+    _check_scale(scale)
+    with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
         lo, hi, level, weight = (
             result.block_lo,
@@ -216,7 +217,7 @@ def plot_mcb_dsc(
 
     mean_score = mcb - dsc + unc
 
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
 
         spread = float(dsc.max() - dsc.min())
@@ -319,6 +320,7 @@ def plot_attributes(
     >>> ax = plot_attributes(y, p, method="corp")  # doctest: +SKIP
     """
     _require_mpl()
+    _check_scale(scale)
     if method not in ("binned", "corp"):
         raise ValueError('method must be "binned" or "corp"')
     y_arr, p_arr, w = _prep(y, p, sample_weight)
@@ -327,7 +329,7 @@ def plot_attributes(
     def _t(x: Any) -> np.ndarray:
         return _tr(x, scale)
 
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
 
         grid = np.linspace(0.0, 1.0, 400)
@@ -460,7 +462,7 @@ def plot_murphy(
                     "pass diff=True with (y, p) pairs for a difference plot"
                 )
 
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
         if diff:
             ax.fill_between(

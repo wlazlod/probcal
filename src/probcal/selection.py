@@ -58,8 +58,10 @@ class CalibratorSelector(BaseCalibrator):
     ``affine_logit_coeffs_``, ``complexity_rank``, ``point_inverse`` and
     ``interval_inverse`` all delegate to ``best_calibrator_``. ``fit`` raises
     ``ValueError`` if ``scoring`` is not one of the accepted criteria (plain
-    ECE and Hosmer–Lemeshow are refused as selection criteria) or ``cv`` is
-    not an integer ``>= 2``.
+    ECE and Hosmer–Lemeshow are refused as selection criteria), ``cv`` is
+    not an integer ``>= 2``, or a class has fewer than ``cv`` members (every
+    held-out fold is scored on its own and needs both classes; lower ``cv``
+    for low-default data).
 
     Parameters
     ----------
@@ -178,7 +180,7 @@ class CalibratorSelector(BaseCalibrator):
                 "Hosmer-Lemeshow are not selection criteria"
             )
         scorer = _SCORERS[self.scoring]
-        cv = validate_cv(self.cv, y_arr)
+        cv = validate_cv(self.cv, y_arr, held_out_both_classes=True)
         menu = self.candidates if self.candidates is not None else _default_candidates()
         # CORP decomposition to attach to the report: Brier when the selection
         # criterion itself is Brier, log loss otherwise (matches the scorer

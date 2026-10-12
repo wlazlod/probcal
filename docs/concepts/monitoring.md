@@ -156,7 +156,9 @@ exactly that purpose.
 
 `monitor._onset.estimate_onset(increments) -> int` finds `k* = argmax_k sum_{j>=k}
 increments[j]`, a backward-CUSUM argmax over that additive series, with ties resolved
-to the latest `k`. This is an **estimate, not a change-point test**: it carries no
+to the earliest `k`; with no positive suffix sum it returns 0 (the whole history). The
+monitor reads the increments only up to the first alarm, so the onset never falls after
+`alarm_at`. This is an **estimate, not a change-point test**: it carries no
 type-I control and no confidence set, only an answer to "which batch does the
 accumulated evidence point to". `report()` runs it whenever an alarm has fired and
 exposes the result as `MonitorReport.onset_label`, and appends a line to `reasoning` that
@@ -268,7 +270,9 @@ placeholder batch since a report keeps no per-batch data.
 
 `monitor.moc_offset_from_counts(y, p, *, level=0.9, sample_weight=None)` is the count-only
 sibling with no monitor involved: it re-anchors `p`'s mean at the one-sided Jeffreys
-posterior upper quantile of the observed event rate (the same quantile
+posterior upper quantile of the observed event rate (weighted counts use Kish's
+effective sample size, so the result does not depend on the scale of the weights;
+the same quantile
 `metrics.jeffreys_grade_test`/`metrics.jeffreys_upper_bands` use), via `LogitOffset`'s
 existing mode B (`target_mean`).
 
@@ -305,10 +309,12 @@ caveat that applies to every bound on that page, this one included.
   before every batch, so per-batch cost grows linearly with history and the
   total cost quadratically. Set a window (`plug_in_window` must be a positive
   integer) for long-running monitors.
-- **Weights.** Sample weights enter as exponents on the Bernoulli factors
-  for reporting parity with the rest of probcal, but non-integer weights
-  break the exact martingale property, and the monitor warns once when it
-  sees them.
+- **Weights.** Sample weights enter as exponents `u = min(1, w / mean(w))` on
+  the Bernoulli factors, computed over the observations each factor multiplies
+  (the batch, or the grade slice). Each `u` lies in (0, 1], so by Jensen
+  `E[LR**u] <= E[LR]**u = 1` and every factor stays an e-value: the guarantee is
+  exact for any weights fixed before the outcomes. Constant weights give
+  `u = 1` (the unweighted monitor); skewed weights cost power, not validity.
 
 ## Relation to existing tools
 
@@ -356,9 +362,9 @@ here, and no claim is made that this test matches its power or optimality
 properties: it is the monitor's existing mixture machinery, repurposed for
 a one-shot audit rather than sequential monitoring.
 
-Sample weights, when given, enter as exponents on the Bernoulli factors
-(the same convention as `CalibrationMonitor`); non-integer weights carry
-the same caveat noted above.
+Sample weights, when given, enter as exponents `min(1, w / mean(w))` per
+grade on the Bernoulli factors (the same convention as `CalibrationMonitor`),
+so the e-value stays valid for any weights.
 
 ## Simulation verification
 

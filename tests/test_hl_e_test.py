@@ -78,22 +78,22 @@ def test_miscalibrated_grade_drives_e_value_large() -> None:
     assert res.p_value < 1e-3
 
 
-def test_weights_equal_row_duplication() -> None:
+def test_weights_are_scale_invariant_exponents() -> None:
+    # Each row is one Bernoulli draw: weights become exponents min(1, w/mean(w))
+    # per grade, so rescaling all weights changes nothing and constant weights
+    # reproduce the unweighted e-value.
     grades = np.array(["A", "A", "B", "B"])
     y = np.array([1.0, 0.0, 0.0, 1.0])
     p = np.array([0.2, 0.2, 0.05, 0.05])
-    w = np.array([3, 1, 2, 4])
+    w = np.array([3.0, 1.0, 2.0, 4.0])
 
     weighted = hl_e_test(y, p, grades, sample_weight=w)
+    scaled = hl_e_test(y, p, grades, sample_weight=10.0 * w)
+    np.testing.assert_allclose(weighted.e_value, scaled.e_value, rtol=1e-12)
 
-    y_dup = np.repeat(y, w)
-    p_dup = np.repeat(p, w)
-    grades_dup = np.repeat(grades, w)
-    unweighted = hl_e_test(y_dup, p_dup, grades_dup)
-
-    np.testing.assert_allclose(weighted.e_value, unweighted.e_value, rtol=1e-12)
-    np.testing.assert_allclose(weighted.e_grade, unweighted.e_grade, rtol=1e-12)
-    assert weighted.p_value == unweighted.p_value
+    unweighted = hl_e_test(y, p, grades)
+    constant = hl_e_test(y, p, grades, sample_weight=np.full(4, 7.0))
+    assert constant.e_value == unweighted.e_value
 
 
 def test_length_mismatch_raises() -> None:

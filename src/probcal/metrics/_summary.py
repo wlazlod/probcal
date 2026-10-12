@@ -77,7 +77,7 @@ def reliability_summary(
         n=len(y_arr),
         events=int(y_arr.sum()),
         intercept=_intercept(y_arr, p_arr, w),
-        slope=float(_slope_fit(y_arr, p_arr, w)[1][1]),
+        slope=float(_slope_fit(y_arr, p_arr, w, "reliability_summary")[1][1]),
         ici=fam["ici"],
         e90=fam["e90"],
         spiegelhalter_p=_spiegelhalter(y_arr, p_arr, w).p_value,

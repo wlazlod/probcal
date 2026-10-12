@@ -15,8 +15,10 @@ uv sync --extra dev            # tests, lint, type-check
 ```
 
 probcal requires Python ≥ 3.11. The core import path touches nothing beyond numpy and the
-standard library: scipy, scikit-learn, pandas, and matplotlib are never imported by
-`probcal` itself (matplotlib only inside the optional `probcal.plots`).
+standard library: `import probcal` imports none of scipy, scikit-learn, pandas, or
+matplotlib. matplotlib is imported only by the optional `probcal.plots` (and by
+`probcal.report` when it draws), and pandas only lazily, when you call a `to_frame()`
+method and pandas is installed (otherwise it returns a list of dicts).
 
 ## Score-level quickstart
 

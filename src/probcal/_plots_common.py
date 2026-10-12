@@ -5,7 +5,9 @@ function. Split out of ``plots.py`` so the diagnostic module can share them
 without a circular import.
 """
 
+import contextlib
 import math
+from collections.abc import Iterator
 from typing import Any
 
 import numpy as np
@@ -57,6 +59,44 @@ def _require_mpl() -> None:
         )
 
 
+_SCALES = ("probability", "logit")
+
+
+def _check_scale(scale: object) -> None:
+    """Reject anything but the two supported axis scales (a typo would draw linear)."""
+    if scale not in _SCALES:
+        raise ValueError(f'scale must be "probability" or "logit", got {scale!r}')
+
+
+@contextlib.contextmanager
+def _closing_new_figures() -> Iterator[None]:
+    """Close the pyplot figures created inside the block if the block raises.
+
+    Figures that existed before the block — including the one holding a
+    caller-supplied ``ax`` — are never closed.
+    """
+    before = set(_plt.get_fignums())
+    try:
+        yield
+    except BaseException:
+        for num in set(_plt.get_fignums()) - before:
+            _plt.close(num)
+        raise
+
+
+@contextlib.contextmanager
+def _plot_context() -> Iterator[None]:
+    """``rc_context(_STYLE)`` plus :func:`_closing_new_figures`.
+
+    Every plot function draws inside this block, so a figure made by
+    :func:`_get_axes` or ``subplots`` and then abandoned by a late exception
+    (bad ``y``, a failing statistic) does not stay registered in pyplot's
+    figure manager.
+    """
+    with _closing_new_figures(), _plt.rc_context(_STYLE):
+        yield
+
+
 def _style_axes(ax: Any) -> None:
     """Apply the axes-level part of ``_STYLE`` explicitly.
 
@@ -73,7 +113,7 @@ def _style_axes(ax: Any) -> None:
 def _get_axes(ax: Any, figsize: tuple[float, float]) -> Any:
     """Return ``ax`` (or a fresh one of ``figsize``) with the house style applied.
 
-    Must be called inside ``_plt.rc_context(_STYLE)``.
+    Must be called inside :func:`_plot_context`.
     """
     if ax is None:
         _, ax = _plt.subplots(figsize=figsize)

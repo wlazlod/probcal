@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .._math import beta_ppf, betainc, norm_sf
+from .._results import _ResultBase
 from .._validation import validate_weights
 from ._common import _prep
 
@@ -58,8 +59,8 @@ def _grade_counts(
     return order_t, n, k, pd
 
 
-@dataclass(frozen=True)
-class BinomialGradeResult:
+@dataclass(frozen=True, eq=False)
+class BinomialGradeResult(_ResultBase):
     """Exact and approximate one-sided binomial backtest per rating grade.
 
     Attributes
@@ -172,8 +173,8 @@ def binomial_grade_test(
     )
 
 
-@dataclass(frozen=True)
-class JeffreysGradeResult:
+@dataclass(frozen=True, eq=False)
+class JeffreysGradeResult(_ResultBase):
     """Jeffreys-posterior backtest per rating grade (ECB IRB practice).
 
     Attributes

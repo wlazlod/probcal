@@ -17,7 +17,13 @@ from .._serialize import JsonIO, check_payload, decode_value, encode_value, enve
 from .._validation import validate_positive_int, validate_scores, validate_weights
 from ._diagnostics import recommend
 from ._onset import estimate_onset
-from ._processes import ConfidenceSequence, OffsetProcess, plug_in_delta, plug_in_shape
+from ._processes import (
+    ConfidenceSequence,
+    OffsetProcess,
+    exponent_weights,
+    plug_in_delta,
+    plug_in_shape,
+)
 
 _RECOMMENDATION_WINDOWS = ("since_onset", "trailing")
 
@@ -40,9 +46,13 @@ def grade_key(v: object) -> str:
 
     Integers and integer-valued floats share a key (``1``, ``1.0``,
     ``np.int64(1)`` all map to ``"1"``), other floats use their shortest
-    repr, and everything else is ``str(v)`` as a plain ``str`` (never
-    ``numpy.str_``). Strings are opaque labels: ``"1.0"`` stays ``"1.0"``.
+    repr (of the value as a Python ``float``, so a ``float32`` label keys
+    as the exact double it holds), bytes are decoded as ASCII, and
+    everything else is ``str(v)`` as a plain ``str`` (never ``numpy.str_``).
+    Strings are opaque labels: ``"1.0"`` stays ``"1.0"``.
     """
+    if isinstance(v, (bytes, np.bytes_)):
+        return bytes(v).decode("ascii")
     if isinstance(v, (bool, np.bool_)):
         return str(bool(v))
     if isinstance(v, (int, np.integer)):
@@ -54,20 +64,50 @@ def grade_key(v: object) -> str:
 
 
 def grade_keys(grade: object) -> np.ndarray:
-    """Vectorized :func:`grade_key` over a 1-D label array (unicode array out)."""
-    arr = np.asarray(grade)
+    """:func:`grade_key` applied element-wise to a 1-D label array (unicode array out).
+
+    Element-wise exactly: ``grade_keys(g)[i] == grade_key(g[i])``. A plain
+    list or tuple is read as an object array, so a mixed list such as
+    ``[1.0, "A"]`` keys as ``["1", "A"]`` rather than being coerced to
+    strings first; typed arrays key each distinct value once.
+    """
+    if isinstance(grade, (list, tuple)):
+        arr = np.empty(len(grade), dtype=object)
+        arr[:] = list(grade)
+    else:
+        arr = np.asarray(grade)
     if arr.ndim != 1:
         raise ValueError(f"grade must be a 1-D array, got shape {arr.shape}")
-    if arr.dtype.kind in "USb":
+    if arr.dtype.kind == "U":
         return arr.astype(str)
-    if arr.dtype.kind in "iu":
-        return arr.astype(np.int64).astype(str)
-    if arr.dtype.kind == "f":
-        out = arr.astype(str)
-        whole = np.isfinite(arr) & (arr == np.round(arr))
-        out[whole] = arr[whole].astype(np.int64).astype(str)
-        return out
-    return np.array([grade_key(x) for x in arr.tolist()], dtype=str)
+    if arr.dtype.kind == "O":
+        return np.array([grade_key(x) for x in arr.tolist()], dtype=str)
+    uniq, inverse = np.unique(arr, return_inverse=True)
+    keys = np.array([grade_key(x) for x in uniq.tolist()], dtype=str)
+    return keys[inverse.reshape(-1)]
+
+
+def _validate_delta_ci_grid(grid: object) -> None:
+    """Reject a confidence-sequence grid that cannot hold a meaningful CS."""
+    try:
+        items: tuple[Any, ...] = tuple(grid)  # type: ignore[arg-type]
+        if len(items) != 3:
+            raise ValueError
+        lo_f, hi_f, count_f = (float(x) for x in items)
+    except (TypeError, ValueError):
+        raise ValueError(f"delta_ci_grid must be a (lo, hi, count) triple, got {grid!r}") from None
+    if not (
+        np.isfinite(lo_f)
+        and np.isfinite(hi_f)
+        and lo_f < hi_f
+        and lo_f <= 0.0 <= hi_f
+        and count_f.is_integer()
+        and count_f >= 2
+    ):
+        raise ValueError(
+            "delta_ci_grid must be (lo, hi, count) with finite lo <= 0 <= hi, lo < hi "
+            f"and an integer count >= 2, got {grid!r}"
+        )
 
 
 _LEGACY_FLOAT_KEY = re.compile(r"^-?\d+\.0$")
@@ -214,9 +254,12 @@ class CalibrationMonitor(JsonIO):
         compared through one normalization: ``1``, ``1.0`` and
         ``np.int64(1)`` are the same grade ``"1"``.
     mixture_grid : tuple of float
-        Positive shifts for the offset mixture (symmetrized to ±).
+        Non-empty tuple of positive, finite shifts for the offset mixture
+        (symmetrized to ±).
     delta_ci_grid : tuple(lo, hi, count)
-        Grid of offset nulls for the confidence sequence.
+        Grid of offset nulls for the confidence sequence:
+        ``linspace(lo, hi, count)`` with finite ``lo <= 0 <= hi``, ``lo < hi``
+        and an integer ``count >= 2``.
     min_history : int
         Number of past batches (``>= 0``) required before the plug-ins
         engage (before that they are the identity and their factors equal 1).
@@ -298,6 +341,19 @@ class CalibrationMonitor(JsonIO):
             raise ValueError(f"min_history must be an integer >= 0, got {min_history!r}")
         if plug_in_window is not None:
             validate_positive_int(plug_in_window, "plug_in_window")
+        mixture_grid = tuple(mixture_grid)
+        if not mixture_grid or not all(
+            isinstance(d, (int, float, np.integer, np.floating))
+            and not isinstance(d, (bool, np.bool_))
+            and np.isfinite(d)
+            and d > 0
+            for d in mixture_grid
+        ):
+            raise ValueError(
+                "mixture_grid must be a non-empty tuple of positive finite shifts, "
+                f"got {mixture_grid!r}"
+            )
+        _validate_delta_ci_grid(delta_ci_grid)
         if grades is not None:
             keys = [grade_key(g) for g in grades]
             if not keys:
@@ -309,7 +365,7 @@ class CalibrationMonitor(JsonIO):
         self.alpha = alpha
         self.components = tuple(components)
         self.grades = grades
-        self.mixture_grid = tuple(mixture_grid)
+        self.mixture_grid = mixture_grid
         self.delta_ci_grid = tuple(delta_ci_grid)
         self.min_history = min_history
         self.plug_in_window = plug_in_window
@@ -344,9 +400,14 @@ class CalibrationMonitor(JsonIO):
         self._grade_cs: dict[str, ConfidenceSequence] = {}
         self._max_log_global = -np.inf
         self._alarmed = False
+        # No longer set (weights keep the guarantee exact); kept so payloads
+        # written by older versions round-trip unchanged.
         self._warned_weights = False
         self._warned_grades = False
         self.masterscale_fingerprint_: str | None = None
+        # Fingerprint of the masterscale passed to the batch in progress;
+        # recorded as masterscale_fingerprint_ only once that batch is accepted.
+        self._pending_fingerprint: str | None = None
 
     @property
     def _cs_grid(self) -> np.ndarray:
@@ -365,12 +426,15 @@ class CalibrationMonitor(JsonIO):
         return max(0, len(self._z) - self.plug_in_window)
 
     def _since(
-        self, start: int, grade: str | None = None
+        self, start: int, grade: str | None = None, *, exponents: bool = False
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """``(z, y, w)`` of the batches from index ``start`` onward.
 
         With ``grade``, only that grade's observations (batches recorded
-        without a grade array contribute nothing).
+        without a grade array contribute nothing). With ``exponents``, each
+        batch's (or grade slice's) weights are replaced by the likelihood-
+        ratio exponents the processes gave them (:func:`~probcal.monitor.
+        _processes.exponent_weights`).
         """
         zs, ys, ws, gs = self._z[start:], self._y[start:], self._w[start:], self._g[start:]
         if grade is None:
@@ -381,14 +445,22 @@ class CalibrationMonitor(JsonIO):
                 for z, y, w, g in zip(zs, ys, ws, gs, strict=True)
                 if g is not None
             ]
+        if exponents:
+            parts = [(z, y, exponent_weights(w)) for z, y, w in parts]
         if not parts:
             return np.empty(0), np.empty(0), np.empty(0)
         z_c, y_c, w_c = (np.concatenate(a) for a in zip(*parts, strict=True))
         return z_c, y_c, w_c
 
     def _past(self, grade: str | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """The plug-ins' training data: the ``plug_in_window`` trailing batches."""
-        return self._since(self._trailing_start(), grade)
+        """The plug-ins' training data: the ``plug_in_window`` trailing batches.
+
+        Weighted by the likelihood-ratio exponents each past batch received,
+        so the plug-in maximizes the same weighted log-likelihood the
+        process accumulates (with unit or constant weights: the unweighted
+        fit, exactly).
+        """
+        return self._since(self._trailing_start(), grade, exponents=True)
 
     def _recommendation_window_start(self, onset_idx: int | None) -> int:
         """Start index of the post-alarm diagnostic/action window.
@@ -427,6 +499,13 @@ class CalibrationMonitor(JsonIO):
     def _onset_index(self) -> int | None:
         """Backward-CUSUM argmax onset index, by index -- not by label.
 
+        The estimate reads the increments up to and including the first
+        alarm, so the onset never lies after ``alarm_at`` (with no alarm,
+        all steps). Ties resolve to the earliest batch, and with no
+        positive plug-in evidence the onset is the first batch -- the
+        since-onset window is then the whole history
+        (:func:`~probcal.monitor._onset.estimate_onset`).
+
         Shared by :meth:`report` and :meth:`apply_recommendation` so the
         two never disagree about which batch onset points to (batch labels
         are opaque and may repeat, so a lookup by label could point at the
@@ -436,7 +515,8 @@ class CalibrationMonitor(JsonIO):
         """
         if not self._onset_available():
             return None
-        increments = np.array([s.log_e_increment for s in self.steps_], dtype=np.float64)
+        end = next((i for i, s in enumerate(self.steps_) if s.alarm), len(self.steps_) - 1)
+        increments = np.array([s.log_e_increment for s in self.steps_[: end + 1]], dtype=np.float64)
         return estimate_onset(increments)
 
     # ------------------------------------------------------------------ updates
@@ -445,15 +525,14 @@ class CalibrationMonitor(JsonIO):
         """Normalized grade keys for this batch (masterscale-assigned or given)."""
         if hasattr(grade, "assign") and hasattr(grade, "fingerprint"):
             fp = grade.fingerprint()
-            if self.masterscale_fingerprint_ is None:
-                self.masterscale_fingerprint_ = fp
-            elif fp != self.masterscale_fingerprint_:
+            if self.masterscale_fingerprint_ is not None and fp != self.masterscale_fingerprint_:
                 raise ValueError(
                     "this monitor was started with masterscale "
                     f"{self.masterscale_fingerprint_[:12]}...; a different masterscale "
                     f"({fp[:12]}...) changes the grade universe. Start a new monitor."
                 )
             g_arr = grade_keys(grade.assign(p_arr))
+            self._pending_fingerprint = fp
         else:
             g_arr = grade_keys(grade)
         if len(g_arr) != len(p_arr):
@@ -498,15 +577,23 @@ class CalibrationMonitor(JsonIO):
         p : array_like
             The probabilities the deployed forecast assigned to this batch.
         sample_weight : array_like or None
-            Positive weights; non-uniform weights break the exact
-            martingale property and warn once (reporting parity).
+            Positive weights, fixed before the outcomes are seen. In every
+            batch factor they enter as likelihood-ratio exponents
+            ``min(1, w / mean(w))`` (over the observations that factor
+            covers), which keeps each factor an e-value: the anytime-valid
+            guarantee holds exactly for any weights. Rescaling all weights
+            by a constant changes nothing, and constant weights are
+            equivalent to none; skewed weights reduce power (an
+            observation never counts as more than one observation's
+            evidence). The plug-ins are fitted with the same exponents.
         grade : array_like, Masterscale, or None
             Optional per-observation grade labels, or a
             :class:`probcal.Masterscale` that assigns them from ``p``;
             either advances the per-grade offset processes (part of the
             global alarm only when ``grades`` was declared). The first
             masterscale seen is recorded as ``masterscale_fingerprint_`` and
-            serialized; a different one later raises.
+            serialized once the batch is accepted; a different one later
+            raises.
         label : str or None
             Batch label for reporting; defaults to ``batch-<k>``.
 
@@ -528,16 +615,8 @@ class CalibrationMonitor(JsonIO):
         if len(y_arr) != len(p_arr):
             raise ValueError("y and p must have equal length")
         w_arr = validate_weights(sample_weight, len(p_arr))
+        self._pending_fingerprint = None
         g_arr = self._grade_array(grade, p_arr) if grade is not None else None
-        if not self._warned_weights and not np.all(w_arr == w_arr[0]):
-            warnings.warn(
-                "non-uniform sample weights break the exact martingale property; "
-                "the e-values remain reported for parity but the type-I guarantee "
-                "is approximate",
-                UserWarning,
-                stacklevel=2,
-            )
-            self._warned_weights = True
         z = logit(p_arr)
 
         # Predictable plug-ins: strictly past data only.
@@ -552,7 +631,7 @@ class CalibrationMonitor(JsonIO):
         offset_inc = self._offset.update(z, p_arr, y_arr, w_arr, delta_hat)
         shape_inc = 0.0
         if (c_hat, a_hat) != (0.0, 1.0):  # identity plug-in: factor exactly 1
-            shape_inc = bern_log_lr(y_arr, p_arr, expit(c_hat + a_hat * z), w_arr)
+            shape_inc = bern_log_lr(y_arr, p_arr, expit(c_hat + a_hat * z), exponent_weights(w_arr))
             self._log_shape += shape_inc
         # The onset series sums the plug-in increments of the processes that
         # drive the alarm, and nothing else.
@@ -592,6 +671,9 @@ class CalibrationMonitor(JsonIO):
 
         step = self._make_step(label, y_arr, w_arr, delta_hat, a_hat, log_e_increment)
         self.steps_.append(step)
+        if self._pending_fingerprint is not None:
+            self.masterscale_fingerprint_ = self._pending_fingerprint
+            self._pending_fingerprint = None
         return step
 
     def _log_global(self) -> float:
@@ -908,7 +990,7 @@ def _legacy_rekey(d: dict, grades: tuple | None) -> Any:
     :func:`grade_key`, and undeclared ``"<int>.0"`` keys (float arrays) map
     to ``"<int>"``. Newer payloads are already normalized: identity.
     """
-    if _version_tuple(d.get("probcal_version", "0")) >= (0, 4, 0):
+    if _version_tuple(d.get("probcal_version", "0")) >= (0, 3, 4):
         return str
     declared = {str(g): grade_key(g) for g in grades or ()}
 

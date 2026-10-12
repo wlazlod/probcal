@@ -12,7 +12,7 @@ from typing import NamedTuple
 import numpy as np
 
 from .._math import loess, logit, norm_sf, weighted_quantile
-from ._common import _prep, effective_weights, is_uniform
+from ._common import _prep, is_uniform
 from ._deprecation import UNSET, deprecated
 
 
@@ -295,7 +295,8 @@ class _Walk(NamedTuple):
     block_w: np.ndarray
     """Total weight of each block."""
     sd_null: np.ndarray | None
-    """Pointwise SD of the walk under calibration (Kish-rescaled weights), if asked."""
+    """Pointwise SD of the walk under calibration, if asked:
+    ``sqrt(cumsum(w**2 * p * (1 - p))) / sum(w)``."""
 
 
 def _ecce_walk(
@@ -321,8 +322,8 @@ def _ecce_walk(
     block_w = np.diff(cum_w, prepend=0.0)
     sd_null = None
     if sd:
-        we = effective_weights(ws)
-        sd_null = np.sqrt(np.cumsum(we * ps * (1.0 - ps))[ends]) / we.sum()
+        # Exact null SD of the walk: Var(sum w (y - p)) = sum w**2 p (1 - p).
+        sd_null = np.sqrt(np.cumsum(ws * ws * ps * (1.0 - ps))[ends]) / w_total
     return _Walk(frac=cum_w / cum_w[-1], cumdev=cumdev, block_w=block_w, sd_null=sd_null)
 
 
@@ -586,14 +587,16 @@ def spiegelhalter_z(y: object, p: object, *, sample_weight: object = None) -> Sp
     asymptotically standard normal. No binning, no smoothing; aggregates the
     whole range, so compensating regional errors can cancel.
 
-    With weights, numerator and null variance use the Kish-rescaled weights
-    (package convention, :mod:`probcal.metrics._common`): ``z`` is invariant
-    to rescaling the weights and unit weights give the unweighted statistic.
-    (0.3.x used ``w`` in the numerator and ``w**2`` in the variance.)
+    With weights the numerator is ``sum(w (y - p) (1 - 2p))`` and the null
+    variance its exact variance under calibration, ``sum(w**2 (1 - 2p)^2 p
+    (1 - p))`` (package convention, :mod:`probcal.metrics._common`): ``z``
+    is invariant to rescaling the weights and unit weights give the
+    unweighted statistic. (0.3.4 used Kish-rescaled weights in both, which
+    misstates the variance when the weights vary with ``p (1 - p)``.)
 
-    The null variance ``sum(w (1 - 2p)^2 p (1 - p))`` is zero when every
-    prediction is exactly 0.5 (or clipped to 0/1); the statistic is then
-    undefined and ``z`` and ``p_value`` are ``nan``.
+    The null variance is zero when every prediction is exactly 0.5 (or
+    clipped to 0/1); the statistic is then undefined and ``z`` and
+    ``p_value`` are ``nan``.
 
     Parameters
     ----------
@@ -614,9 +617,8 @@ def spiegelhalter_z(y: object, p: object, *, sample_weight: object = None) -> Sp
 
 def _spiegelhalter(y_arr: np.ndarray, p_arr: np.ndarray, w: np.ndarray) -> SpiegelhalterResult:
     """:func:`spiegelhalter_z` on validated arrays."""
-    we = effective_weights(w)
-    num = float(np.sum(we * (y_arr - p_arr) * (1.0 - 2.0 * p_arr)))
-    var = float(np.sum(we * (1.0 - 2.0 * p_arr) ** 2 * p_arr * (1.0 - p_arr)))
+    num = float(np.sum(w * (y_arr - p_arr) * (1.0 - 2.0 * p_arr)))
+    var = float(np.sum(w * w * (1.0 - 2.0 * p_arr) ** 2 * p_arr * (1.0 - p_arr)))
     if not var > 0.0:
         return SpiegelhalterResult(z=math.nan, p_value=math.nan)
     z = num / math.sqrt(var)

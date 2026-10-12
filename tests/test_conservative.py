@@ -341,12 +341,13 @@ def test_default_order_is_by_mean_p_ascending() -> None:
 
 def test_explicit_order_is_honored() -> None:
     grades, y, p = _band_dataset()
-    # Reversed order: the running maximum flattens every later bound up to C's.
+    # Reversed order: every later bound is below C's, so the running maximum
+    # would leave B and A zero-width bands; they merge into C's band.
     with pytest.warns(UserWarning, match="running maximum"):
         bands = jeffreys_upper_bands(y, p, grades, confidence=0.9, order=("C", "B", "A"))
-    assert bands["C"][0] == 0.0
-    assert bands["C"][1] == pytest.approx(bands["B"][0])
-    assert bands["B"][1] == pytest.approx(bands["A"][0])
+    ordered = jeffreys_upper_bands(y, p, grades, confidence=0.9)
+    assert list(bands) == ["C+B+A"]
+    assert bands["C+B+A"] == (0.0, ordered["C"][1])
 
 
 def test_jeffreys_upper_bands_order_mismatch_raises() -> None:
@@ -383,15 +384,13 @@ def test_hand_computed_two_grade_example() -> None:
 def test_monotonization_warns_only_when_it_changes_something() -> None:
     # Grade "A" (best, lower p) engineered to have more relative defaults than
     # grade "B" (worse), so its raw own-grade Jeffreys upper bound exceeds
-    # grade B's -- B's bound is raised to A's and a UserWarning fires.
+    # grade B's -- B is merged into A's band and a UserWarning fires.
     grades = np.array(["A"] * 100 + ["B"] * 100)
     y = np.array([1.0] * 10 + [0.0] * 90 + [0.0] * 100)
     p = np.array([0.01] * 100 + [0.05] * 100)
     with pytest.warns(UserWarning, match="running maximum"):
         bands = jeffreys_upper_bands(y, p, grades, confidence=0.9)
-    hi_raw = np.array([beta_ppf(0.9, 10.5, 90.5), beta_ppf(0.9, 0.5, 100.5)])
-    np.testing.assert_allclose([bands["A"][1], bands["B"][1]], np.maximum.accumulate(hi_raw))
-    assert bands["A"][1] <= bands["B"][1]
+    assert bands == {"A+B": (0.0, beta_ppf(0.9, 10.5, 90.5))}
 
 
 def test_monotone_hull_never_lowers_a_bound() -> None:
@@ -405,9 +404,10 @@ def test_monotone_hull_never_lowers_a_bound() -> None:
         bands = jeffreys_upper_bands(y, p, grades, confidence=0.9)
     own_a = beta_ppf(0.9, 5.5, 45.5)
     own_b = beta_ppf(0.9, 50.5, 4950.5)
-    assert bands["A"][1] == pytest.approx(own_a)  # never lowered
-    assert bands["B"][1] >= own_b
-    assert bands["B"][1] - bands["B"][0] >= 0.0
+    lo, hi = bands["A+B"]  # B cannot be ordered above A: merged, never zero-width
+    assert hi == pytest.approx(own_a)  # never lowered
+    assert hi >= own_b
+    assert hi > lo
     # The PAVA fit the old code used would have lowered A's bound.
     old = pava(np.array([own_a, own_b]), np.array([50.0, 5000.0])).fitted
     assert old[0] < own_a

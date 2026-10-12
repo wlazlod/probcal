@@ -86,9 +86,17 @@ def test_calibration_test_weights_are_relative() -> None:
     a = calibration_test(y, p, sample_weight=w)
     b = calibration_test(y, p, sample_weight=10.0 * w)
     assert b.statistic == pytest.approx(a.statistic, rel=1e-8)
-    n_eff = w.sum() ** 2 / np.dot(w, w)
+    assert b.df == pytest.approx(a.df, rel=1e-8)
+    # Second-order Rao-Scott: lr / (lbar (1 + a2)) on chi2(2 / (1 + a2)),
+    # lambda = eig(I^-1 J) at the null.
     raw = _old_calibration_test_lr(y, p, w)
-    assert a.statistic == pytest.approx(raw * n_eff / w.sum(), rel=1e-8)
+    z = np.log(p / (1 - p))
+    X = np.column_stack([np.ones_like(z), z])
+    v = p * (1 - p)
+    lam = np.linalg.eigvals(np.linalg.solve((X.T * (w * v)) @ X, (X.T * (w * w * v)) @ X)).real
+    a2 = np.var(lam) / lam.mean() ** 2
+    assert a.statistic == pytest.approx(raw / (lam.mean() * (1 + a2)), rel=1e-8)
+    assert a.df == pytest.approx(2 / (1 + a2), rel=1e-10)
 
 
 def test_calibration_test_tail_and_aliases() -> None:

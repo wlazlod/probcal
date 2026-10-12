@@ -175,7 +175,7 @@ def _old_ece_debiased(y: np.ndarray, p: np.ndarray, n_bins: int = 15) -> float:
     return float(out)
 
 
-def test_ece_debiased_unit_weights_unchanged_and_kish_weighted() -> None:
+def test_ece_debiased_unit_weights_unchanged_and_per_bin_effective_counts() -> None:
     y, p = _calibrated(3000)
     assert ece_debiased(y, p) == pytest.approx(_old_ece_debiased(y, p), rel=1e-12, abs=1e-15)
     assert ece_debiased(y, p, sample_weight=np.ones(len(y))) == ece_debiased(y, p)
@@ -184,7 +184,8 @@ def test_ece_debiased_unit_weights_unchanged_and_kish_weighted() -> None:
     w = np.where(np.arange(len(y)) % 10 == 0, 50.0, 1.0)
     yw, pw, ww = _prep(y, p, w)
     bs = bin_stats(yw, pw, ww, 15, "mass")
-    n_eff = bs.w_sum * ww.sum() / np.dot(ww, ww)
+    idx = np.searchsorted(np.unique(np.quantile(pw, np.linspace(0, 1, 16)[1:-1])), pw, "right")
+    n_eff = np.bincount(idx, weights=ww) ** 2 / np.bincount(idx, weights=ww**2)
     gaps = np.abs(bs.p_mean - bs.rate)
     var_b = bs.rate * (1 - bs.rate) / (n_eff - 1)
     want = np.sum(bs.w_sum / ww.sum() * np.sqrt(np.maximum(gaps**2 - var_b, 0.0)))

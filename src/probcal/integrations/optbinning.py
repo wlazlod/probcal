@@ -22,11 +22,13 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
     ) from exc
 
 from .._math import logit
+from .._protocol import CalibratorProtocolMixin
 from .._serialize import JsonIO, canonical_json, check_payload, encode_value, envelope, sha256_hex
 from ..base import BaseCalibrator
 from ..parametric import BetaCalibrator
-from ..sklearn._protocol import CalibratorProtocolMixin
 from ..thresholds import calibrated_bands_to_raw
+
+__all__ = ["CalibratedScorecard", "calibrate_scorecard"]
 
 _AFFINE_ATOL = 1e-6  # measured residual is ~1e-13; rounding=True measures ~1.4
 _FP_DIGITS = 12  # significant digits kept per float in the scorecard-table fingerprint
@@ -141,7 +143,7 @@ class CalibratedScorecard(JsonIO, CalibratorProtocolMixin):
         Returns
         -------
         dict[str, tuple(points_lo, points_hi)]
-            Point cut-offs per band.
+            Point cut-offs per band, as plain floats (``inf`` for an open end).
 
         Raises
         ------
@@ -165,7 +167,7 @@ class CalibratedScorecard(JsonIO, CalibratorProtocolMixin):
         for name, (z_lo, z_hi) in raw.items():
             p_lo = a_pts + b_pts * z_lo if np.isfinite(z_lo) else np.inf * -np.sign(b_pts)
             p_hi = a_pts + b_pts * z_hi if np.isfinite(z_hi) else np.inf * np.sign(b_pts)
-            out[name] = (min(p_lo, p_hi), max(p_lo, p_hi))
+            out[name] = (float(min(p_lo, p_hi)), float(max(p_lo, p_hi)))
         # Bands ordered by rising calibrated PD must map to monotone point
         # ranges (falling when B < 0, i.e. higher points = safer).
         order = sorted(out, key=lambda k: bands_d[k][0])

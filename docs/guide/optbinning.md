@@ -50,8 +50,8 @@ points = cs.score(X_new)                  # unchanged deployed points
 
 # 3. Masterscale: calibrated PD bands -> exact point cut-offs.
 ms = Masterscale.from_edges([0.005, 0.02, 0.08], names=list("ABCD"))
-print(cs.masterscale(ms))
-# {'A': (662.3, inf), 'B': (614.9, 662.3), ...}  — cut-offs on the points scale
+print(cs.masterscale(ms))                 # cut-offs on the points scale
+# -> {'A': (638.68, inf), 'B': (598.96, 638.68), ...}
 
 # 4. Provenance: the JSON names both layers.
 cs.to_json("scorecard-calibration.json")   # calibrator envelope +

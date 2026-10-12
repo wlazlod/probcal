@@ -121,7 +121,7 @@ res = pluto_tasche(
     confidence=0.9,
     grades=("A", "B", "C"),
 )
-print(res.pd_upper)          # [0.00287..., 0.00329..., 0.00758...]
+print(res.pd_upper)          # -> [0.00287 0.00328 0.00765]
 print(res.interpret())       # one audit sentence per grade
 
 # From observation-level grades and outcomes.
@@ -139,7 +139,8 @@ pass it and the best-to-worst order is the scale's:
 from probcal.metrics import pluto_tasche_from_arrays
 
 res3 = pluto_tasche_from_arrays(ms, y_cal, p=s_cal, confidence=0.9)
-print(res3.grades)          # ('G1', 'G2', 'G3'), the scale's order
+# grades come back in the scale's order:
+print(res3.grades)          # -> ('G1', 'G2', 'G3')
 ```
 
 Both entry points return the same `PlutoTascheResult` and are re-exported from
@@ -161,12 +162,17 @@ needs pooling with worse grades to say anything about a zero-default grade at al
 
 The own-grade `hi` sequence need not come out non-decreasing on its own (a noisy grade can post
 a smaller posterior upper bound than a better grade), which would make adjacent bands overlap.
-`jeffreys_upper_bands` monotonizes it with a running maximum in the given `order`
-(`np.maximum.accumulate`), and warns (`UserWarning`) only when that adjustment changed
-something. A running maximum only ever *raises* a bound, which is the prudent direction for an
+A grade whose own bound does not exceed the running maximum of the better grades (in the given
+`order`) is therefore **merged into the band before it**: the merged band is keyed by the
+joined labels, best to worst (`"A+B"`), keeps the running-maximum `hi`, and a `UserWarning`
+names the merged grades. So every returned band has `lo < hi`, and the bands are contiguous
+and strictly increasing; a merged key means the data cannot order those grades at this
+confidence, and merging them in the masterscale (or collecting more data) is the decision the
+warning asks for. No grade's bound is ever lowered, which is the prudent direction for an
 upper bound. Up to 0.3.x the hull was a weighted isotonic regression (PAVA, weight = grade
-size): the minimum-adjustment fit, but one that could pull a small grade's bound *down* below
-its own posterior quantile when a large, better-performing grade followed it. (`level=` is the
+size), which could pull a small grade's bound *down* below its own posterior quantile; 0.3.4
+kept a running maximum per grade, which could leave a zero-width band `(hi, hi)` that no
+calibrated PD falls into. (`level=` is the
 0.3.x spelling of `confidence=`; it still works with a `DeprecationWarning` until 0.4.0.)
 
 ```python

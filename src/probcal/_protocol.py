@@ -1,6 +1,7 @@
 """Delegation of the probcal calibrator protocol to a fitted inner calibrator.
 
-sklearn-free on purpose: shared by the sklearn adapters and by
+sklearn-free on purpose (it lives outside ``probcal.sklearn``, whose import
+requires scikit-learn): shared by the sklearn adapters and by
 ``probcal.integrations.optbinning.CalibratedScorecard``.
 """
 
@@ -9,8 +10,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from .._results import Interpretation
-    from ..base import BaseCalibrator
+    from ._results import Interpretation
+    from .base import BaseCalibrator
 
 
 class CalibratorProtocolMixin:

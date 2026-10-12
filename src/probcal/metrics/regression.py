@@ -5,13 +5,15 @@ Theory: ``docs/concepts/metrics.md``. Sample weights follow the package
 convention in :mod:`probcal.metrics._common`.
 """
 
+import math
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
 
 from .._math import chi2_sf, expit, irls_logistic, logit
 from .._validation import EPS
-from ._common import _prep, effective_weights
+from ._common import _prep, rao_scott
 from .smooth import _spiegelhalter
 
 
@@ -43,10 +45,32 @@ def _intercept(y: np.ndarray, p: np.ndarray, w: np.ndarray) -> float:
     return float(irls_logistic(np.ones((len(z), 1)), y, w=w, offset=z).beta[0])
 
 
-def _slope_fit(y: np.ndarray, p: np.ndarray, w: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Design matrix ``[1, logit(p)]`` and the fitted (intercept, slope)."""
+def _constant_logit(z: np.ndarray, caller: str) -> bool:
+    """``True`` (with a warning) when ``logit(p)`` takes a single value."""
+    if bool(np.all(z == z[0])):
+        warnings.warn(
+            f"{caller}: every prediction has the same logit(p), so the calibration "
+            "slope is not identified; it is reported as nan",
+            UserWarning,
+            stacklevel=4,
+        )
+        return True
+    return False
+
+
+def _slope_fit(
+    y: np.ndarray, p: np.ndarray, w: np.ndarray, caller: str = "calibration_slope"
+) -> tuple[np.ndarray, np.ndarray]:
+    """Design matrix ``[1, logit(p)]`` and the fitted (intercept, slope).
+
+    With a single distinct ``logit(p)`` the slope is not identified: the
+    fitted vector is ``(intercept with the slope fixed at 1, nan)``, with a
+    ``UserWarning``.
+    """
     z = logit(p)
     X = np.column_stack([np.ones_like(z), z])
+    if _constant_logit(z, caller):
+        return X, np.array([_intercept(y, p, w), math.nan])
     return X, irls_logistic(X, y, w=w).beta
 
 
@@ -54,6 +78,9 @@ def calibration_slope(y: object, p: object, *, sample_weight: object = None) -> 
     """Cox calibration slope.
 
     ``< 1`` means overfitting/overconfident spread, ``> 1`` underfitting.
+    When every prediction has the same ``logit(p)`` (a constant ``p``, or a
+    single PD level) the slope is not identified and ``nan`` is returned
+    with a ``UserWarning``.
 
     Parameters
     ----------
@@ -67,32 +94,40 @@ def calibration_slope(y: object, p: object, *, sample_weight: object = None) -> 
     Returns
     -------
     float
-        Fitted slope on the logit scale.
+        Fitted slope on the logit scale (``nan`` when ``logit(p)`` is
+        constant).
     """
     return float(_slope_fit(*_prep(y, p, sample_weight))[1][1])
 
 
 @dataclass(frozen=True)
 class CalibrationTestResult:
-    """2-df likelihood-ratio test of (intercept, slope) = (0, 1) — the
+    """Likelihood-ratio test of (intercept, slope) = (0, 1) — the
     Cox-framed weak calibration test.
 
     Attributes
     ----------
     statistic : float
-        Likelihood-ratio test statistic (chi-square, 2 df).
+        Likelihood-ratio test statistic, referred to ``chi2(df)`` (the
+        Rao-Scott corrected statistic for non-uniform weights).
     p_value : float
         Upper-tail p-value of the statistic.
     alpha : float
         Fitted intercept (also available as :attr:`intercept`).
     beta : float
-        Fitted slope (also available as :attr:`slope`).
+        Fitted slope (also available as :attr:`slope`); ``nan`` when
+        ``logit(p)`` is constant.
+    df : float
+        Degrees of freedom of the reference chi-square: ``2`` (``1`` when
+        only the intercept is testable), smaller and fractional after the
+        Rao-Scott correction for non-uniform weights.
     """
 
     statistic: float
     p_value: float
     alpha: float
     beta: float
+    df: float = 2.0
 
     @property
     def intercept(self) -> float:
@@ -110,10 +145,18 @@ def calibration_test(
 ) -> CalibrationTestResult:
     """Likelihood-ratio test of joint calibration (alpha, beta) = (0, 1).
 
-    With weights, the fit uses ``sample_weight`` as given (the MLE is
-    scale-invariant) and the LR statistic uses the Kish-rescaled weights, so
-    it is invariant to rescaling the weights; unit weights give the plain
-    test (see :mod:`probcal.metrics._common`).
+    With weights, the fit and the likelihood ratio use ``sample_weight`` as
+    given, and the weighted LR statistic -- distributed under calibration as
+    a weighted sum of ``chi2_1`` variables, not as ``chi2_2`` -- is referred
+    to a second-order Rao-Scott corrected chi-square
+    (:func:`probcal.metrics._common.rao_scott`; the design effects use the
+    exact null variance ``sum(w**2 p (1 - p) x x')`` of the weighted score).
+    The test is invariant to rescaling the weights, and unit (or constant)
+    weights give the plain 2-df likelihood-ratio test.
+
+    When every prediction has the same ``logit(p)`` the slope is not
+    identified: only calibration-in-the-large is tested (slope fixed at 1,
+    ``df = 1``), ``beta`` is ``nan``, and a ``UserWarning`` is emitted.
 
     Parameters
     ----------
@@ -130,19 +173,22 @@ def calibration_test(
         Test statistic, p-value, and fitted intercept/slope.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    X, beta_hat = _slope_fit(y_arr, p_arr, w)
+    X, beta_hat = _slope_fit(y_arr, p_arr, w, "calibration_test")
     alpha, beta = float(beta_hat[0]), float(beta_hat[1])
-    # Likelihood ratio on the Kish-rescaled weights (package convention):
-    # invariant to rescaling the weights, the plain LR for unit weights.
-    we = effective_weights(w)
 
     def _ll(prob: np.ndarray) -> float:
         prob = np.clip(prob, EPS, 1.0 - EPS)
-        return float(np.sum(we * (y_arr * np.log(prob) + (1.0 - y_arr) * np.log1p(-prob))))
+        return float(np.sum(w * (y_arr * np.log(prob) + (1.0 - y_arr) * np.log1p(-prob))))
 
-    lr = max(2.0 * (_ll(expit(X @ beta_hat)) - _ll(p_arr)), 0.0)
-    p_value = chi2_sf(lr, 2.0)
-    return CalibrationTestResult(statistic=lr, p_value=p_value, alpha=alpha, beta=beta)
+    if math.isnan(beta):  # constant logit(p): intercept-only (offset) test
+        X = X[:, :1]
+        fitted = expit(alpha + logit(p_arr))
+    else:
+        fitted = expit(X @ beta_hat)
+    lr = max(2.0 * (_ll(fitted) - _ll(p_arr)), 0.0)
+    stat, df = rao_scott(lr, X, p_arr, w)
+    p_value = chi2_sf(stat, df)
+    return CalibrationTestResult(statistic=stat, p_value=p_value, alpha=alpha, beta=beta, df=df)
 
 
 @dataclass(frozen=True)
@@ -201,7 +247,7 @@ def calibration_guardrails(
         Slope, intercept, and Spiegelhalter-p values with pass/fail flags.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    slope = float(_slope_fit(y_arr, p_arr, w)[1][1])
+    slope = float(_slope_fit(y_arr, p_arr, w, "calibration_guardrails")[1][1])
     intercept = _intercept(y_arr, p_arr, w)
     sp = _spiegelhalter(y_arr, p_arr, w)
     slope_ok = 0.9 <= slope <= 1.1

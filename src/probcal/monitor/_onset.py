@@ -21,7 +21,12 @@ def estimate_onset(increments: np.ndarray) -> int:
 
     Computes ``k* = argmax_k sum_{j >= k} increments[j]`` — the start of
     the suffix with the largest total plug-in log-LR evidence. Ties (equal
-    maximal suffix sums) resolve to the LATEST ``k``.
+    maximal suffix sums) resolve to the EARLIEST ``k``: a batch with a zero
+    increment (a plug-in not yet engaged) at the front of the evidence trail
+    is kept in it rather than dropped. When no suffix carries positive
+    evidence (every suffix sum ``<= 0`` — e.g. the alarm came from the
+    fixed-grid mixture while the plug-ins contributed nothing), there is no
+    trail to localize and the estimate is 0, the whole history.
 
     Parameters
     ----------
@@ -52,8 +57,9 @@ def estimate_onset(increments: np.ndarray) -> int:
         raise ValueError("increments must be non-empty")
     suffix_sums = np.cumsum(arr[::-1])[::-1]
     best = np.max(suffix_sums)
-    tied = np.flatnonzero(suffix_sums == best)
-    return int(tied[-1])
+    if not best > 0.0:
+        return 0
+    return int(np.flatnonzero(suffix_sums == best)[0])
 
 
 __all__ = ["estimate_onset"]

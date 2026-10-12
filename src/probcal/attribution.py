@@ -16,6 +16,7 @@ Lundberg & Lee (2017); Lundberg et al. (2020); Sundararajan, Taly & Yan
 (2017); Aumann & Shapley (1974) — full records in the documentation.
 """
 
+import sys
 from dataclasses import dataclass
 from typing import Any
 
@@ -91,12 +92,18 @@ def adjust_attributions(
         ``base_value`` is then ignored.
     base_value : float or array_like of shape (n,)
         SHAP base value(s) on the same scale as ``phi``.
-    calibrator : fitted calibrator, Chain, or CalibratedModel
+    calibrator : fitted calibrator, Chain, CalibratedModel, or sklearn adapter
         Any object with ``predict_proba`` on model probabilities;
         ``affine_logit_coeffs_`` (when not None) enables the exact affine
         path. A :class:`~probcal.CalibratedModel` is read through its
         model-free :attr:`~probcal.CalibratedModel.chain_` (its own
-        ``predict_proba`` takes features, not scores).
+        ``predict_proba`` takes features, not scores). The sklearn
+        adapters (``probcal.sklearn.SklearnCalibrator`` and
+        ``CalibratedClassifier``) are read through their fitted probcal
+        ``calibrator_``, which maps the model's probability for
+        ``classes_[1]`` (for ``method="decision_function"``, the ``expit``
+        of its margin) — so ``phi`` must explain the score for
+        ``classes_[1]``.
     scale : {"logit", "probability"}
         Working scale of the attributions. Affine-exactness exists only on
         the logit scale.
@@ -122,6 +129,12 @@ def adjust_attributions(
 
     if isinstance(calibrator, CalibratedModel):
         calibrator = calibrator.chain_
+    elif "probcal.sklearn" in sys.modules:
+        # Only reachable with sklearn already imported; never imports it here.
+        from .sklearn._base import BinaryCalibratedMixin
+
+        if isinstance(calibrator, BinaryCalibratedMixin):
+            calibrator = calibrator._fitted_calibrator()
     phi_arr, base_arr = _extract(phi, base_value)
     s = base_arr + phi_arr.sum(axis=1)
 

@@ -216,7 +216,7 @@ sc = Scorecard(
 ).fit(X_cal, y_cal.astype(int))
 
 cs = calibrate_scorecard(sc, X_cal, y_cal)
-print(cs.masterscale(ms))             # {'A': (638.7, inf), 'B': (598.9, 638.7), ...}
+print(cs.masterscale(ms))             # -> {'A': (638.68, inf), 'B': (598.96, 638.68), ...}
 ```
 
 The points are untouched by calibration; only the mapping from points to

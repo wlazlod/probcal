@@ -71,10 +71,13 @@ class HistogramBinningCalibrator(BaseCalibrator):
         idx = np.searchsorted(edges, s, side="right")
         k, n = bin_sums(idx, y, w, len(edges) + 1)
         prior = 0.5 if self.shrinkage == "jeffreys" else 0.0
-        # Empty bins (possible under "width") fall back to the global rate.
-        rate = np.full(len(n), float(np.average(y, weights=w)))
+        # Equal-mass edges leave no bin empty. Under "width" a bin can be
+        # empty; it takes its neighbours' rate (interpolated by bin index, the
+        # nearest filled bin at either end), so it never breaks the ordering
+        # of the filled bins around it.
         filled = n > 0
-        rate[filled] = (k[filled] + prior) / (n[filled] + 2.0 * prior)
+        filled_rate = (k[filled] + prior) / (n[filled] + 2.0 * prior)
+        rate = np.interp(np.arange(len(n)), np.flatnonzero(filled), filled_rate)
         self.edges_ = edges
         self.bin_rate_ = rate
         self.bin_weight_ = n
@@ -174,8 +177,8 @@ class ScalingBinningCalibrator(BaseCalibrator):
         edges = equal_mass_edges(g, n_bins, w)
         idx = np.searchsorted(edges, g, side="right")
         sums, cnts = bin_sums(idx, g, w, len(edges) + 1)
-        # Deduplicated edges drawn from g itself leave no bin empty; the guard
-        # interpolates between neighbours should rounding ever produce one.
+        # equal_mass_edges leaves no bin empty (ties at the minimum included);
+        # the guard interpolates between neighbours should one ever occur.
         filled = cnts > 0
         means = np.interp(np.arange(len(cnts)), np.flatnonzero(filled), sums[filled] / cnts[filled])
         self.edges_ = edges

@@ -17,8 +17,9 @@ unhashable (``__hash__ = None``), like the arrays themselves.
 
 import dataclasses
 import warnings
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import ClassVar
 
 import numpy as np
@@ -46,7 +47,12 @@ def _aligned_table(headers: tuple[str, ...], rows: Sequence[Sequence[object]]) -
 
 
 def _values_equal(a: object, b: object) -> bool:
-    """Field equality that understands numpy arrays (``nan == nan``) and nests."""
+    """Field equality that understands numpy arrays (``nan == nan``) and nests.
+
+    Tuples and lists compare element-wise (same type required), mappings
+    key-set first and then value by value, so containers of arrays — e.g.
+    :attr:`BeltResult.bands` — compare without raising.
+    """
     if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
         a_arr, b_arr = np.asarray(a), np.asarray(b)
         if a_arr.shape != b_arr.shape:
@@ -61,6 +67,8 @@ def _values_equal(a: object, b: object) -> bool:
             and len(a) == len(b)
             and all(_values_equal(x, y) for x, y in zip(a, b, strict=True))
         )
+    if isinstance(a, Mapping) and isinstance(b, Mapping):
+        return a.keys() == b.keys() and all(_values_equal(a[k], b[k]) for k in a)
     if isinstance(a, float) and isinstance(b, float) and a != a and b != b:
         return True
     return bool(a == b)
@@ -331,9 +339,10 @@ class BeltResult(_ResultBase):
         Evaluation grid on the probability and logit scales.
     levels : tuple of float
         The two confidence levels requested (``confidence=`` argument).
-    bands : dict
+    bands : Mapping
         ``{level: (lower, upper)}`` band bounds on the probability scale,
-        one entry per level in ``levels``.
+        one entry per level in ``levels``. A read-only mapping (the result
+        is frozen); ``dict(belt.bands)`` gives a mutable copy.
     degree : int
         Polynomial degree selected by forward likelihood-ratio testing.
     p_value : float
@@ -343,9 +352,27 @@ class BeltResult(_ResultBase):
     grid_p: np.ndarray
     grid_logit: np.ndarray
     levels: tuple[float, float]
-    bands: dict[float, tuple[np.ndarray, np.ndarray]]
+    bands: Mapping[float, tuple[np.ndarray, np.ndarray]]
     degree: int
     p_value: float
+
+    def __post_init__(self) -> None:
+        frozen = MappingProxyType({k: tuple(v) for k, v in dict(self.bands).items()})
+        object.__setattr__(self, "bands", frozen)
+
+    def __reduce__(self) -> tuple[object, tuple[object, ...]]:
+        # A mappingproxy does not pickle; rebuild from a plain dict instead.
+        return (
+            type(self),
+            (
+                self.grid_p,
+                self.grid_logit,
+                self.levels,
+                dict(self.bands),
+                self.degree,
+                self.p_value,
+            ),
+        )
 
     def _legacy(self, which: int, side: int, name: str) -> np.ndarray:
         level = self.levels[which]

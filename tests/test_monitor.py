@@ -96,19 +96,18 @@ def test_grade_component_catches_single_grade_drift() -> None:
     assert "A" in mon.report().grade_table
 
 
-def test_weights_warn_once_and_enter_as_exponents() -> None:
-    mon = CalibrationMonitor()
+def test_weights_do_not_warn_and_enter_as_capped_exponents() -> None:
+    import warnings as _warnings
+
     y, p = _batch(seed=7)
     w = np.ones_like(p)
     w[:10] = 2.5
-    with pytest.warns(UserWarning, match="martingale"):
-        mon.update(y, p, sample_weight=w, label="w1")
-    import warnings as _warnings
-
-    with _warnings.catch_warnings(record=True) as rec:
-        _warnings.simplefilter("always")
-        mon.update(y, p, sample_weight=w, label="w2")
-    assert not any("martingale" in str(r.message) for r in rec)  # warned once
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("error")
+        a = CalibrationMonitor().update(y, p, sample_weight=w, label="w1")
+    b = CalibrationMonitor().update(y, p, sample_weight=7.0 * w, label="w1")
+    assert a.e_global == pytest.approx(b.e_global, rel=1e-12)  # scale-free
+    assert a.e_global != CalibrationMonitor().update(y, p, label="w1").e_global
 
 
 def test_validation_errors() -> None:

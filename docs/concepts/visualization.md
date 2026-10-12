@@ -125,7 +125,8 @@ it is *simultaneous* (Scheffé-type) over the whole curve for the selected polyn
 conditional on the selected degree. The p-value ignores the forward degree selection that
 preceded it, so it is somewhat anti-conservative. The polynomial is fitted on the centred and
 scaled logit (weighted mean and SD), which only improves conditioning. With `sample_weight`,
-the fits and tests use Kish-rescaled weights ([weight convention](metrics.md#sample-weights)).
+the fits are weighted likelihoods and the bands and test use the exact weighted (sandwich)
+variance ([weight convention](metrics.md#sample-weights)).
 
 `calibration_belt(..., confidence=(0.8, 0.95))` sets the two levels; the result carries
 `levels` and `bands = {level: (lower, upper)}`, so `belt.bands[0.95]` is the 95% band. The

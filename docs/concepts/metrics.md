@@ -24,13 +24,18 @@ finite, and is read as a **relative frequency weight**:
   are weighted means. They do not change when all weights are multiplied by a constant, and
   unit weights reproduce the unweighted numbers exactly.
 - Wherever a *sample size* enters (a test statistic's variance, a finite-sample bias
-  correction, a likelihood-ratio statistic), the weights are first rescaled to
-  `w_eff = w * sum(w) / sum(w**2)`, so they sum to Kish's effective sample size
-  `n_eff = sum(w)**2 / sum(w**2)`. This applies to `spiegelhalter_z`, `ece_debiased`,
-  `murphy_decomposition(bias_corrected=True)`, `hosmer_lemeshow`, `calibration_test`,
-  `calibration_belt` and the `ecce_curve` null envelope. Unit weights give `w_eff == w`
-  exactly; a constant factor changes nothing; and weights concentrated on a few rows cannot
-  manufacture significance.
+  correction, a null envelope, a likelihood-ratio statistic), the variance is the one the
+  weighted statistic actually has when each `y` is Bernoulli(`p`):
+  `Var(sum(w * (y - p))) = sum(w**2 * p * (1 - p))`. `spiegelhalter_z` and the `ecce_curve`
+  null envelope use that variance directly; `hosmer_lemeshow` uses it per risk group, in the
+  classical form `sum_g(w**2) * pt_g * (1 - pt_g)` with `pt_g = sum_g(w**2 p) / sum_g(w**2)`;
+  `ece_debiased` and `murphy_decomposition(bias_corrected=True)` use each bin's effective
+  count `sum_b(w)**2 / sum_b(w**2)`; and the likelihood-ratio tests of `calibration_test` and
+  `calibration_belt` are taken on the weighted log-likelihood and referred to a second-order
+  Rao–Scott corrected chi-square, with sandwich covariances for the belt's bands (so
+  `CalibrationTestResult.df` is fractional when the weights vary). Every one of
+  these is invariant to multiplying all weights by a constant, and unit weights give the
+  unweighted statistic exactly.
 
 Two count-form functions read weights literally instead: `pluto_tasche_from_arrays` sums
 weights as obligor and default counts (an integer weight equals row duplication), and
@@ -38,10 +43,13 @@ weights as obligor and default counts (an integer weight equals row duplication)
 `CalibrationMonitor`. The per-grade binomial and Jeffreys tests use raw integer counts and
 ignore weights.
 
-0.3.4 introduced this convention. Before it, test statistics treated `sum(w)` as the sample
-size: Hosmer–Lemeshow and the calibration LR test scaled with a constant weight `c`, and
-Spiegelhalter's z was divided by `sqrt(c)`. For weights drawn from U(0.5, 2) the HL and LR
-statistics now come out smaller by the factor `n_eff / sum(w)` (about 0.72).
+Before 0.3.4, test statistics treated `sum(w)` as the sample size, so Hosmer–Lemeshow and the
+calibration LR test scaled with a constant weight `c`. 0.3.4 made them scale-invariant by
+rescaling the weights to Kish's single global effective sample size
+`sum(w)**2 / sum(w**2)`; 0.3.5 replaced that with the exact weighted variances above, because
+one global effective size misstates the variance whenever the weights vary with `p`. For
+weights that are independent of `p` the two agree closely; for weights correlated with `p`
+the 0.3.5 statistics are the correctly sized ones.
 
 ## Proper scoring rules
 
@@ -373,11 +381,13 @@ applied, because none is implied by returning several independent reports. Forma
 group-conditional calibration testing is future work; see `docs/guide/groups.md`.
 
 **Weighted quantiles.** `e50`, `e90`, and the `reliability_summary` stats box compute their
-quantile step with `probcal._math.weighted_quantile` (Hazen interpolation positions) whenever
-`sample_weight` is given and not uniform; unweighted and equal-weight calls short-circuit to
-plain `np.quantile` so 0.1.2 results stay bit-identical (Hazen differs from numpy's default
-quantile method even at equal weights, so it is the short-circuit, not a numerical
-coincidence, that protects those anchors).
+quantile step with `probcal._math.weighted_quantile` whenever `sample_weight` is given: the
+continuous weighted form of numpy's default (`linear`) rule. Each sorted observation sits at
+the midpoint of its own weight, those midpoints are mapped affinely onto `[0, 1]` as the
+plotting positions, and the quantile interpolates linearly between them. With equal weights
+the positions are exactly numpy's, so the result is `np.quantile` bit for bit; the positions
+are continuous in the weights, so nearly equal weights give nearly the unweighted answer, and
+rescaling the weights changes nothing.
 
 ## Reading a report
 

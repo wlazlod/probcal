@@ -79,7 +79,7 @@ around a point estimate.
 from probcal.offset import estimate_offset, offset_from_estimate
 
 est = estimate_offset(y_cal, s_cal)
-print(est)                       # delta=+0.1234 +/- 0.0287, n=..., events=...
+print(est)                       # -> delta=-0.8765 +/- 0.1144, n=3000, events=82.0
 off = offset_from_estimate(est, s_cal)  # same LogitOffset mode A would give
 ```
 

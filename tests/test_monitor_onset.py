@@ -45,19 +45,19 @@ def test_estimate_onset_backward_cusum_argmax() -> None:
     assert estimate_onset(inc) == 3
 
 
-def test_estimate_onset_ties_break_to_latest() -> None:
-    assert estimate_onset(np.zeros(5)) == 4
+def test_estimate_onset_ties_break_to_earliest() -> None:
+    assert estimate_onset(np.array([0.0, 0.0, 2.0, 1.0])) == 0
 
 
 def test_estimate_onset_single_element() -> None:
     assert estimate_onset(np.array([3.0])) == 0
 
 
-def test_estimate_onset_all_negative_picks_last_index() -> None:
-    # Every suffix sum is negative; the least-negative (smallest loss) is the
-    # final singleton, since dropping any earlier term only adds more loss.
-    inc = np.array([-1.0, -2.0, -0.5])
-    assert estimate_onset(inc) == 2
+def test_estimate_onset_without_positive_evidence_is_whole_history() -> None:
+    # No suffix carries positive plug-in evidence: nothing to localize, so
+    # the onset is the first batch (the whole history), not the last one.
+    assert estimate_onset(np.array([-1.0, -2.0, -0.5])) == 0
+    assert estimate_onset(np.zeros(5)) == 0
 
 
 def test_estimate_onset_empty_raises() -> None:
@@ -126,7 +126,13 @@ def test_since_onset_window_respects_plug_in_window() -> None:
     # plug_in_window=3 trailing start (index 7 = 10 - 3).
     forced = [-1.0, -1.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
     assert estimate_onset(np.array(forced)) == 2
-    mon.steps_ = [replace(s, log_e_increment=v) for s, v in zip(mon.steps_, forced, strict=True)]
+    # The onset is read up to the first alarm; place that alarm after it.
+    mon.steps_ = [
+        replace(s, log_e_increment=v, alarm=i >= 5)
+        for i, (s, v) in enumerate(zip(mon.steps_, forced, strict=True))
+    ]
+
+    mon_trailing.steps_ = [replace(s, alarm=i >= 5) for i, s in enumerate(mon_trailing.steps_)]
 
     rep = mon.report()
     assert rep.onset_label == "m2"  # the onset estimate itself is unaffected

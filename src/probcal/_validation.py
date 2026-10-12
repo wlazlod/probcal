@@ -141,8 +141,21 @@ def validate_weights(w: object, n: int) -> np.ndarray:
     return arr
 
 
-def validate_cv(cv: object, y: np.ndarray) -> int:
+def validate_cv(cv: object, y: np.ndarray, *, held_out_both_classes: bool = False) -> int:
     """Validate a fold count for stratified cross-fitting on binary ``y``.
+
+    Parameters
+    ----------
+    cv : int
+        Fold count; an integer ``>= 2``.
+    y : numpy.ndarray
+        Binary target in ``{0.0, 1.0}``.
+    held_out_both_classes : bool, keyword-only
+        Also require every held-out fold to contain both classes, i.e. at
+        least ``cv`` members per class. Needed wherever something is fitted
+        or scored on a single held-out fold (per-fold calibrators, per-fold
+        selection scores); a pooled out-of-fold fit only needs the training
+        folds to see both classes.
 
     Returns
     -------
@@ -153,15 +166,23 @@ def validate_cv(cv: object, y: np.ndarray) -> int:
     ------
     ValueError
         If ``cv`` is not an integer ``>= 2``, or a class has fewer than two
-        members (some training fold would then miss that class).
+        members (some training fold would then miss that class), or — with
+        ``held_out_both_classes`` — fewer than ``cv`` members.
     """
     if isinstance(cv, bool) or not isinstance(cv, (int, np.integer)) or int(cv) < 2:
         raise ValueError(f"cv must be an integer >= 2, got {cv!r}")
-    n_min = int(min(np.sum(y == 0.0), np.sum(y == 1.0)))
+    n_neg, n_pos = int(np.sum(y == 0.0)), int(np.sum(y == 1.0))
+    n_min = min(n_neg, n_pos)
     if n_min < 2:
         raise ValueError(
             f"cross-fitting needs at least 2 observations of each class; the rarer "
             f"class has {n_min}"
+        )
+    if held_out_both_classes and n_min < int(cv):
+        raise ValueError(
+            f"cv={int(cv)} needs at least {int(cv)} observations of each class so that "
+            f"every held-out fold contains both classes; y has {n_pos} positives and "
+            f"{n_neg} negatives. Use cv <= {n_min} (or more data)"
         )
     return int(cv)
 

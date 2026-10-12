@@ -14,11 +14,10 @@ import numpy as np
 from ._validation import (
     validate_binary_y,
     validate_positive_int,
-    validate_scores,
     validate_weights,
 )
 from .base import UnattainableTargetError, shrink_interval
-from .masterscale import Masterscale
+from .masterscale import Masterscale, _validate_probabilities
 
 
 def calibrated_interval_to_raw(
@@ -138,7 +137,8 @@ def _prebin(
     Returns per-pre-bin weighted counts ``W``, weighted events ``E``, and the
     cut values ``cuts`` (length ``len(W) - 1``): pre-bin ``j`` is exactly
     ``{cuts[j-1] <= p < cuts[j]}``, the same rule :meth:`Masterscale.assign`
-    applies, so any run of consecutive pre-bins is a valid grade.
+    applies, so any run of consecutive pre-bins is a valid grade. ``p`` is
+    unclipped, so the cuts are the observed values themselves.
     """
     order = np.argsort(p, kind="stable")
     ps, ys, ws = p[order], y[order], w[order]
@@ -146,6 +146,9 @@ def _prebin(
     ranks = (np.arange(1, prebins) * n) // prebins
     cuts = np.unique(ps[ranks])
     cuts = cuts[cuts > ps[0]]  # a cut at the minimum would make an empty first pre-bin
+    # The top band is closed at 1, so mass at p == 1 belongs to the last
+    # pre-bin below it; a cut at 1 would need an empty band [1, 1).
+    cuts = cuts[cuts < 1.0]
     idx = np.searchsorted(cuts, ps, side="right")
     k = len(cuts) + 1
     W = np.bincount(idx, weights=ws, minlength=k).astype(np.float64)
@@ -272,7 +275,7 @@ def build_masterscale(
         ``n_grades``, or ``prebins``.
     """
     y_arr = validate_binary_y(y)
-    p_arr = validate_scores(p, name="p")
+    p_arr = _validate_probabilities(p, name="p")
     if len(y_arr) != len(p_arr):
         raise ValueError("y and p must have equal length")
     w_arr = validate_weights(sample_weight, len(p_arr))

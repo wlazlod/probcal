@@ -48,13 +48,13 @@ The public API is exactly the export lists below; anything prefixed with
   `evaluate`).
 - `probcal.monitor.__all__`: `CalibrationMonitor`, `MonitorStep`,
   `MonitorReport`, `AppliedAction`, `moc_offset`, `moc_offset_from_counts`.
-- `probcal.sklearn` (extra `probcal[sklearn]`): `SklearnCalibrator`,
+- `probcal.sklearn.__all__` (extra `probcal[sklearn]`): `SklearnCalibrator`,
   `SklearnOffset`, `CalibratedClassifier`.
-- `probcal.integrations.optbinning` (extra `probcal[optbinning]`):
+- `probcal.integrations.optbinning.__all__` (extra `probcal[optbinning]`):
   `calibrate_scorecard`, `CalibratedScorecard`.
-- `probcal.plots` (extra `probcal[viz]`): the plotting catalog,
+- `probcal.plots.__all__` (extra `probcal[viz]`): the plotting catalog,
   including `plot_e_process`.
-- `probcal.report` (extra `probcal[viz]`): `validation_report`. Not
+- `probcal.report.__all__` (extra `probcal[viz]`): `validation_report`. Not
   re-exported from top-level `probcal`, so `import probcal` and
   `import probcal.report` both stay matplotlib-free at import time.
 

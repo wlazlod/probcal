@@ -1,5 +1,7 @@
 """Tests for probcal.monitor._actions (margin-of-conservatism offsets)."""
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -144,8 +146,10 @@ def test_moc_offset_from_counts_weighted() -> None:
     p = np.array([0.05, 0.05, 0.05, 0.05])
     w = np.array([2.0, 3.0, 1.0, 4.0])
     off = moc_offset_from_counts(y, p, level=0.9, sample_weight=w)
-    k = float(np.sum(w * y))
-    n = float(np.sum(w))
+    # Kish effective counts: n_eff = sum(w)^2 / sum(w^2), events scaled alike
+    kish = float(np.sum(w)) / float(np.sum(w * w))
+    k = float(np.sum(w * y)) * kish
+    n = float(np.sum(w)) * kish
     q = beta_ppf(0.9, k + 0.5, n - k + 0.5)
     assert off.post_mean_ == pytest.approx(q, abs=1e-9)
 
@@ -275,7 +279,14 @@ def test_apply_recommendation_window_uses_onset_index_not_label_lookup() -> None
     rep = mon.report()
     assert rep.alarm_at == "m"
 
-    onset_idx = estimate_onset(np.array([s.log_e_increment for s in mon.steps_]))
+    # Pin the evidence trail so the onset is unambiguously the first drifted
+    # batch (index 4), up to and including the first alarm.
+    forced = [0.0, -1.0, -1.0, -1.0, 20.0, 50.0, 80.0, 60.0, 80.0, 80.0]
+    mon.steps_ = [replace(s, log_e_increment=v) for s, v in zip(mon.steps_, forced, strict=True)]
+    alarm_idx = next(i for i, s in enumerate(mon.steps_) if s.alarm)
+    assert alarm_idx >= 4
+    onset_idx = estimate_onset(np.array(forced[: alarm_idx + 1]))
+    assert onset_idx == 4
     action = mon.apply_recommendation()
     assert len(action.window) == len(mon.steps_) - onset_idx
     assert len(action.window) != len(mon.steps_)  # a label lookup would find index 0

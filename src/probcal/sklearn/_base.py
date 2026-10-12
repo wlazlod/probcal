@@ -8,9 +8,9 @@ from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import _check_sample_weight, check_is_fitted
 
 from .._math import expit
+from .._protocol import CalibratorProtocolMixin
 from ..base import BaseCalibrator
 from ..parametric import BetaCalibrator
-from ._protocol import CalibratorProtocolMixin
 
 
 def check_sample_weight(sample_weight: object, X: object) -> np.ndarray | None:

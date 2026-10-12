@@ -367,7 +367,7 @@ def test_spiegelhalter_zero_variance_is_nan() -> None:
     assert math.isnan(res.z) and math.isnan(res.p_value)
 
 
-def test_spiegelhalter_kish_weights() -> None:
+def test_spiegelhalter_weighted_variance() -> None:
     y, p = _calibrated(4000)
     base = spiegelhalter_z(y, p)
     assert spiegelhalter_z(y, p, sample_weight=np.ones(len(y))) == base
@@ -377,9 +377,8 @@ def test_spiegelhalter_kish_weights() -> None:
         base.z, rel=1e-12
     )
     w = np.random.default_rng(1).uniform(0.2, 3.0, len(y))
-    we = w * w.sum() / np.dot(w, w)
     a = 1.0 - 2.0 * p
-    z_want = np.sum(we * (y - p) * a) / np.sqrt(np.sum(we * a**2 * p * (1.0 - p)))
+    z_want = np.sum(w * (y - p) * a) / np.sqrt(np.sum(w**2 * a**2 * p * (1.0 - p)))
     assert spiegelhalter_z(y, p, sample_weight=w).z == pytest.approx(z_want, rel=1e-12)
     assert spiegelhalter_z(y, p, sample_weight=10 * w).z == pytest.approx(z_want, rel=1e-12)
 

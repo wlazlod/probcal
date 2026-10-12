@@ -1,9 +1,23 @@
 """Masterscale: one boundary convention, one object, accepted everywhere grades are."""
 
+import copy
+import json
+import pathlib
+import pickle
+
 import numpy as np
 import pytest
 
-from probcal import Masterscale
+from probcal import BetaCalibrator, GradeTable, Masterscale, make_pd_portfolio
+from probcal._registry import load
+from probcal.metrics import (
+    binomial_grade_test,
+    hl_e_test,
+    jeffreys_grade_test,
+    jeffreys_upper_bands,
+    pluto_tasche_from_arrays,
+)
+from probcal.monitor import CalibrationMonitor
 
 BANDS = {
     "A": (0.0, 0.01),
@@ -12,122 +26,86 @@ BANDS = {
     "D": (0.05, 0.10),
     "E": (0.10, 1.0),
 }
+MS = Masterscale(BANDS)
+PORT = make_pd_portfolio(n=4000, random_state=3)
+P_TEST = make_pd_portfolio(n=6000, random_state=11)
+
+
+# ----------------------------------------------------------------- construction
 
 
 def test_dict_and_from_edges_agree() -> None:
-    ms = Masterscale(BANDS)
     ms2 = Masterscale.from_edges([0.01, 0.02, 0.05, 0.10], names=list("ABCDE"))
-    assert ms == ms2
-    assert ms.names == ("A", "B", "C", "D", "E")
-    assert ms.n_grades == 5
-    np.testing.assert_array_equal(ms.edges, [0.0, 0.01, 0.02, 0.05, 0.10, 1.0])
-    assert ms.bands == BANDS
-    assert list(ms.bands) == list("ABCDE")
-
-
-def test_from_edges_default_names_and_unsorted_dict_input() -> None:
-    ms = Masterscale.from_edges([0.05, 0.01])
-    assert ms.names == ("G1", "G2", "G3")
-    shuffled = Masterscale(
-        {
-            "E": (0.10, 1.0),
-            "A": (0.0, 0.01),
-            "C": (0.02, 0.05),
-            "B": (0.01, 0.02),
-            "D": (0.05, 0.10),
-        }
-    )
-    assert shuffled == Masterscale(BANDS)
+    assert MS == ms2
+    assert MS.names == ("A", "B", "C", "D", "E")
+    assert MS.n_grades == 5
+    np.testing.assert_array_equal(MS.edges, [0.0, 0.01, 0.02, 0.05, 0.10, 1.0])
+    assert MS.bands == BANDS
+    assert Masterscale.from_edges([0.05, 0.01]).names == ("G1", "G2", "G3")
+    assert Masterscale(dict(reversed(list(BANDS.items())))) == MS  # unsorted dict input
 
 
 @pytest.mark.parametrize(
-    ("bands", "fragment"),
+    ("make", "fragment"),
     [
-        ({"A": (0.0, 0.01), "B": (0.02, 1.0)}, "B"),  # gap, named by the band after it
-        ({"A": (0.0, 0.02), "B": (0.01, 1.0)}, "B"),  # overlap
-        ({"A": (0.01, 0.01), "B": (0.01, 1.0)}, "A"),  # lo >= hi
-        ({"A": (-0.1, 0.5), "B": (0.5, 1.0)}, "A"),  # outside [0, 1]
-        ({"A": (0.0, 0.5), "B": (0.5, 1.5)}, "B"),
-        ({}, "at least one"),
+        (lambda: Masterscale({"A": (0.0, 0.01), "B": (0.02, 1.0)}), "B"),  # gap: next band
+        (lambda: Masterscale({"A": (0.0, 0.02), "B": (0.01, 1.0)}), "B"),  # overlap
+        (lambda: Masterscale({"A": (0.01, 0.01), "B": (0.01, 1.0)}), "A"),  # lo >= hi
+        (lambda: Masterscale({"A": (-0.1, 0.5), "B": (0.5, 1.0)}), "A"),  # outside [0, 1]
+        (lambda: Masterscale({}), "at least one"),
+        (lambda: Masterscale.from_edges([0.5], names=["A", "A"]), "unique"),
     ],
+    ids=["gap", "overlap", "empty-band", "outside", "no-bands", "duplicate-names"],
 )
-def test_construction_errors_name_the_band(bands, fragment) -> None:
+def test_construction_errors_name_the_band(make, fragment) -> None:
     with pytest.raises(ValueError, match=fragment):
-        Masterscale(bands)
+        make()
 
 
-def test_duplicate_names_raise() -> None:
-    with pytest.raises(ValueError, match="unique"):
-        Masterscale.from_edges([0.5], names=["A", "A"])
+# ----------------------------------------------------------------- assign / table
 
 
 def test_assign_matches_digitize_right_false() -> None:
-    ms = Masterscale(BANDS)
     rng = np.random.default_rng(0)
     p = np.concatenate([rng.random(100_000), [0.0, 0.01, 0.02, 0.05, 0.10, 1.0]])
     inner = [0.01, 0.02, 0.05, 0.10]
     expected = np.asarray(list("ABCDE"))[np.digitize(p, inner, right=False)]
-    np.testing.assert_array_equal(ms.assign(p), expected)
-    np.testing.assert_array_equal(ms.index(p), np.digitize(p, inner, right=False))
+    np.testing.assert_array_equal(MS.assign(p), expected)
+    np.testing.assert_array_equal(MS.index(p), np.digitize(p, inner, right=False))
 
 
-def test_boundary_convention_pinned() -> None:
-    ms = Masterscale(BANDS)
-    assert ms.assign([0.01])[0] == "B"  # p == lo -> this band
-    assert ms.assign([0.0199999])[0] == "B"
-    assert ms.assign([0.02])[0] == "C"  # p == hi -> next band
-    assert ms.assign([1.0])[0] == "E"  # top band closed at its upper edge
-    assert ms.assign([0.0])[0] == "A"
-
-
-def test_out_of_range_raises() -> None:
+def test_assign_validates_and_accepts_two_columns() -> None:
     ms = Masterscale({"lo": (0.001, 0.02), "hi": (0.02, 0.5)})
-    with pytest.raises(ValueError, match="outside"):
-        ms.assign([0.0005])
-    with pytest.raises(ValueError, match="outside"):
-        ms.assign([0.6])
-
-
-def test_two_column_input_equals_column_one() -> None:
-    ms = Masterscale(BANDS)
+    for bad in ([0.0005], [0.6]):
+        with pytest.raises(ValueError, match="outside"):
+            ms.assign(bad)
+    for bad in ([np.nan], [1.5], [-0.1]):
+        with pytest.raises(ValueError):
+            MS.assign(bad)
     p = np.array([0.005, 0.015, 0.03, 0.07, 0.2])
-    np.testing.assert_array_equal(ms.assign(np.column_stack([1 - p, p])), ms.assign(p))
+    np.testing.assert_array_equal(MS.assign(np.column_stack([1 - p, p])), MS.assign(p))
 
 
-def test_frozen_and_hashable() -> None:
-    ms = Masterscale(BANDS)
-    with pytest.raises(AttributeError):
-        ms.names = ("X",)  # type: ignore[misc]
-    assert hash(ms) == hash(Masterscale(BANDS))
-    assert "Masterscale" in repr(ms) and "A" in repr(ms)
-
-
-# ----------------------------------------------------------------- Task 2
-
-import json  # noqa: E402
-
-from probcal import GradeTable, make_pd_portfolio  # noqa: E402
-from probcal._registry import SERIALIZABLE, load  # noqa: E402
-
-PORT = make_pd_portfolio(n=4000, random_state=3)
+def test_assign_does_not_clip_probabilities_across_a_close_edge() -> None:
+    low = Masterscale({"A": (0.0, 1e-13), "B": (1e-13, 1.0)})
+    assert low.assign([0.0]).tolist() == ["A"]
+    high = Masterscale({"A": (0.0, 1 - 1e-13), "B": (1 - 1e-13, 1.0)})
+    assert high.assign([1.0]).tolist() == ["B"]
 
 
 def test_table_lists_every_grade_and_counts_match_assign() -> None:
-    ms = Masterscale(BANDS)
-    tab = ms.table(PORT.y, PORT.scores)
+    tab = MS.table(PORT.y, PORT.scores)
     assert isinstance(tab, GradeTable)
-    assert tab.grades == ms.names
-    labels = ms.assign(PORT.scores)
-    for i, g in enumerate(ms.names):
+    assert tab.grades == MS.names
+    labels = MS.assign(PORT.scores)
+    for i, g in enumerate(MS.names):
         assert tab.n[i] == np.sum(labels == g)
         assert tab.events[i] == np.sum(PORT.y[labels == g])
-    np.testing.assert_array_equal(tab.lo, ms.edges[:-1])
-    np.testing.assert_array_equal(tab.hi, ms.edges[1:])
-    text = str(tab)
-    assert "grade" in text and "observed_rate" in text and "A" in text
+    np.testing.assert_array_equal(tab.lo, MS.edges[:-1])
+    np.testing.assert_array_equal(tab.hi, MS.edges[1:])
 
 
-def test_table_weighted_and_empty_grade() -> None:
+def test_table_weighted_empty_grade_equality_and_unclipped_mean_pd() -> None:
     ms = Masterscale.from_edges([0.5, 0.9])
     p = np.array([0.1, 0.2, 0.6])
     y = np.array([0.0, 1.0, 1.0])
@@ -135,51 +113,83 @@ def test_table_weighted_and_empty_grade() -> None:
     np.testing.assert_allclose(tab.n, [3.0, 1.0, 0.0])
     np.testing.assert_allclose(tab.events, [1.0, 1.0, 0.0])
     assert np.isnan(tab.observed_rate[2]) and np.isnan(tab.mean_pd[2])
+    t = Masterscale.from_edges([0.5]).table([0.0, 1.0, 1.0], [0.0, 1.0, 1.0])
+    assert t.mean_pd.tolist() == [0.0, 1.0]
+    # OFF-3 / OFF-21: array-aware equality; repr is the generic result table.
+    assert ms.table(y, p) == ms.table(y, p)  # nan observed_rate in the empty grade compares equal
+    assert ms.table(y, p) != ms.table(y, np.array([0.1, 0.6, 0.6]))
+    with pytest.raises(TypeError):
+        hash(tab)
+    assert repr(tab).startswith("GradeTable\ngrade")
 
 
 def test_interpret_states_the_convention() -> None:
-    ms = Masterscale(BANDS)
-    interp = ms.interpret()
+    interp = MS.interpret()
     assert interp.method == "Masterscale"
     # 0.3.4: each band contributes its (lo, hi) pair, not just its upper edge.
     assert interp.param_names[:4] == ("A.lo", "A.hi", "B.lo", "B.hi")
     assert interp.param_values[:4] == (0.0, 0.01, 0.01, 0.02)
-    assert len(interp.param_values) == 2 * ms.n_grades
+    assert len(interp.param_values) == 2 * MS.n_grades
     assert any("lo <= p < hi" in m for m in interp.messages)
-    assert any("A" in m and "0.01" in m for m in interp.messages)
+    assert "half-open" in interp.messages[-1] and "closed intervals" not in interp.messages[-1]
 
 
-def test_serialization_round_trip_and_fingerprint() -> None:
-    ms = Masterscale(BANDS)
-    d = ms.to_dict()
+# ----------------------------------------------------------------- identity / serialization
+
+
+def test_serialization_round_trip_fingerprint_and_provenance() -> None:
+    d = MS.to_dict()
     assert d["class"] == "Masterscale" and d["probcal_schema"] == 1
     back = Masterscale.from_dict(json.loads(json.dumps(d)))
-    assert back == ms and back.names == ms.names
-    assert load(d) == ms
-    assert Masterscale.from_json(ms.to_json()) == ms
-    assert ms.fingerprint() == Masterscale(dict(reversed(list(BANDS.items())))).fingerprint()
-    other = Masterscale.from_edges([0.01, 0.02, 0.05, 0.11], names=list("ABCDE"))
-    assert ms.fingerprint() != other.fingerprint()
-    assert "Masterscale" in SERIALIZABLE
+    assert back == MS and back.names == MS.names
+    assert load(d) == MS
+    assert MS.fingerprint() == Masterscale(dict(reversed(list(BANDS.items())))).fingerprint()
+    built = Masterscale(BANDS, provenance={"objective": "likelihood", "prebins": 8})
+    assert Masterscale.from_dict(built.to_dict()).provenance == {
+        "objective": "likelihood",
+        "prebins": 8,
+    }
+    assert MS.provenance is None
+    assert any("likelihood" in m for m in built.interpret().messages)
 
 
-def test_provenance_round_trips() -> None:
-    ms = Masterscale(BANDS, provenance={"objective": "likelihood", "prebins": 8})
-    back = Masterscale.from_dict(ms.to_dict())
-    assert back.provenance == {"objective": "likelihood", "prebins": 8}
-    assert Masterscale(BANDS).provenance is None
-    assert any("likelihood" in m for m in ms.interpret().messages)
+def test_immutable_deep_frozen_and_copyable() -> None:
+    # OFF-2: both raised "Masterscale is immutable".
+    ms = Masterscale(BANDS, provenance={"objective": "likelihood", "binding": ["min_count"]})
+    for clone in (copy.deepcopy(ms), copy.copy(ms), pickle.loads(pickle.dumps(ms))):
+        assert clone == ms and clone.provenance == ms.provenance
+        assert clone.fingerprint() == ms.fingerprint()
+    with pytest.raises(AttributeError, match="immutable"):
+        ms._bands = ()  # type: ignore[misc]
+    # OFF-12: the provenance was copied one level deep only.
+    src = {"objective": "likelihood", "binding": ["min_count"], "nested": {"k": [1, 2]}}
+    ms = Masterscale(BANDS, provenance=src)
+    src["binding"].append("min_events")
+    src["nested"]["k"].append(3)
+    got = ms.provenance
+    assert got == {"objective": "likelihood", "binding": ["min_count"], "nested": {"k": [1, 2]}}
+    got["binding"].append("x")  # the returned copy is the caller's to mutate
+    assert ms.provenance["binding"] == ["min_count"]
 
 
-def test_to_json_path(tmp_path) -> None:
-    ms = Masterscale(BANDS)
-    ms.to_json(tmp_path / "ms.json")
-    assert Masterscale.from_json(tmp_path / "ms.json") == ms
+def test_equality_and_fingerprint_follow_one_rule() -> None:
+    # OFF-13: __eq__ ignored provenance while fingerprint covered it.
+    plain = Masterscale(BANDS)
+    built = Masterscale(BANDS, provenance={"objective": "likelihood"})
+    assert plain.bands == built.bands
+    assert plain != built and plain.fingerprint() != built.fingerprint()
+    twin = Masterscale(dict(reversed(list(BANDS.items()))), provenance={"objective": "likelihood"})
+    assert twin == built and hash(twin) == hash(built)
+    assert twin.fingerprint() == built.fingerprint()
+    assert len({plain, built, twin}) == 2
+    # -0.0 and 0.0 bounds are the same scale.
+    a = Masterscale({"A": (-0.0, 0.5), "B": (0.5, 1.0)})
+    b = Masterscale({"A": (0.0, 0.5), "B": (0.5, 1.0)})
+    assert a == b and hash(a) == hash(b)
+    assert a.fingerprint() == b.fingerprint() and a.to_json() == b.to_json()
 
 
-# ----------------------------------------------------------------- Task 3
-
-from probcal.metrics import binomial_grade_test, hl_e_test, jeffreys_grade_test  # noqa: E402
+# ----------------------------------------------------------------- consumers
 
 
 def _aligned(res_a, res_b, fields):
@@ -193,8 +203,6 @@ def _aligned(res_a, res_b, fields):
             assert a[ia[g]] == b[ib[g]], (f, g)
 
 
-MS = Masterscale(BANDS)
-P_TEST = make_pd_portfolio(n=6000, random_state=11)
 _FIELDS = ("n", "k", "pd", "p_exact", "p_normal", "p_value", "light", "ci_low", "ci_high")
 
 
@@ -206,77 +214,40 @@ def test_grade_tests_equivalence_gate(fn) -> None:
     assert with_ms.grades == tuple(g for g in MS.names if g in with_labels.grades)
 
 
-def test_hl_e_test_equivalence_gate() -> None:
-    with_ms = hl_e_test(P_TEST.y, P_TEST.scores, MS)
-    with_labels = hl_e_test(P_TEST.y, P_TEST.scores, MS.assign(P_TEST.scores))
-    assert with_ms.e_value == with_labels.e_value and with_ms.p_value == with_labels.p_value
-    _aligned(with_ms, with_labels, ["e_grade"])
+def test_hl_e_pluto_tasche_and_jeffreys_bands_equivalence_gate() -> None:
+    labels = MS.assign(P_TEST.scores)
+    order = tuple(g for g in MS.names if g in set(labels))
+
+    hl_ms = hl_e_test(P_TEST.y, P_TEST.scores, MS)
+    hl_labels = hl_e_test(P_TEST.y, P_TEST.scores, labels)
+    assert hl_ms.e_value == hl_labels.e_value and hl_ms.p_value == hl_labels.p_value
+    _aligned(hl_ms, hl_labels, ["e_grade"])
+
+    pt_ms = pluto_tasche_from_arrays(MS, P_TEST.y, p=P_TEST.scores)
+    pt_labels = pluto_tasche_from_arrays(labels, P_TEST.y, order=order)
+    assert pt_ms.grades == pt_labels.grades == order
+    for f in ("n", "d", "n_pooled", "d_pooled", "pd_upper"):
+        np.testing.assert_array_equal(getattr(pt_ms, f), getattr(pt_labels, f))
+    with pytest.raises(ValueError, match="p is required"):
+        pluto_tasche_from_arrays(MS, P_TEST.y)
+    with pytest.raises(ValueError, match="order is required"):
+        pluto_tasche_from_arrays(labels, P_TEST.y)
+
+    jb_ms = jeffreys_upper_bands(P_TEST.y, P_TEST.scores, MS)
+    assert jb_ms == jeffreys_upper_bands(P_TEST.y, P_TEST.scores, labels, order=order)
+    assert list(jb_ms) == list(order)
 
 
-def test_grade_tests_report_best_to_worst_not_alphabetically() -> None:
+def test_grade_tests_report_best_to_worst_and_skip_empty_grades() -> None:
     ms = Masterscale.from_edges([0.01, 0.05], names=["AAA", "AA", "A"])
     res = jeffreys_grade_test(P_TEST.y, P_TEST.scores, ms)
     assert res.grades == ("AAA", "AA", "A")
     assert np.all(np.diff(res.pd) > 0)
     res_labels = jeffreys_grade_test(P_TEST.y, P_TEST.scores, ms.assign(P_TEST.scores))
-    assert res_labels.grades == ("A", "AA", "AAA")  # today's behaviour, unchanged
+    assert res_labels.grades == ("A", "AA", "AAA")  # label arrays keep sorted order
     assert hl_e_test(P_TEST.y, P_TEST.scores, ms).grades == ("AAA", "AA", "A")
-
-
-def test_grade_tests_skip_empty_grades_like_labels_do() -> None:
-    ms = Masterscale.from_edges([0.01, 0.05, 0.999], names=["A", "B", "C", "D"])
-    res = jeffreys_grade_test(P_TEST.y, P_TEST.scores, ms)
-    assert "D" not in res.grades
-
-
-# ----------------------------------------------------------------- Task 4
-
-from probcal.metrics import jeffreys_upper_bands, pluto_tasche_from_arrays  # noqa: E402
-
-
-def test_pluto_tasche_from_arrays_masterscale_equivalence() -> None:
-    labels = MS.assign(P_TEST.scores)
-    order = tuple(g for g in MS.names if g in set(labels))
-    with_ms = pluto_tasche_from_arrays(MS, P_TEST.y, p=P_TEST.scores)
-    with_labels = pluto_tasche_from_arrays(labels, P_TEST.y, order=order)
-    assert with_ms.grades == with_labels.grades == order
-    for f in ("n", "d", "n_pooled", "d_pooled", "pd_upper"):
-        np.testing.assert_array_equal(getattr(with_ms, f), getattr(with_labels, f))
-
-
-def test_pluto_tasche_from_arrays_masterscale_needs_p_and_labels_need_order() -> None:
-    with pytest.raises(ValueError, match="p is required"):
-        pluto_tasche_from_arrays(MS, P_TEST.y)
-    with pytest.raises(ValueError, match="order is required"):
-        pluto_tasche_from_arrays(MS.assign(P_TEST.scores), P_TEST.y)
-
-
-def test_jeffreys_upper_bands_masterscale_equivalence() -> None:
-    labels = MS.assign(P_TEST.scores)
-    order = tuple(g for g in MS.names if g in set(labels))
-    with_ms = jeffreys_upper_bands(P_TEST.y, P_TEST.scores, MS)
-    with_labels = jeffreys_upper_bands(P_TEST.y, P_TEST.scores, labels, order=order)
-    assert with_ms == with_labels
-    assert list(with_ms) == list(order)
-
-
-# ----------------------------------------------------------------- Task 5
-
-from probcal import BetaCalibrator, calibrated_bands_to_raw  # noqa: E402
-
-
-def test_calibrated_bands_to_raw_accepts_masterscale() -> None:
-    cal = BetaCalibrator().fit(PORT.scores, PORT.y)
-    assert calibrated_bands_to_raw(cal, MS) == calibrated_bands_to_raw(cal, MS.bands)
-    assert list(calibrated_bands_to_raw(cal, MS, space="logit")) == list(MS.names)
-
-
-# ----------------------------------------------------------------- Task 6
-
-import json as _json  # noqa: E402
-import pathlib  # noqa: E402
-
-from probcal.monitor import CalibrationMonitor  # noqa: E402
+    sparse = Masterscale.from_edges([0.01, 0.05, 0.999], names=["A", "B", "C", "D"])
+    assert "D" not in jeffreys_grade_test(P_TEST.y, P_TEST.scores, sparse).grades
 
 
 def _batches():
@@ -286,6 +257,7 @@ def _batches():
     return [(other.y[i * 500 : (i + 1) * 500], p[i * 500 : (i + 1) * 500]) for i in range(6)]
 
 
+@pytest.mark.filterwarnings("ignore:grade arrays were passed:UserWarning")
 def test_monitor_update_masterscale_equivalence_and_fingerprint() -> None:
     a, b = CalibrationMonitor(alpha=0.05), CalibrationMonitor(alpha=0.05)
     for k, (y, p) in enumerate(_batches()):
@@ -303,24 +275,11 @@ def test_monitor_update_masterscale_equivalence_and_fingerprint() -> None:
     assert back.fingerprint() == a.fingerprint()
 
 
-def test_monitor_rejects_a_different_masterscale_mid_stream() -> None:
-    mon = CalibrationMonitor()
-    (y, p), *_ = _batches()
-    mon.update(y, p, grade=MS)
-    other = Masterscale.from_edges([0.01, 0.02, 0.05, 0.11], names=list("ABCDE"))
-    with pytest.raises(ValueError, match="masterscale"):
-        mon.update(y, p, grade=other)
-
-
 def test_pre_0_3_3_monitor_payload_loads_without_the_field() -> None:
     golden = pathlib.Path(__file__).parent / "golden" / "CalibrationMonitor.json"
-    d = _json.loads(golden.read_text())["object"]
+    d = json.loads(golden.read_text())["object"]
     assert "masterscale_fingerprint" not in d["state"]
-    mon = CalibrationMonitor.from_dict(d)
-    assert mon.masterscale_fingerprint_ is None
-
-
-# ----------------------------------------------------------------- Task 7
+    assert CalibrationMonitor.from_dict(d).masterscale_fingerprint_ is None
 
 
 def test_validation_report_with_masterscale(tmp_path, monkeypatch) -> None:
@@ -344,55 +303,3 @@ def test_validation_report_with_masterscale(tmp_path, monkeypatch) -> None:
     # A label array keeps today's wording.
     html_labels = validation_report(P_TEST.y, p, grades=MS.assign(p), n_boot=20, seed=1)
     assert "by mean predicted probability" in html_labels and "Grade table" not in html_labels
-
-
-# ---------------------------------------------------------------- 0.3.4 fixes
-
-
-def test_deepcopy_and_pickle_round_trip() -> None:
-    # OFF-2: both raised "Masterscale is immutable".
-    import copy
-    import pickle
-
-    ms = Masterscale(BANDS, provenance={"objective": "likelihood", "binding": ["min_count"]})
-    for clone in (copy.deepcopy(ms), copy.copy(ms), pickle.loads(pickle.dumps(ms))):
-        assert clone == ms and clone.provenance == ms.provenance
-        assert clone.fingerprint() == ms.fingerprint()
-    with pytest.raises(AttributeError, match="immutable"):
-        ms._bands = ()  # type: ignore[misc]
-
-
-def test_provenance_is_deep_frozen() -> None:
-    # OFF-12: the provenance was copied one level deep only.
-    src = {"objective": "likelihood", "binding": ["min_count"], "nested": {"k": [1, 2]}}
-    ms = Masterscale(BANDS, provenance=src)
-    src["binding"].append("min_events")
-    src["nested"]["k"].append(3)
-    got = ms.provenance
-    assert got == {"objective": "likelihood", "binding": ["min_count"], "nested": {"k": [1, 2]}}
-    got["binding"].append("x")  # the returned copy is the caller's to mutate
-    assert ms.provenance["binding"] == ["min_count"]
-
-
-def test_equality_and_fingerprint_follow_one_rule() -> None:
-    # OFF-13: __eq__ ignored provenance while fingerprint covered it.
-    plain = Masterscale(BANDS)
-    built = Masterscale(BANDS, provenance={"objective": "likelihood"})
-    assert plain.bands == built.bands
-    assert plain != built and plain.fingerprint() != built.fingerprint()
-    twin = Masterscale(dict(reversed(list(BANDS.items()))), provenance={"objective": "likelihood"})
-    assert twin == built and hash(twin) == hash(built)
-    assert twin.fingerprint() == built.fingerprint()
-    assert len({plain, built, twin}) == 2
-
-
-def test_grade_table_equality_and_repr() -> None:
-    # OFF-3 / OFF-21: array-aware equality; repr is the generic result table.
-    ms = Masterscale.from_edges([0.5, 0.9])
-    y, p = np.array([0.0, 1.0, 1.0]), np.array([0.1, 0.2, 0.6])
-    t1, t2 = ms.table(y, p), ms.table(y, p)
-    assert t1 == t2  # nan observed_rate in the empty grade compares equal
-    assert t1 != ms.table(y, np.array([0.1, 0.6, 0.6]))
-    with pytest.raises(TypeError):
-        hash(t1)
-    assert repr(t1).startswith("GradeTable\ngrade")

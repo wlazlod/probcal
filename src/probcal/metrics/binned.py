@@ -251,8 +251,8 @@ class HosmerLemeshowResult:
     statistic : float
         Chi-square test statistic.
     df : int
-        Degrees of freedom: non-empty groups minus 2 (``0`` when fewer than
-        three groups are non-empty).
+        Degrees of freedom: non-empty groups minus ``ddof`` (``0`` when no
+        degree of freedom is left).
     p_value : float
         Upper-tail p-value of the statistic; ``nan`` when ``df == 0``.
     """
@@ -268,6 +268,7 @@ def hosmer_lemeshow(
     *,
     n_bins: int = 10,
     sample_weight: object = None,
+    ddof: int = 0,
     g: object = UNSET,
 ) -> HosmerLemeshowResult:
     """Hosmer–Lemeshow goodness-of-fit test on ``n_bins`` equal-mass risk groups.
@@ -284,6 +285,16 @@ def hosmer_lemeshow(
     The statistic is invariant to rescaling the weights, and unit weights
     give the unweighted test bit for bit.
 
+    The reference distribution is chi-square on ``groups - ddof`` degrees of
+    freedom. With ``p`` fixed in advance (a model or calibrator fitted on
+    other data, the usual validation setting) the per-group standardized
+    residuals are asymptotically independent, so the statistic is
+    ``chi2(groups)``: ``ddof=0``, the default (Hosmer, Lemeshow and
+    Sturdivant, 2013, on external validation). The classical ``groups - 2``
+    is for a logistic model fitted on the same data; pass ``ddof=2`` for it.
+    On out-of-sample ``p`` it is anti-conservative (about 12% rejections at
+    a nominal 5% with 10 groups).
+
     Parameters
     ----------
     y : array_like
@@ -292,10 +303,14 @@ def hosmer_lemeshow(
         Predicted probabilities in ``[0, 1]``.
     n_bins : int, keyword-only
         Requested number of equal-mass risk groups. Tied scores can collapse
-        groups; with fewer than three non-empty groups the test has no
-        degrees of freedom and returns ``df=0``, ``p_value=nan``.
+        groups; when no more than ``ddof`` groups are non-empty the test has
+        no degrees of freedom and returns ``df=0``, ``p_value=nan``.
     sample_weight : array_like or None, keyword-only
         Optional positive weights, same length as ``y``.
+    ddof : int, keyword-only
+        Degrees of freedom subtracted from the number of non-empty groups:
+        ``0`` (default) for ``p`` fixed before seeing ``y``, ``2`` for a
+        logistic model fitted on the same ``(y, p)`` data.
     g : int, keyword-only
         Deprecated spelling of ``n_bins`` (removed in 0.4.0).
 
@@ -305,6 +320,8 @@ def hosmer_lemeshow(
         Chi-square statistic, degrees of freedom, and p-value.
     """
     n_groups = renamed_kwarg("hosmer_lemeshow", "g", "n_bins", g, n_bins, 10)
+    if isinstance(ddof, bool) or not isinstance(ddof, (int, np.integer)) or ddof < 0:
+        raise ValueError(f"ddof must be a non-negative integer, got {ddof!r}")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     idx, m = bin_index(p_arr, n_groups, "mass")
     keep = np.bincount(idx, minlength=m) > 0
@@ -316,6 +333,6 @@ def hosmer_lemeshow(
     denom = s2p * (1.0 - s2p / s2)
     ok = denom > 0
     stat = float(np.sum((obs[ok] - exp[ok]) ** 2 / denom[ok]))
-    df = max(len(s2) - 2, 0)
+    df = max(len(s2) - int(ddof), 0)
     p_value = chi2_sf(stat, df) if df > 0 else math.nan
     return HosmerLemeshowResult(statistic=stat, df=df, p_value=p_value)

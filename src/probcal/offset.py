@@ -9,6 +9,7 @@ King & Zeng (2001); Elkan (2001); Tasche (2013) — full records in the
 documentation.
 """
 
+import math
 import warnings
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -459,20 +460,20 @@ def _offset_mle(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
 
 
 def estimate_offset(y: object, p: object, *, sample_weight: object = None) -> OffsetEstimate:
-    """Offset-only logistic MLE of ``delta`` given ``p``, with a Fisher standard error.
+    """Offset-only logistic MLE of ``delta`` given ``p``, with its standard error.
 
     Fits the single-parameter model ``y ~ Bernoulli(sigma(logit(p) + delta))``
     by maximum likelihood. The score equation
     ``sum(w * (y - sigma(logit(p) + delta))) = 0`` is exactly the mean-matching
     condition solved by ``LogitOffset(target_mean=mean_w(y))``, so ``delta`` is
     found by the same bisection root-finder (:func:`_offset_mle`, shared with
-    ``probcal.monitor._processes.plug_in_delta``). The Fisher information for
-    this one-parameter model is ``sum(w * q * (1 - q))`` at
-    ``q = sigma(logit(p) + delta)``, so the standard error is its inverse
-    square root. That reading of the weights is the frequency one — ``w``
-    counts observations — so the SE is only valid for frequency weights;
-    importance (or otherwise non-count) weights inflate the information and
-    understate the SE.
+    ``probcal.monitor._processes.plug_in_delta``). Weights are relative
+    frequency weights (:mod:`probcal.metrics._common`): ``delta`` and ``se``
+    do not change when every weight is multiplied by a constant. With
+    ``q = sigma(logit(p) + delta)``, ``I = sum(w * q * (1 - q))`` and
+    ``J = sum(w**2 * q * (1 - q))`` (the exact variance of the weighted score
+    when each row is one Bernoulli draw), the standard error is
+    ``sqrt(J) / I``; for unit weights that is the Fisher ``1 / sqrt(I)``.
 
     Parameters
     ----------
@@ -515,7 +516,11 @@ def estimate_offset(y: object, p: object, *, sample_weight: object = None) -> Of
     z = logit(p_arr)
     delta = _offset_mle(z, y_arr, w)
     q = expit(z + delta)
-    se = 1.0 / np.sqrt(float(np.sum(w * q * (1.0 - q))))
+    v = w * q * (1.0 - q)
+    info = float(np.sum(v))
+    # sqrt(J / I) / sqrt(I) == sqrt(J) / I, written so that unit weights
+    # (w * v == v, J / I == 1.0 exactly) give the Fisher 1 / sqrt(I) bit for bit.
+    se = math.sqrt(float(np.sum(w * v)) / info) / math.sqrt(info)
     return OffsetEstimate(
         delta=delta,
         se=se,

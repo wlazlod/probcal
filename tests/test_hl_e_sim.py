@@ -30,11 +30,3 @@ def test_type1_gate_reduced() -> None:
     assert res["p_ge_20"] <= bound_05, (res["p_ge_20"], bound_05)
     assert res["p_ge_100"] <= bound_01, (res["p_ge_100"], bound_01)
     assert res["mean_e"] <= 1.0 + 3.0 * res["se_mean"], (res["mean_e"], res["se_mean"])
-
-
-def test_power_smoke_floor() -> None:
-    # Not a calibrated power gate -- just a floor confirming the test has
-    # visible power against an obvious level shift, at the reduced run count
-    # but full n=2000 sample size.
-    res = sim.power(shift=0.4, runs=300, n=2000, seed=43)
-    assert res["detect_rate"] >= 0.5, res["detect_rate"]

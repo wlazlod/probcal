@@ -543,7 +543,7 @@ class CorpResult(_ResultBase):
 
 @dataclass(frozen=True)
 class OffsetEstimate(_ResultBase):
-    """Offset-only logistic MLE of ``delta`` given ``p``, with its Fisher standard error.
+    """Offset-only logistic MLE of ``delta`` given ``p``, with its standard error.
 
     Attributes
     ----------
@@ -552,8 +552,10 @@ class OffsetEstimate(_ResultBase):
         ``sum(w * (y - sigma(logit(p) + delta))) = 0`` (the offset-only
         logistic score equation), found by bisection.
     se : float
-        Asymptotic (Fisher-information) standard error of ``delta``,
-        ``1 / sqrt(sum(w * q * (1 - q)))`` at ``q = sigma(logit(p) + delta)``.
+        Asymptotic standard error of ``delta``,
+        ``sqrt(sum(w**2 * q * (1 - q))) / sum(w * q * (1 - q))`` at
+        ``q = sigma(logit(p) + delta)``: invariant to the scale of the weights,
+        and the Fisher ``1 / sqrt(sum(q * (1 - q)))`` for unit weights.
     n : int
         Number of observations.
     events : float

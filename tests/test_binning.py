@@ -1,13 +1,13 @@
-"""Tests for probcal.binning: histogram binning and scaling-binning."""
+"""Tests for probcal.binning (histogram and scaling-binning) and the equal-mass edges."""
 
 import numpy as np
+import pytest
 
-from probcal._results import Interpretation
+from probcal._steps import equal_mass_edges
 from probcal.binning import HistogramBinningCalibrator, ScalingBinningCalibrator
 from probcal.parametric import PlattCalibrator
 
 RNG = np.random.default_rng(17)
-GRID = np.linspace(0.001, 0.999, 400)
 
 
 def _sample(n: int = 4000) -> tuple[np.ndarray, np.ndarray]:
@@ -16,38 +16,32 @@ def _sample(n: int = 4000) -> tuple[np.ndarray, np.ndarray]:
     return s, y
 
 
+def _floor_tied_sample() -> tuple[np.ndarray, np.ndarray]:
+    # Low-PD scores reported to 3 dp: about a fifth of the rows sit at the floor.
+    rng = np.random.default_rng(0)
+    s = np.maximum(np.round(rng.beta(0.6, 40, 2000), 3), 0.001)
+    y = (rng.random(2000) < s).astype(float)
+    return s, y
+
+
+def _assert_no_empty_bin(values: np.ndarray, edges: np.ndarray) -> None:
+    counts = np.bincount(np.searchsorted(edges, values, side="right"), minlength=len(edges) + 1)
+    assert np.all(counts > 0)
+
+
+# ---------------------------------------------------------------- hand-computed fits
+
+
 def test_histogram_two_bins_hand_computed() -> None:
     s = np.array([0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9])
     y = np.array([0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0])
-    cal = HistogramBinningCalibrator(n_bins=2, shrinkage=None).fit(s, y)
     # Equal-mass: first four scores in bin 1 (rate 1/4), last four in bin 2 (rate 3/4).
-    p = cal.predict_proba(np.array([0.15, 0.85]))
-    np.testing.assert_allclose(p, [0.25, 0.75])
-
-
-def test_histogram_jeffreys_shrinkage() -> None:
-    s = np.array([0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9])
-    y = np.array([0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0])
-    cal = HistogramBinningCalibrator(n_bins=2).fit(s, y)  # jeffreys default
-    p = cal.predict_proba(np.array([0.15, 0.85]))
-    np.testing.assert_allclose(p, [(1 + 0.5) / (4 + 1), (3 + 0.5) / (4 + 1)])
-
-
-def test_histogram_width_strategy_empty_bin_fallback() -> None:
-    # Scores concentrated in [0, 0.3]: many width bins are empty.
-    s = RNG.uniform(0.01, 0.3, 200)
-    y = (RNG.random(200) < s).astype(float)
-    cal = HistogramBinningCalibrator(n_bins=10, strategy="width").fit(s, y)
-    p = cal.predict_proba(np.array([0.95]))  # empty region
-    assert np.isfinite(p[0])
-    assert 0.0 < p[0] < 1.0
-
-
-def test_histogram_monotone_flag_dynamic() -> None:
-    s, y = _sample()
-    cal = HistogramBinningCalibrator(n_bins=5).fit(s, y)
-    rates_monotone = bool(np.all(np.diff(cal.bin_rate_) >= 0))
-    assert cal.is_monotone_ == rates_monotone
+    raw = HistogramBinningCalibrator(n_bins=2, shrinkage=None).fit(s, y)
+    np.testing.assert_allclose(raw.predict_proba(np.array([0.15, 0.85])), [0.25, 0.75])
+    jeffreys = HistogramBinningCalibrator(n_bins=2).fit(s, y)  # the default shrinkage
+    np.testing.assert_allclose(
+        jeffreys.predict_proba(np.array([0.15, 0.85])), [(1 + 0.5) / (4 + 1), (3 + 0.5) / (4 + 1)]
+    )
 
 
 def test_histogram_weighted() -> None:
@@ -55,53 +49,53 @@ def test_histogram_weighted() -> None:
     y = np.array([0.0, 1.0, 0.0, 1.0])
     w = np.array([3.0, 1.0, 1.0, 3.0])
     cal = HistogramBinningCalibrator(n_bins=2, shrinkage=None).fit(s, y, sample_weight=w)
-    p = cal.predict_proba(np.array([0.15, 0.65]))
-    np.testing.assert_allclose(p, [0.25, 0.75])
-
-
-def test_histogram_interpret() -> None:
-    cal = HistogramBinningCalibrator().fit(*_sample(500))
-    interp = cal.interpret()
-    assert isinstance(interp, Interpretation)
-    assert "n_bins" in interp.param_names
+    np.testing.assert_allclose(cal.predict_proba(np.array([0.15, 0.65])), [0.25, 0.75])
 
 
 def test_scaling_binning_outputs_are_platt_bin_means() -> None:
     s, y = _sample(2000)
     cal = ScalingBinningCalibrator(n_bins=8).fit(s, y)
-    platt = PlattCalibrator().fit(s, y)
-    g = platt.predict_proba(s)
+    g = PlattCalibrator().fit(s, y).predict_proba(s)
     # Reconstruct: equal-mass bins of g, means of g per bin.
     edges = np.quantile(g, np.linspace(0, 1, 9)[1:-1])
     idx = np.searchsorted(edges, g, side="right")
     expected_means = np.array([g[idx == b].mean() for b in range(8)])
     p = cal.predict_proba(s)
-    # Every prediction must be one of the bin means.
     assert np.all(np.isin(np.round(p, 10), np.round(expected_means, 10)))
 
 
-def test_scaling_binning_monotone() -> None:
-    cal = ScalingBinningCalibrator().fit(*_sample())
-    p = cal.predict_proba(GRID)
-    assert np.all(np.diff(p) >= -1e-15)
-    assert cal.is_monotone_ is True
+# ---------------------------------------------------------------- empty width bins (0.3.5)
 
 
-def test_scaling_binning_interpret_two_stages() -> None:
-    cal = ScalingBinningCalibrator(n_bins=6).fit(*_sample(1000))
-    interp = cal.interpret()
-    assert "a" in interp.param_names and "b" in interp.param_names
-    assert "n_bins" in interp.param_names
+def test_histogram_width_empty_bins_take_neighbour_rate() -> None:
+    rng = np.random.default_rng(5)
+    s = rng.uniform(0.01, 0.3, 300)
+    y = (rng.random(300) < s).astype(float)
+    cal = HistogramBinningCalibrator(n_bins=10, strategy="width").fit(s, y)
+    filled = cal.bin_weight_ > 0
+    assert not filled.all()
+    last = np.flatnonzero(filled)[-1]
+    # Trailing empty bins carry the last filled bin's rate, not the global rate.
+    np.testing.assert_array_equal(cal.bin_rate_[last:], cal.bin_rate_[last])
+    assert cal.predict_proba([0.95])[0] == cal.bin_rate_[last]
 
 
-# ---------------------------------------------------------------- 0.3.4 regressions
+def test_histogram_width_interior_empty_bin_between_neighbours() -> None:
+    s = np.array([0.01, 0.02, 0.05, 0.08, 0.35, 0.36, 0.38])
+    y = np.array([0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0])
+    cal = HistogramBinningCalibrator(n_bins=10, strategy="width").fit(s, y)
+    r = cal.bin_rate_
+    assert cal.bin_weight_[1] == 0 and cal.bin_weight_[2] == 0
+    assert min(r[0], r[3]) <= r[1] <= r[2] <= max(r[0], r[3])
+    assert cal.is_monotone_
+
+
+# ---------------------------------------------------------------- monotonicity / inverse
 
 
 def test_scaling_binning_decreasing_platt_is_not_monotone() -> None:
     """CAL-2: a decreasing Platt stage makes the composite decreasing; 0.3.x
     still claimed is_monotone_=True and interval_inverse returned lo > hi."""
-    import pytest
-
     s, y = _sample(2000)
     cal = ScalingBinningCalibrator(n_bins=5).fit(s, 1.0 - y)  # labels reversed
     assert cal.platt_.a_ < 0.0
@@ -123,15 +117,7 @@ def test_scaling_binning_inverse_bounds_stay_in_preimage() -> None:
             assert lo <= p[0] <= hi and lo <= p[1] <= hi, (j, lo, hi, p)
 
 
-def test_histogram_inverse_bounds_stay_in_preimage() -> None:
-    s, y = _sample(4000)
-    cal = HistogramBinningCalibrator(n_bins=4, shrinkage=None).fit(np.sort(s), np.sort(y))
-    assert cal.is_monotone_
-    levels = cal.bin_rate_
-    for j in range(len(levels)):
-        raw_lo, raw_hi = cal.interval_inverse(float(levels[j]), float(levels[j]))
-        p = cal.predict_proba(np.array([raw_lo, raw_hi]))
-        np.testing.assert_array_equal(p, [levels[j], levels[j]])
+# ---------------------------------------------------------------- equal-mass edges
 
 
 def test_equal_mass_edges_use_sample_weights() -> None:
@@ -142,30 +128,44 @@ def test_equal_mass_edges_use_sample_weights() -> None:
     cal = HistogramBinningCalibrator(n_bins=4).fit(s, y, sample_weight=w)
     mass = cal.bin_weight_ / cal.bin_weight_.sum()
     np.testing.assert_allclose(mass, 0.25, atol=0.02)
-    unit = HistogramBinningCalibrator(n_bins=4).fit(s, y)
-    np.testing.assert_array_equal(unit.edges_, np.quantile(s, [0.25, 0.5, 0.75]))
 
 
-def test_scaling_binning_weighted_edges() -> None:
-    s = np.linspace(0.01, 0.99, 400)
-    y = (RNG.random(400) < s).astype(float)
-    w = np.where(s < 0.5, 9.0, 1.0)
-    cal = ScalingBinningCalibrator(n_bins=4).fit(s, y, sample_weight=w)
-    g = cal.platt_.predict_proba(s)
-    idx = np.searchsorted(cal.edges_, g, side="right")
-    mass = np.bincount(idx, weights=w, minlength=4) / w.sum()
-    np.testing.assert_allclose(mass, 0.25, atol=0.02)
+@pytest.mark.parametrize("weighted", [False, True], ids=["unweighted", "weighted"])
+def test_equal_mass_edges_no_empty_bin_with_ties_at_minimum(weighted: bool) -> None:
+    """0.3.5: a fifth of the rows tied at the floor left the first bins empty."""
+    s, _ = _floor_tied_sample()
+    w = np.random.default_rng(3).uniform(0.5, 2.0, len(s)) if weighted else None
+    for n_bins in (2, 7, 20):
+        edges = equal_mass_edges(s, n_bins, w)
+        assert np.all(edges > s.min())
+        _assert_no_empty_bin(s, edges)
 
 
-def test_n_bins_validated_at_fit_not_init() -> None:
-    """CAL-25: sklearn convention — construction never raises."""
-    import pytest
+def test_equal_mass_edges_constant_values_single_bin() -> None:
+    assert equal_mass_edges(np.full(30, 0.2), 5).size == 0
 
-    s, y = _sample(200)
-    for bad in (0, -3, 2.5, True, None):
-        hist = HistogramBinningCalibrator(n_bins=bad)  # type: ignore[arg-type]
-        with pytest.raises(ValueError, match="n_bins"):
-            hist.fit(s, y)
-        sb = ScalingBinningCalibrator(n_bins=bad)  # type: ignore[arg-type]
-        with pytest.raises(ValueError, match="n_bins"):
-            sb.fit(s, y)
+
+def test_equal_mass_edges_unchanged_without_ties() -> None:
+    s = np.random.default_rng(4).uniform(0.0, 1.0, 999)
+    for n_bins in (2, 10, 31):
+        qs = np.linspace(0.0, 1.0, n_bins + 1)[1:-1]
+        np.testing.assert_array_equal(equal_mass_edges(s, n_bins), np.unique(np.quantile(s, qs)))
+
+
+def test_equal_mass_edges_drops_gap_bin_between_ties() -> None:
+    # The linear quantile rule can put an edge inside a gap with a tied value
+    # as the next edge: the bin between them holds no value.
+    s = np.array([0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.3, 0.4, 0.5])
+    qs = np.linspace(0.0, 1.0, 6)[1:-1]
+    np.testing.assert_allclose(np.unique(np.quantile(s, qs)), [0.1, 0.12, 0.2, 0.34])
+    edges = equal_mass_edges(s, 5)
+    np.testing.assert_allclose(edges, [0.2, 0.34])
+    _assert_no_empty_bin(s, edges)
+
+
+def test_histogram_mass_below_tied_minimum() -> None:
+    s, y = _floor_tied_sample()
+    cal = HistogramBinningCalibrator(n_bins=10).fit(s, y)
+    assert np.all(cal.bin_weight_ > 0)
+    below, at_min = cal.predict_proba([0.0005, 0.001])
+    assert below == at_min

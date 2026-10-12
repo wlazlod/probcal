@@ -14,7 +14,8 @@ for weighted tests, and that was wrong whenever weights vary with the per-row va
 weighted statistic now uses its exact variance and still does not depend on the scale of the
 weights. The monitor is anytime-valid for any sample weights. Step calibrators no longer give a
 high PD below a tied minimum score. Raw band edges agree with `Masterscale.assign` to the last
-floating-point step (ulp). Unweighted and unit-weight results are bit-identical to 0.3.4, except
+floating-point step (ulp). Hosmer–Lemeshow now uses the correct out-of-sample reference
+distribution by default. Unweighted and unit-weight results are bit-identical to 0.3.4, except
 where the release notes below say otherwise. Every saved artifact still loads.
 
 <details markdown="1">
@@ -34,6 +35,11 @@ where the release notes below say otherwise. Every saved artifact still loads.
     `CalibrationTestResult` gains a field `df`, which is fractional when weighted.
   - `calibration_belt` uses weighted ML with sandwich bands and a Rao–Scott p-value.
   - The monitor's residual-LR diagnostic uses a Rao–Scott correction.
+  - `estimate_offset` gives `se = sqrt(sum w^2 q(1-q)) / sum w q(1-q)`. The old
+    `1 / sqrt(sum w q(1-q))` read weights as counts, so with a constant weight of 10 the 95%
+    interval covered 48% of the time. `SegmentedCalibrator` shrinkage (`se_`, `tau2_`,
+    `shrink_`) and its predictions no longer depend on the scale of `sample_weight`. The
+    monitor's `apply_recommendation` audit `se` is fixed by the same change.
 - **Monitoring.**
   - Sample weights enter as exponents `min(1, w / mean(w))` per factor, which keeps every
     factor an e-value for any weights. Before, a constant weight of 10 raised a null alarm in
@@ -105,8 +111,21 @@ where the release notes below say otherwise. Every saved artifact still loads.
   - `OffsetEstimate` is in the API reference.
   - Doc snippets' `# -> expected` comments are now checked against actual output.
 
+### Added
+
+- `BBQCalibrator(monotone=False)`. Set to `True`, it isotonizes each candidate binning with
+  weighted PAVA before averaging, so the map is monotone and invertible. Default BBQ fits come
+  out non-monotone on about 90% of realistic PD portfolios. The option leaves held-out
+  accuracy unchanged or slightly better. With the default, predictions and payload
+  fingerprints are bit-identical. A payload saved with `monotone=True` does not load in 0.3.4.
+- `hosmer_lemeshow(ddof=)`; see below.
+
 ### Changed (numerically visible)
 
+- **`hosmer_lemeshow` refers to `chi2(groups)` by default** (new keyword `ddof=0`). Out of
+  sample, the classical `groups - 2` rejected about 12% of calibrated portfolios at a nominal
+  5%. With `ddof=0` the rate is about 5%. Every p-value is now larger and `df` grows by 2.
+  `ddof=2` restores 0.3.4 exactly, and is correct for a logistic model fitted on the same data.
 - **Weighted statistics.** With unit or constant weights nothing moves. With weights
   independent of p (U(0.5, 2), n = 3000), values move by under 2%. With weights correlated
   with p:
@@ -117,6 +136,11 @@ where the release notes below say otherwise. Every saved artifact still loads.
   - Murphy reliability by 8-12%.
   - The ECCE envelope by about 10%.
   - Belt bands by up to 42% narrower; Kish had overstated their variance.
+- **`estimate_offset` SE with weights**: about 2x larger for lognormal or p-correlated
+  weights, and 3.16x larger for a constant weight of 10. Weights with mean below 1 now give a
+  smaller SE. `SegmentedCalibrator` shrinkage can change substantially: in one example, the
+  largest segment's `shrink_` moved from 0.93 to 0.51. Integer weights still give the same
+  `delta` as duplicated rows, but no longer the same SE.
 - **Monitor with non-constant weights.** E-values, confidence sequences, plug-ins and onset
   increments all change. Null alarm rates drop to at most alpha, and the cost is power with
   skewed weights. Onset labels can move earlier.

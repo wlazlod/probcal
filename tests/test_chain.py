@@ -7,7 +7,6 @@ from probcal import (
     BetaCalibrator,
     CalibratedModel,
     Chain,
-    IsotonicCalibrator,
     LogitOffset,
     PlattCalibrator,
     UnattainableTargetError,
@@ -63,43 +62,18 @@ def test_affine_coeffs_compose_or_none() -> None:
     assert chain_beta.affine_logit_coeffs_ is None
 
 
-def test_step_calibrator_chain_is_monotone_and_invertible() -> None:
-    chain, _, _ = _chain(cal_cls=IsotonicCalibrator, deltas=(0.3,))
-    assert chain.is_monotone_ is True
-    lo, hi = chain.interval_inverse(0.02, 0.10)
-    p = chain.predict_proba(np.array([np.clip(lo, 1e-9, 1 - 1e-9)]))
-    assert p[0] >= 0.02 - 1e-12
-
-
-def test_interpret_concatenates_stages() -> None:
-    chain, _, _ = _chain(deltas=(0.4,))
-    text = repr(chain.interpret())
-    assert "BetaCalibrator" in text and "delta" in text
-
-
 def test_chain_validation() -> None:
     cal = BetaCalibrator().fit(_D.scores, _D.y)
     off = LogitOffset(delta=0.1).fit(_D.scores)
-    with pytest.raises(ValueError, match="first"):
+    with pytest.raises(ValueError, match="first stage must be a calibrator"):
         Chain([off, cal])
-    with pytest.raises(ValueError, match="LogitOffset"):
+    with pytest.raises(ValueError, match="must be a LogitOffset"):
         Chain([cal, cal])
     with pytest.raises(ValueError, match="at least"):
         Chain([])
-    # Unfitted stages are legal at construction now; the not-fitted error
-    # only surfaces from the reading methods (see the tests below).
-    unfitted = Chain([BetaCalibrator()])
-    assert unfitted.fitted_ is False
-    with pytest.raises(RuntimeError, match="not fitted; call fit\\(\\) first"):
-        unfitted.predict_proba(_D.scores)
-
-
-def test_unfitted_chain_fits_like_the_manual_two_step() -> None:
-    chain = Chain([BetaCalibrator(), LogitOffset(target_mean=0.03)]).fit(_D.scores, _D.y)
-    cal = BetaCalibrator().fit(_D.scores, _D.y)
-    off = LogitOffset(target_mean=0.03).fit(cal.predict_proba(_D.scores))
-    manual = Chain([cal, off])
-    np.testing.assert_array_equal(chain.predict_proba(_Q), manual.predict_proba(_Q))
+    # Unfitted stages are legal at construction; the not-fitted error only
+    # surfaces from the reading methods (see the test below).
+    assert Chain([BetaCalibrator()]).fitted_ is False
 
 
 def test_unfitted_chain_methods_raise_the_standard_not_fitted_error() -> None:
@@ -114,26 +88,12 @@ def test_unfitted_chain_methods_raise_the_standard_not_fitted_error() -> None:
         chain.interval_inverse(0.1, 0.2)
 
 
-def test_constructor_still_validates_types_and_order() -> None:
-    with pytest.raises(ValueError, match="first stage must be a calibrator"):
-        Chain([LogitOffset(delta=0.1)])
-    with pytest.raises(ValueError, match="must be a LogitOffset"):
-        Chain([BetaCalibrator(), BetaCalibrator()])
-
-
 def test_fit_refits_already_fitted_stages() -> None:
     cal = BetaCalibrator().fit(_D.scores, _D.y)
     before = cal.fingerprint()
     _D2 = make_pd_portfolio(n=2000, random_state=15)
     Chain([cal, LogitOffset(delta=0.1)]).fit(_D2.scores, _D2.y)  # different data
     assert cal.fingerprint() != before
-
-
-def test_chain_serialization_round_trip() -> None:
-    chain, _, _ = _chain()
-    loaded = Chain.from_json(chain.to_json())
-    np.testing.assert_array_equal(chain.predict_proba(_Q), loaded.predict_proba(_Q))
-    assert chain.fingerprint() == loaded.fingerprint()
 
 
 def test_calibrated_model_chain_property() -> None:
@@ -208,3 +168,34 @@ def test_chain_validates_space_and_buffer() -> None:
         chain.interval_inverse(0.01, 0.1, buffer_logit=-0.5)
     back = Chain.from_json(chain.to_json())
     assert back.fingerprint() == chain.fingerprint()
+    np.testing.assert_array_equal(back.predict_proba(_Q), chain.predict_proba(_Q))
+
+
+def test_chain_prototype_is_cloned_deep_and_fresh_wherever_it_is_used() -> None:
+    from probcal import CalibratorSelector, SegmentedCalibrator
+    from probcal.base import clone_unfitted
+
+    proto = Chain([PlattCalibrator(), LogitOffset(delta=0.3)])
+    c = clone_unfitted(proto)
+    assert isinstance(c, Chain) and not c.fitted_
+    assert all(a is not b for a, b in zip(c.stages, proto.stages, strict=True))
+    assert c.stages[1].delta == 0.3
+
+    class _Model:
+        def fit(self, X, y):
+            return self
+
+        def predict_proba(self, X):
+            s = np.asarray(X)[:, 0]
+            return np.column_stack([1.0 - s, s])
+
+    X = _D.scores.reshape(-1, 1)
+    m = CalibratedModel(_Model(), proto, flow="cv", cv=3, ensemble=True).fit(X, _D.y)
+    cals = [c for _, c in m.ensemble_]
+    assert cals[0] is not cals[1] and cals[0].stages[0] is not cals[1].stages[0]
+    sel = CalibratorSelector(candidates={"chain": proto, "beta": BetaCalibrator()}, cv=3)
+    assert np.all(np.isfinite(sel.fit(_D.scores, _D.y).predict_proba(_Q)))
+    seg = np.arange(len(_D.y)) % 2
+    sc = SegmentedCalibrator(base=proto).fit(_D.scores, _D.y, segments=seg)
+    assert np.all(np.isfinite(sc.predict_proba(_D.scores, segments=seg)))
+    assert not proto.stages[0].fitted_

@@ -1,15 +1,22 @@
-"""Fast tests for probcal.monitor; simulations live in test_monitor_sim.py."""
+"""Fast tests for probcal.monitor: e-processes, weights, persistence, diagnostics, validation.
+
+Per-grade behaviour lives in test_monitor_grades.py, the drift onset in
+test_monitor_onset.py, actions in test_monitor_actions.py and the simulation
+gates in test_monitor_sim.py.
+"""
 
 import json
+import warnings
+from dataclasses import replace
 
 import numpy as np
 import pytest
 
-from probcal._math import expit, logit
+from probcal._math import bern_log_lr, expit, logit
 from probcal.datasets import make_pd_portfolio
-from probcal.monitor import CalibrationMonitor, MonitorReport, MonitorStep
-
-RNG = np.random.default_rng(17)
+from probcal.monitor import CalibrationMonitor
+from probcal.monitor._diagnostics import residual_shape_lr, slope_ci
+from probcal.monitor._processes import exponent_weights, plug_in_delta, plug_in_shape
 
 
 def _batch(n=2000, shift=0.0, slope=1.0, seed=0, event_rate=0.05):
@@ -21,11 +28,17 @@ def _batch(n=2000, shift=0.0, slope=1.0, seed=0, event_rate=0.05):
     return y, p
 
 
+def _small_batch(n: int = 300, shift: float = 0.0, seed: int = 0):
+    rng = np.random.default_rng(seed)
+    p = expit(rng.normal(-2.5, 1.0, n))
+    y = (rng.random(n) < expit(logit(p) + shift)).astype(float)
+    return y, p
+
+
 def test_first_batch_plug_ins_are_identity() -> None:
     mon = CalibrationMonitor()
     y, p = _batch(seed=3)
     step = mon.update(y, p, label="b1")
-    assert isinstance(step, MonitorStep)
     assert step.delta_hat == 0.0
     assert step.slope_hat == 1.0
     assert step.e_shape == 1.0  # identity plug-in -> every factor is exactly 1
@@ -62,64 +75,20 @@ def test_alarm_and_reoffset_recommendation_under_level_drift() -> None:
     assert lo > 0.0  # and excludes zero after sustained drift
 
 
-def test_refit_recommendation_under_slope_drift() -> None:
-    mon = CalibrationMonitor(alpha=0.05)
-    for k in range(12):
-        y, p = _batch(shift=0.0, slope=0.55, seed=100 + k)
-        mon.update(y, p, label=f"m{k}")
-    rep = mon.report()
-    assert rep.alarm_at is not None
-    assert rep.recommendation == "re-fit"
-
-
 def test_no_alarm_on_calibrated_stream() -> None:
     mon = CalibrationMonitor(alpha=0.05)
     for k in range(12):
         y, p = _batch(shift=0.0, seed=500 + k)
         step = mon.update(y, p, label=f"m{k}")
     assert step.alarm is False
-    assert mon.report().recommendation == "none"
     assert step.p_anytime > 0.05
-
-
-def test_grade_component_catches_single_grade_drift() -> None:
-    mon = CalibrationMonitor(alpha=0.05, grades=("A", "B"))
-    for k in range(8):
-        y_a, p_a = _batch(n=1000, shift=1.2, seed=200 + k)
-        y_b, p_b = _batch(n=1000, shift=0.0, seed=300 + k)
-        y = np.concatenate([y_a, y_b])
-        p = np.concatenate([p_a, p_b])
-        g = np.array(["A"] * 1000 + ["B"] * 1000)
-        step = mon.update(y, p, grade=g, label=f"m{k}")
-    assert set(step.e_grades) == {"A", "B"}
-    assert step.e_grades["A"] > step.e_grades["B"]
-    assert "A" in mon.report().grade_table
-
-
-def test_weights_do_not_warn_and_enter_as_capped_exponents() -> None:
-    import warnings as _warnings
-
-    y, p = _batch(seed=7)
-    w = np.ones_like(p)
-    w[:10] = 2.5
-    with _warnings.catch_warnings():
-        _warnings.simplefilter("error")
-        a = CalibrationMonitor().update(y, p, sample_weight=w, label="w1")
-    b = CalibrationMonitor().update(y, p, sample_weight=7.0 * w, label="w1")
-    assert a.e_global == pytest.approx(b.e_global, rel=1e-12)  # scale-free
-    assert a.e_global != CalibrationMonitor().update(y, p, label="w1").e_global
-
-
-def test_validation_errors() -> None:
-    with pytest.raises(ValueError, match="components"):
-        CalibrationMonitor(components=("offset", "nope"))
-    with pytest.raises(ValueError, match="alpha"):
-        CalibrationMonitor(alpha=1.5)
-    mon = CalibrationMonitor()
-    with pytest.raises(ValueError, match="0, 1"):
-        mon.update(np.array([0.0, 2.0]), np.array([0.1, 0.2]))
-    # a single-class batch is legal (a quiet month has no defaults)
-    mon.update(np.zeros(50), np.full(50, 0.02), label="quiet")
+    rep = mon.report()
+    assert rep.recommendation == "none"
+    assert rep.onset_label is None
+    action = mon.apply_recommendation()
+    assert action.kind == "none"
+    assert action.offset is None and action.composed is None and action.monitor is None
+    assert action.window == ()
 
 
 def test_predictability_future_batches_do_not_change_past() -> None:
@@ -139,54 +108,226 @@ def test_predictability_future_batches_do_not_change_past() -> None:
 
 
 def test_persistence_reproduces_trajectory_bit_for_bit(tmp_path) -> None:
-    batches = [_batch(shift=0.3, seed=60 + k) for k in range(5)]
-    mon = CalibrationMonitor()
-    direct = [mon.update(y, p, label=f"m{k}").e_global for k, (y, p) in enumerate(batches)]
+    def grade_batch(k: int):
+        y, p = _batch(n=600, shift=0.3, seed=60 + k)
+        return y, p, np.array(["A", "B"])[np.arange(len(p)) % 2]
 
-    resumed: list[float] = []
-    mon2 = CalibrationMonitor()
-    for k, (y, p) in enumerate(batches):
-        resumed.append(mon2.update(y, p, label=f"m{k}").e_global)
+    batches = [grade_batch(k) for k in range(5)]
+    mon = CalibrationMonitor(grades=("A", "B"))
+    direct = [mon.update(y, p, grade=g, label=f"m{k}") for k, (y, p, g) in enumerate(batches)]
+
+    resumed = []
+    mon2 = CalibrationMonitor(grades=("A", "B"))
+    for k, (y, p, g) in enumerate(batches):
+        resumed.append(mon2.update(y, p, grade=g, label=f"m{k}"))
         path = tmp_path / f"state{k}.json"
         mon2.to_json(path)
         mon2 = CalibrationMonitor.from_json(path)
-    assert direct == resumed
+    assert direct == resumed  # every field, incl. grade CIs and log-e increments
     rep = mon2.report()
-    assert isinstance(rep, MonitorReport)
-    assert [s.e_global for s in rep.steps] == direct
+    assert list(rep.steps) == direct
+    frame = rep.to_frame()  # a DataFrame with pandas, else a list of dicts
+    assert len(frame) == 5
 
 
-def test_delayed_labels_are_opaque() -> None:
-    batches = [_batch(seed=80 + k) for k in range(3)]
-    lab_order = ["2026Q3", "2026Q1", "2026Q2"]  # out of calendar order
-    mon_a = CalibrationMonitor()
-    mon_b = CalibrationMonitor()
-    pairs = zip(batches, lab_order, strict=True)
-    ea = [mon_a.update(y, p, label=lab).e_global for (y, p), lab in pairs]
-    eb = [mon_b.update(y, p, label=f"x{k}").e_global for k, (y, p) in enumerate(batches)]
-    assert ea == eb
+def test_monitor_and_action_json_is_strict() -> None:
+    # MON-9: nan component e-values and the -inf initial running max used to be
+    # written as NaN / -Infinity tokens, which strict JSON parsers reject.
+    def _reject(token: str) -> None:
+        raise AssertionError(f"non-strict JSON token {token}")
 
-
-def test_to_frame_is_list_of_dicts_or_frame() -> None:
-    mon = CalibrationMonitor()
-    for k in range(3):
-        y, p = _batch(seed=90 + k)
+    mon = CalibrationMonitor(components=("offset",))
+    assert np.isneginf(mon._max_log_global)
+    json.loads(mon.to_json(), parse_constant=_reject)
+    for k in range(6):
+        y, p = _batch(n=1000, shift=0.8, seed=k)
         mon.update(y, p, label=f"m{k}")
-    frame = mon.report().to_frame()
-    try:
-        import pandas as pd
+    assert np.isnan(mon.steps_[-1].e_shape)
+    json.loads(mon.to_json(), parse_constant=_reject)
+    restored = CalibrationMonitor.from_json(mon.to_json())
+    assert np.isnan(restored.steps_[-1].e_shape)
+    assert restored.to_json() == mon.to_json()
+    json.loads(mon.apply_recommendation().to_json(), parse_constant=_reject)
 
-        assert isinstance(frame, pd.DataFrame) and len(frame) == 3
-    except ImportError:
-        assert isinstance(frame, list) and len(frame) == 3 and isinstance(frame[0], dict)
+    # MON-14: the reasoning never prints nan for the unmonitored component.
+    rep = mon.report()
+    assert rep.alarm_at is not None
+    assert not any("nan" in line for line in rep.reasoning)
+    assert any("not monitored" in line for line in rep.reasoning)
 
 
-def test_monitor_serialization_registered() -> None:
-    from probcal._registry import SERIALIZABLE
+# ---------------------------------------------------------------- weights
 
-    assert "CalibrationMonitor" in SERIALIZABLE
-    mon = CalibrationMonitor()
-    y, p = _batch(seed=95)
-    mon.update(y, p, label="m0")
-    d = json.loads(mon.to_json())
-    assert d["class"] == "CalibrationMonitor" and d["probcal_schema"] == 1
+
+def test_exponent_weights_bounded_and_scale_free() -> None:
+    w = np.random.default_rng(0).lognormal(0.0, 1.5, 500)
+    u = exponent_weights(w)
+    assert np.all((u > 0.0) & (u <= 1.0))
+    assert np.allclose(exponent_weights(1e4 * w), u, rtol=1e-12)
+    big = w >= w.mean()
+    assert np.all(u[big] == 1.0)
+    assert np.allclose(u[~big], w[~big] / w.mean())
+
+
+def test_weights_do_not_warn_and_are_scale_free() -> None:
+    y, p = _batch(seed=7)
+    w = np.ones_like(p)
+    w[:10] = 2.5
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        a = CalibrationMonitor().update(y, p, sample_weight=w, label="w1")
+    b = CalibrationMonitor().update(y, p, sample_weight=7.0 * w, label="w1")
+    assert a.e_global == pytest.approx(b.e_global, rel=1e-12)
+    assert a.e_global != CalibrationMonitor().update(y, p, label="w1").e_global
+
+
+def test_constant_weights_reduce_to_the_unweighted_monitor() -> None:
+    plain = CalibrationMonitor(grades=("A", "B", "C"), delta_ci_grid=(-2.0, 2.0, 41))
+    weighted = CalibrationMonitor(grades=("A", "B", "C"), delta_ci_grid=(-2.0, 2.0, 41))
+    for k in range(6):
+        y, p = _small_batch(shift=0.5 if k >= 3 else 0.0, seed=k)
+        g = np.array(["A", "B", "C"])[np.arange(len(p)) % 3]
+        a = plain.update(y, p, grade=g, label=f"b{k}")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            b = weighted.update(y, p, sample_weight=np.full(len(p), 1e4), grade=g, label=f"b{k}")
+        assert replace(b, n_events=a.n_events) == a  # n_events is the weighted count
+
+
+def test_skewed_weight_batch_factor_is_an_e_value() -> None:
+    # Under the null, E[prod_i LR_i^u_i] <= 1 for exponents u_i in (0, 1];
+    # raw exponents w_i > 1 inflate it above 1.
+    rng = np.random.default_rng(0)
+    n, reps = 12, 40_000
+    p = expit(rng.normal(-1.5, 0.8, n))
+    q = expit(logit(p) + 0.7)
+    w = rng.lognormal(0.0, 2.0, n) * 5.0
+    u = exponent_weights(w)
+    y = (rng.random((reps, n)) < p).astype(float)
+    terms = y * (np.log(q) - np.log(p)) + (1.0 - y) * (np.log1p(-q) - np.log1p(-p))
+    factor = np.exp(terms @ u)
+    raw = np.exp(terms @ w)
+    se = factor.std() / np.sqrt(reps)
+    assert factor.mean() <= 1.0 + 3.0 * se
+    assert raw.mean() > 1.5
+    assert np.isclose(np.log(factor[0]), bern_log_lr(y[0], p, q, u))
+
+
+def test_skewed_weight_null_alarm_rate_is_controlled() -> None:
+    alarms = 0
+    reps = 40
+    for r in range(reps):
+        rng = np.random.default_rng(r)
+        mon = CalibrationMonitor(components=("offset",))
+        for _ in range(10):
+            p = expit(rng.normal(-3.0, 1.0, 200))
+            y = (rng.random(200) < p).astype(float)
+            s = mon.update(y, p, sample_weight=1e4 * rng.lognormal(0, 1.5, 200))
+        alarms += s.alarm
+    assert alarms / reps <= 0.05 + 0.05  # loose: alpha plus Monte Carlo slack
+
+
+# ---------------------------------------------------------------- diagnostics
+
+
+def test_residual_shape_lr_invariant_to_weight_scale() -> None:
+    y, p = _small_batch(n=2000, shift=0.4, seed=50)
+    z = logit(p)
+    w = np.random.default_rng(1).uniform(0.5, 2.0, len(p))
+    a = residual_shape_lr(z, y, w, 0.3)
+    b = residual_shape_lr(z, y, 10.0 * w, 0.3)
+    assert a == pytest.approx(b, rel=1e-9)
+
+
+def test_residual_shape_lr_weighted_null_size_and_unit_weights() -> None:
+    # Offset-only truth: the design-effect-corrected statistic exceeds the
+    # chi-square(1) 5% bound about 5% of the time, also with skewed weights.
+    rng = np.random.default_rng(3)
+    hits = 0
+    reps = 300
+    for _ in range(reps):
+        z = rng.normal(-2.0, 1.0, 400)
+        y = (rng.random(400) < expit(z + 0.3)).astype(float)
+        w = rng.lognormal(0.0, 1.0, 400)
+        hits += residual_shape_lr(z, y, w, plug_in_delta(z, y, w)) > 3.841
+    assert hits / reps < 0.09
+    z = rng.normal(-2.0, 1.0, 400)
+    y = (rng.random(400) < expit(z)).astype(float)
+    ones = np.ones(400)
+    c, a = plug_in_shape(z, y, ones)
+
+    def ll(q: np.ndarray) -> float:
+        return float(np.sum(y * np.log(q) + (1.0 - y) * np.log1p(-q)))
+
+    plain = max(0.0, 2.0 * (ll(expit(c + a * z)) - ll(expit(z + 0.1))))
+    assert residual_shape_lr(z, y, ones, 0.1) == plain
+
+
+def test_slope_ci_constant_logits_is_uninformative_without_warnings() -> None:
+    z = np.full(50, -2.0)
+    y = (np.arange(50) % 5 == 0).astype(float)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert slope_ci(z, y, np.ones(50)) == (-np.inf, np.inf)
+
+
+# ---------------------------------------------------------------- validation
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"components": ("offset", "nope")}, "components"),
+        ({"alpha": 1.5}, "alpha"),
+        ({"recommendation_window": "nope"}, "recommendation_window"),
+        ({"grades": (1, 1.0)}, "duplicate"),
+        *[({"plug_in_window": w}, "plug_in_window") for w in (0, -1, True, 1.5)],
+        *[({"min_history": v}, "min_history") for v in (-1, 1.5, True)],
+        *[
+            ({"mixture_grid": g}, "mixture_grid")
+            for g in [(), (0.0,), (-0.5, 1.0), (np.inf,), (np.nan,), (True,), ("0.5",)]
+        ],
+        *[
+            ({"delta_ci_grid": g}, "delta_ci_grid")
+            for g in [
+                (3.0, -3.0, 241),
+                (-3.0, 3.0, 0),
+                (-3.0, 3.0, 1),
+                (-3.0, 3.0, 2.5),
+                (0.5, 3.0, 11),
+                (-3.0, -0.5, 11),
+                (-np.inf, 3.0, 11),
+                (-3.0, 3.0),
+                (1.0, 1.0, 5),
+            ]
+        ],
+    ],
+)
+def test_constructor_validation(kwargs: dict, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
+        CalibrationMonitor(**kwargs)
+
+
+def test_edge_grids_and_min_history_zero_are_accepted() -> None:
+    CalibrationMonitor(mixture_grid=(0.5,), delta_ci_grid=(0.0, 2.0, 2))
+    CalibrationMonitor(mixture_grid=(1, 2), delta_ci_grid=(-1, 0, 3))
+    mon = CalibrationMonitor(min_history=0)
+    y, p = _batch(n=500, seed=1)
+    assert mon.update(y, p).delta_hat == 0.0  # empty past -> identity plug-in
+
+
+@pytest.mark.parametrize(
+    ("y", "p", "kwargs", "match"),
+    [
+        ([0.0, 2.0], [0.1, 0.2], {}, "0, 1"),
+        ([], [], {}, "batch is empty"),  # used to surface as an IndexError
+        ([0.0, 1.0], [0.1, 0.2], {"grade": ["A", "Z"]}, "not in the declared grades"),
+    ],
+)
+def test_update_validation_leaves_no_step(y, p, kwargs, match) -> None:
+    mon = CalibrationMonitor(grades=("A", "B"))
+    with pytest.raises(ValueError, match=match):
+        mon.update(np.array(y), np.array(p), **kwargs)
+    assert mon.steps_ == []
+    # a single-class batch is legal (a quiet month has no defaults)
+    mon.update(np.zeros(50), np.full(50, 0.02), label="quiet")

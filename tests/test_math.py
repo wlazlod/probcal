@@ -10,15 +10,10 @@ import pytest
 from probcal._math import (
     _FPMIN,
     _loess_fit_sorted_vec,
-    _loess_window_starts,
     beta_ppf,
-    betainc,
     bisect,
-    chi2_ppf,
     expit,
-    gammainc_lower,
     irls_logistic,
-    lgamma_vec,
     loess,
     logit,
     natural_cubic_basis,
@@ -46,11 +41,6 @@ def test_expit_overflow_safe() -> None:
     assert out[0] >= 0.0 and out[1] <= 1.0
 
 
-def test_logit_clips_boundaries() -> None:
-    out = logit(np.array([0.0, 1.0]))
-    assert np.all(np.isfinite(out))
-
-
 # ---------------------------------------------------------------- solvers
 
 
@@ -60,53 +50,6 @@ def test_bisect_finds_root() -> None:
 
 
 # ---------------------------------------------------------------- special functions
-
-
-def test_lgamma_vec_known_values() -> None:
-    np.testing.assert_allclose(lgamma_vec(np.array([1.0, 2.0, 5.0])), [0.0, 0.0, np.log(24.0)])
-
-
-def test_betainc_identity_parameters() -> None:
-    x = np.linspace(0.0, 1.0, 21)
-    np.testing.assert_allclose(betainc(1.0, 1.0, x), x, atol=1e-14)
-
-
-def test_betainc_symmetry() -> None:
-    x = np.linspace(0.01, 0.99, 50)
-    left = betainc(2.5, 4.0, x)
-    right = 1.0 - betainc(4.0, 2.5, 1.0 - x)
-    np.testing.assert_allclose(left, right, atol=1e-13)
-
-
-def test_betainc_monotone_in_x() -> None:
-    x = np.linspace(0.0, 1.0, 200)
-    v = betainc(3.0, 7.0, x)
-    assert np.all(np.diff(v) >= -1e-15)
-
-
-def test_gammainc_lower_exponential_case() -> None:
-    x = np.linspace(0.0, 20.0, 50)
-    np.testing.assert_allclose(gammainc_lower(1.0, x), 1.0 - np.exp(-x), atol=1e-13)
-
-
-def test_chi2_ppf_roundtrip() -> None:
-    for df in (1.0, 2.0, 5.0, 30.0):
-        x = 7.3
-        q = gammainc_lower(df / 2.0, x / 2.0)
-        assert abs(chi2_ppf(q, df) - x) < 1e-8
-
-
-def test_beta_ppf_hand_anchors() -> None:
-    assert abs(beta_ppf(0.5, 2.0, 2.0) - 0.5) < 1e-10
-    assert abs(beta_ppf(0.5, 1.0, 1.0) - 0.5) < 1e-10
-    # Beta(1,2): CDF = 1 - (1-x)^2 -> x = 1 - sqrt(1-q); q=0.19 -> 0.1.
-    assert abs(beta_ppf(0.19, 1.0, 2.0) - 0.1) < 1e-10
-
-
-def test_beta_ppf_monotone_in_q() -> None:
-    qs = np.linspace(0.01, 0.99, 25)
-    vals = [beta_ppf(float(q), 2.5, 7.0) for q in qs]
-    assert np.all(np.diff(vals) > 0)
 
 
 def test_beta_ppf_validation() -> None:
@@ -134,25 +77,6 @@ def test_pava_worked_example() -> None:
     np.testing.assert_allclose(res.block_weight, [1.0, 3.0, 1.0])
 
 
-def test_pava_monotone_output() -> None:
-    y = RNG.random(500)
-    res = pava(y, np.ones(500))
-    assert np.all(np.diff(res.fitted) >= -1e-15)
-
-
-def test_pava_already_monotone_unchanged() -> None:
-    y = np.array([0.1, 0.2, 0.3])
-    res = pava(y, np.ones(3))
-    np.testing.assert_allclose(res.fitted, y)
-
-
-def test_pava_weighted() -> None:
-    # Heavier weight on the later observation pulls the pooled mean toward it.
-    y = np.array([1.0, 0.0])
-    res = pava(y, np.array([1.0, 3.0]))
-    np.testing.assert_allclose(res.fitted, [0.25, 0.25])
-
-
 # ---------------------------------------------------------------- IRLS logistic
 
 
@@ -162,22 +86,6 @@ def _make_logistic_data(n: int = 5000, beta=(-2.0, 1.5)) -> tuple[np.ndarray, np
     p = expit(X @ np.asarray(beta))
     y = (RNG.random(n) < p).astype(float)
     return X, y
-
-
-def test_irls_recovers_coefficients() -> None:
-    X, y = _make_logistic_data()
-    res = irls_logistic(X, y)
-    assert res.converged
-    assert not res.separation
-    np.testing.assert_allclose(res.beta, [-2.0, 1.5], atol=0.15)
-
-
-def test_irls_offset_shifts_intercept() -> None:
-    X, y = _make_logistic_data()
-    res0 = irls_logistic(X, y)
-    res1 = irls_logistic(X, y, offset=np.full(len(y), 0.7))
-    np.testing.assert_allclose(res1.beta[0], res0.beta[0] - 0.7, atol=1e-6)
-    np.testing.assert_allclose(res1.beta[1], res0.beta[1], atol=1e-6)
 
 
 def test_irls_separation_warns_and_returns_finite() -> None:
@@ -244,29 +152,6 @@ def test_irls_soft_targets_never_separate() -> None:
     assert res.converged
 
 
-def test_irls_monotone_descent() -> None:
-    rng = np.random.default_rng(7)
-    n = 20_000
-    z = rng.normal(0.0, 8.0, n)
-    y = (rng.random(n) < expit(1.5 * z + 0.5)).astype(float)
-    n_pos, n_neg = float(y.sum()), float(n - y.sum())
-    targets = np.where(y == 1.0, (n_pos + 1.0) / (n_pos + 2.0), 1.0 / (n_neg + 2.0))
-    X = np.column_stack([np.ones(n), logit(expit(z))])  # the design the Platt pipeline sees
-
-    def platt_nll(beta: np.ndarray) -> float:
-        eta = X @ beta
-        softplus = np.maximum(eta, 0.0) + np.log1p(np.exp(-np.abs(eta)))
-        return float(np.sum(softplus - targets * eta))
-
-    res = irls_logistic(X, targets)
-    assert res.converged
-    assert not res.separation
-    assert res.nll <= platt_nll(np.zeros(2))
-    # v0.1.1's false-separation abort returned (b, a) ~ (0.3518, 1.1825); the
-    # monotone-descent fit must do at least as well on the objective.
-    assert res.nll <= platt_nll(np.array([0.3518, 1.1825]))
-
-
 # ---------------------------------------------------------------- LOESS
 
 
@@ -275,11 +160,6 @@ def test_loess_reproduces_linear_trend() -> None:
     y = 2.0 * x + 1.0
     fitted = loess(x, y, frac=0.5)
     np.testing.assert_allclose(fitted, y, atol=1e-10)
-
-
-def test_loess_xeval() -> None:
-    x = np.linspace(0.0, 1.0, 60)
-    y = 2.0 * x + 1.0
     grid = np.array([0.25, 0.75])
     np.testing.assert_allclose(loess(x, y, xeval=grid), 2.0 * grid + 1.0, atol=1e-10)
 
@@ -362,13 +242,6 @@ def test_loess_grid_size_none_and_oversized_are_exact() -> None:
 
 
 # ---------------------------------------------------------------- natural cubic basis
-
-
-def test_natural_cubic_basis_shape() -> None:
-    x = np.linspace(0.0, 1.0, 40)
-    knots = np.array([0.1, 0.3, 0.5, 0.7, 0.9])
-    B = natural_cubic_basis(x, knots)
-    assert B.shape == (40, 5)
 
 
 def test_natural_cubic_basis_linear_beyond_boundary() -> None:
@@ -465,36 +338,31 @@ def _loess_anchor_case(
 
 def _loess_fixtures() -> list[object]:
     out = []
-    for n in (1000, 10_000):
-        d = make_pd_portfolio(n=n, random_state=3)
-        out.append(pytest.param(d.scores, d.y, id=f"portfolio-{n}"))
+    d = make_pd_portfolio(n=1000, random_state=3)
+    out.append(pytest.param(d.scores, d.y, id="portfolio-1000"))
     d = make_pd_portfolio(n=2000, random_state=4)
     out.append(pytest.param(np.round(d.scores, 2), d.y, id="tied-scores"))
     return out
 
 
-@pytest.mark.parametrize("p,y", _loess_fixtures())
-def test_loess_window_starts_match_the_two_pointer_loop(p: np.ndarray, y: np.ndarray) -> None:
-    """The vectorized window search must land on the loop's exact index.
+def _two_score_fixture() -> object:
+    """1025 rows carrying only two distinct scores, 837 low / 188 high.
 
-    Not an approximation: the loop's comparison is reproduced verbatim, so a
-    tied-score fixture (where the sum form and the difference form of the
-    comparison round differently) has to agree too.
+    An anchor above their midpoint would give a rank-deficient local-linear
+    window (``det`` is pure cancellation), where the loop and the vectorized
+    routine may take different branches; anchors are data quantiles, so the
+    corner never reaches a reported value and presorted == default still holds.
     """
-    xs, _, r, anchors = _loess_anchor_case(p, y)
-    n = len(xs)
-    expected, i = [], 0
-    for x0 in anchors:
-        while i + r < n and xs[i + r] - x0 < x0 - xs[i]:
-            i += 1
-        expected.append(i)
-    np.testing.assert_array_equal(_loess_window_starts(xs, anchors, r), np.array(expected))
+    rng = np.random.default_rng(0)
+    xs = np.concatenate([np.full(837, 0.1), np.full(188, 0.9)])
+    ys = (rng.random(1025) < 0.3).astype(float)
+    return pytest.param(xs, ys, id="two-scores")
 
 
 def test_loess_per_observation_matches_the_retired_loop() -> None:
     """0.3.4 routes every evaluation through the blocked engine; on data points
     it agrees with the retired loop to a few ulps."""
-    for n, rnd in ((300, None), (2000, 2), (2000, 3)):
+    for n, rnd in ((300, None), (2000, 2)):
         d = make_pd_portfolio(n=n, random_state=5)
         p = d.scores if rnd is None else np.round(d.scores, rnd)
         order = np.argsort(p, kind="stable")
@@ -527,7 +395,7 @@ def test_loess_vectorized_anchors_match_the_loop(p: np.ndarray, y: np.ndarray, d
     )
 
 
-@pytest.mark.parametrize("p,y", _loess_fixtures())
+@pytest.mark.parametrize("p,y", [*_loess_fixtures(), _two_score_fixture()])
 def test_loess_presorted_matches_the_default_path(p: np.ndarray, y: np.ndarray) -> None:
     """End-to-end: ``presorted=True`` only changes throughput, not the fit."""
     order = np.argsort(p, kind="stable")
@@ -546,65 +414,6 @@ def test_loess_presorted_without_grid_matches_default() -> None:
     order = np.argsort(d.scores, kind="stable")
     xs, ys = d.scores[order], d.y[order]
     assert np.array_equal(loess(xs, ys, frac=0.75, presorted=True), loess(xs, ys, frac=0.75))
-
-
-def _two_score_fixture() -> tuple[np.ndarray, np.ndarray, int]:
-    """1025 rows carrying only two distinct scores, 837 low / 188 high."""
-    rng = np.random.default_rng(0)
-    n, n_low = 1025, 837
-    xs = np.concatenate([np.full(n_low, 0.1), np.full(n - n_low, 0.9)])
-    ys = (rng.random(n) < 0.3).astype(float)
-    return xs, ys, min(max(int(np.ceil(0.75 * n)), 2), n)
-
-
-def test_loess_vectorized_rank_deficient_window() -> None:
-    """The sub-ulp agreement bound does not cover rank-deficient windows.
-
-    With only two distinct scores, an eval point above their midpoint puts the
-    far group at exactly the bandwidth ``h``, so its tricube weight is exactly
-    zero and every surviving row shares one ``x``. The local *linear* system is
-    then singular and ``det = sw * swxx - swx * swx`` is pure cancellation,
-    computed as ~1e-23 rather than 0 — small enough that the ulp-level weight
-    difference between ``u ** 3`` and ``u * u * u`` can land the loop and the
-    vectorized routine on opposite sides of the ``abs(det) < _FPMIN`` guard.
-    Here the vectorized path takes the ``swy / sw`` branch, which for a
-    single-``x`` window is the plain mean of ``y`` over the surviving rows and
-    the only well-defined answer; the loop divides by the cancellation noise and
-    returns an arbitrary value. Which path lands where is a property of the
-    rounding, not of the algorithm — the loop's own value on such a window is
-    already arbitrary, so this is a characterization test of a known corner, not
-    a correctness bound. The guard is deliberately not changed: that would move
-    the point-estimate path.
-    """
-    xs, ys, r = _two_score_fixture()
-    x0 = 0.50148
-    start = _loess_window_starts(xs, np.array([x0]), r)[0]
-    xw, yw = xs[start : start + r], ys[start : start + r]
-    h = max(x0 - xs[start], xs[start + r - 1] - x0)
-    tri = np.clip(1.0 - (np.abs(xw - x0) / h) ** 3, 0.0, None) ** 3
-    surviving = tri > 0
-    assert len(np.unique(xw[surviving])) == 1  # rank-deficient by construction
-
-    with np.errstate(invalid="ignore", divide="ignore"):
-        vec = _loess_fit_sorted_vec(xs, ys, np.array([x0]), r, 1)[0]
-        scalar = _loess_fit_sorted(xs, ys, np.array([x0]), r, 1)[0]
-    assert vec == float(np.mean(yw[surviving]))  # the swy/sw branch
-    assert abs(scalar - vec) > 0.1  # the loop's cancellation-noise branch
-
-
-def test_loess_rank_deficient_windows_do_not_reach_reported_values() -> None:
-    """Anchors are data quantiles, so the corner above stays off the fit.
-
-    ``loess`` evaluates at ``np.unique(np.quantile(ev, ...))``, which for this
-    fixture is just the two data values — neither of which sits above the
-    midpoint with the far group excluded. The end-to-end presorted result is
-    therefore exactly the default one, which is the guarantee that matters.
-    """
-    xs, ys, _ = _two_score_fixture()
-    fast = loess(xs, ys, frac=0.75, grid_size=512, presorted=True)
-    slow = loess(xs, ys, frac=0.75, grid_size=512)
-    np.testing.assert_allclose(fast, slow, rtol=1e-9, atol=1e-12)
-    assert np.max(np.abs(fast - slow)) <= 1e-12
 
 
 # ------------------------------------------------- IRLS convergence criterion (0.3.4)

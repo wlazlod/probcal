@@ -2,22 +2,18 @@
 
 import numpy as np
 
+from probcal._math import logit
 from probcal.datasets import make_pd_portfolio
 from probcal.metrics.regression import calibration_test
 from probcal.parametric import BetaCalibrator
 
 
-def test_event_rate_close_to_target() -> None:
+def test_event_rate_anchor_and_reproducibility() -> None:
     port = make_pd_portfolio(n=20000, event_rate=0.03, random_state=1)
     assert abs(port.p_true.mean() - 0.03) < 1e-6  # anchored exactly by construction
     assert abs(port.y.mean() - 0.03) < 0.005  # sampling noise only
-
-
-def test_reproducible() -> None:
-    a = make_pd_portfolio(n=1000, random_state=7)
-    b = make_pd_portfolio(n=1000, random_state=7)
-    np.testing.assert_array_equal(a.scores, b.scores)
-    np.testing.assert_array_equal(a.y, b.y)
+    assert make_pd_portfolio(n=100, random_state=1) == make_pd_portfolio(n=100, random_state=1)
+    assert make_pd_portfolio(n=100, random_state=1) != make_pd_portfolio(n=100, random_state=2)
 
 
 def test_default_portfolio_is_miscalibrated() -> None:
@@ -26,17 +22,10 @@ def test_default_portfolio_is_miscalibrated() -> None:
     assert res.p_value < 1e-4
 
 
-def test_undistorted_portfolio_is_calibrated() -> None:
-    port = make_pd_portfolio(n=20000, slope=1.0, asymmetry=0.0, intercept=0.0, random_state=5)
-    # With no distortion the scores ARE the true probabilities.
-    np.testing.assert_allclose(port.scores, port.p_true, atol=1e-12)
-
-
 def test_asymmetry_recoverable_by_beta() -> None:
     # Recovery of BOTH exponents needs data in both tails, so this test widens
     # the score distribution; on the 3% default portfolio the high-tail
-    # exponent is unidentifiable (no data there) — which is itself the point
-    # the data-splitting chapter makes about events-per-parameter.
+    # exponent is unidentifiable (no data there).
     port = make_pd_portfolio(
         n=40000,
         slope=0.8,
@@ -53,31 +42,15 @@ def test_asymmetry_recoverable_by_beta() -> None:
     assert abs(cal.b_ - 0.8) < 0.2
 
 
-def test_export() -> None:
-    import probcal
-
-    assert "make_pd_portfolio" in probcal.__all__
-
-
-def test_intercept_shifts_true_probabilities_after_anchoring() -> None:
-    # OFF-4: the intercept was absorbed by the mean anchor (no effect at all).
+def test_intercept_and_event_rate_are_honoured() -> None:
+    # OFF-4: the intercept was absorbed by the mean anchor (no effect at all),
+    # and slope=1, asymmetry=0 ignored event_rate entirely.
     base = make_pd_portfolio(n=5000, random_state=2)
     shifted = make_pd_portfolio(n=5000, intercept=0.5, random_state=2)
     np.testing.assert_array_equal(base.scores, shifted.scores)
-    from probcal._math import logit
-
     np.testing.assert_allclose(logit(shifted.p_true) - logit(base.p_true), 0.5, atol=1e-9)
     assert shifted.p_true.mean() > 0.03
 
-
-def test_identity_case_honours_event_rate() -> None:
-    # OFF-4: slope=1, asymmetry=0 ignored event_rate entirely.
     port = make_pd_portfolio(n=20000, slope=1.0, asymmetry=0.0, event_rate=0.1, random_state=5)
     assert abs(port.scores.mean() - 0.1) < 1e-9
     np.testing.assert_array_equal(port.scores, port.p_true)
-
-
-def test_portfolio_equality_is_array_aware() -> None:
-    # OFF-3
-    assert make_pd_portfolio(n=100, random_state=1) == make_pd_portfolio(n=100, random_state=1)
-    assert make_pd_portfolio(n=100, random_state=1) != make_pd_portfolio(n=100, random_state=2)

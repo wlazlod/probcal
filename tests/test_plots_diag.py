@@ -78,22 +78,7 @@ def test_plot_mcb_dsc_places_one_point_per_candidate():
         plot_mcb_dsc(stale)
 
 
-def test_plot_mcb_dsc_rejects_mismatched_weighted_mean_y():
-
-    import matplotlib.pyplot as plt
-
-    from probcal.plots import plot_mcb_dsc
-
-    y_a, p_a = _data(seed=17)
-    y_b, p_b = _data(seed=19)  # different portfolio -> different weighted mean y
-    with pytest.raises(ValueError, match="same weighted mean"):
-        plot_mcb_dsc({"a": (y_a, p_a), "b": (y_b, p_b)})
-    plt.close("all")
-
-
-def test_plot_attributes_draws_reference_lines_and_shading():
-
-    import matplotlib.pyplot as plt
+def test_plot_attributes_reference_lines_and_both_methods():
 
     from probcal.plots import plot_attributes
 
@@ -102,56 +87,11 @@ def test_plot_attributes_draws_reference_lines_and_shading():
     labels = {ln.get_label() for ln in ax.lines}
     assert {"identity", "climatology / no resolution", "climatology", "no skill"} <= labels
     assert len(ax.collections) >= 1  # positive-BSS shading (+ binned scatter)
-    plt.close("all")
+    assert any(c.get_offsets().shape[0] > 0 for c in ax.collections)  # binned (default)
 
-
-def test_plot_attributes_both_methods_render():
-
-    import matplotlib.pyplot as plt
-
-    from probcal.plots import plot_attributes
-
-    y, p = _data()
-    ax_binned = plot_attributes(y, p, method="binned")
-    offsets = [coll.get_offsets() for coll in ax_binned.collections if hasattr(coll, "get_offsets")]
-    assert any(o.shape[0] > 0 for o in offsets)
-    plt.close("all")
-
-    ax_corp = plot_attributes(y, p, method="corp")
+    ax_corp = plot_attributes(y, p, method="corp", scale="logit")
     assert any(ln.get_drawstyle() == "steps-post" for ln in ax_corp.lines)
-    plt.close("all")
-
-
-def test_plot_attributes_logit_scale_renders():
-
-    import matplotlib.pyplot as plt
-
-    from probcal.plots import plot_attributes
-
-    y, p = _data()
-    ax = plot_attributes(y, p, scale="logit")
-    assert ax.get_xlabel() == "predicted probability (logit scale)"
-    plt.close("all")
-
-
-def test_plot_attributes_rejects_bad_method():
-    from probcal.plots import plot_attributes
-
-    y, p = _data()
-    with pytest.raises(ValueError, match="method"):
-        plot_attributes(y, p, method="bogus")
-
-
-def test_plot_murphy_mapping_without_diff_rejects_non_murphy_curve_values():
-
-    import matplotlib.pyplot as plt
-
-    from probcal.plots import plot_murphy
-
-    y, p = _data()
-    with pytest.raises(ValueError, match="mapping values must be MurphyCurve"):
-        plot_murphy({"a": (y, p), "b": (y, p)})
-    plt.close("all")
+    assert ax_corp.get_xlabel() == "predicted probability (logit scale)"
 
 
 def test_plot_murphy_validates_before_creating_a_figure():
@@ -169,18 +109,3 @@ def test_plot_murphy_validates_before_creating_a_figure():
     with pytest.raises(ValueError, match="MurphyCurve"):
         plot_murphy({"a": (y, p)})
     assert set(plt.get_fignums()) == before
-
-
-def test_plot_corp_logit_and_user_axes_style():
-    import matplotlib.pyplot as plt
-
-    from probcal.curves import corp_reliability
-    from probcal.plots import plot_corp
-
-    y, p = _data()
-    with plt.rc_context({"axes.grid": False}):
-        _, ax = plt.subplots()
-    plot_corp(corp_reliability(y, p, n_resamples=10), scale="logit", ax=ax)
-    assert not ax.spines["top"].get_visible()
-    assert all(gl.get_visible() for gl in ax.xaxis.get_gridlines())
-    assert ax.get_xlabel().endswith("(logit scale)")

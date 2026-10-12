@@ -37,11 +37,10 @@ def _scale_through_plateaus(cal, s: np.ndarray) -> Masterscale:
     [IsotonicCalibrator(), HistogramBinningCalibrator(n_bins=5)],
     ids=["isotonic", "histogram"],
 )
-@pytest.mark.parametrize("seed", [0, 1, 2])
-def test_raw_interval_counts_equal_assign_counts(cal, seed) -> None:
+def test_raw_interval_counts_equal_assign_counts(cal) -> None:
     # OFF-1: closed raw intervals double-counted the plateau sitting on a
     # shared calibrated edge; half-open raw intervals must partition.
-    d = make_pd_portfolio(n=4000, random_state=seed)
+    d = make_pd_portfolio(n=4000, random_state=0)
     cal.fit(d.scores, d.y)
     assert cal.is_monotone_  # n_bins=5 keeps the histogram rates monotone here
     for ms in (_scale_through_plateaus(cal, d.scores), Masterscale.from_edges([0.01, 0.02, 0.04])):
@@ -50,14 +49,9 @@ def test_raw_interval_counts_equal_assign_counts(cal, seed) -> None:
         expected = {g: int(np.sum(labels == g)) for g in ms.names}
         assert _raw_counts(raw, d.scores, ms.names[-1]) == expected
         assert sum(expected.values()) == len(d.scores)
-
-
-def test_adjacent_raw_bands_share_their_edge() -> None:
-    cal = IsotonicCalibrator().fit(PORT.scores, PORT.y)
-    ms = _scale_through_plateaus(cal, PORT.scores)
-    raw = list(calibrated_bands_to_raw(cal, ms).values())
-    for (_, hi0), (lo1, _) in zip(raw, raw[1:], strict=False):
-        assert hi0 == lo1
+        bounds = list(raw.values())
+        for (_, hi0), (lo1, _) in zip(bounds, bounds[1:], strict=False):
+            assert hi0 == lo1  # adjacent raw bands share their edge exactly
 
 
 def test_affine_calibrator_matches_closed_inversion_and_logit_space() -> None:

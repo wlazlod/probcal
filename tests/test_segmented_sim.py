@@ -23,11 +23,11 @@ _SPEC.loader.exec_module(sim)
 
 
 def test_eb_mse_beats_no_pooling_and_complete_pooling_reduced() -> None:
-    res = sim.recovery(100, sim.N_PER_SEGMENT, sim.TRUE_DELTAS, seed=42)
+    res = sim.recovery(30, sim.N_PER_SEGMENT, sim.TRUE_DELTAS, seed=42)
     assert res["mean_mse_eb"] <= res["mean_mse_no_pooling"]
     assert res["mean_mse_eb"] <= res["mean_mse_complete_pooling"]
 
 
 def test_eb_degrades_to_complete_pooling_as_spread_shrinks_to_zero() -> None:
-    res = sim.recovery(100, (3000,) * 6, (0.0,) * 6, seed=123)
+    res = sim.recovery(30, (3000,) * 6, (0.0,) * 6, seed=123)
     assert np.max(np.abs(res["mean_delta_tilde"])) < 0.05

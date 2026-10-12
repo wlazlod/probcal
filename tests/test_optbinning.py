@@ -52,11 +52,6 @@ def test_predict_proba_is_calibrated_scorecard_output(fitted) -> None:
     assert isinstance(cs.calibrator_, BetaCalibrator)
 
 
-def test_score_is_untouched(fitted) -> None:
-    cs, sc, X_cal, _ = fitted
-    np.testing.assert_array_equal(cs.score(X_cal), sc.score(X_cal))
-
-
 def test_points_affine_coeffs_verified(fitted) -> None:
     cs, sc, X_cal, _ = fitted
     a_pts, b_pts = cs.points_affine_coeffs_
@@ -109,16 +104,12 @@ def test_serialization_reattaches_and_verifies_scorecard(fitted) -> None:
     loaded = CalibratedScorecard.from_dict(d, scorecard=sc)
     np.testing.assert_array_equal(cs.predict_proba(X_cal), loaded.predict_proba(X_cal))
     assert cs.fingerprint() == loaded.fingerprint()
+    # MON-25: to_json used to exist without a from_json counterpart.
+    from_js = CalibratedScorecard.from_json(cs.to_json(), scorecard=sc)
+    assert from_js.fingerprint() == cs.fingerprint()
     other_sc, _, _ = _scorecard(n=2500, seed=9)
     with pytest.raises(ValueError, match="fingerprint"):
         CalibratedScorecard.from_dict(d, scorecard=other_sc)
-
-
-def test_custom_calibrator_prototype(fitted) -> None:
-    _, sc, X_cal, y_cal = fitted
-    cs = calibrate_scorecard(sc, X_cal, y_cal, calibrator=PlattCalibrator())
-    assert isinstance(cs.calibrator_, PlattCalibrator)
-    assert cs.affine_logit_coeffs_ is not None
 
 
 def test_masterscale_method_accepts_masterscale_object(fitted) -> None:
@@ -185,16 +176,3 @@ def test_legacy_csv_fingerprint_payload_still_loads(fitted) -> None:
     d["state"]["scorecard_fingerprint"] = "0" * 64
     with pytest.raises(ValueError, match="fingerprint"):
         CalibratedScorecard.from_dict(d, scorecard=sc)
-
-
-def test_from_json_round_trip_with_scorecard(fitted, tmp_path) -> None:
-    # MON-25: to_json existed without a from_json counterpart.
-    cs, sc, X_cal, _ = fitted
-    path = tmp_path / "layer.json"
-    cs.to_json(path)
-    loaded = CalibratedScorecard.from_json(path, scorecard=sc)
-    np.testing.assert_array_equal(loaded.predict_proba(X_cal), cs.predict_proba(X_cal))
-    assert loaded.fingerprint() == cs.fingerprint()
-    assert CalibratedScorecard.from_json(cs.to_json(), scorecard=sc).fingerprint() == (
-        cs.fingerprint()
-    )

@@ -163,18 +163,28 @@ risk deciles (`hosmer_lemeshow(..., n_bins=10)`; the 0.3.x spelling `g=` is depr
 forms
 
 \[
-C = \sum_{b=1}^{g} \frac{(O_b - E_b)^2}{E_b\,\bigl(1 - E_b/n_b\bigr)} \;\sim\; \chi^2_{g-2},
+C = \sum_{b=1}^{g} \frac{(O_b - E_b)^2}{E_b\,\bigl(1 - E_b/n_b\bigr)} \;\sim\; \chi^2_{g - \text{ddof}},
 \]
 
-with \( O_b \) observed and \( E_b \) expected events per group. It is the historical
+with \( O_b \) observed and \( E_b \) expected events per group. The degrees of freedom
+depend on where \( p \) came from. For a logistic model fitted on the same data, the
+classical \( g-2 \) applies (`ddof=2`). When \( p \) is fixed before the outcomes are
+seen, which is the usual PD validation setting with a model or calibrator fitted on other
+data, the per-group residuals are asymptotically independent and \( C \sim \chi^2_g \)
+(Hosmer, Lemeshow and Sturdivant, 2013, on external validation). That is the default, `ddof=0`. Against
+\( g-2 \), out-of-sample \( p \) rejects about 12% of the time at a nominal 5% with
+\( g=10 \). Under \( \chi^2_g \) it rejects about 5%. Before 0.3.5 probcal always used
+\( g-2 \). With heavy-tailed weights and few effective events per group, the chi-square
+approximation is loose: with lognormal(0, 1) weights, it rejects about 9% at n = 5000 and
+PD ≈ 3%, and 6% at n = 50 000. It is the historical
 workhorse of clinical model validation and it carries the same two diseases in sharper form:
 the statistic depends on an essentially arbitrary grouping (changing \( g \), or the tie
 handling at decile boundaries, changes the p-value), and its power scales with \( n \) so that
 on large portfolios it rejects calibration defects of no practical consequence, while on small
 ones it detects almost nothing. probcal ships it because validators expect it, marks it
-report-only, and never lets the [selector](auto-selection.md) see it. With fewer than three
-non-empty groups the reference distribution has no degrees of freedom left, so the result
-reports `df=0` and `p_value=nan` rather than a p-value on a floored `df=1`.
+report-only, and never lets the [selector](auto-selection.md) see it. When no more than `ddof`
+non-empty groups remain, the reference distribution has no degrees of freedom left, so the
+result reports `df=0` and `p_value=nan` rather than a p-value on a floored `df=1`.
 
 ## Binning-free estimators
 
@@ -564,6 +574,7 @@ sweep, vectorized LOESS), so the single-call rows above are the per-replicate co
 - Ferro, C. A. T., Fricker, T. E. (2012). "A bias-corrected decomposition of the Brier score." *Quarterly Journal of the Royal Meteorological Society* 138(668), 1954–1960.
 - Gretton, A., Borgwardt, K. M., Rasch, M. J., Schölkopf, B., Smola, A. (2012). "A Kernel Two-Sample Test." *Journal of Machine Learning Research* 13, 723–773.
 - Hosmer, D. W., Lemeshow, S. (1980). "Goodness of fit tests for the multiple logistic regression model." *Communications in Statistics - Theory and Methods* 9(10), 1043–1069.
+- Hosmer, D. W., Lemeshow, S., Sturdivant, R. X. (2013). *Applied Logistic Regression*, 3rd ed. Wiley.
 - Kumar, A., Sarawagi, S., Jain, U. (2018). "Trainable Calibration Measures for Neural Networks from Kernel Mean Embeddings." ICML, PMLR 80, 2805–2814.
 - Miller, M. E., Hui, S. L., Tierney, W. M. (1991). "Validation techniques for logistic regression models." *Statistics in Medicine* 10(8), 1213–1226.
 - Murphy, A. H. (1973). "A New Vector Partition of the Probability Score." *Journal of Applied Meteorology* 12(4), 595–600.

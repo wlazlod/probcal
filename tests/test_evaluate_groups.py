@@ -40,18 +40,6 @@ def test_evaluate_by_none_is_byte_identical_to_0_2_0_fixture() -> None:
     np.testing.assert_allclose(rep.ci_high, [0.025280355485568177, 0.045428648333590414], rtol=1e-9)
 
 
-def test_evaluate_by_none_matches_omitting_the_argument() -> None:
-    d = make_pd_portfolio(n=400, random_state=3)
-    a = evaluate(d.y, d.scores, n_boot=40, random_state=7, metrics=("brier", "ece"))
-    b = evaluate(d.y, d.scores, n_boot=40, random_state=7, metrics=("brier", "ece"), by=None)
-    assert isinstance(a, MetricReport)
-    assert isinstance(b, MetricReport)
-    assert a.names == b.names
-    np.testing.assert_array_equal(a.values, b.values)
-    np.testing.assert_array_equal(a.ci_low, b.ci_low)
-    np.testing.assert_array_equal(a.ci_high, b.ci_high)
-
-
 def test_evaluate_by_returns_grouped_report_in_sorted_order() -> None:
     y, p = _calibrated(900)
     by = np.where(p < 0.3, "low", np.where(p < 0.6, "mid", "high"))
@@ -80,32 +68,27 @@ def test_evaluate_by_group_values_match_direct_call_with_offset_seed() -> None:
         np.testing.assert_array_equal(rep.values, direct.values)
         np.testing.assert_array_equal(rep.ci_low, direct.ci_low)
         np.testing.assert_array_equal(rep.ci_high, direct.ci_high)
+    # The pooled report keeps the caller's seed.
+    pooled = evaluate(y, p, n_boot=n_boot, random_state=seed, metrics=names)
+    np.testing.assert_array_equal(grouped.pooled.ci_low, pooled.ci_low)
+    np.testing.assert_array_equal(grouped.pooled.ci_high, pooled.ci_high)
 
 
-def test_evaluate_by_pooled_matches_direct_call_with_seed_unchanged() -> None:
-    y, p = _calibrated(900)
-    by = np.where(p < 0.5, "low", "high")
-    seed = 5
-    n_boot = 20
-    names = ("brier",)
-    grouped = evaluate(y, p, n_boot=n_boot, random_state=seed, metrics=names, by=by)
-    direct = evaluate(y, p, n_boot=n_boot, random_state=seed, metrics=names)
-    np.testing.assert_array_equal(grouped.pooled.values, direct.values)
-    np.testing.assert_array_equal(grouped.pooled.ci_low, direct.ci_low)
-    np.testing.assert_array_equal(grouped.pooled.ci_high, direct.ci_high)
-
-
-def test_evaluate_by_length_mismatch_raises() -> None:
-    y, p = _calibrated(50)
-    with pytest.raises(ValueError, match="by must have the same length as y"):
-        evaluate(y, p, n_boot=5, by=np.array(["a", "b"]))
-
-
-def test_evaluate_by_single_class_group_names_the_group() -> None:
-    y = np.array([0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
-    p = np.array([0.1, 0.2, 0.3, 0.7, 0.8, 0.9])
-    by = np.array(["a", "a", "a", "b", "b", "b"])
-    with pytest.raises(ValueError, match=r"group 'a': .*both classes"):
+@pytest.mark.parametrize(
+    "y,p,by,match",
+    [
+        (np.r_[np.zeros(25), np.ones(25)], np.full(50, 0.5), np.array(["a", "b"]), "same length"),
+        (
+            np.array([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]),
+            np.array([0.1, 0.2, 0.3, 0.7, 0.8, 0.9]),
+            np.array(["a", "a", "a", "b", "b", "b"]),
+            r"group 'a': .*both classes",
+        ),
+    ],
+    ids=["length", "single-class-group"],
+)
+def test_evaluate_by_bad_input_raises(y, p, by, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
         evaluate(y, p, n_boot=5, by=by)
 
 
@@ -124,16 +107,6 @@ def test_evaluate_by_to_frame_shape() -> None:
     else:
         assert list(frame.columns) == ["group", "metric", "value", "ci_low", "ci_high"]
         assert frame.iloc[0]["group"] == "pooled"
-
-
-def test_evaluate_by_repr_smoke() -> None:
-    y, p = _calibrated(300)
-    by = np.where(p < 0.5, "low", "high")
-    rep = evaluate(y, p, n_boot=10, metrics=("brier",), by=by)
-    text = repr(rep)
-    assert "GroupedMetricReport" in text
-    assert "pooled" in text
-    assert "low" in text and "high" in text
 
 
 def test_evaluate_by_groups_raw_values_and_rejects_display_clash() -> None:

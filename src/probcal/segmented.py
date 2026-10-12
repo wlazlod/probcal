@@ -101,8 +101,9 @@ class SegmentedCalibrator(BaseCalibrator):
         Per-segment observation count and weighted event count, aligned
         with ``segments_``.
     delta_hat_, se_ : numpy.ndarray
-        Per-segment offset MLE and its Fisher standard error (``se=inf``
-        for single-class segments).
+        Per-segment offset MLE and its standard error
+        (:func:`~probcal.offset.estimate_offset`; ``se=inf`` for
+        single-class segments). Invariant to the scale of ``sample_weight``.
     tau2_ : float
         Between-segment heterogeneity variance (DerSimonian-Laird
         method-of-moments estimate); 0.0 when fewer than two segments have

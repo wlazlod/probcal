@@ -45,25 +45,17 @@ def _oof_calls(n: int) -> list[tuple[frozenset, frozenset]]:
     ]
 
 
-def test_cv_flow_out_of_fold_scoring_is_disjoint() -> None:
-    n = 800
-    X, y = _spy_data(n)
-    SpyModel.calls = []
-    CalibratedModel(SpyModel(), PlattCalibrator(), flow="cv", cv=5).fit(X, y)
-    oof = _oof_calls(n)
-    assert oof, "expected out-of-fold scoring calls to have been recorded"
-    for fit_ids, scored in oof:
-        assert not (fit_ids & scored), "a fold model scored rows it was trained on"
-
-
-def test_cv_folds_cover_everything_exactly_once() -> None:
+def test_cv_flow_scores_every_row_exactly_once_out_of_fold() -> None:
     n = 600
     X, y = _spy_data(n)
     SpyModel.calls = []
     CalibratedModel(SpyModel(), PlattCalibrator(), flow="cv", cv=4).fit(X, y)
+    oof = _oof_calls(n)
+    assert oof, "expected out-of-fold scoring calls to have been recorded"
     scored_union: set[int] = set()
     scored_total = 0
-    for _, scored in _oof_calls(n):
+    for fit_ids, scored in oof:
+        assert not (fit_ids & scored), "a fold model scored rows it was trained on"
         scored_union |= scored
         scored_total += len(scored)
     assert scored_union == set(range(n))

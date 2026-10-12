@@ -1,9 +1,13 @@
 """Tests for probcal.wrapper.CalibratedModel."""
 
+import json
+import warnings
+
 import numpy as np
 import pytest
 
 from probcal._math import expit, irls_logistic
+from probcal.offset import LogitOffset
 from probcal.parametric import PlattCalibrator
 from probcal.wrapper import CalibratedModel
 
@@ -28,6 +32,21 @@ class TinyLogit:
         return np.column_stack([1.0 - p, p])
 
 
+class WeightedTinyLogit(TinyLogit):
+    def fit(self, X, y, sample_weight=None):
+        self.sample_weight_ = sample_weight
+        return super().fit(X, y)
+
+
+class KwargsTinyLogit(TinyLogit):
+    """fit(**kwargs) must not be taken as accepting sample_weight."""
+
+    def fit(self, X, y, **kwargs):
+        if kwargs:
+            raise TypeError(f"unexpected {sorted(kwargs)}")
+        return super().fit(X, y)
+
+
 class MarginOnly:
     """Model exposing only decision_function."""
 
@@ -36,6 +55,18 @@ class MarginOnly:
 
     def decision_function(self, X: np.ndarray) -> np.ndarray:
         return X[:, 0] - 1.0
+
+
+class LookupModel:
+    """String-feature model: X is a 1-D array of category labels."""
+
+    def fit(self, X, y):
+        self.rates_ = {k: float(np.mean(y[np.asarray(X) == k])) for k in set(np.asarray(X))}
+        return self
+
+    def predict_proba(self, X):
+        p = np.clip([self.rates_.get(x, 0.5) for x in np.asarray(X)], 0.01, 0.99)
+        return np.column_stack([1.0 - p, p])
 
 
 def _data(n: int = 4000) -> tuple[np.ndarray, np.ndarray]:
@@ -52,6 +83,16 @@ def _trained_model() -> tuple[TinyLogit, np.ndarray, np.ndarray]:
     return model, X_cal, y_cal
 
 
+def _string_data(n: int = 1500) -> tuple[np.ndarray, np.ndarray]:
+    X = RNG.choice(np.array(["low", "mid", "high"]), size=n)
+    rate = {"low": 0.05, "mid": 0.2, "high": 0.5}
+    y = (RNG.random(n) < np.array([rate[x] for x in X])).astype(float)
+    return X, y
+
+
+# ------------------------------------------------------------------ flows
+
+
 def test_prefit_matches_manual_calibration() -> None:
     model, X_cal, y_cal = _trained_model()
     wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
@@ -65,136 +106,32 @@ def test_prefit_matches_manual_calibration() -> None:
 
 
 def test_decision_function_duck_typing() -> None:
-    model = MarginOnly()
     X_cal, y_cal = _data(1500)
-    wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
+    wrapped = CalibratedModel(MarginOnly(), PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
     p = wrapped.predict_proba(X_cal[:50])
     assert p.shape == (50,)
     assert np.all((p > 0) & (p < 1))
 
 
-def test_cv_pooled_flow() -> None:
+def test_cv_pooled_flow_refits_the_model_on_all_rows() -> None:
     X, y = _data(2500)
     wrapped = CalibratedModel(TinyLogit(), PlattCalibrator(), flow="cv", cv=5).fit(X, y)
-    # Final model refit on all rows; single pooled calibrator.
     assert wrapped.model_.n_fit_rows_ == 2500
     assert wrapped.calibrator_.fitted_
-    p = wrapped.predict_proba(X[:100])
-    assert np.all((p > 0) & (p < 1))
 
 
-def test_cv_ensemble_flow() -> None:
+def test_cv_ensemble_flow_averages_fold_pipelines() -> None:
     X, y = _data(2500)
     wrapped = CalibratedModel(TinyLogit(), PlattCalibrator(), flow="cv", cv=4, ensemble=True).fit(
         X, y
     )
     assert len(wrapped.ensemble_) == 4
-    # Prediction equals the mean over fold pipelines.
     X_new = X[:60]
     expected = np.mean(
         [cal.predict_proba(m.predict_proba(X_new)[:, 1]) for m, cal in wrapped.ensemble_],
         axis=0,
     )
     np.testing.assert_allclose(wrapped.predict_proba(X_new), expected, atol=1e-12)
-
-
-def test_cv_reproducible() -> None:
-    X, y = _data(1200)
-    a = CalibratedModel(TinyLogit(), PlattCalibrator(), flow="cv", random_state=3).fit(X, y)
-    b = CalibratedModel(TinyLogit(), PlattCalibrator(), flow="cv", random_state=3).fit(X, y)
-    np.testing.assert_allclose(a.predict_proba(X[:50]), b.predict_proba(X[:50]))
-
-
-def test_offset_to_target_mean() -> None:
-    model, X_cal, y_cal = _trained_model()
-    wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
-    target = 0.05
-    result = wrapped.offset_to(target_mean=target)
-    assert result is wrapped
-    assert len(wrapped.offsets_) == 1
-    np.testing.assert_allclose(wrapped.predict_proba(X_cal).mean(), target, atol=1e-9)
-
-
-def test_offset_composes_in_interval_inverse_and_affine() -> None:
-    model, X_cal, y_cal = _trained_model()
-    wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
-    lo0, hi0 = wrapped.interval_inverse(0.02, 0.10, space="logit")
-    a0, b0 = wrapped.affine_logit_coeffs_
-    wrapped.offset_to(delta=0.4)
-    lo1, hi1 = wrapped.interval_inverse(0.02, 0.10, space="logit")
-    a1, b1 = wrapped.affine_logit_coeffs_
-    np.testing.assert_allclose([lo1, hi1], [lo0 - 0.4 / a0, hi0 - 0.4 / a0], atol=1e-9)
-    assert a1 == a0
-    np.testing.assert_allclose(b1, b0 + 0.4, atol=1e-12)
-
-
-def test_predict_proba_2d() -> None:
-    model, X_cal, y_cal = _trained_model()
-    wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
-    p2 = wrapped.predict_proba_2d(X_cal[:10])
-    assert p2.shape == (10, 2)
-    np.testing.assert_allclose(p2.sum(axis=1), 1.0)
-
-
-def test_interpret_includes_offset_stage() -> None:
-    model, X_cal, y_cal = _trained_model()
-    wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
-    wrapped.offset_to(delta=-0.2)
-    interp = wrapped.interpret()
-    assert "delta" in interp.param_names
-    assert "a" in interp.param_names
-
-
-def test_invalid_flow_raises() -> None:
-    with pytest.raises(ValueError, match="flow"):
-        CalibratedModel(TinyLogit(), PlattCalibrator(), flow="nope").fit(*_data(100))
-
-
-def test_export() -> None:
-    import probcal
-
-    assert "CalibratedModel" in probcal.__all__
-
-
-# ---------------------------------------------------------------- 0.3.4 fixes
-
-
-class LookupModel:
-    """String-feature model: X is a 1-D array of category labels."""
-
-    def __init__(self) -> None:
-        self.seen_types_: list[type] = []
-
-    def fit(self, X, y):
-        self.seen_types_.append(type(X))
-        self.rates_ = {k: float(np.mean(y[np.asarray(X) == k])) for k in set(np.asarray(X))}
-        return self
-
-    def predict_proba(self, X):
-        self.seen_types_.append(type(X))
-        p = np.clip([self.rates_.get(x, 0.5) for x in np.asarray(X)], 0.01, 0.99)
-        return np.column_stack([1.0 - p, p])
-
-
-class WeightedTinyLogit(TinyLogit):
-    def fit(self, X, y, sample_weight=None):
-        self.sample_weight_ = sample_weight
-        return super().fit(X, y)
-
-
-def _string_data(n: int = 1500) -> tuple[np.ndarray, np.ndarray]:
-    X = RNG.choice(np.array(["low", "mid", "high"]), size=n)
-    rate = {"low": 0.05, "mid": 0.2, "high": 0.5}
-    y = (RNG.random(n) < np.array([rate[x] for x in X])).astype(float)
-    return X, y
-
-
-@pytest.mark.parametrize("bad", [1, 0, 2.5, True, "5"])
-def test_cv_must_be_an_integer_at_least_two(bad) -> None:
-    # OFF-6: cv=1 trained every fold model on an empty set.
-    X, y = _data(300)
-    with pytest.raises(ValueError, match="cv must be an integer >= 2"):
-        CalibratedModel(TinyLogit(), PlattCalibrator(), flow="cv", cv=bad).fit(X, y)
 
 
 @pytest.mark.parametrize("flow", ["prefit", "cv"])
@@ -225,6 +162,67 @@ def test_dataframe_rows_are_subset_with_iloc() -> None:
     assert wrapped.predict_proba(df.iloc[:5]).shape == (5,)
 
 
+def test_prefit_model_must_be_trained_on_zero_one_labels() -> None:
+    sklearn_lm = pytest.importorskip("sklearn.linear_model")
+    X, y = _data(600)
+    for labels in [(0, 1), (0.0, 1.0), (False, True)]:
+        lr = sklearn_lm.LogisticRegression().fit(X, np.where(y == 1, labels[1], labels[0]))
+        CalibratedModel(lr, PlattCalibrator()).fit(X, y)
+    lr = sklearn_lm.LogisticRegression().fit(X, np.where(y == 1, "bad", "good"))
+    with pytest.raises(ValueError, match=r"trained on classes \['bad', 'good'\]"):
+        CalibratedModel(lr, PlattCalibrator()).fit(X, y)
+
+
+# ------------------------------------------------------------------ validation
+
+
+def _few_events() -> tuple[np.ndarray, np.ndarray]:
+    X = np.random.default_rng(1).normal(size=(200, 2))
+    y = np.zeros(200)
+    y[:3] = 1
+    return X, y
+
+
+@pytest.mark.parametrize(
+    ("make", "exc", "match"),
+    [
+        (lambda: CalibratedModel(TinyLogit(), PlattCalibrator(), flow="nope"), ValueError, "flow"),
+        # OFF-6: cv=1 trained every fold model on an empty set.
+        *[
+            (
+                lambda bad=bad: CalibratedModel(TinyLogit(), PlattCalibrator(), flow="cv", cv=bad),
+                ValueError,
+                "cv must be an integer >= 2",
+            )
+            for bad in (1, 2.5, True, "5")
+        ],
+        (
+            lambda: CalibratedModel(TinyLogit(), PlattCalibrator(), flow="cv", cv=5, ensemble=True),
+            ValueError,
+            "cv <= 3",
+        ),
+    ],
+    ids=["flow", "cv=1", "cv=2.5", "cv=True", "cv='5'", "ensemble-few-events"],
+)
+def test_fit_validation(make, exc, match) -> None:
+    with pytest.raises(exc, match=match):
+        make().fit(*_few_events())
+
+
+def test_misc_validation() -> None:
+    model, X_cal, y_cal = _trained_model()
+    with pytest.raises(ValueError, match="rows"):
+        CalibratedModel(model, PlattCalibrator()).fit(X_cal[:10], y_cal)
+    # OFF-16: AttributeError on a missing ensemble_.
+    with pytest.raises(RuntimeError, match="not fitted"):
+        _ = CalibratedModel(TinyLogit(), PlattCalibrator()).is_monotone_
+    # The pooled flow only needs both classes in every training fold.
+    CalibratedModel(TinyLogit(), PlattCalibrator(), flow="cv", cv=5).fit(*_few_events())
+
+
+# ------------------------------------------------------------------ sample_weight routing
+
+
 def test_sample_weight_reaches_model_fit_in_cv_flow() -> None:
     # OFF-8: weights went to the calibrator only.
     X, y = _data(900)
@@ -237,22 +235,45 @@ def test_sample_weight_reaches_model_fit_in_cv_flow() -> None:
     assert unweighted.fit(X, y).model_.sample_weight_ is None
 
 
-def test_model_without_sample_weight_warns_once() -> None:
+@pytest.mark.parametrize("model_cls", [TinyLogit, KwargsTinyLogit])
+def test_model_without_sample_weight_warns_once_and_fits_unweighted(model_cls) -> None:
     X, y = _data(900)
     w = RNG.uniform(0.5, 2.0, 900)
-    import warnings
-
     with warnings.catch_warnings(record=True) as rec:
         warnings.simplefilter("always")
-        CalibratedModel(TinyLogit(), PlattCalibrator(), flow="cv", cv=3).fit(X, y, sample_weight=w)
+        m = CalibratedModel(model_cls(), PlattCalibrator(), flow="cv", cv=3).fit(
+            X, y, sample_weight=w
+        )
     msgs = [r for r in rec if "does not accept sample_weight" in str(r.message)]
     assert len(msgs) == 1
+    np.testing.assert_allclose(m.model_.beta_, TinyLogit().fit(X, y).beta_)
 
 
-def test_is_monotone_before_fit_raises_runtime_error() -> None:
-    # OFF-16: AttributeError on a missing ensemble_.
-    with pytest.raises(RuntimeError, match="not fitted"):
-        _ = CalibratedModel(TinyLogit(), PlattCalibrator()).is_monotone_
+# ------------------------------------------------------------------ offsets
+
+
+def test_offset_to_target_mean_uses_calibration_weights() -> None:
+    model, X_cal, y_cal = _trained_model()
+    wrapped = CalibratedModel(model, PlattCalibrator(), flow="prefit").fit(X_cal, y_cal)
+    assert wrapped.offset_to(target_mean=0.05) is wrapped
+    assert len(wrapped.offsets_) == 1
+    np.testing.assert_allclose(wrapped.predict_proba(X_cal).mean(), 0.05, atol=1e-9)
+
+    w = np.where(y_cal == 1, 5.0, 1.0)
+    weighted = CalibratedModel(model, PlattCalibrator()).fit(X_cal, y_cal, sample_weight=w)
+    weighted.offset_to(target_mean=0.2)
+    assert np.average(weighted.predict_proba(X_cal), weights=w) == pytest.approx(0.2, abs=1e-9)
+
+
+def test_offset_to_with_x_accepts_sample_weight() -> None:
+    model, X_cal, y_cal = _trained_model()
+    w = RNG.uniform(0.5, 3.0, len(y_cal))
+    m = CalibratedModel(model, PlattCalibrator()).fit(X_cal, y_cal)
+    m2 = CalibratedModel.from_json(m.to_json(), model=model)
+    m2.offset_to(target_mean=0.3, X=X_cal, sample_weight=w)
+    assert np.average(m2.predict_proba(X_cal), weights=w) == pytest.approx(0.3, abs=1e-9)
+    with pytest.raises(ValueError, match="only accepted together with X"):
+        m.offset_to(target_mean=0.3, sample_weight=w)
 
 
 def test_offset_to_positional_is_deprecated() -> None:
@@ -290,8 +311,6 @@ def test_protocol_delegates_to_chain() -> None:
 
 def test_with_offset_appends_a_fitted_offset_to_a_copy() -> None:
     # OFF-25: a data-free way to compose an already-fitted offset.
-    from probcal.offset import LogitOffset
-
     model, X_cal, y_cal = _trained_model()
     wrapped = CalibratedModel(model, PlattCalibrator()).fit(X_cal, y_cal)
     off = LogitOffset(delta=0.4).fit(np.array([0.1, 0.2]))
@@ -309,7 +328,10 @@ def test_with_offset_appends_a_fitted_offset_to_a_copy() -> None:
         wrapped.with_offset(LogitOffset(delta=0.1))
 
 
-def test_x_and_y_length_mismatch_raises() -> None:
+def test_reload_without_model_keeps_model_ref_and_fingerprint() -> None:
     model, X_cal, y_cal = _trained_model()
-    with pytest.raises(ValueError, match="rows"):
-        CalibratedModel(model, PlattCalibrator()).fit(X_cal[:10], y_cal)
+    m = CalibratedModel(model, PlattCalibrator(), model_id="pd-v1").fit(X_cal, y_cal)
+    d1 = m.to_dict()
+    m2 = CalibratedModel.from_dict(json.loads(json.dumps(d1)))
+    assert m2.to_dict()["state"]["model_ref"] == d1["state"]["model_ref"]
+    assert m2.fingerprint() == m.fingerprint()

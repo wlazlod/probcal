@@ -288,8 +288,8 @@ class SelectionReport(_ResultBase):
         (:func:`probcal._corp.decompose`) on the same out-of-fold
         predictions as ``score_mean``, decomposing Brier when
         ``criterion == "brier"`` and log loss otherwise. ``None`` for
-        reports produced before probcal 0.3 (e.g. loaded from an older
-        golden), since the columns did not exist to compute.
+        reports loaded from a payload written by probcal < 0.3, which
+        carries no such columns.
     unc : float or None
         CORP uncertainty term, identical across candidates (it depends
         only on ``y`` and the sample weights, not on the predictions).

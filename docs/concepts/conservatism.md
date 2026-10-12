@@ -169,11 +169,8 @@ names the merged grades. So every returned band has `lo < hi`, and the bands are
 and strictly increasing; a merged key means the data cannot order those grades at this
 confidence, and merging them in the masterscale (or collecting more data) is the decision the
 warning asks for. No grade's bound is ever lowered, which is the prudent direction for an
-upper bound. Up to 0.3.x the hull was a weighted isotonic regression (PAVA, weight = grade
-size), which could pull a small grade's bound *down* below its own posterior quantile; 0.3.4
-kept a running maximum per grade, which could leave a zero-width band `(hi, hi)` that no
-calibrated PD falls into. (`level=` is the
-0.3.x spelling of `confidence=`; it still works with a `DeprecationWarning` until 0.4.0.)
+upper bound. (`level=` is a deprecated alias of `confidence=`; it warns with a `DeprecationWarning` and is removed in
+0.4.0.)
 
 ```python
 # s_cal, y_cal: held-out calibration scores, outcomes

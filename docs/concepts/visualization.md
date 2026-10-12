@@ -100,8 +100,7 @@ miscalibration area shaded between the curve and the identity, its bootstrap rib
 `smECE = ...` readout in the bottom-right corner, the same convention that fills the fourth
 reliability construction described above. Where no observation lies within the kernel's
 truncation radius (`5 * sigma`) of a grid point, `reliability_smooth` reports that point's
-rate and ribbon as NaN rather than inventing a value (0.3.x drew a rate of 0 with a `[0, 0]`
-ribbon in such gaps), so the curve breaks across a data gap instead of bridging it.
+rate and ribbon as NaN rather than inventing a value, so the curve breaks across a data gap instead of bridging it.
 
 ![Reliability diagram with the kernel curve: the density-weighted smECE-consistent line (wide where predictions are dense), its bootstrap ribbon, and the smECE readout](img/reliability_smooth.png)
 
@@ -130,7 +129,7 @@ variance ([weight convention](metrics.md#sample-weights)).
 
 `calibration_belt(..., confidence=(0.8, 0.95))` sets the two levels; the result carries
 `levels` and `bands = {level: (lower, upper)}`, so `belt.bands[0.95]` is the 95% band. The
-0.3.x attributes `lower_80`/`upper_80`/`lower_95`/`upper_95` remain as deprecated properties
+attributes `lower_80`/`upper_80`/`lower_95`/`upper_95` are deprecated properties
 (removed in 0.4.0); despite their names they return the `levels[0]`/`levels[1]` bands,
 whatever the requested levels are.
 

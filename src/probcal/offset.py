@@ -167,9 +167,9 @@ class LogitOffset(JsonIO):
         y : array_like or None, keyword-only
             Ignored; accepted for compatibility with the chain fit protocol.
         sample_weight : array_like or None, keyword-only
-            Weights for the portfolio mean. Passing it positionally (the
-            0.3 signature ``fit(p, sample_weight)``) still works but emits a
-            ``DeprecationWarning``; it will be removed in 0.4.0.
+            Weights for the portfolio mean. Passing it positionally
+            (signature ``fit(p, sample_weight)``) is deprecated: it emits a
+            ``DeprecationWarning`` and will be removed in 0.4.0.
 
         Returns
         -------

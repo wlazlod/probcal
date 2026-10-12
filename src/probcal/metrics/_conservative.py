@@ -355,9 +355,8 @@ def jeffreys_upper_bands(
     merged grades. The data cannot order those grades at this confidence;
     merging them (or collecting more data) is the decision the warning asks
     for. Every returned band therefore has ``lo < hi``, and the bands are
-    contiguous and strictly increasing. (0.3.x used a size-weighted PAVA
-    fit, which could *lower* a grade's upper bound; 0.3.4 kept the running
-    maximum per grade, which produced the zero-width bands.)
+    contiguous and strictly increasing. A size-weighted PAVA fit is not
+    used because it can *lower* a grade's upper bound.
 
     The resulting ``{grade: (lo, hi)}`` table is exactly the shape
     :func:`probcal.thresholds.calibrated_bands_to_raw` and

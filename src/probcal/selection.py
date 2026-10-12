@@ -121,7 +121,7 @@ class CalibratorSelector(BaseCalibrator):
 
     def _set_state(self, state: dict[str, object]) -> None:
         state = dict(state)
-        state.pop("is_monotone_", None)  # pre-0.4 payloads; now read from the winner
+        state.pop("is_monotone_", None)  # pre-0.4 payloads; the property reads the winner
         rep = state.pop("report")
         super()._set_state(state)
         self.report_ = SelectionReport(
@@ -131,7 +131,7 @@ class CalibratorSelector(BaseCalibrator):
             guardrails_ok=decode_value(rep["guardrails_ok"]),  # type: ignore[index, arg-type]
             chosen=decode_value(rep["chosen"]),  # type: ignore[index, arg-type]
             criterion=rep["criterion"],  # type: ignore[index]
-            # .get(..., None): the 0.2.0 golden predates these columns.
+            # .get(..., None): payloads written by probcal < 0.3 lack these columns.
             mcb=decode_value(rep.get("mcb")),  # type: ignore[attr-defined, arg-type]
             dsc=decode_value(rep.get("dsc")),  # type: ignore[attr-defined, arg-type]
             unc=decode_value(rep.get("unc")),  # type: ignore[attr-defined, arg-type]

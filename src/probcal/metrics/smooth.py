@@ -83,8 +83,8 @@ def _smece_at_sigma_lattice(m: np.ndarray, width: float, sigma: float) -> float:
     lattice. Cost is O(len(m)) per call, independent of n and of sigma. For
     ``5 * sigma <= spacing`` the kernels are isolated and the integral is
     exactly the total variation ``sum(|m|)`` (also its upper bound for every
-    sigma), which replaces the aliasing-prone coarse-grid evaluation that made
-    the pre-fix binned path spuriously report ~0 at small sigma.
+    sigma), which avoids the aliasing of a coarse-grid evaluation (which can
+    spuriously report ~0 at small sigma).
     """
     mc, w2 = _coarsen(m, width, sigma)
     if 5.0 * sigma <= w2:  # isolated masses: integral is the total variation
@@ -117,8 +117,7 @@ def _smece_solve(
     """Core smECE fixed-point solve behind ``smooth_ece``, exposing the
     lattice state a caller needs to build a numerically consistent curve.
 
-    Literally the pre-refactor body of ``smooth_ece`` (path selection at
-    module docstring / historical lines ~152-172), factored out so
+    Holds ``smooth_ece``'s whole path selection and solve, so
     ``curves.reliability_smooth`` can share it without re-deriving
     ``sigma_star`` — the two are therefore identical by construction, not by
     agreement.
@@ -224,25 +223,25 @@ def smooth_ece(
     over the logit range before solving the fixed point; the binned measure
     is then evaluated in closed form on its own lattice by direct Gaussian
     convolution, at a cost independent of n and of sigma. The lattice path
-    engages for every call with a non-degenerate logit range
-    (0.1.3 engaged it only for ``n > bins``, leaving typical calibration-set
-    sizes on the exact O(n)-per-step path — the "size cliff").
+    engages for every call with a non-degenerate logit range, whatever ``n``,
+    so typical calibration-set sizes avoid the exact O(n)-per-step path.
     With ``bins=None``, or a degenerate range
-    (``t.max() == t.min()``), the exact 0.1.2 computation runs bit-for-bit.
+    (``t.max() == t.min()``), the exact computation (a 257-point grid
+    evaluator) runs instead.
     Otherwise, if the found ``sigma`` is smaller than 8 bin widths (the
     kernel would be under-resolved by the bins), the solve is repeated once
     on an adaptively refined binning (``bins <- ceil(range / (sigma/8))``);
     the exact computation is used only when that refinement is infeasible
     (refined bin count above ``2**20``) or still under-resolved — reachable
     for near-perfectly-calibrated data spread over a wide logit range (e.g.
-    extreme/clipped scores), so the worst case matches the pre-0.1.3 O(n)
-    cost. For ``n <= bins`` the lattice value may differ from the exact
+    extreme/clipped scores), so the worst case is the exact path's O(n)
+    cost per bisection step. For ``n <= bins`` the lattice value may differ from the exact
     grid at the ~1e-4 level on typical portfolios (measured <= 2.4e-4 on
     ``make_pd_portfolio``); on wide clipped-logit-range data the gap can be
     much larger because the exact path's fixed 257-point grid under-resolves
     small-sigma kernels there — in that regime the lattice value is the
-    better one (>= 8 samples per sigma). ``bins=None`` recovers the old
-    values.
+    better one (>= 8 samples per sigma). ``bins=None`` forces the exact
+    computation.
 
     Parameters
     ----------
@@ -345,7 +344,7 @@ def ecce(
     parameter. The walk is read only at the end of each block of tied
     predictions, so the result does not depend on the input order of tied
     rows; ``stat_mean`` weights each block by its total sample weight.
-    Without ties and with unit weights both statistics equal the 0.3.x values.
+    Without ties and with unit weights the walk is read after every row.
 
     Parameters
     ----------
@@ -432,7 +431,7 @@ def ici(
     (Austin & Steyerberg, 2019).
 
     The LOESS stage itself is unweighted.
-    ``grid_size=None`` recovers 0.1.2 values exactly.
+    ``grid_size=None`` fits the LOESS exactly at every prediction.
 
     Parameters
     ----------
@@ -446,7 +445,7 @@ def ici(
         Optional positive weights, same length as ``y``; weights only the
         final averaging step, not the LOESS fit.
     grid_size : int or None, keyword-only
-        LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
+        LOESS evaluation grid size; ``None`` fits exactly at every prediction.
 
     Returns
     -------
@@ -466,7 +465,7 @@ def e50(
 ) -> float:
     """Median of the |LOESS(y|p) - p| distances.
 
-    ``grid_size=None`` recovers 0.1.2 values exactly. The LOESS distances are
+    ``grid_size=None`` fits the LOESS exactly at every prediction. The LOESS distances are
     always unweighted; ``sample_weight``, when given and
     not uniform, weights only the quantile step (see
     :func:`~probcal._math.weighted_quantile`).
@@ -482,7 +481,7 @@ def e50(
     sample_weight : array_like or None, keyword-only
         Optional positive weights; used only for the quantile step.
     grid_size : int or None, keyword-only
-        LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
+        LOESS evaluation grid size; ``None`` fits exactly at every prediction.
 
     Returns
     -------
@@ -502,7 +501,7 @@ def e90(
 ) -> float:
     """90th percentile of the |LOESS(y|p) - p| distances.
 
-    ``grid_size=None`` recovers 0.1.2 values exactly. The LOESS distances are
+    ``grid_size=None`` fits the LOESS exactly at every prediction. The LOESS distances are
     always unweighted; ``sample_weight``, when given and
     not uniform, weights only the quantile step (see
     :func:`~probcal._math.weighted_quantile`).
@@ -518,7 +517,7 @@ def e90(
     sample_weight : array_like or None, keyword-only
         Optional positive weights; used only for the quantile step.
     grid_size : int or None, keyword-only
-        LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
+        LOESS evaluation grid size; ``None`` fits exactly at every prediction.
 
     Returns
     -------
@@ -538,7 +537,7 @@ def emax(
 ) -> float:
     """Maximum of the |LOESS(y|p) - p| distances.
 
-    ``grid_size=None`` recovers 0.1.2 values exactly.
+    ``grid_size=None`` fits the LOESS exactly at every prediction.
 
     Parameters
     ----------
@@ -553,7 +552,7 @@ def emax(
         weighted maximum over strictly positive weights is the plain maximum,
         so the value does not depend on them.
     grid_size : int or None, keyword-only
-        LOESS evaluation grid size; ``None`` recovers 0.1.2 values exactly.
+        LOESS evaluation grid size; ``None`` fits exactly at every prediction.
 
     Returns
     -------
@@ -591,8 +590,8 @@ def spiegelhalter_z(y: object, p: object, *, sample_weight: object = None) -> Sp
     variance its exact variance under calibration, ``sum(w**2 (1 - 2p)^2 p
     (1 - p))`` (package convention, :mod:`probcal.metrics._common`): ``z``
     is invariant to rescaling the weights and unit weights give the
-    unweighted statistic. (0.3.4 used Kish-rescaled weights in both, which
-    misstates the variance when the weights vary with ``p (1 - p)``.)
+    unweighted statistic. A Kish-rescaled effective sample size is not used
+    because it misstates the variance when the weights vary with ``p (1 - p)``.
 
     The null variance is zero when every prediction is exactly 0.5 (or
     clipped to 0/1); the statistic is then undefined and ``z`` and

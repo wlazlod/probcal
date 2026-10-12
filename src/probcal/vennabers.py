@@ -117,9 +117,9 @@ class VennAbersCalibrator(BaseCalibrator):
         inserted at each of the m+1 gaps between the distinct calibration
         scores. Both are non-decreasing, and ``F0_ <= F1_`` elementwise.
     ties_pooled_ : bool
-        ``True`` for every fit since 0.3.4. ``False`` only for an object read
-        from a pre-0.3.4 payload, which keeps its stored tables and their
-        original lookup (query inserted before any tied calibration scores).
+        ``True`` for every fit. ``False`` only for an object read from a
+        payload written by probcal < 0.3.4, which keeps its stored tables and
+        their lookup (query inserted before any tied calibration scores).
 
     Notes
     -----

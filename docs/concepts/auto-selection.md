@@ -34,8 +34,8 @@ Parsimony itself is read off each candidate's `complexity_rank` property (lower 
 the built-in menu spans temperature's 1.0 up to ENIR's 80.0, and the base-class default is
 100.0, "unknown, ranks last"). A custom calibrator is scored on the same footing simply by
 overriding the property (e.g. returning `1.5` slots it between temperature and Platt in the
-tie-break), so a user-supplied candidate can now win a tie against a built-in method instead of
-always ranking last.
+tie-break), so a user-supplied candidate can win a tie against a built-in method; one that
+does not override it ranks last.
 
 ## Why the nesting is structural
 

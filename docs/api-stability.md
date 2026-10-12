@@ -18,7 +18,7 @@ pattern).
 
 What a patch release may therefore change: metric defaults and numeric
 paths with an escape hatch; the shape of fitted internals that are not
-part of the calibrator protocol (0.1.3 changed `ENIRCalibrator.path_solutions_`);
+part of the calibrator protocol (such as `ENIRCalibrator.path_solutions_`);
 performance, documentation, and packaging. What it may not: public
 signatures, exported names, the calibrator protocol, and the ability to
 read every schema-1 artifact.
@@ -79,8 +79,8 @@ detailed changelog entry and, where feasible, a parameter that
 recovers the old values.
 
 Deprecated in 0.3.4, all removed in 0.4.0 (each warns with a
-`DeprecationWarning` naming its replacement; until then the old spelling
-behaves as before):
+`DeprecationWarning` naming its replacement; until then the deprecated
+spelling keeps working):
 
 | Deprecated | Replacement |
 |---|---|

@@ -174,8 +174,8 @@ def ece_sweep(
     non-monotone binning). The paper sweeps up to ``b = n``; the sweep here
     stops at ``max_bins`` (default 100) as a cost cap.
 
-    0.3.x took the largest monotone ``b`` anywhere in ``2..100`` instead,
-    skipping over non-monotone counts; ``rule="largest"`` recovers it.
+    ``rule="largest"`` instead takes the largest monotone ``b`` anywhere in
+    ``2..max_bins``, skipping over non-monotone counts.
 
     Parameters
     ----------
@@ -191,7 +191,7 @@ def ece_sweep(
         Upper end of the sweep (capped at ``n``).
     rule : {"first_violation", "largest"}, keyword-only
         ``"first_violation"`` (default, the paper's rule) or ``"largest"``
-        (the 0.3.x rule).
+        (the largest monotone count, non-monotone counts skipped).
 
     Returns
     -------

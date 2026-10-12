@@ -70,8 +70,8 @@ def _beta_point_inverse_z(
     bounded by ``0.076*|b-a|/min(a,b)`` elsewhere. Layer 2 refines with up to
     ``max_steps`` (default 4) Halley corrections, exiting early once the
     residual certificate ``|f(z)| <= rtol * max(1, |K|)`` is met; the
-    certificate bounds the coordinate error by ``|f(z)| / min(a, b)``. The
-    initial design was a fixed 2 steps (machine precision up to
+    certificate bounds the coordinate error by ``|f(z)| / min(a, b)``. A
+    fixed 2 steps would not suffice (machine precision only up to
     asymmetry ratio 3, ~1e-10 at ratio 10, ~1e-4 at ratio 50 without a 3rd
     step); the certified cap is a finite, bounded expression — not
     open-ended iteration — that reaches machine precision at ratio 50 in

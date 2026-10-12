@@ -370,9 +370,9 @@ class CalibratedModel(JsonIO):
         by the ``sample_weight`` given to :meth:`fit`. The offset is never
         folded into the calibrator's parameters.
 
-        Positional use (``offset_to(0.03)``, the 0.3 signature
-        ``(target_mean, delta, X)``) still works but emits a
-        ``DeprecationWarning``; it will be removed in 0.4.0.
+        Positional use (``offset_to(0.03)``, signature
+        ``(target_mean, delta, X)``) is deprecated: it emits a
+        ``DeprecationWarning`` and will be removed in 0.4.0.
 
         Parameters
         ----------

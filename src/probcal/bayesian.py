@@ -72,8 +72,8 @@ class BBQCalibrator(BaseCalibrator):
     bins_grid_ : numpy.ndarray
         Candidate bin counts.
     model_weights_ : numpy.ndarray
-        Posterior weights over the candidates (sum to 1). Formerly
-        ``weights_`` (deprecated alias, removed in 0.4.0).
+        Posterior weights over the candidates (sum to 1).
+        ``weights_`` is a deprecated alias, removed in 0.4.0.
     model_edges_, model_rates_ : list of numpy.ndarray
         Interior edges and posterior-mean bin rates of each candidate binning
         (isotonized when ``monotone=True``).
@@ -101,8 +101,8 @@ class BBQCalibrator(BaseCalibrator):
         return _deprecated_weights(self)
 
     def _params_for_dict(self) -> dict[str, object]:
-        # Omit the default so default payloads (and their fingerprints) stay
-        # byte-identical to 0.3.4 and remain loadable by older releases.
+        # Omit the default so default payloads (and their fingerprints) carry
+        # no ``monotone`` key and stay loadable by releases without it.
         params = self.get_params()
         if params.get("monotone") is False:
             del params["monotone"]
@@ -241,7 +241,7 @@ class ENIRCalibrator(BaseCalibrator):
         Indices into ``path_lambdas_`` of the retained breakpoints.
     model_weights_ : numpy.ndarray of shape (K,)
         BIC weights over the retained solutions, renormalized to sum to 1.
-        Formerly ``weights_`` (deprecated alias, removed in 0.4.0).
+        ``weights_`` is a deprecated alias, removed in 0.4.0.
     scores_ : numpy.ndarray of shape (m,)
         Distinct calibration scores: the grid ``path_solutions_`` lives on.
     dropped_weight_ : float

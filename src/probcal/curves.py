@@ -117,7 +117,7 @@ def reliability_loess(
         Optional positive weights. Non-uniform weights multiply the tricube
         kernel weights of each local-linear fit (same nearest-neighbour
         windows); ``None`` or all-equal weights give the unweighted LOESS
-        curve unchanged. (0.3.x validated the weights and ignored them.)
+        curve unchanged.
 
     Returns
     -------
@@ -228,8 +228,8 @@ def _kernel_rate_density(
         centers, num_s = _lattice_kernel_smooth(num, width, sigma, t_lo)
         _, den_s = _lattice_kernel_smooth(den, width, sigma, t_lo)
         # Cells farther than the kernel's +-5 sigma truncation from every
-        # observation have zero smoothed weight: no data, so no rate (NaN;
-        # 0.3.x reported 0 there).
+        # observation have zero smoothed weight: no data, so no rate (NaN,
+        # not 0, so a gap is not mistaken for an observed zero rate).
         with np.errstate(invalid="ignore", divide="ignore"):
             rate_c = np.where(den_s > 0.0, num_s / den_s, np.nan)
         rate = np.interp(grid_logit, centers, rate_c)
@@ -295,8 +295,7 @@ def reliability_smooth(
 
     Grid points with no observation within the kernel's ``+-5 sigma_star``
     reach (data gaps, on the logit scale) have no estimate: ``event_rate``,
-    ``ci_low`` and ``ci_high`` are ``nan`` there (0.3.x reported a rate of 0
-    with a ``[0, 0]`` ribbon). Bootstrap resamples that leave a grid point
+    ``ci_low`` and ``ci_high`` are ``nan`` there. Bootstrap resamples that leave a grid point
     uncovered are skipped in that point's quantiles.
 
     Parameters

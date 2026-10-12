@@ -282,9 +282,8 @@ class CalibrationMonitor(JsonIO):
         is also set, the window starts at the LATER of the two starts
         (``max(onset_idx, n_batches - plug_in_window)``), so a short
         ``plug_in_window`` still bounds how far back the since-onset window
-        can reach. ``"trailing"`` is the escape hatch restoring 0.2.0
-        behaviour exactly for those diagnostic INPUTS: it ignores the onset
-        estimate and uses ``plug_in_window`` (or all past batches) instead,
+        can reach. ``"trailing"`` ignores the onset estimate for those
+        diagnostic INPUTS and uses ``plug_in_window`` (or all past batches) instead,
         unconditionally. ``onset_label`` and the onset sentence in
         ``reasoning`` are populated under both modes — only the
         diagnostic window differs. When onset is unavailable (any step
@@ -302,8 +301,8 @@ class CalibrationMonitor(JsonIO):
     Notes
     -----
     Anytime validity needs the global mixture's components and weights to
-    be fixed in advance. Before 0.3.4 a grade first seen mid-stream joined
-    the average with ``e = 1``, re-weighting the existing components — the
+    be fixed in advance: a grade first seen mid-stream that joined the
+    average with ``e = 1`` would re-weight the existing components, and the
     global value could then jump toward 1 without any evidence. Declaring
     ``grades`` fixes the universe up front; without it the per-grade
     processes are diagnostics only.
@@ -400,8 +399,8 @@ class CalibrationMonitor(JsonIO):
         self._grade_cs: dict[str, ConfidenceSequence] = {}
         self._max_log_global = -np.inf
         self._alarmed = False
-        # No longer set (weights keep the guarantee exact); kept so payloads
-        # written by older versions round-trip unchanged.
+        # Never set (weights keep the guarantee exact); kept so payloads
+        # that carry the flag round-trip unchanged.
         self._warned_weights = False
         self._warned_grades = False
         self.masterscale_fingerprint_: str | None = None
@@ -474,7 +473,7 @@ class CalibrationMonitor(JsonIO):
         ``plug_in_window`` still bounds how far back the since-onset window
         can reach. ``"trailing"``: the ``plug_in_window`` trailing start (or
         0, i.e. all history, when ``plug_in_window`` is ``None``) --
-        ``onset_idx`` is ignored, matching 0.2.0 behaviour exactly. An
+        ``onset_idx`` is ignored. An
         ``onset_idx`` of ``None`` (onset unavailable, see
         :meth:`_onset_available`) takes the ``"trailing"`` branch whatever
         ``recommendation_window`` says.
@@ -904,7 +903,7 @@ class CalibrationMonitor(JsonIO):
             "warned_weights": self._warned_weights,
             "steps": [self._step_to_dict(s) for s in self.steps_],
         }
-        if self._warned_grades:  # written only when set: older payloads stay byte-identical
+        if self._warned_grades:  # written only when set: payloads without the flag keep their bytes
             state["warned_grades"] = True
         if self.masterscale_fingerprint_ is not None:
             state["masterscale_fingerprint"] = self.masterscale_fingerprint_
@@ -923,7 +922,7 @@ class CalibrationMonitor(JsonIO):
     def from_dict(cls, d: dict) -> "CalibrationMonitor":
         """Rebuild a monitor mid-stream; the trajectory continues bit-for-bit.
 
-        Payloads written before 0.3.4 keyed float grade labels as
+        Payloads written by probcal < 0.3.4 key float grade labels as
         ``"1.0"``; those keys are renamed to the normalized ``"1"`` on load
         so new batches continue the same per-grade processes.
 
@@ -984,11 +983,11 @@ class CalibrationMonitor(JsonIO):
 def _legacy_rekey(d: dict, grades: tuple | None) -> Any:
     """Key renaming for payloads written before grade-label normalization.
 
-    Before 0.3.4 declared grades were keyed ``str(g)`` and data labels
-    ``np.asarray(grade).astype(str)``, so a float label ``1.0`` was keyed
-    ``"1.0"``. For such payloads, keys of declared grades map to
+    Payloads written by probcal < 0.3.4 key declared grades ``str(g)`` and
+    data labels ``np.asarray(grade).astype(str)``, so a float label ``1.0``
+    is keyed ``"1.0"``. For such payloads, keys of declared grades map to
     :func:`grade_key`, and undeclared ``"<int>.0"`` keys (float arrays) map
-    to ``"<int>"``. Newer payloads are already normalized: identity.
+    to ``"<int>"``. Payloads from 0.3.4 on are already normalized: identity.
     """
     if _version_tuple(d.get("probcal_version", "0")) >= (0, 3, 4):
         return str

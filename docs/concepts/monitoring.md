@@ -87,8 +87,8 @@ is in the mixture **only when `grades=` is declared**, and then from the
 first batch on. The reason is Ville's inequality: an average of e-processes
 is an e-process only if its components and weights are fixed in advance. A
 mixture that admits a new grade mid-stream, or re-weights when one first
-appears, is not a supermartingale under the null (0.3.x did exactly this,
-and its `e_global` could jump at the batch a grade first showed up). With
+appears, is not a supermartingale under the null (its `e_global` can jump
+at the batch a grade first shows up). With
 `grades=None`, per-grade processes and confidence sequences are still
 tracked and reported (`e_grades`, `grade_delta_ci`, `grade_table`) as
 diagnostics, but they stay out of the alarm, and the monitor warns once
@@ -139,8 +139,8 @@ up in that grade's own `MonitorStep.grade_delta_ci[g]`. `plot_e_process(...,
 grades_panel=True)` adds a second axes plotting every grade's CS band
 (lo/hi) across steps in a panel carved from the main axes' slot (inside the
 figure, or inside a caller-supplied `ax`'s slot), with the step labels moved to
-the panel. The default `grades_panel=False` output is unchanged (pinned by a
-structural plot snapshot).
+the panel. The default `grades_panel=False` draws no grade panel (its output
+is pinned by a structural plot snapshot).
 
 ## Drift-onset estimate and the since-onset window
 
@@ -180,12 +180,12 @@ starts at the LATER of the two starts, `max(onset_idx, n_batches - plug_in_windo
 so a short `plug_in_window` still bounds how far back the since-onset window can
 reach; a `plug_in_window` of 3 with an onset at batch 2 of 10, for example, uses the
 last 3 batches, not the 8 since onset. **Escape hatch:** `recommendation_window="trailing"`
-restores 0.2.0 behaviour exactly for those diagnostic INPUTS (`delta_now`, the slope
-CI, the residual LR): it ignores the onset estimate and uses `plug_in_window` (or all
+computes those diagnostic INPUTS (`delta_now`, the slope CI, the residual LR) on the
+trailing window: it ignores the onset estimate and uses `plug_in_window` (or all
 past batches) instead, unconditionally. `onset_label` and the onset sentence in
 `reasoning` are still populated under `"trailing"`; only the diagnostic window
 differs between the two modes. `tests/test_monitor_sim.py::
-test_recommendation_correct_on_pure_drift` re-runs the 90%-correct gate under the new
+test_recommendation_correct_on_pure_drift` re-runs the 90%-correct gate under the
 default.
 
 Localization accuracy (batches built like `docs/scripts/monitor_sim.py`'s, drift

@@ -126,9 +126,7 @@ integer ≥ 2, any sklearn splitter (`GroupKFold`, `TimeSeriesSplit`, ...) or
 iterable of `(train, test)` index pairs, or `"prefit"`. `stratify` applies
 only to an integer `cv`: `True` (the default) uses
 `StratifiedKFold(cv, shuffle=True, random_state=random_state)`, `False` uses
-`KFold(cv, shuffle=True, random_state=random_state)` (before 0.3.4,
-`stratify=False` silently fell back to an unshuffled stratified split and
-ignored `random_state`). `X` reaches the wrapped estimator untouched, as in
+`KFold(cv, shuffle=True, random_state=random_state)`. `X` reaches the wrapped estimator untouched, as in
 `CalibratedClassifierCV`: DataFrames with string columns feeding a
 `ColumnTransformer`, and sparse matrices, work, and `n_features_in_` and
 `feature_names_in_` are copied from the fitted estimator.
@@ -296,8 +294,8 @@ Both estimators run `sklearn.utils.estimator_checks.parametrize_with_checks`
 in CI on the pinned minimum (1.4) and the latest release.
 `CalibratedClassifier` passes the full corpus. On sklearn ≥ 1.6 that includes
 `check_sample_weight_equivalence_on_dense_data`, which hands in explicit
-splits and so now runs live; the older `check_sample_weights_invariance`
-(sklearn < 1.6) is still declared, since weight ≡ duplication cannot hold
+splits and so runs live; sklearn < 1.6's `check_sample_weights_invariance`
+is declared inapplicable, since weight ≡ duplication cannot hold
 through an integer-`cv` split whose fold assignment depends on n (sklearn's
 own CV wrappers share this). The declarations live in the data-only module
 `probcal.sklearn._xfail`. `SklearnCalibrator`'s one-column contract is

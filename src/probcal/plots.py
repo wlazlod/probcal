@@ -224,8 +224,8 @@ def plot_reliability(
     ``{"intercept", "slope", "ici", "smooth_ece", "brier"}`` the report
     carries, plus ``n``/``events`` computed from ``y``.
 
-    ``risk_dist`` selects the density layer: ``"rug"`` (default) draws the
-    0.2.0 event/non-event tick marks along the top/bottom edges,
+    ``risk_dist`` selects the density layer: ``"rug"`` (default) draws
+    event/non-event tick marks along the top/bottom edges,
     deterministically thinned to at most 1000 marks per class; ``"split"``
     replaces it with a 30-equal-mass-bin spike histogram of ``p`` (events
     up, non-events down, from a ``y=0.12`` baseline in axis-fraction
@@ -233,7 +233,7 @@ def plot_reliability(
     axis coordinates cannot go below 0, so both classes share the one
     baseline); ``None`` draws no density layer. ``rug=False`` disables the
     density layer regardless of ``risk_dist`` (equivalent to
-    ``risk_dist=None``). ``counts=True`` restores the twin-axis count-bar
+    ``risk_dist=None``). ``counts=True`` adds the twin-axis count-bar
     margin, independent of ``risk_dist``.
 
     Passing ``by`` switches to a faceted grid: one panel per sorted,

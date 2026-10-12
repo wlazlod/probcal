@@ -351,8 +351,7 @@ class Masterscale(JsonIO):
         """The band table in words, with the boundary convention and provenance.
 
         ``param_names``/``param_values`` list each grade's band as two
-        entries, ``"<grade>.lo"`` and ``"<grade>.hi"`` (until 0.3 only the
-        upper edges were listed, under the bare grade names).
+        entries, ``"<grade>.lo"`` and ``"<grade>.hi"``.
         """
         last = self.n_grades - 1
         messages = [

@@ -56,7 +56,7 @@ blocks: a step function, constant within each block. Scores outside the calibrat
 clamp to the first or last block level. An optional `interpolation="linear"` mode joins block
 midpoints to remove the discontinuities; its `interval_inverse` inverts that interpolated map
 (the exact crossing on the bracketing segment, nudged by a few ulps so the bounds lie inside
-the preimage), not the underlying step map as before 0.3.4. `interpret()` reports the number of blocks (the
+the preimage), not the underlying step map. `interpret()` reports the number of blocks (the
 effective complexity actually estimated from the data), and flat steps translate into tied
 predictions downstream.
 
@@ -128,7 +128,7 @@ Beta–Binomial marginal has a closed form, computed with log-gamma functions
 weight on one \( B \) says the data speak clearly about their own resolution; diffuse weight
 says they do not, and
 the averaging is doing real work. `BBQCalibrator.interpret()` reports the top three models by
-weight (`model_weights_`; the 0.3.x name `weights_` is a deprecated alias until 0.4.0). The
+weight (`model_weights_`; `weights_` is a deprecated alias until 0.4.0). The
 averaged map is smoother than any single binning, but nothing forces it to increase. On
 low-default data a sparse bin often dips below its neighbours through sampling noise alone. In
 a sweep over realistic PD portfolios (n from 500 to 20 000, event rates from 0.5% to 10%),
@@ -137,8 +137,8 @@ had a dip larger than 5% of the PD. `BBQCalibrator(monotone=True)` pools each ca
 rates with weighted PAVA (weights are the posterior counts) before averaging. A non-negative
 mixture of non-decreasing step functions is non-decreasing, so that map is monotone and
 invertible by construction. Its held-out log loss and Brier score are no worse than the
-default's, and the model weights are unchanged. The default stays `False` in 0.3.x for
-reproducibility.
+default's, and the model weights are unchanged. The default is `False`, so a default fit
+reproduces across 0.3.x releases.
 
 Two deliberate departures from Naeini et al. (2015):
 

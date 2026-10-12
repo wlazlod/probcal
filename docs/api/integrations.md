@@ -18,10 +18,10 @@ serialization registry that class-name dispatch such as
 could not rebuild it without the scorecard object.
 
 The stored scorecard fingerprint is SHA-256 of a canonical JSON rendering of
-`table(style="detailed")` (floats to 12 significant digits), no longer of
-pandas' CSV output, so it does not depend on pandas' formatting. Payloads
-written before 0.3.4 still load: a stored fingerprint matching the legacy CSV
-hash is accepted, and re-saving writes the new form; any other mismatch
+`table(style="detailed")` (floats to 12 significant digits), so it does
+not depend on pandas' formatting. Payloads written by probcal < 0.3.4 load:
+a stored fingerprint matching the pandas-CSV hash those versions recorded is
+accepted, and re-saving writes the canonical form; any other mismatch
 raises `ValueError`.
 
 If the scorecard's probability is constant on the calibration data, the

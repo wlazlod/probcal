@@ -169,8 +169,8 @@ def plot_mcb_dsc(
     ValueError
         If ``score`` is not ``"brier"`` or ``"log_loss"``; if a
         ``SelectionReport`` is given without ``mcb``/``dsc`` columns
-        (fitted before probcal 0.3); if a mapping's candidates do not share
-        the same weighted mean ``y``.
+        (as in one loaded from a payload written by probcal < 0.3); if a
+        mapping's candidates do not share the same weighted mean ``y``.
 
     Examples
     --------

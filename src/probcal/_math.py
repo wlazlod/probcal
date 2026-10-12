@@ -726,17 +726,16 @@ def _loess_fit_sorted_vec(
 ) -> np.ndarray:
     """LOESS at sorted eval points: tricube-weighted local fits on r-windows.
 
-    The single LOESS engine (0.3.4 retired the per-point Python loop it was
-    once the "vectorized twin" of). Anchors are processed in blocks of
+    The single LOESS engine. Anchors are processed in blocks of
     ``_LOESS_BLOCK // r`` so the gathered (block x r) window matrix stays
     cache-resident; every window has exactly ``r`` points, so the gather is
     rectangular. ``xs`` and ``evs`` must already be sorted ascending.
 
-    Against the retired loop (frozen in ``tests/test_math.py`` as a
-    reference) the only intended difference is the tricube cube, taken by
-    multiplication (``u * u * u``) rather than ``** 3`` (libm ``pow``, ~10x the
-    cost): at most one ulp per weight on a well-conditioned window, measured
-    <= 4.3e-15 absolute on fitted values over 720 portfolio configurations
+    Against the per-point reference loop in ``tests/test_math.py`` the only
+    intended difference is the tricube cube, taken by multiplication
+    (``u * u * u``) rather than ``** 3`` (libm ``pow``, ~10x the cost): at
+    most one ulp per weight on a well-conditioned window, measured <= 4.3e-15
+    absolute on fitted values over 720 portfolio configurations
     (continuous, 2-dp and 3-dp scores; frac 0.2/0.75; degree 0/1).
 
     On a *rank-deficient* window — every non-zero tricube weight on one
@@ -745,8 +744,8 @@ def _loess_fit_sorted_vec(
     than 0), and the ulp-level weight difference can put the two
     implementations on opposite sides of the ``abs(det) < _FPMIN`` guard. Such
     a window's local *linear* fit is undefined; the ``swy / sw`` branch (the
-    weighted mean, what it degenerates to) is the well-defined answer, and the
-    loop's alternative divided by cancellation noise. See
+    weighted mean, what it degenerates to) is the well-defined answer, whereas
+    the alternative divides by cancellation noise. See
     ``tests/test_math.py::test_loess_vectorized_rank_deficient_window``.
     """
     m = evs.shape[0]
@@ -851,8 +850,8 @@ def loess(
 
         Tied ``x`` values are fitted on the mean ``y`` of their tie block, so
         the result does not depend on the input order of tied rows (the
-        average of the fit over all tie orderings); without ties nothing
-        changes.
+        average of the fit over all tie orderings); without ties this is the
+        plain per-point fit.
     presorted : bool, keyword-only
         Declare that ``x`` is already sorted ascending, so the internal
         ``argsort`` (and the inverse permutation of the fitted values) can be

@@ -75,9 +75,8 @@ def calibrated_bands_to_raw(
     score ``s`` lies in the interval of exactly the grade that
     ``Masterscale.assign(g(s))`` gives it — also for step calibrators
     (isotonic, histogram binning), where a calibrated edge sitting on a
-    plateau carries positive raw-score mass. (Until 0.3 every band was
-    inverted as a closed interval, so such plateaus were counted in two
-    adjacent grades.) For a single interval with closed-bound semantics use
+    plateau carries positive raw-score mass, which half-open inversion
+    assigns to exactly one grade. For a single interval with closed-bound semantics use
     :func:`calibrated_interval_to_raw`.
 
     Parameters
@@ -93,7 +92,7 @@ def calibrated_bands_to_raw(
         Scale of the returned bounds.
     buffer_logit : float, keyword-only
         Robustness margin applied in logit space before inversion: each band
-        shrinks to ``[lo', hi')`` first, so buffered bands no longer touch.
+        shrinks to ``[lo', hi')`` first, so buffered bands do not touch.
 
     Returns
     -------

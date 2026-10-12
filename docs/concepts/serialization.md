@@ -81,8 +81,7 @@ Three things are promised exactly, and one is not:
   numeric change in a fitted class's forward map is a build failure unless
   the goldens are regenerated on purpose, with a changelog entry.
 - **Metric estimates are not promised across releases.** A metric's default
-  estimator may change in any 0.x release (0.1.3 made `evaluate`'s bootstrap
-  stratified; 0.2.0 moved `smooth_ece` to a lattice path), always with a
+  estimator may change in any 0.x release, always with a
   changelog entry and a parameter that recovers the old values. The numbers
   a report quotes are reproducible by pinning the probcal version, which the
   JSON records as `probcal_version`.

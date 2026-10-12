@@ -21,8 +21,8 @@ unit weights reproduce the unweighted numbers exactly.
   ``calibration_test`` and ``calibration_belt`` are taken on the weighted
   log-likelihood and referred to a second-order Rao-Scott corrected
   chi-square (:func:`rao_scott`), with sandwich covariances for the belt.
-  A single global effective sample size (Kish's ``sum(w)**2 / sum(w**2)``,
-  used in 0.3.4) is *not* used: it misstates these variances whenever the
+  A single global effective sample size (Kish's ``sum(w)**2 / sum(w**2)``)
+  is *not* used: it misstates these variances whenever the
   weights vary with ``p``.
 
 Two count-form functions document a different, literal reading:

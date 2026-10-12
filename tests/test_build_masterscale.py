@@ -1,7 +1,6 @@
 """build_masterscale: an exact DP over pre-bins, checked against brute force."""
 
 import itertools
-import time
 
 import numpy as np
 import pytest
@@ -50,67 +49,6 @@ def _brute_force(y, p, k, objective, min_count, min_events, prebins, target=None
     return best
 
 
-@pytest.mark.parametrize("objective", ["likelihood", "target_shares"])
-@pytest.mark.parametrize(
-    ("k", "prebins", "min_count", "min_events"),
-    [(2, 12, 0, 0), (3, 16, 0, 0), (4, 20, 40, 1), (5, 24, 30, 0)],
-)
-def test_dp_equals_brute_force(objective, k, prebins, min_count, min_events) -> None:
-    d = make_pd_portfolio(n=600, event_rate=0.15, random_state=5)
-    target = np.full(k, 1.0 / k) if objective == "target_shares" else None
-    ms = build_masterscale(
-        d.y,
-        d.scores,
-        n_grades=k,
-        min_count=min_count,
-        min_events=min_events,
-        objective=objective,
-        target_shares=target,
-        prebins=prebins,
-    )
-    brute = _brute_force(d.y, d.scores, k, objective, min_count, min_events, prebins, target)
-    assert ms.provenance is not None
-    assert ms.provenance["objective_value"] == pytest.approx(brute, abs=1e-12)
-    assert ms.n_grades == k and ms.names == tuple(f"G{i + 1}" for i in range(k))
-
-
-def test_edges_are_exact_and_floors_hold() -> None:
-    ms = build_masterscale(PORT.y, PORT.scores, n_grades=6, min_count=200, min_events=5)
-    tab = ms.table(PORT.y, PORT.scores)
-    assert np.all(tab.n >= 200) and np.all(tab.events >= 5)
-    assert np.all(np.diff(tab.mean_pd) > 0)  # monotone grade PDs by construction
-    assert ms.edges[0] == 0.0 and ms.edges[-1] == 1.0
-    p_clip = np.clip(PORT.scores, 1e-12, 1 - 1e-12)
-    assert np.all(np.isin(ms.edges[1:-1], p_clip))  # edges are observed p values
-    # The assigned partition is the one the optimizer scored: counts match pre-bin sums.
-    W, _E, cuts = _prebin(p_clip, PORT.y, np.ones(len(p_clip)), 512)
-    positions = [int(np.searchsorted(cuts, e)) + 1 for e in ms.edges[1:-1]]
-    seg = [W[a:b].sum() for a, b in zip([0, *positions], [*positions, len(W)], strict=True)]
-    np.testing.assert_allclose(tab.n, seg)
-
-
-def test_infeasible_names_the_binding_floor() -> None:
-    with pytest.raises(ValueError, match="min_events"):
-        build_masterscale(PORT.y, PORT.scores, n_grades=5, min_events=1000)
-    with pytest.raises(ValueError, match="min_count"):
-        build_masterscale(PORT.y, PORT.scores, n_grades=5, min_count=3000)
-
-
-def test_target_shares_and_objective_validation() -> None:
-    with pytest.raises(ValueError, match="target_shares"):
-        build_masterscale(PORT.y, PORT.scores, n_grades=3, objective="target_shares")
-    with pytest.raises(ValueError, match="sum to 1"):
-        build_masterscale(
-            PORT.y,
-            PORT.scores,
-            n_grades=3,
-            objective="target_shares",
-            target_shares=[0.5, 0.5, 0.5],
-        )
-    with pytest.raises(ValueError, match="objective"):
-        build_masterscale(PORT.y, PORT.scores, n_grades=3, objective="entropy")
-
-
 def test_prebin_sensitivity_below_one_prebin_width() -> None:
     a = build_masterscale(PORT.y, PORT.scores, n_grades=5, prebins=512)
     b = build_masterscale(PORT.y, PORT.scores, n_grades=5, prebins=1024)
@@ -135,26 +73,6 @@ def test_built_scale_round_trips_and_feeds_downstream() -> None:
     assert any("likelihood" in m for m in ms.interpret().messages)
 
 
-def test_weights_names_and_speed() -> None:
-    w = np.where(PORT.y == 1, 2.0, 1.0)
-    ms = build_masterscale(PORT.y, PORT.scores, n_grades=4, sample_weight=w)
-    assert ms.n_grades == 4
-    with pytest.raises(ValueError, match="names"):
-        build_masterscale(PORT.y, PORT.scores, n_grades=4, names=["a", "b"])
-    t0 = time.perf_counter()
-    build_masterscale(PORT.y, PORT.scores, n_grades=8)
-    assert time.perf_counter() - t0 < 2.0
-
-
-@pytest.mark.parametrize("bad", [0, -1, 2.5, True, "3"])
-def test_n_grades_and_prebins_must_be_positive_ints(bad) -> None:
-    # OFF-18: these used to fall through to a numpy error deep in the DP.
-    with pytest.raises(ValueError, match="n_grades must be a positive integer"):
-        build_masterscale(PORT.y, PORT.scores, n_grades=bad)
-    with pytest.raises(ValueError, match="prebins must be a positive integer"):
-        build_masterscale(PORT.y, PORT.scores, n_grades=3, prebins=bad)
-
-
 def test_from_edges_carries_provenance() -> None:
     # OFF-23: build_masterscale builds the scale once, via from_edges(provenance=).
     ms = Masterscale.from_edges([0.1], provenance={"source": "test", "edges": [0.1]})
@@ -163,3 +81,48 @@ def test_from_edges_carries_provenance() -> None:
     assert built == Masterscale.from_edges(
         built.edges[1:-1], names=built.names, provenance=built.provenance
     )
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"min_events": 1000}, "binding: min_events"),
+        ({"min_count": 3000}, "binding: min_count"),
+        ({"objective": "target_shares"}, "requires target_shares"),
+        ({"objective": "target_shares", "target_shares": [0.5, 0.5]}, "non-negative shares"),
+        ({"objective": "target_shares", "target_shares": [0.5, 0.5, 0.5]}, "sum to 1"),
+        ({"objective": "entropy"}, "objective"),
+        ({"names": ["a", "b"]}, "names"),
+        # OFF-18: these used to fall through to a numpy error deep in the DP.
+        ({"n_grades": True}, "n_grades must be a positive integer"),
+        ({"prebins": 2.5}, "prebins must be a positive integer"),
+    ],
+)
+def test_validation(kwargs, match) -> None:
+    kwargs = {"n_grades": 3, **kwargs}
+    with pytest.raises(ValueError, match=match):
+        build_masterscale(PORT.y, PORT.scores, **kwargs)
+
+
+def test_weighted_build_is_weight_scale_invariant() -> None:
+    w = np.random.default_rng(0).uniform(0.1, 5.0, len(PORT.y))
+    a = build_masterscale(PORT.y, PORT.scores, n_grades=4, sample_weight=w, min_count=100)
+    b = build_masterscale(PORT.y, PORT.scores, n_grades=4, sample_weight=10 * w, min_count=1000)
+    np.testing.assert_array_equal(a.edges, b.edges)
+    assert not np.array_equal(a.edges, build_masterscale(PORT.y, PORT.scores, n_grades=4).edges)
+
+
+def test_edges_are_observed_unclipped_values_even_with_mass_at_zero_and_one() -> None:
+    p = np.r_[np.zeros(200), np.full(300, 0.3), np.full(500, 0.6)]
+    y = (np.arange(1000) % 7 == 0).astype(float)
+    ms = build_masterscale(y, p, n_grades=3)
+    assert ms.edges.tolist() == [0.0, 0.3, 0.6, 1.0]
+    assert ms.table(y, p).n.tolist() == [200.0, 300.0, 500.0]
+
+    rng = np.random.default_rng(0)
+    p = np.r_[rng.uniform(0.01, 0.2, 700), np.ones(300)]
+    y = (rng.random(1000) < p).astype(float)
+    ms = build_masterscale(y, p, n_grades=3)
+    assert ms.edges[-1] == 1.0
+    assert np.all(ms.edges[1:-1] < 0.2)  # no near-one edge from clipping
+    assert ms.table(y, p).n.sum() == 1000

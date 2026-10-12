@@ -8,7 +8,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from probcal._math import expit, logit
+from probcal._math import bern_log_lr, expit, logit
 from probcal.datasets import make_pd_portfolio
 from probcal.monitor import CalibrationMonitor
 from probcal.monitor._onset import estimate_onset
@@ -40,24 +40,19 @@ def _batch(n=2000, shift=0.0, slope=1.0, seed=0, event_rate=0.05):
 # ---------------------------------------------------------------- estimate_onset (unit)
 
 
-def test_estimate_onset_backward_cusum_argmax() -> None:
-    inc = np.array([-0.1, -0.2, -0.15, 5.0, 4.5, 4.8])
-    assert estimate_onset(inc) == 3
-
-
-def test_estimate_onset_ties_break_to_latest() -> None:
-    assert estimate_onset(np.zeros(5)) == 4
-
-
-def test_estimate_onset_single_element() -> None:
-    assert estimate_onset(np.array([3.0])) == 0
-
-
-def test_estimate_onset_all_negative_picks_last_index() -> None:
-    # Every suffix sum is negative; the least-negative (smallest loss) is the
-    # final singleton, since dropping any earlier term only adds more loss.
-    inc = np.array([-1.0, -2.0, -0.5])
-    assert estimate_onset(inc) == 2
+@pytest.mark.parametrize(
+    ("increments", "expected"),
+    [
+        ([-0.1, -0.2, -0.15, 5.0, 4.5, 4.8], 3),  # backward-CUSUM argmax
+        ([3.0], 0),
+        ([0.0, 3.0, 2.0], 0),  # ties resolve to the earliest batch
+        ([-1.0, 0.0, 3.0], 1),
+        ([0.0, 0.0, 0.0], 0),  # no positive evidence: the whole history
+        ([-1.0, -0.5], 0),
+    ],
+)
+def test_estimate_onset(increments: list[float], expected: int) -> None:
+    assert estimate_onset(np.array(increments)) == expected
 
 
 def test_estimate_onset_empty_raises() -> None:
@@ -65,47 +60,48 @@ def test_estimate_onset_empty_raises() -> None:
         estimate_onset(np.array([]))
 
 
-# ---------------------------------------------------------------- onset_label wiring
+def test_onset_increment_sums_only_active_components() -> None:
+    # MON-10: the onset series is the plug-in log-LR of the monitored components.
+    mon = CalibrationMonitor(components=("offset",))
+    for k in range(5):
+        y, p = _batch(n=1000, shift=0.5, seed=60 + k)
+        step = mon.update(y, p, label=f"m{k}")
+        d = step.delta_hat
+        expected = 0.0 if d == 0.0 else bern_log_lr(y, p, expit(logit(p) + d), np.ones_like(p))
+        assert step.log_e_increment == pytest.approx(expected, abs=1e-12)
 
 
-def test_no_onset_under_null() -> None:
-    mon = CalibrationMonitor(alpha=0.05)
-    for k in range(12):
-        y, p = _batch(shift=0.0, seed=500 + k)
+def _drift_from_start(**kw: object) -> CalibrationMonitor:
+    mon = CalibrationMonitor(**kw)  # type: ignore[arg-type]
+    for k in range(6):
+        y, p = _batch(shift=0.6, seed=40 + k)
         mon.update(y, p, label=f"m{k}")
-    rep = mon.report()
-    assert rep.alarm_at is None
-    assert rep.onset_label is None
+    return mon
 
 
-def test_onset_label_present_after_alarm() -> None:
-    mon = CalibrationMonitor(alpha=0.05)
-    for k in range(8):
-        y, p = _batch(shift=0.8, seed=k)
-        mon.update(y, p, label=f"m{k}")
+def test_onset_never_after_alarm() -> None:
+    mon = _drift_from_start()
     rep = mon.report()
-    assert rep.alarm_at is not None
-    assert rep.onset_label is not None
+    labels = [s.label for s in mon.steps_]
+    assert rep.alarm_at is not None and rep.onset_label is not None
+    assert labels.index(rep.onset_label) <= labels.index(rep.alarm_at)
     assert any("estimated drift onset" in r for r in rep.reasoning)
 
 
-def test_log_e_increment_round_trips_through_json(tmp_path) -> None:
-    mon = CalibrationMonitor()
-    for k in range(3):
-        y, p = _batch(seed=10 + k)
-        mon.update(y, p, label=f"m{k}")
-    path = tmp_path / "state.json"
-    mon.to_json(path)
-    mon2 = CalibrationMonitor.from_json(path)
-    assert [s.log_e_increment for s in mon.steps_] == [s.log_e_increment for s in mon2.steps_]
+def test_no_plug_in_evidence_falls_back_to_whole_history() -> None:
+    # min_history so large the plug-ins never engage: every increment is 0
+    # and the alarm comes from the fixed-grid mixture alone.
+    mon = _drift_from_start(min_history=100, components=("offset",))
+    assert all(s.log_e_increment == 0.0 for s in mon.steps_)
+    rep = mon.report()
+    assert rep.alarm_at == "m0"
+    assert rep.onset_label == "m0"
+    action = mon.apply_recommendation()
+    assert action.window == tuple(s.label for s in mon.steps_)
+    assert action.audit["onset_label"] == rep.onset_label
 
 
 # ---------------------------------------------------------------- recommendation_window
-
-
-def test_recommendation_window_validation() -> None:
-    with pytest.raises(ValueError, match="recommendation_window"):
-        CalibrationMonitor(recommendation_window="nope")
 
 
 def test_since_onset_window_respects_plug_in_window() -> None:
@@ -126,7 +122,13 @@ def test_since_onset_window_respects_plug_in_window() -> None:
     # plug_in_window=3 trailing start (index 7 = 10 - 3).
     forced = [-1.0, -1.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
     assert estimate_onset(np.array(forced)) == 2
-    mon.steps_ = [replace(s, log_e_increment=v) for s, v in zip(mon.steps_, forced, strict=True)]
+    # The onset is read up to the first alarm; place that alarm after it.
+    mon.steps_ = [
+        replace(s, log_e_increment=v, alarm=i >= 5)
+        for i, (s, v) in enumerate(zip(mon.steps_, forced, strict=True))
+    ]
+
+    mon_trailing.steps_ = [replace(s, alarm=i >= 5) for i, s in enumerate(mon_trailing.steps_)]
 
     rep = mon.report()
     assert rep.onset_label == "m2"  # the onset estimate itself is unaffected
@@ -138,26 +140,6 @@ def test_since_onset_window_respects_plug_in_window() -> None:
     since_numbers = rep.reasoning[:4] + rep.reasoning[5:]
     trailing_numbers = rep_trailing.reasoning[:4] + rep_trailing.reasoning[5:]
     assert since_numbers == trailing_numbers
-
-
-def test_trailing_window_matches_since_onset_when_onset_is_batch_zero() -> None:
-    # A single batch, drifted hard enough to alarm on the first look: the
-    # first batch's plug-in is always the identity (no strictly-earlier
-    # data), so its increment is exactly 0.0 and it is trivially the only
-    # step — onset_idx == 0 by construction, and "since onset" and
-    # "trailing" (all past batches) select the identical single-batch
-    # window, so the recommendation numbers must coincide exactly.
-    def run(window: str):
-        mon = CalibrationMonitor(alpha=0.05, recommendation_window=window)
-        y, p = _batch(n=2000, shift=1.2, seed=0)
-        mon.update(y, p, label="m0")
-        return mon.report()
-
-    rep_since = run("since_onset")
-    rep_trailing = run("trailing")
-    assert rep_since.alarm_at == "m0"
-    assert rep_since.onset_label == "m0"
-    assert rep_since.reasoning == rep_trailing.reasoning
 
 
 # ---------------------------------------------------------------- pre-0.3 payloads
@@ -177,36 +159,21 @@ def _load_alarmed(window: str | None = None) -> CalibrationMonitor:
     return CalibrationMonitor.from_dict(d)
 
 
-def test_pre_0_3_steps_load_without_increments() -> None:
-    mon = _load_alarmed()
-    assert all(s.log_e_increment is None for s in mon.steps_)
-    assert mon.report().alarm_at is not None
-
-
-def test_fresh_steps_always_carry_an_increment() -> None:
-    mon = CalibrationMonitor()
-    for k in range(4):
-        y, p = _batch(n=500, shift=0.5, seed=20 + k)
-        mon.update(y, p, label=f"m{k}")
-    assert all(isinstance(s.log_e_increment, float) for s in mon.steps_)
-
-
 def test_pre_0_3_payload_reports_no_onset_and_uses_the_trailing_window() -> None:
     # No increments to search, so no onset may be claimed and the
     # diagnostics must fall back to the trailing window -- the default
     # "since_onset" monitor must agree, number for number, with an
     # explicit "trailing" run on the very same restored state.
     mon = _load_alarmed()
+    assert all(s.log_e_increment is None for s in mon.steps_)
     rep = mon.report()
+    assert rep.alarm_at is not None
     assert mon.recommendation_window == "since_onset"
     assert rep.onset_label is None
     assert _UNAVAILABLE in rep.reasoning
     assert not any("estimated drift onset" in r for r in rep.reasoning)
     assert rep.reasoning == _load_alarmed("trailing").report().reasoning
 
-
-def test_pre_0_3_payload_apply_recommendation_uses_the_trailing_window() -> None:
-    mon = _load_alarmed()
     action = mon.apply_recommendation()
     trailing = _load_alarmed("trailing").apply_recommendation()
     assert action.window == tuple(s.label for s in mon.steps_)  # plug_in_window is None

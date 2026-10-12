@@ -25,10 +25,11 @@ from ._results import (
     KernelReliabilityCurve,
     ReliabilityCurve,
     SmoothReliabilityCurve,
+    _ResultBase,
 )
 from ._validation import EPS, validate_positive_int
 from .metrics._binstats import bin_stats
-from .metrics._common import _prep, effective_weights, is_uniform
+from .metrics._common import _prep, is_uniform, rao_scott
 from .metrics._deprecation import UNSET, renamed_kwarg
 from .metrics.smooth import _ecce_walk, _lattice_kernel_smooth, _smece_solve
 
@@ -116,7 +117,7 @@ def reliability_loess(
         Optional positive weights. Non-uniform weights multiply the tricube
         kernel weights of each local-linear fit (same nearest-neighbour
         windows); ``None`` or all-equal weights give the unweighted LOESS
-        curve unchanged. (0.3.x validated the weights and ignored them.)
+        curve unchanged.
 
     Returns
     -------
@@ -227,8 +228,8 @@ def _kernel_rate_density(
         centers, num_s = _lattice_kernel_smooth(num, width, sigma, t_lo)
         _, den_s = _lattice_kernel_smooth(den, width, sigma, t_lo)
         # Cells farther than the kernel's +-5 sigma truncation from every
-        # observation have zero smoothed weight: no data, so no rate (NaN;
-        # 0.3.x reported 0 there).
+        # observation have zero smoothed weight: no data, so no rate (NaN,
+        # not 0, so a gap is not mistaken for an observed zero rate).
         with np.errstate(invalid="ignore", divide="ignore"):
             rate_c = np.where(den_s > 0.0, num_s / den_s, np.nan)
         rate = np.interp(grid_logit, centers, rate_c)
@@ -294,8 +295,7 @@ def reliability_smooth(
 
     Grid points with no observation within the kernel's ``+-5 sigma_star``
     reach (data gaps, on the logit scale) have no estimate: ``event_rate``,
-    ``ci_low`` and ``ci_high`` are ``nan`` there (0.3.x reported a rate of 0
-    with a ``[0, 0]`` ribbon). Bootstrap resamples that leave a grid point
+    ``ci_low`` and ``ci_high`` are ``nan`` there. Bootstrap resamples that leave a grid point
     uncovered are skipped in that point's quantiles.
 
     Parameters
@@ -439,7 +439,8 @@ def corp_reliability(
         Nominal coverage level of the bands; must satisfy
         ``0 < confidence < 1`` (stored as ``CorpResult.level``).
     n_resamples : int, keyword-only
-        Number of resamples used to build the bands.
+        Number of resamples used to build the bands; ``0`` skips them (as
+        ``bands=None``).
     random_state : int, keyword-only
         Seed for ``numpy.random.default_rng``, used by the band resampling.
     level : float, keyword-only
@@ -483,6 +484,10 @@ def corp_reliability(
     conf = float(renamed_kwarg("corp_reliability", "level", "confidence", level, confidence, 0.9))  # type: ignore[arg-type]
     if not (0.0 < conf < 1.0):
         raise ValueError("confidence must satisfy 0 < confidence < 1")
+    if n_resamples < 0:
+        raise ValueError("n_resamples must be >= 0")
+    if n_resamples == 0:
+        bands = None
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     lo, hi, level_b, w_b, pav = corp_fit(y_arr, p_arr, w)
     b = decompose(y_arr, p_arr, pav, w, "brier")
@@ -512,9 +517,11 @@ def corp_reliability(
     )
 
 
-@dataclass(frozen=True)
-class EcceCurve:
+@dataclass(frozen=True, eq=False)
+class EcceCurve(_ResultBase):
     """Cumulative-deviation walk over predictions sorted ascending (ECCE).
+
+    Compares by value (arrays element-wise); unhashable.
 
     Attributes
     ----------
@@ -548,10 +555,10 @@ def ecce_curve(y: object, p: object, *, sample_weight: object = None) -> EcceCur
     order of tied rows is arbitrary, so intermediate points carry no
     information); ``frac`` is the cumulative weight fraction. ``sd_null`` is
     the pointwise standard deviation of the walk under calibration — an
-    envelope for reading, not a simultaneous band — computed with the
-    Kish-rescaled weights of the package weight convention
-    (``sqrt(cumsum(p (1 - p))) / n`` for unit weights; 0.3.x used
-    ``w**2``, which ignored the weights' scale).
+    envelope for reading, not a simultaneous band — the exact null SD
+    ``sqrt(cumsum(w**2 p (1 - p))) / sum(w)`` of the weighted walk
+    (``sqrt(cumsum(p (1 - p))) / n`` for unit weights; invariant to
+    rescaling the weights).
 
     Parameters
     ----------
@@ -626,8 +633,17 @@ def calibration_belt(
       p-value is anti-conservative.
 
     Where the band excludes the diagonal, the data reject calibration in
-    that region. Weights follow the package convention (Kish-rescaled for
-    the LR tests and the information matrix; unit weights unchanged).
+    that region. With non-uniform weights (package convention,
+    :mod:`probcal.metrics._common`) the fits maximise the weighted
+    likelihood, the band uses the sandwich covariance ``I**-1 J I**-1``
+    with ``J = X' diag(w**2 mu (1 - mu)) X`` (the exact variance of the
+    weighted score under the fitted model), the forward-selection steps
+    divide each 1-df LR statistic by the added coefficient's design effect
+    (sandwich over model-based variance), and the p-value is second-order
+    Rao-Scott corrected (:func:`probcal.metrics._common.rao_scott`, its
+    reference distribution ``chi2`` with the corrected, possibly fractional,
+    degrees of freedom). All of it is invariant to rescaling the weights;
+    unit weights give the unweighted belt unchanged.
 
     Parameters
     ----------
@@ -656,10 +672,13 @@ def calibration_belt(
         raise ValueError("confidence must be two levels in (0, 1)")
     grid_size = validate_positive_int(grid_size, "grid_size")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    we = effective_weights(w)
+    # Mean-one weights (unit weights unchanged) keep the ridge and the fit
+    # tolerances on the same scale whatever the weights' scale.
+    w = w / float(np.mean(w))
+    uniform = is_uniform(w)
     z = logit(p_arr)
-    centre = float(np.average(z, weights=we))
-    spread = float(np.sqrt(np.average((z - centre) ** 2, weights=we)))
+    centre = float(np.average(z, weights=w))
+    spread = float(np.sqrt(np.average((z - centre) ** 2, weights=w)))
     if not spread > 0.0:
         spread = 1.0
 
@@ -669,34 +688,55 @@ def calibration_belt(
 
     def loglik(prob: np.ndarray) -> float:
         prob = np.clip(prob, EPS, 1.0 - EPS)
-        return float(np.sum(we * (y_arr * np.log(prob) + (1.0 - y_arr) * np.log1p(-prob))))
+        return float(np.sum(w * (y_arr * np.log(prob) + (1.0 - y_arr) * np.log1p(-prob))))
+
+    def information_inv(X: np.ndarray, mu: np.ndarray) -> np.ndarray:
+        """Inverse of the (ridged) model-based information."""
+        info = (X * (w * mu * (1.0 - mu))[:, None]).T @ X
+        return np.linalg.inv(info + 1e-10 * np.eye(X.shape[1]))
+
+    def covariance(X: np.ndarray, mu: np.ndarray) -> np.ndarray:
+        """Coefficient covariance: ``I**-1`` scaled to unit weights, or the sandwich."""
+        info_inv = information_inv(X, mu)
+        if uniform:
+            return info_inv * float(w[0])
+        meat = (X * (w * w * mu * (1.0 - mu))[:, None]).T @ X
+        return info_inv @ meat @ info_inv
+
+    def step_stat(lr: float, X: np.ndarray, mu: np.ndarray) -> float:
+        """1-df LR statistic for the last column, divided by its design effect."""
+        if uniform:
+            return lr / float(w[0])
+        deff = covariance(X, mu)[-1, -1] / information_inv(X, mu)[-1, -1]
+        return lr / deff if deff > 0.0 else lr
 
     # Forward LR selection of the polynomial degree. A separated fit's
     # coefficients come from the ridge fallback: usable as a terminal fit,
     # never a basis for extension.
     degree = 1
-    fit = irls_logistic(design(1, z), y_arr, w=we)
+    fit = irls_logistic(design(1, z), y_arr, w=w)
     ll = loglik(expit(design(1, z) @ fit.beta))
     while degree < 4 and not fit.separation:
         X_cand = design(degree + 1, z)
-        cand = irls_logistic(X_cand, y_arr, w=we)
+        cand = irls_logistic(X_cand, y_arr, w=w)
         if cand.separation:
             break
-        ll_cand = loglik(expit(X_cand @ cand.beta))
-        if chi2_sf(max(2.0 * (ll_cand - ll), 0.0), 1.0) >= 0.05:
+        mu_cand = expit(X_cand @ cand.beta)
+        ll_cand = loglik(mu_cand)
+        if chi2_sf(step_stat(max(2.0 * (ll_cand - ll), 0.0), X_cand, mu_cand), 1.0) >= 0.05:
             break
         degree += 1
         fit, ll = cand, ll_cand
 
     # Associated calibration test: fitted polynomial vs the identity map.
     df = degree + 1
-    p_value = chi2_sf(max(2.0 * (ll - loglik(p_arr)), 0.0), float(df))
-
-    # Bands from the information-matrix ellipsoid.
     X = design(degree, z)
+    stat, df_rs = rao_scott(max(2.0 * (ll - loglik(p_arr)), 0.0), X, p_arr, w)
+    p_value = chi2_sf(stat, df_rs)
+
+    # Bands from the (sandwich) covariance ellipsoid.
     mu = expit(np.clip(X @ fit.beta, -30.0, 30.0))
-    info = (X * (we * mu * (1.0 - mu))[:, None]).T @ X
-    info_inv = np.linalg.inv(info + 1e-10 * np.eye(df))
+    info_inv = covariance(X, mu)
     grid_p = _grid(p_arr, grid_size)
     grid_z = logit(grid_p)
     Xg = design(degree, grid_z)

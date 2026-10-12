@@ -70,9 +70,12 @@ def test_all_sections_present() -> None:
 
 
 @pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
-def test_minimal_report_omits_optional_sections() -> None:
+def test_minimal_report_omits_optional_sections(tmp_path) -> None:
     y, p, _ = _portfolio()
-    html = validation_report(y, p, n_boot=20, seed=42)
+    out = tmp_path / "report.html"
+    html = validation_report(y, p, n_boot=20, seed=42, path=out)
+    assert out.read_text(encoding="utf-8") == html
+    assert html.startswith("<!doctype html>")
 
     assert "Portfolio summary" in html
     assert "Reliability" in html
@@ -113,17 +116,12 @@ def test_missing_matplotlib_raises_helpful_error(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
-def test_markdown_requires_path() -> None:
-    y, p, _ = _portfolio(n=100)
-    with pytest.raises(ValueError, match="markdown"):
-        validation_report(y, p, format="markdown", n_boot=10)
-
-
-@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
 def test_markdown_writes_figures_and_has_no_data_uri(tmp_path) -> None:
     y, p, cal = _portfolio()
     grades = _grades(p)
     out = tmp_path / "report.md"
+    with pytest.raises(ValueError, match="markdown"):
+        validation_report(y, p, format="markdown", n_boot=10)  # markdown needs a path
 
     text = validation_report(
         y, p, calibrator=cal, grades=grades, path=out, format="markdown", n_boot=20, seed=1
@@ -138,15 +136,6 @@ def test_markdown_writes_figures_and_has_no_data_uri(tmp_path) -> None:
     assert "reliability_kernel.png" in pngs
     assert "grade_backtest.png" in pngs
     assert "report_figures/reliability_corp.png" in text
-
-
-@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
-def test_path_writes_html_file(tmp_path) -> None:
-    y, p, _ = _portfolio(n=100)
-    out = tmp_path / "report.html"
-    text = validation_report(y, p, path=out, n_boot=10)
-    assert out.read_text(encoding="utf-8") == text
-    assert text.startswith("<!doctype html>")
 
 
 def test_import_report_module_stays_matplotlib_free() -> None:
@@ -172,20 +161,16 @@ def test_html_escapes_malicious_grade_and_group_labels() -> None:
     evil = "<img src=x onerror=alert(1)>"
     labels = np.where(np.arange(n) % 2 == 0, evil, "A&B")
 
-    html = validation_report(y, p, grades=labels, by=labels, n_boot=15, seed=3)
+    html = validation_report(
+        y, p, grades=labels, by=labels, n_boot=15, seed=3, title="Cost $5 <b>bold</b>"
+    )
+    assert "Cost $5 &lt;b&gt;bold&lt;/b&gt;" in html
+    assert "<b>bold</b>" not in html
 
     assert evil not in html
     assert "&lt;img src=x onerror=alert(1)&gt;" in html
     assert "A&amp;B" in html
     assert "<script" not in html
-
-
-@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
-def test_html_title_with_dollar_and_tags_is_escaped() -> None:
-    y, p, _ = _portfolio(n=100)
-    html = validation_report(y, p, title="Cost $5 <b>bold</b>", n_boot=10)
-    assert "Cost $5 &lt;b&gt;bold&lt;/b&gt;" in html
-    assert "<b>bold</b>" not in html
 
 
 @pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
@@ -254,3 +239,17 @@ def test_backtest_follows_the_numeric_grade_order() -> None:
     section = html.split("Per-grade backtest (Jeffreys)")[1].split("Pluto-Tasche")[0]
     rows = re.findall(r"<tr><td>([^<]+)</td>", section)
     assert rows == [str(i) for i in range(1, 12)]
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_report_explains_merged_jeffreys_bands(tmp_path) -> None:
+    rng = np.random.default_rng(0)
+    p = np.r_[np.full(400, 0.01), np.full(400, 0.05), np.full(400, 0.2)]
+    grades = np.repeat(np.array(["A", "B", "C"]), 400)
+    # Grade A defaults far above its PD, grade B never: B's own bound falls below A's.
+    y = np.r_[(np.arange(400) < 40).astype(float), np.zeros(400), (rng.random(400) < 0.2) * 1.0]
+    with pytest.warns(UserWarning, match="merged"):
+        validation_report(y, p, grades=grades, n_boot=10, format="markdown", path=tmp_path / "r.md")
+    text = (tmp_path / "r.md").read_text()
+    assert "A+B" in text
+    assert "Merged bands (A+B)" in text

@@ -51,6 +51,22 @@ def _thaw(v: object) -> object:
     return v
 
 
+def _validate_probabilities(p: object, *, name: str = "p") -> np.ndarray:
+    """Validate ``p`` like :func:`~probcal._validation.validate_scores`, without clipping.
+
+    Shape, finiteness and the ``[0, 1]`` range are checked exactly as there
+    (a two-column ``predict_proba`` matrix is accepted), but the values are
+    returned as given: grade assignment compares ``p`` against band edges,
+    and clipping to ``[EPS, 1 - EPS]`` would move ``0`` and ``1`` across an
+    edge closer than ``EPS`` to them.
+    """
+    validate_scores(p, name=name)
+    arr = np.asarray(p, dtype=np.float64)
+    if arr.ndim == 2 and arr.shape[1] == 2:
+        return arr[:, 1].copy()
+    return arr.reshape(-1).copy()
+
+
 def _masterscale_from_state(
     bands: dict[str, tuple[float, float]], provenance: dict | None
 ) -> "Masterscale":
@@ -176,7 +192,8 @@ class Masterscale(JsonIO):
         for name, bounds in bands.items():
             if len(bounds) != 2:
                 raise ValueError(f"band {name!r}: expected (lo, hi), got {bounds!r}")
-            lo, hi = float(bounds[0]), float(bounds[1])
+            # ``+ 0.0`` folds -0.0 into 0.0, so equal ladders share one fingerprint.
+            lo, hi = float(bounds[0]) + 0.0, float(bounds[1]) + 0.0
             in_range = np.isfinite(lo) and np.isfinite(hi) and 0.0 <= lo <= 1.0 and 0.0 <= hi <= 1.0
             if not in_range:
                 raise ValueError(f"band {name!r}: bounds must lie in [0, 1], got ({lo}, {hi})")
@@ -275,15 +292,16 @@ class Masterscale(JsonIO):
     def index(self, p: object) -> np.ndarray:
         """Zero-based grade index per observation, ``lo <= p < hi``, top band closed.
 
-        ``p`` goes through :func:`probcal._validation.validate_scores`, so a
-        two-column ``predict_proba`` matrix is accepted.
+        ``p`` is validated like any probability input (a two-column
+        ``predict_proba`` matrix is accepted) but not clipped away from 0
+        and 1, so an edge closer than ``1e-12`` to either end still decides.
 
         Raises
         ------
         ValueError
             If any ``p`` lies outside ``[edges[0], edges[-1]]``.
         """
-        p_arr = validate_scores(p, name="p")
+        p_arr = _validate_probabilities(p, name="p")
         lo, hi = self._edges[0], self._edges[-1]
         bad = (p_arr < lo) | (p_arr > hi)
         if np.any(bad):
@@ -307,7 +325,7 @@ class Masterscale(JsonIO):
         weights, when given, turn counts into weighted sums.
         """
         y_arr = validate_binary_y(y)
-        p_arr = validate_scores(p, name="p")
+        p_arr = _validate_probabilities(p, name="p")
         if len(y_arr) != len(p_arr):
             raise ValueError("y and p must have equal length")
         w_arr = validate_weights(sample_weight, len(p_arr))
@@ -333,8 +351,7 @@ class Masterscale(JsonIO):
         """The band table in words, with the boundary convention and provenance.
 
         ``param_names``/``param_values`` list each grade's band as two
-        entries, ``"<grade>.lo"`` and ``"<grade>.hi"`` (until 0.3 only the
-        upper edges were listed, under the bare grade names).
+        entries, ``"<grade>.lo"`` and ``"<grade>.hi"``.
         """
         last = self.n_grades - 1
         messages = [
@@ -343,7 +360,8 @@ class Masterscale(JsonIO):
         ]
         messages.append(
             "assignment is half-open, lo <= p < hi, with the top band closed at its upper "
-            "edge; band inversion keeps closed intervals"
+            "edge; band inversion (calibrated_bands_to_raw) returns the same half-open "
+            "intervals on the raw axis"
         )
         prov = self.provenance
         if prov is not None:

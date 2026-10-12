@@ -87,8 +87,8 @@ is in the mixture **only when `grades=` is declared**, and then from the
 first batch on. The reason is Ville's inequality: an average of e-processes
 is an e-process only if its components and weights are fixed in advance. A
 mixture that admits a new grade mid-stream, or re-weights when one first
-appears, is not a supermartingale under the null (0.3.x did exactly this,
-and its `e_global` could jump at the batch a grade first showed up). With
+appears, is not a supermartingale under the null (its `e_global` can jump
+at the batch a grade first shows up). With
 `grades=None`, per-grade processes and confidence sequences are still
 tracked and reported (`e_grades`, `grade_delta_ci`, `grade_table`) as
 diagnostics, but they stay out of the alarm, and the monitor warns once
@@ -139,8 +139,8 @@ up in that grade's own `MonitorStep.grade_delta_ci[g]`. `plot_e_process(...,
 grades_panel=True)` adds a second axes plotting every grade's CS band
 (lo/hi) across steps in a panel carved from the main axes' slot (inside the
 figure, or inside a caller-supplied `ax`'s slot), with the step labels moved to
-the panel. The default `grades_panel=False` output is unchanged (pinned by a
-structural plot snapshot).
+the panel. The default `grades_panel=False` draws no grade panel (its output
+is pinned by a structural plot snapshot).
 
 ## Drift-onset estimate and the since-onset window
 
@@ -156,7 +156,9 @@ exactly that purpose.
 
 `monitor._onset.estimate_onset(increments) -> int` finds `k* = argmax_k sum_{j>=k}
 increments[j]`, a backward-CUSUM argmax over that additive series, with ties resolved
-to the latest `k`. This is an **estimate, not a change-point test**: it carries no
+to the earliest `k`; with no positive suffix sum it returns 0 (the whole history). The
+monitor reads the increments only up to the first alarm, so the onset never falls after
+`alarm_at`. This is an **estimate, not a change-point test**: it carries no
 type-I control and no confidence set, only an answer to "which batch does the
 accumulated evidence point to". `report()` runs it whenever an alarm has fired and
 exposes the result as `MonitorReport.onset_label`, and appends a line to `reasoning` that
@@ -178,12 +180,12 @@ starts at the LATER of the two starts, `max(onset_idx, n_batches - plug_in_windo
 so a short `plug_in_window` still bounds how far back the since-onset window can
 reach; a `plug_in_window` of 3 with an onset at batch 2 of 10, for example, uses the
 last 3 batches, not the 8 since onset. **Escape hatch:** `recommendation_window="trailing"`
-restores 0.2.0 behaviour exactly for those diagnostic INPUTS (`delta_now`, the slope
-CI, the residual LR): it ignores the onset estimate and uses `plug_in_window` (or all
+computes those diagnostic INPUTS (`delta_now`, the slope CI, the residual LR) on the
+trailing window: it ignores the onset estimate and uses `plug_in_window` (or all
 past batches) instead, unconditionally. `onset_label` and the onset sentence in
 `reasoning` are still populated under `"trailing"`; only the diagnostic window
 differs between the two modes. `tests/test_monitor_sim.py::
-test_recommendation_correct_on_pure_drift` re-runs the 90%-correct gate under the new
+test_recommendation_correct_on_pure_drift` re-runs the 90%-correct gate under the
 default.
 
 Localization accuracy (batches built like `docs/scripts/monitor_sim.py`'s, drift
@@ -268,7 +270,9 @@ placeholder batch since a report keeps no per-batch data.
 
 `monitor.moc_offset_from_counts(y, p, *, level=0.9, sample_weight=None)` is the count-only
 sibling with no monitor involved: it re-anchors `p`'s mean at the one-sided Jeffreys
-posterior upper quantile of the observed event rate (the same quantile
+posterior upper quantile of the observed event rate (weighted counts use Kish's
+effective sample size, so the result does not depend on the scale of the weights;
+the same quantile
 `metrics.jeffreys_grade_test`/`metrics.jeffreys_upper_bands` use), via `LogitOffset`'s
 existing mode B (`target_mean`).
 
@@ -305,10 +309,12 @@ caveat that applies to every bound on that page, this one included.
   before every batch, so per-batch cost grows linearly with history and the
   total cost quadratically. Set a window (`plug_in_window` must be a positive
   integer) for long-running monitors.
-- **Weights.** Sample weights enter as exponents on the Bernoulli factors
-  for reporting parity with the rest of probcal, but non-integer weights
-  break the exact martingale property, and the monitor warns once when it
-  sees them.
+- **Weights.** Sample weights enter as exponents `u = min(1, w / mean(w))` on
+  the Bernoulli factors, computed over the observations each factor multiplies
+  (the batch, or the grade slice). Each `u` lies in (0, 1], so by Jensen
+  `E[LR**u] <= E[LR]**u = 1` and every factor stays an e-value: the guarantee is
+  exact for any weights fixed before the outcomes. Constant weights give
+  `u = 1` (the unweighted monitor); skewed weights cost power, not validity.
 
 ## Relation to existing tools
 
@@ -356,9 +362,9 @@ here, and no claim is made that this test matches its power or optimality
 properties: it is the monitor's existing mixture machinery, repurposed for
 a one-shot audit rather than sequential monitoring.
 
-Sample weights, when given, enter as exponents on the Bernoulli factors
-(the same convention as `CalibrationMonitor`); non-integer weights carry
-the same caveat noted above.
+Sample weights, when given, enter as exponents `min(1, w / mean(w))` per
+grade on the Bernoulli factors (the same convention as `CalibrationMonitor`),
+so the e-value stays valid for any weights.
 
 ## Simulation verification
 

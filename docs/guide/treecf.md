@@ -94,10 +94,10 @@ silently targets the wrong quantity whenever the calibrator is not the
 identity. Calibrated policies go through `Target.calibrated` (or
 `Target.bands(space="calibrated")`), always.
 
-## Cross-repo items: implemented in treecf 0.2.4
+## What treecf provides for calibrated targets
 
-Implemented in [treecf#23](https://github.com/wlazlod/treecf/pull/23),
-released as treecf 0.2.4, which the `probcal[treecf]` extra now pins.
+treecf ≥ 0.2.4, the version the `probcal[treecf]` extra pins, closes the
+loop from its side:
 
 - Provenance: the certificate's calibrated-target block carries a
   structured `calibrator` sub-block `{embedded, fingerprint, type,
@@ -106,8 +106,7 @@ released as treecf 0.2.4, which the `probcal[treecf]` extra now pins.
   absent. Every `BatchRecord` carries `calibrator_fingerprint`.
   `Explainer.check_certificate(cert, calibrator=...)` re-checks the
   fingerprint and re-inverts the stored `lo`/`hi` against the stored raw
-  interval. (Field names shipped as `calibrator_fingerprint` on batch
-  records and `score_calibrated` for the read-out.)
+  interval.
 - Calibrated read-out: `Counterfactual.score_calibrated` and the
   certificate factual block's `score_calibrated` carry the calibrator's
   probability at the counterfactual and factual points (presentational;
@@ -122,19 +121,15 @@ released as treecf 0.2.4, which the `probcal[treecf]` extra now pins.
   CenteredIsotonic, `Chain(Beta + offset)`, `CalibratedModel.chain_`} ×
   {`op="<="`, `op=">="`, `range`, `bands`} × {`buffer_logit` 0, 0.2} on
   sklearn and LightGBM ensembles, every plan re-verified through the model
-  and calibrator. **Boundary-routing defect, found by
-  these smoke tests and fixed upstream in
-  [treecf#21](https://github.com/wlazlod/treecf/pull/21):** sklearn
-  `tree_` ensembles route `float32(x) <= float64(threshold)` while
-  treecf's IR evaluated in float64, so a counterfactual coordinate placed
-  exactly on a split threshold (the natural optimum of a smallest-change
-  search) could flip through many trees. In the reproducing case the exact
-  backend stamped `proof="optimal"` on an `x_cf` whose true
-  `decision_function` margin was 3.09 raw units away. treecf#21
-  re-expresses thresholds as the exact float64 boundary of the float32
-  cast, making routing bit-exact for every input; fixed as of treecf
-  0.2.4, which the `probcal[treecf]` extra pins. XGBoost also casts
-  features to float32 natively; the analogous fix is a treecf
+  and calibrator.
+- Bit-exact boundary routing: sklearn `tree_` ensembles route
+  `float32(x) <= float64(threshold)`, and a counterfactual coordinate
+  placed exactly on a split threshold (the natural optimum of a
+  smallest-change search) must route the same way in treecf as in the
+  model. treecf re-expresses each threshold as the exact float64 boundary
+  of the float32 cast, so routing is bit-exact for every input
+  ([treecf#21](https://github.com/wlazlod/treecf/pull/21)). XGBoost also
+  casts features to float32 natively; the analogous handling is a treecf
   follow-up.
 - Docs: treecf's `concepts/calibration.md` documents provenance
   and the read-out, and pin tests count exactly one `interval_inverse`
@@ -145,6 +140,6 @@ calibrator's probcal JSON is a self-contained, independently verifiable
 pair: `from_json` the calibrator, match its `fingerprint()` against the
 certificate's `calibrator` block, and let
 `check_certificate(cert, calibrator=...)` re-invert the stored calibrated
-bounds against the stored raw interval. `buffer_logit` guidance is
-unchanged: take it from the monitor's offset confidence-sequence
+bounds against the stored raw interval. For `buffer_logit`,
+take the value from the monitor's offset confidence-sequence
 half-width (see above).

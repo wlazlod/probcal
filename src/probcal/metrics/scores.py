@@ -139,9 +139,9 @@ def murphy_decomposition(
     bias_corrected : bool, keyword-only
         If ``True`` (default ``False``), apply the Ferro & Fricker (2012)
         within-bin variance correction to the reliability and resolution terms.
-        The variance uses each bin's effective count (sum of the
-        Kish-rescaled weights, see :mod:`probcal.metrics._common`; the raw
-        count for unit weights).
+        The variance uses each bin's effective count ``sum_b(w)**2 /
+        sum_b(w**2)`` (see :mod:`probcal.metrics._common`; the raw count for
+        unit weights).
     sample_weight : array_like or None, keyword-only
         Optional positive weights, same length as ``y``.
 
@@ -158,9 +158,9 @@ def murphy_decomposition(
     rel_term = (bs.p_mean - yb) ** 2
     res_term = (yb - y_bar) ** 2
     if bias_corrected:
-        # Effective bin counts under the package weight convention
-        # (Kish-rescaled weights; raw counts for unit weights).
-        n_eff = bs.w_sum * (float(w.sum()) / float(np.dot(w, w)))
+        # Per-bin effective counts sum(w)**2 / sum(w**2) (raw counts for
+        # unit weights).
+        n_eff = bs.n_eff
         multi = n_eff > 1.0
         var_yb = yb * (1.0 - yb) / np.where(multi, n_eff - 1.0, 1.0)
         rel_term = np.where(multi, np.maximum(rel_term - var_yb, 0.0), rel_term)

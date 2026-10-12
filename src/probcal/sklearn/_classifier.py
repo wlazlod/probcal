@@ -4,39 +4,20 @@ import numbers
 import warnings
 
 import numpy as np
-from sklearn import get_config
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.model_selection import KFold, StratifiedKFold, check_cv, cross_val_predict
 from sklearn.utils import indexable
-from sklearn.utils.metadata_routing import MetadataRouter, get_routing_for_object
 from sklearn.utils.validation import (
     _num_samples,
     check_consistent_length,
     check_is_fitted,
     column_or_1d,
-    has_fit_parameter,
 )
 
 from .._math import expit
 from ..base import BaseCalibrator
+from ..wrapper import _accepts_sample_weight
 from ._base import BinaryCalibratedMixin, check_sample_weight
-
-
-def _accepts_sample_weight(estimator: object) -> bool:
-    """Whether ``estimator``'s ``fit`` can consume ``sample_weight`` at all.
-
-    The signature check is sklearn's own precedent — ``CalibratedClassifierCV``
-    does exactly this and warns when it fails. Under metadata routing a router
-    (``Pipeline``, ``GridSearchCV``, …) takes weights through ``**params``
-    rather than a named argument, so routers count as capable there and
-    sklearn's routing machinery has the final word: an undeclared request
-    raises ``UnsetMetadataPassedError`` instead of dropping the weights.
-    """
-    if has_fit_parameter(estimator, "sample_weight"):
-        return True
-    if get_config().get("enable_metadata_routing", False):
-        return isinstance(get_routing_for_object(estimator), MetadataRouter)
-    return False
 
 
 class CalibratedClassifier(BinaryCalibratedMixin, ClassifierMixin, BaseEstimator):

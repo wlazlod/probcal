@@ -58,8 +58,10 @@ class CalibratorSelector(BaseCalibrator):
     ``affine_logit_coeffs_``, ``complexity_rank``, ``point_inverse`` and
     ``interval_inverse`` all delegate to ``best_calibrator_``. ``fit`` raises
     ``ValueError`` if ``scoring`` is not one of the accepted criteria (plain
-    ECE and Hosmer–Lemeshow are refused as selection criteria) or ``cv`` is
-    not an integer ``>= 2``.
+    ECE and Hosmer–Lemeshow are refused as selection criteria), ``cv`` is
+    not an integer ``>= 2``, or a class has fewer than ``cv`` members (every
+    held-out fold is scored on its own and needs both classes; lower ``cv``
+    for low-default data).
 
     Parameters
     ----------
@@ -119,7 +121,7 @@ class CalibratorSelector(BaseCalibrator):
 
     def _set_state(self, state: dict[str, object]) -> None:
         state = dict(state)
-        state.pop("is_monotone_", None)  # pre-0.4 payloads; now read from the winner
+        state.pop("is_monotone_", None)  # pre-0.4 payloads; the property reads the winner
         rep = state.pop("report")
         super()._set_state(state)
         self.report_ = SelectionReport(
@@ -129,7 +131,7 @@ class CalibratorSelector(BaseCalibrator):
             guardrails_ok=decode_value(rep["guardrails_ok"]),  # type: ignore[index, arg-type]
             chosen=decode_value(rep["chosen"]),  # type: ignore[index, arg-type]
             criterion=rep["criterion"],  # type: ignore[index]
-            # .get(..., None): the 0.2.0 golden predates these columns.
+            # .get(..., None): payloads written by probcal < 0.3 lack these columns.
             mcb=decode_value(rep.get("mcb")),  # type: ignore[attr-defined, arg-type]
             dsc=decode_value(rep.get("dsc")),  # type: ignore[attr-defined, arg-type]
             unc=decode_value(rep.get("unc")),  # type: ignore[attr-defined, arg-type]
@@ -178,7 +180,7 @@ class CalibratorSelector(BaseCalibrator):
                 "Hosmer-Lemeshow are not selection criteria"
             )
         scorer = _SCORERS[self.scoring]
-        cv = validate_cv(self.cv, y_arr)
+        cv = validate_cv(self.cv, y_arr, held_out_both_classes=True)
         menu = self.candidates if self.candidates is not None else _default_candidates()
         # CORP decomposition to attach to the report: Brier when the selection
         # criterion itself is Brier, log loss otherwise (matches the scorer

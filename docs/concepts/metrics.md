@@ -24,13 +24,18 @@ finite, and is read as a **relative frequency weight**:
   are weighted means. They do not change when all weights are multiplied by a constant, and
   unit weights reproduce the unweighted numbers exactly.
 - Wherever a *sample size* enters (a test statistic's variance, a finite-sample bias
-  correction, a likelihood-ratio statistic), the weights are first rescaled to
-  `w_eff = w * sum(w) / sum(w**2)`, so they sum to Kish's effective sample size
-  `n_eff = sum(w)**2 / sum(w**2)`. This applies to `spiegelhalter_z`, `ece_debiased`,
-  `murphy_decomposition(bias_corrected=True)`, `hosmer_lemeshow`, `calibration_test`,
-  `calibration_belt` and the `ecce_curve` null envelope. Unit weights give `w_eff == w`
-  exactly; a constant factor changes nothing; and weights concentrated on a few rows cannot
-  manufacture significance.
+  correction, a null envelope, a likelihood-ratio statistic), the variance is the one the
+  weighted statistic actually has when each `y` is Bernoulli(`p`):
+  `Var(sum(w * (y - p))) = sum(w**2 * p * (1 - p))`. `spiegelhalter_z` and the `ecce_curve`
+  null envelope use that variance directly; `hosmer_lemeshow` uses it per risk group, in the
+  classical form `sum_g(w**2) * pt_g * (1 - pt_g)` with `pt_g = sum_g(w**2 p) / sum_g(w**2)`;
+  `ece_debiased` and `murphy_decomposition(bias_corrected=True)` use each bin's effective
+  count `sum_b(w)**2 / sum_b(w**2)`; and the likelihood-ratio tests of `calibration_test` and
+  `calibration_belt` are taken on the weighted log-likelihood and referred to a second-order
+  Rao–Scott corrected chi-square, with sandwich covariances for the belt's bands (so
+  `CalibrationTestResult.df` is fractional when the weights vary). Every one of
+  these is invariant to multiplying all weights by a constant, and unit weights give the
+  unweighted statistic exactly.
 
 Two count-form functions read weights literally instead: `pluto_tasche_from_arrays` sums
 weights as obligor and default counts (an integer weight equals row duplication), and
@@ -38,10 +43,12 @@ weights as obligor and default counts (an integer weight equals row duplication)
 `CalibrationMonitor`. The per-grade binomial and Jeffreys tests use raw integer counts and
 ignore weights.
 
-0.3.4 introduced this convention. Before it, test statistics treated `sum(w)` as the sample
-size: Hosmer–Lemeshow and the calibration LR test scaled with a constant weight `c`, and
-Spiegelhalter's z was divided by `sqrt(c)`. For weights drawn from U(0.5, 2) the HL and LR
-statistics now come out smaller by the factor `n_eff / sum(w)` (about 0.72).
+Because the test statistics use the exact weighted variances above, Hosmer–Lemeshow and the
+calibration LR test do not change when every weight is multiplied by a constant `c`. A single
+global effective sample size such as Kish's `sum(w)**2 / sum(w**2)` would be scale-invariant
+too, but it misstates the variance whenever the weights vary with `p`. For weights that are
+independent of `p` the two agree closely; for weights correlated with `p` only the exact
+weighted variances give correctly sized tests.
 
 ## Proper scoring rules
 
@@ -142,31 +149,40 @@ et al. (2022), a principled, data-driven resolution choice that markedly reduces
 follows the paper's rule (its eq. 8 and Algorithm 1): sweep \( B = 2, 3, \ldots \) equal-mass
 bins and stop at the **first** bin count whose bin event rates are not monotone; the chosen
 \( B^* \) is the last count before that violation, so every smaller count is monotone too.
-The paper sweeps up to \( B = n \); probcal stops at `max_bins=100` as a cost cap. Up to 0.3.x,
-probcal instead took the largest monotone \( B \) anywhere in 2..100, skipping over
-non-monotone counts; `ece_sweep(rule="largest")` restores that. On synthetic continuous data
-the chosen \( B \) changes in about half of the cases (usually smaller), the value by at most
-~0.01 absolute at n=500 and ~0.003 at n=10⁴. `adaptive_ece` is a deprecated alias for
+The paper sweeps up to \( B = n \); probcal stops at `max_bins=100` as a cost cap.
+`ece_sweep(rule="largest")` instead takes the largest monotone \( B \) anywhere in 2..100,
+skipping over non-monotone counts. On synthetic continuous data the two rules choose a
+different \( B \) in about half of the cases (the first-violation rule usually the smaller
+one), and the values differ by at most ~0.01 absolute at n=500 and ~0.003 at n=10⁴. `adaptive_ece` is a deprecated alias for
 equal-mass ECE (`ece(strategy="mass")`), kept because the literature uses the name; it warns
 and is removed in 0.4.0.
 
 The **Hosmer–Lemeshow test** (Hosmer and Lemeshow, 1980) groups observations into \( g \)
-risk deciles (`hosmer_lemeshow(..., n_bins=10)`; the 0.3.x spelling `g=` is deprecated) and
+risk deciles (`hosmer_lemeshow(..., n_bins=10)`; `g=` is a deprecated alias of `n_bins=`) and
 forms
 
 \[
-C = \sum_{b=1}^{g} \frac{(O_b - E_b)^2}{E_b\,\bigl(1 - E_b/n_b\bigr)} \;\sim\; \chi^2_{g-2},
+C = \sum_{b=1}^{g} \frac{(O_b - E_b)^2}{E_b\,\bigl(1 - E_b/n_b\bigr)} \;\sim\; \chi^2_{g - \text{ddof}},
 \]
 
-with \( O_b \) observed and \( E_b \) expected events per group. It is the historical
+with \( O_b \) observed and \( E_b \) expected events per group. The degrees of freedom
+depend on where \( p \) came from. For a logistic model fitted on the same data, the
+classical \( g-2 \) applies (`ddof=2`). When \( p \) is fixed before the outcomes are
+seen, which is the usual PD validation setting with a model or calibrator fitted on other
+data, the per-group residuals are asymptotically independent and \( C \sim \chi^2_g \)
+(Hosmer, Lemeshow and Sturdivant, 2013, on external validation). That is the default, `ddof=0`. Against
+\( g-2 \), out-of-sample \( p \) rejects about 12% of the time at a nominal 5% with
+\( g=10 \). Under \( \chi^2_g \) it rejects about 5%. With heavy-tailed weights and few effective events per group, the chi-square
+approximation is loose: with lognormal(0, 1) weights, it rejects about 9% at n = 5000 and
+PD ≈ 3%, and 6% at n = 50 000. It is the historical
 workhorse of clinical model validation and it carries the same two diseases in sharper form:
 the statistic depends on an essentially arbitrary grouping (changing \( g \), or the tie
 handling at decile boundaries, changes the p-value), and its power scales with \( n \) so that
 on large portfolios it rejects calibration defects of no practical consequence, while on small
 ones it detects almost nothing. probcal ships it because validators expect it, marks it
-report-only, and never lets the [selector](auto-selection.md) see it. With fewer than three
-non-empty groups the reference distribution has no degrees of freedom left, so the result
-reports `df=0` and `p_value=nan` rather than a p-value on a floored `df=1`.
+report-only, and never lets the [selector](auto-selection.md) see it. When no more than `ddof`
+non-empty groups remain, the reference distribution has no degrees of freedom left, so the
+result reports `df=0` and `p_value=nan` rather than a p-value on a floored `df=1`.
 
 ## Binning-free estimators
 
@@ -194,8 +210,9 @@ reading the walk inside such a block would make the statistic depend on input ro
 probcal reads the walk only at the end of each tied block (where it is order-free), takes the
 \( x \) coordinate as the cumulative weight fraction, and averages the mean deviation over
 blocks weighted by block weight. Without ties and with unit weights this is the textbook
-statistic, bit for bit; with ties `ecce_max` changes only if the old maximum fell inside a
-block, while `ecce_mean` moves (about +8.5% on scores rounded to two decimals), and
+statistic, bit for bit; with ties `ecce_max` differs from the textbook walk only if its
+maximum falls inside a block, while `ecce_mean` differs (about +8.5% on scores rounded to two
+decimals), and
 `EcceCurve` has one point per distinct prediction. `ecce`, `ecce_curve` and `evaluate` share
 the same walk.
 
@@ -296,7 +313,7 @@ The **calibration test** is the likelihood-ratio test of \( (\alpha, \beta) = (0
 jointly, on 2 degrees of freedom: the Cox-framed "weak calibration" test, in the lineage
 running through Miller, Hui and Tierney (1991). Its χ² p-value comes from
 `probcal._math.chi2_sf`, an upper-tail evaluation that keeps the runtime numpy-only and stays
-accurate deep in the tail (since 0.3.4, every χ² and normal p-value in the package, including
+accurate deep in the tail (every χ² and normal p-value in the package, including
 Hosmer–Lemeshow, the belt, Spiegelhalter and SKCE, is computed this way, so tiny p-values are
 reported as such instead of rounding to exactly 0).
 
@@ -345,11 +362,11 @@ interval relative to i.i.d. resampling on exactly the rare-event, small-\( n \) 
 matters most. That is the opposite of the intuition that stratifying always tightens or
 always widens a CI: the direction depends on which variance source dominates. `evaluate(...,
 stratify=False)` restores plain i.i.d. resampling, redrawing a degenerate (single-class)
-replicate up to 100 times before raising rather than silently substituting anything. An older
-substitution rule (reusing the point estimate as a zero-variance replicate whenever an i.i.d.
-draw came back single-class) was removed for the same reason: it narrowed the i.i.d. path
-artificially rather than reporting the sampling variance honestly. Neither the stratified
-default nor its removal makes CIs uniformly wider or narrower; both make the reported interval
+replicate up to 100 times before raising rather than silently substituting anything. Reusing
+the point estimate as a zero-variance replicate whenever an i.i.d. draw comes back
+single-class would narrow the i.i.d. path artificially rather than report the sampling
+variance honestly. Neither the stratified default nor the redraw rule makes CIs uniformly
+wider or narrower; both make the reported interval
 mean what it claims to measure.
 
 Bootstrap intervals for *biased* estimators still center on the biased value. A bootstrap CI
@@ -363,8 +380,8 @@ full data plus one independent call per group, returning a `GroupedMetricReport`
 instead of a plain `MetricReport`. Groups are formed from the raw label values (so `1` and
 `"1"` are different groups) and displayed as `str(value)`, ordered by display name; two
 distinct values that print the same raise `ValueError`. Group `i` (in that order) uses
-`random_state + 1000 * i` rather than reusing `random_state` for every group. (`random_state`
-replaces the 0.3.x keyword `seed`, which still works with a `DeprecationWarning` until
+`random_state + 1000 * i` rather than reusing `random_state` for every group. (`seed=` is a
+deprecated alias of `random_state=`; it warns with a `DeprecationWarning` and is removed in
 0.4.0.) The offset is fixed and label-independent, so
 reproducibility does not depend on how many groups exist or what they are named, and no two
 groups' bootstrap draws can coincide by construction. This is side-by-side reporting, not a
@@ -373,11 +390,13 @@ applied, because none is implied by returning several independent reports. Forma
 group-conditional calibration testing is future work; see `docs/guide/groups.md`.
 
 **Weighted quantiles.** `e50`, `e90`, and the `reliability_summary` stats box compute their
-quantile step with `probcal._math.weighted_quantile` (Hazen interpolation positions) whenever
-`sample_weight` is given and not uniform; unweighted and equal-weight calls short-circuit to
-plain `np.quantile` so 0.1.2 results stay bit-identical (Hazen differs from numpy's default
-quantile method even at equal weights, so it is the short-circuit, not a numerical
-coincidence, that protects those anchors).
+quantile step with `probcal._math.weighted_quantile` whenever `sample_weight` is given: the
+continuous weighted form of numpy's default (`linear`) rule. Each sorted observation sits at
+the midpoint of its own weight, those midpoints are mapped affinely onto `[0, 1]` as the
+plotting positions, and the quantile interpolates linearly between them. With equal weights
+the positions are exactly numpy's, so the result is `np.quantile` bit for bit; the positions
+are continuous in the weights, so nearly equal weights give nearly the unweighted answer, and
+rescaling the weights changes nothing.
 
 ## Reading a report
 
@@ -448,35 +467,33 @@ print(jeffreys_grade_test(y_cal, s_cal, ms))              # ECB-style backtest, 
 
 Most of the catalog is O(n) or O(n log n) per call: the proper scores, ECCE, Spiegelhalter's
 z, and the recalibration-regression framework are single linear passes; the binned ECE family
-sorts or bins in O(n log n). Two estimators smooth rather than bin, which historically cost
-more, and both gained an anchoring parameter in 0.1.3 to bring their cost down without
-changing what they measure.
+sorts or bins in O(n log n). Two estimators smooth rather than bin, which costs more, and
+both take an anchoring parameter that brings their cost down without changing what they
+measure.
 
 **The ICI family** (`ici`, `e50`, `e90`, `emax`, and the `reliability_summary` stats box) fits
-a LOESS smoother \( \hat{c}(p) \) and previously refit it at every one of the \( n \)
-observations, each fit itself scanning an O(n)-window, effectively O(n²) at portfolio scale.
+a LOESS smoother \( \hat{c}(p) \). Refitting it at every one of the \( n \) observations,
+each fit itself scanning an O(n)-window, is effectively O(n²) at portfolio scale.
 `grid_size` (default 512) fits the smoother at that many equal-mass anchors spanning the
 prediction range and linearly interpolates the rest, the same device R's `stats::lowess` uses
 via its `delta` parameter. Windows and bandwidths are computed against the full data, so this
 changes *how many points get an exact fit*, not what the fit means; measured drift on
 `make_pd_portfolio(n=5000)` is `|Δici| ≈ 1.3e-6`, far below bootstrap CI width. `grid_size=None`
-recovers the exact per-point fit and its pre-0.1.3 cost. On this host, `ici` at n=50,000 fell
-from 192.2s to 1.2s, and `loess(grid_size=512)` fits n=1,000,000 points in under 30s.
+gives the exact per-point fit at that O(n²) cost. On this host, `ici` at n=50,000 takes 1.2s
+with the default grid against 192.2s exact, and `loess(grid_size=512)` fits n=1,000,000 points in under 30s.
 
-**`smooth_ece`** solves a bandwidth fixed point by bisection, and each step built a kernel
-matrix against every residual. `bins` (default 8192) pre-aggregates the weighted residual
+**`smooth_ece`** solves a bandwidth fixed point by bisection; evaluated exactly, each step
+builds a kernel matrix against every residual. `bins` (default 8192) pre-aggregates the weighted residual
 measure onto equal-width bins over the logit range once, up front (O(n)); each bisection step
 then evaluates that binned measure directly on its own lattice by truncated-Gaussian
 convolution, independent of n. A small-bandwidth guard retries once on an adaptively refined
 binning (`bins <- ceil(range / (sigma/8))`) whenever the found bandwidth would be under-resolved
 by the current bins, then falls back to the exact per-observation computation only if that
 refinement is infeasible (above 2^20 bins) or still under-resolved, so accuracy never degrades
-silently, and the binned path no longer reuses the exact
-path's 257-point grid (that reuse aliased against the bin lattice and was a cost-only defect).
-The lattice path engages for every call with a non-degenerate
-logit range (0.1.3 engaged it only for `n > bins`, leaving typical calibration-set sizes on
-the exact path: the "size cliff", now removed); `bins=None` or a
-degenerate range is bit-identical to the pre-0.1.3 exact computation. For
+silently. The binned path evaluates on its own lattice rather than the exact path's
+257-point grid, which would alias against the bin lattice. The lattice path engages for every
+call with a non-degenerate logit range, whatever n; `bins=None` or a degenerate range runs
+the exact computation. For
 `n <= bins` the lattice value may differ from the exact grid at the ~1e-4 level on typical
 portfolios (measured ≤ 2.4e-4 on `make_pd_portfolio`); on wide clipped-logit-range data the
 gap can be much larger, because there the exact path's fixed 257-point grid under-resolves
@@ -495,7 +512,7 @@ O(bins · taps) per bisection step, where taps is the truncated-Gaussian kernel 
 Each replicate is sorted by prediction once (`np.argsort(..., kind="stable")`), and the LOESS
 fit and the ECCE walk reuse that order. The LOESS anchors are fitted in cache-sized blocks of
 whole windows rather than one Python iteration each (`_math._loess_fit_sorted_vec`, the only
-LOESS engine since 0.3.4; it matches the former per-point loop to ≤ 4.3×10⁻¹⁵ on fitted values
+LOESS engine; it matches a scalar per-point loop to ≤ 4.3×10⁻¹⁵ on fitted values
 and is tested against it). Reported **point estimates** come off the unsorted path; the
 bootstrap replicates' reordered sums move percentile CI bounds only in their last bits.
 
@@ -510,9 +527,8 @@ well-defined answer; the other branch divides by cancellation noise. Since ancho
 quantiles, this has not been observed to reach a reported value, and the corner is pinned by
 `tests/test_math.py`.
 
-Measured on the dev host at n=10⁴, one full-catalog replicate costs about 28 ms (0.3.x: 34 ms);
-`ece_sweep`'s early stop accounts for most of the difference (1.8 ms per replicate, was
-8.9 ms), and the binned ECE family costs 0.34 ms. `evaluate(n=10⁴, n_boot=1000)` takes about
+Measured on the dev host at n=10⁴, one full-catalog replicate costs about 28 ms;
+`ece_sweep` with its early stop costs 1.8 ms per replicate (about 8.9 ms without it), and the binned ECE family costs 0.34 ms. `evaluate(n=10⁴, n_boot=1000)` takes about
 28 s. The ICI family's LOESS fit remains the largest single cost, so `metrics=` excluding it
 (`ici`/`e50`/`e90`/`emax`) is the biggest lever. For n above roughly 10⁶, reduce `n_boot`, pass
 a `metrics=` subset, or both.
@@ -535,7 +551,7 @@ a `metrics=` subset, or both.
 | 100,000 | `smooth_ece(d.y, d.scores)` | 0.003 |
 | 100,000 | `evaluate(d.y, d.scores, n_boot=100)` | 25.8 |
 
-The public `ece_sweep` and `ici` now run the same code as the bootstrap path (early-stopping
+The public `ece_sweep` and `ici` run the same code as the bootstrap path (early-stopping
 sweep, vectorized LOESS), so the single-call rows above are the per-replicate costs.
 
 ## References
@@ -554,6 +570,7 @@ sweep, vectorized LOESS), so the single-call rows above are the per-replicate co
 - Ferro, C. A. T., Fricker, T. E. (2012). "A bias-corrected decomposition of the Brier score." *Quarterly Journal of the Royal Meteorological Society* 138(668), 1954–1960.
 - Gretton, A., Borgwardt, K. M., Rasch, M. J., Schölkopf, B., Smola, A. (2012). "A Kernel Two-Sample Test." *Journal of Machine Learning Research* 13, 723–773.
 - Hosmer, D. W., Lemeshow, S. (1980). "Goodness of fit tests for the multiple logistic regression model." *Communications in Statistics - Theory and Methods* 9(10), 1043–1069.
+- Hosmer, D. W., Lemeshow, S., Sturdivant, R. X. (2013). *Applied Logistic Regression*, 3rd ed. Wiley.
 - Kumar, A., Sarawagi, S., Jain, U. (2018). "Trainable Calibration Measures for Neural Networks from Kernel Mean Embeddings." ICML, PMLR 80, 2805–2814.
 - Miller, M. E., Hui, S. L., Tierney, W. M. (1991). "Validation techniques for logistic regression models." *Statistics in Medicine* 10(8), 1213–1226.
 - Murphy, A. H. (1973). "A New Vector Partition of the Probability Score." *Journal of Applied Meteorology* 12(4), 595–600.

@@ -56,9 +56,11 @@ known? It fits the single-parameter model `y ~ Bernoulli(sigma(logit(p) + delta)
 likelihood. The score equation `sum(w * (y - sigma(logit(p) + delta))) = 0` is exactly the
 mean-matching condition mode B solves with `target_mean = mean_w(y)`, so `estimate_offset`
 finds `delta` with the same bisection root-finder, `_solve_delta` (through the
-`_offset_mle` helper), not a reimplementation, so the two routes cannot drift apart. The Fisher information for this
-one-parameter model at the fitted `delta` is `sum(w * q * (1 - q))` with `q = sigma(logit(p) +
-delta)`, so its inverse square root is `delta`'s asymptotic standard error. `estimate_offset`
+`_offset_mle` helper), not a reimplementation, so the two routes cannot drift apart. With `q = sigma(logit(p) + delta)`
+at the fitted `delta`, the asymptotic standard error is
+`sqrt(sum(w**2 * q * (1 - q))) / sum(w * q * (1 - q))`. This is the exact variance of the
+weighted score divided by the squared information. It does not change when all weights are
+rescaled, and for unit weights it is the Fisher `1 / sqrt(sum(q * (1 - q)))`. `estimate_offset`
 returns an `OffsetEstimate(delta, se, n, events, weight_sum)`; `probcal.offset.
 offset_from_estimate(est, p)` turns it into the same fitted `LogitOffset` mode A would give
 for `delta=est.delta`, so the audited MLE plugs directly into every downstream use: `Chain`,
@@ -79,7 +81,7 @@ around a point estimate.
 from probcal.offset import estimate_offset, offset_from_estimate
 
 est = estimate_offset(y_cal, s_cal)
-print(est)                       # delta=+0.1234 +/- 0.0287, n=..., events=...
+print(est)                       # -> delta=-0.8765 +/- 0.1144, n=3000, events=82.0
 off = offset_from_estimate(est, s_cal)  # same LogitOffset mode A would give
 ```
 
@@ -204,7 +206,7 @@ so the fitted offset anchors the calibrator's in-sample predictions exactly as
 maximum-likelihood offset; `estimate_offset` remains an explicit choice `Chain.fit` never makes
 on its own. Because `fit` always refits every stage, including ones already fitted at
 construction, keeping one stage frozen means composing already-fitted objects and skipping
-`fit`, the same pattern that worked before `Chain` had a `fit` method at all.
+`fit`.
 
 ## In probcal
 

@@ -12,6 +12,7 @@ import numpy as np
 
 from .._math import expit
 from .._validation import EPS
+from ..metrics._common import rao_scott
 from ..metrics.regression import calibration_slope
 from ._processes import plug_in_delta, plug_in_shape
 
@@ -20,7 +21,16 @@ CHI2_1_95 = 3.841
 
 
 def residual_shape_lr(z: np.ndarray, y: np.ndarray, w: np.ndarray, delta: float) -> float:
-    """``2 * (loglik of the Cox fit - loglik of the offset-only fit)`` on the window."""
+    """``2 * (loglik of the Cox fit - loglik of the offset-only fit)`` on the window.
+
+    With non-uniform weights the weighted LR is a scaled ``chi2_1`` under
+    the offset-only model, not ``chi2_1``; it is divided by its design
+    effect (first-order Rao-Scott on the slope score, the intercept
+    projected out: :func:`probcal.metrics._common.rao_scott` on the centred
+    logits), so it compares to the chi-square(1) bound on the right scale
+    and is invariant to rescaling the weights. Unit weights give the plain
+    LR, unchanged.
+    """
     if z.size == 0 or np.unique(y).size < 2:
         return 0.0
     c, a = plug_in_shape(z, y, w)
@@ -29,7 +39,13 @@ def residual_shape_lr(z: np.ndarray, y: np.ndarray, w: np.ndarray, delta: float)
         qc = np.clip(q, EPS, 1.0 - EPS)
         return float(np.sum(w * (y * np.log(qc) + (1.0 - y) * np.log1p(-qc))))
 
-    return max(0.0, 2.0 * (ll(expit(c + a * z)) - ll(expit(z + delta))))
+    mu = expit(z + delta)
+    lr = max(0.0, 2.0 * (ll(expit(c + a * z)) - ll(mu)))
+    # Slope score with the (free) intercept projected out under the null info.
+    v = w * mu * (1.0 - mu)
+    z_c = z - float(np.sum(v * z)) / float(np.sum(v))
+    stat, _ = rao_scott(lr, z_c[:, None], mu, w)
+    return stat
 
 
 def slope_ci(z: np.ndarray, y: np.ndarray, w: np.ndarray, n_boot: int = 200) -> tuple[float, float]:
@@ -41,9 +57,13 @@ def slope_ci(z: np.ndarray, y: np.ndarray, w: np.ndarray, n_boot: int = 200) -> 
     slopes = []
     for _ in range(n_boot):
         idx = rng.integers(0, len(z), len(z))
-        if np.unique(y[idx]).size < 2:
+        # One-class or constant-logit resamples identify no slope: skip them
+        # (calibration_slope would return nan and warn).
+        if np.unique(y[idx]).size < 2 or np.unique(z[idx]).size < 2:
             continue
-        slopes.append(calibration_slope(y[idx], p[idx], sample_weight=w[idx]))
+        slope = calibration_slope(y[idx], p[idx], sample_weight=w[idx])
+        if np.isfinite(slope):
+            slopes.append(slope)
     if len(slopes) < 20:
         return -np.inf, np.inf
     return float(np.quantile(slopes, 0.025)), float(np.quantile(slopes, 0.975))

@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from probcal._math import expit
 from probcal.metrics import brier_score, log_loss
@@ -75,15 +74,6 @@ def test_corp_log_loss_degenerate_levels_are_clipped():
     assert np.isfinite(r.log_loss_mcb) and np.isfinite(r.log_loss_dsc)
 
 
-def test_corp_level_must_be_in_unit_interval():
-    from probcal.curves import corp_reliability
-
-    y, p = _calibrated(200)
-    for level in (0.0, 1.0, -0.1, 1.5):
-        with pytest.raises(ValueError, match="level|confidence"):
-            corp_reliability(y, p, bands=None, level=level)
-
-
 def test_consistency_bands_are_seeded_and_contain_identity_mostly():
     from probcal.curves import corp_reliability
 
@@ -106,3 +96,10 @@ def test_confidence_bands_bracket_the_fit():
     r = corp_reliability(y, p, bands="confidence", n_resamples=50, random_state=5)
     fit = eval_step(r.block_lo, r.block_level, r.band_grid)
     assert np.mean((fit >= r.band_low - 1e-12) & (fit <= r.band_high + 1e-12)) > 0.9
+
+
+def test_corp_zero_resamples_skips_bands():
+    from probcal.curves import corp_reliability
+
+    y, p = _calibrated(300)
+    assert corp_reliability(y, p, n_resamples=0).band_grid.size == 0

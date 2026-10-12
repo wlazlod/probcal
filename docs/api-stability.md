@@ -18,7 +18,7 @@ pattern).
 
 What a patch release may therefore change: metric defaults and numeric
 paths with an escape hatch; the shape of fitted internals that are not
-part of the calibrator protocol (0.1.3 changed `ENIRCalibrator.path_solutions_`);
+part of the calibrator protocol (such as `ENIRCalibrator.path_solutions_`);
 performance, documentation, and packaging. What it may not: public
 signatures, exported names, the calibrator protocol, and the ability to
 read every schema-1 artifact.
@@ -48,13 +48,13 @@ The public API is exactly the export lists below; anything prefixed with
   `evaluate`).
 - `probcal.monitor.__all__`: `CalibrationMonitor`, `MonitorStep`,
   `MonitorReport`, `AppliedAction`, `moc_offset`, `moc_offset_from_counts`.
-- `probcal.sklearn` (extra `probcal[sklearn]`): `SklearnCalibrator`,
+- `probcal.sklearn.__all__` (extra `probcal[sklearn]`): `SklearnCalibrator`,
   `SklearnOffset`, `CalibratedClassifier`.
-- `probcal.integrations.optbinning` (extra `probcal[optbinning]`):
+- `probcal.integrations.optbinning.__all__` (extra `probcal[optbinning]`):
   `calibrate_scorecard`, `CalibratedScorecard`.
-- `probcal.plots` (extra `probcal[viz]`): the plotting catalog,
+- `probcal.plots.__all__` (extra `probcal[viz]`): the plotting catalog,
   including `plot_e_process`.
-- `probcal.report` (extra `probcal[viz]`): `validation_report`. Not
+- `probcal.report.__all__` (extra `probcal[viz]`): `validation_report`. Not
   re-exported from top-level `probcal`, so `import probcal` and
   `import probcal.report` both stay matplotlib-free at import time.
 
@@ -79,8 +79,8 @@ detailed changelog entry and, where feasible, a parameter that
 recovers the old values.
 
 Deprecated in 0.3.4, all removed in 0.4.0 (each warns with a
-`DeprecationWarning` naming its replacement; until then the old spelling
-behaves as before):
+`DeprecationWarning` naming its replacement; until then the deprecated
+spelling keeps working):
 
 | Deprecated | Replacement |
 |---|---|

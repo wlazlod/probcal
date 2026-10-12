@@ -12,6 +12,7 @@ import numpy as np
 from .._math import beta_ppf, expit
 from .._registry import load, register
 from .._serialize import JsonIO, check_payload, envelope
+from ..metrics._common import effective_weights
 from ..metrics.scores import _prep
 from ..offset import LogitOffset
 from ._monitor import CalibrationMonitor, MonitorReport, MonitorStep
@@ -148,8 +149,10 @@ def moc_offset_from_counts(
     """Margin-of-conservatism offset from raw event counts (mode B, no monitor).
 
     The Jeffreys posterior upper bound on the observed event rate,
-    ``q = beta_ppf(level, k + 0.5, n - k + 0.5)`` with ``k = sum(w * y)``
-    and ``n = sum(w)`` -- the same one-sided Jeffreys quantile
+    ``q = beta_ppf(level, k + 0.5, n - k + 0.5)`` with the Kish effective
+    counts ``n = sum(w)^2 / sum(w^2)`` and ``k = n * sum(w * y) / sum(w)``
+    (unit weights give the raw counts; rescaling every weight by a constant
+    leaves ``q`` unchanged) -- the same one-sided Jeffreys quantile
     ``metrics.jeffreys_grade_test``/``metrics.jeffreys_upper_bands`` use --
     becomes the offset's target mean: ``LogitOffset(target_mean=q)`` (mode
     B) solves for the log-odds shift that re-anchors ``p``'s mean at
@@ -191,8 +194,10 @@ def moc_offset_from_counts(
     y_arr, p_arr, w_arr = _prep(y, p, sample_weight)
     if not 0.0 < level < 1.0:
         raise ValueError("level must lie in (0, 1)")
-    k = float(np.sum(w_arr * y_arr))
-    n = float(np.sum(w_arr))
+    # Kish effective counts: events and trials scaled by the same factor.
+    w_eff = effective_weights(w_arr)
+    k = float(np.sum(w_eff * y_arr))
+    n = float(np.sum(w_eff))
     q = beta_ppf(level, k + 0.5, n - k + 0.5)
     return LogitOffset(target_mean=q).fit(p_arr, sample_weight=w_arr)
 

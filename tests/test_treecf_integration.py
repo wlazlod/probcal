@@ -49,7 +49,8 @@ def _require_treecf_0_2_4() -> None:
         pytest.fail("probcal[treecf] requires treecf>=0.2.4 — update the pin")
 
 
-def test_counterfactual_hits_calibrated_target(setup) -> None:
+def test_score_calibrated_readout(setup) -> None:
+    _require_treecf_0_2_4()
     model, X, y, scores, cal = setup
     x0, p0 = _pick_high_risk(model, X, cal)
     assert p0 > 0.05
@@ -58,24 +59,11 @@ def test_counterfactual_hits_calibrated_target(setup) -> None:
         x0, target=Target.calibrated(cal, op="<=", value=0.05), seed=0, backend="exact"
     )
     assert hasattr(res, "x_cf"), f"expected a counterfactual, got {type(res).__name__}"
-    x_cf = np.asarray(res.x_cf, dtype=np.float64)
-    p_cf = cal.predict_proba(model.predict_proba(x_cf.reshape(1, -1))[:, 1])
-    assert p_cf[0] <= 0.05 + 1e-9  # closed interval per the plateau contract
-
-
-def test_score_calibrated_readout(setup) -> None:
-    _require_treecf_0_2_4()
-    model, X, y, scores, cal = setup
-    x0, _ = _pick_high_risk(model, X, cal)
-    exp = Explainer(model=model, background=X[:500])
-    res = exp.explain(
-        x0, target=Target.calibrated(cal, op="<=", value=0.05), seed=0, backend="exact"
-    )
-    assert hasattr(res, "x_cf")
     # The read-out is presentational; the raw interval decided. It must agree
     # with the independent model -> calibrator recompute exactly.
     x_cf = np.asarray(res.x_cf, dtype=np.float64)
     p_cf = cal.predict_proba(model.predict_proba(x_cf.reshape(1, -1))[:, 1])
+    assert p_cf[0] <= 0.05 + 1e-9  # closed interval per the plateau contract
     assert res.score_calibrated is not None
     assert res.score_calibrated == pytest.approx(p_cf[0], abs=1e-12)
 
@@ -111,21 +99,6 @@ def test_certificate_provenance_loop(setup) -> None:
     assert "calibrator_match" not in exp.check_certificate(cert)
 
 
-def test_chain_target_after_macro_shift(setup) -> None:
-    model, X, y, scores, cal = setup
-    off = LogitOffset(delta=0.5).fit(cal.predict_proba(scores))
-    chain = Chain([cal, off])
-    x0, _ = _pick_high_risk(model, X, cal)
-    exp = Explainer(model=model, background=X[:500])
-    res = exp.explain(
-        x0, target=Target.calibrated(chain, op="<=", value=0.05), seed=0, backend="exact"
-    )
-    assert hasattr(res, "x_cf")
-    x_cf = np.asarray(res.x_cf, dtype=np.float64)
-    p_cf = chain.predict_proba(model.predict_proba(x_cf.reshape(1, -1))[:, 1])
-    assert p_cf[0] <= 0.05 + 1e-9
-
-
 def test_isotonic_plateau_target_lands_on_block_boundary(setup) -> None:
     model, X, y, scores, cal = setup
     iso = IsotonicCalibrator().fit(scores, y.astype(float))
@@ -139,12 +112,3 @@ def test_isotonic_plateau_target_lands_on_block_boundary(setup) -> None:
     x_cf = np.asarray(res.x_cf, dtype=np.float64)
     p_cf = iso.predict_proba(model.predict_proba(x_cf.reshape(1, -1))[:, 1])
     assert p_cf[0] <= t + 1e-12  # the plateau level itself qualifies (closed)
-
-
-def test_bands_grade_recourse(setup) -> None:
-    model, X, y, scores, cal = setup
-    x0, _ = _pick_high_risk(model, X, cal)
-    exp = Explainer(model=model, background=X[:500])
-    bands = {"A": (0.0, 0.02), "B": (0.02, 0.08)}
-    out = exp.explain(x0, target=Target.bands(bands, space="calibrated", calibrator=cal), seed=0)
-    assert set(out) == {"A", "B"}

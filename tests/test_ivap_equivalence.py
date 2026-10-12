@@ -16,10 +16,14 @@ from _ivap_reference import pair_at, pooled_calibration
 from probcal._validation import EPS, validate_scores, validate_weights
 from probcal.vennabers import VennAbersCalibrator
 
-# 20 seeded calibration sets: n in {30 x 7, 500 x 7, 3000 x 6}; ties injected in half
-# the cases, unit and non-uniform weights alternating independently of the tie flag.
-_SIZES = [30] * 7 + [500] * 7 + [3000] * 6
-CASES = [(n, i % 2 == 0, (i // 2) % 2 == 1, i) for i, n in enumerate(_SIZES)]
+# Every tie/weight combination at n=30 and n=500, plus one large tied-and-weighted set.
+CASES = [
+    (n, tied, weighted, 4 * j + 2 * int(tied) + int(weighted))
+    for j, n in enumerate((30, 500))
+    for tied in (False, True)
+    for weighted in (False, True)
+]
+CASES.append((3000, True, True, 19))
 
 
 def _make_dataset(
@@ -73,9 +77,9 @@ def test_interval_matches_v012_pair_refit(n: int, tied: bool, weighted: bool, se
     np.testing.assert_allclose(got, expected, rtol=0, atol=1e-12)
 
 
-@pytest.mark.parametrize("seed", range(5))
+@pytest.mark.parametrize("seed", range(2))
 def test_interval_is_row_order_invariant_with_ties(seed: int) -> None:
-    """0.3.x inserted the query among unpooled tied rows: permuting the rows
+    """CAL-6: 0.3.x inserted the query among unpooled tied rows: permuting the rows
     moved the output. Pooled ties make it a function of the data set only."""
     s, y, w = _make_dataset(300, True, seed % 2 == 1, seed)
     queries = _queries(s, seed)

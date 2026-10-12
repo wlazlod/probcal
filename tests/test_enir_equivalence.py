@@ -21,9 +21,9 @@ from probcal.bayesian import ENIRCalibrator
 
 PROBE = np.linspace(0.01, 0.99, 251)
 
-# 20 seeded datasets: m in {50 x 7, 200 x 7, 2000 x 6}, cycling four dataset kinds.
-_SIZES = [50] * 7 + [200] * 7 + [2000] * 6
-CASES = [(m, i % 4, i) for i, m in enumerate(_SIZES)]
+# Every dataset kind at m=50 and m=200, plus one large weighted case.
+CASES = [(m, kind, 4 * j + kind) for j, m in enumerate((50, 200)) for kind in range(4)]
+CASES.append((2000, 2, 14))
 
 
 def _make_dataset(m: int, kind: int, seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

@@ -1,6 +1,8 @@
-"""Per-grade offset confidence sequences; slow power sim excluded from -m "not slow"."""
+"""Per-grade e-processes, grade keys, and grade confidence sequences."""
 
+import json
 import pathlib
+import warnings
 
 import numpy as np
 import pytest
@@ -8,6 +10,7 @@ import pytest
 from probcal._math import expit, logit
 from probcal.datasets import make_pd_portfolio
 from probcal.monitor import CalibrationMonitor
+from probcal.monitor._monitor import grade_key, grade_keys
 
 _DATA_DIR = pathlib.Path(__file__).parent / "data"
 
@@ -25,25 +28,15 @@ def _grade_batch(
     return y, p, g
 
 
-def test_grade_delta_ci_empty_without_grades() -> None:
-    mon = CalibrationMonitor()
-    y, p, _ = _grade_batch(n=200, seed=1)
-    step = mon.update(y, p, label="m0")
-    assert step.grade_delta_ci == {}
+def _batch(n=1000, shift=0.0, seed=0):
+    d = make_pd_portfolio(n=n, random_state=seed)
+    rng = np.random.default_rng(seed + 1000)
+    y = (rng.random(n) < expit(logit(d.scores) + shift)).astype(float)
+    return y, d.scores
 
 
-def test_grade_delta_ci_populated_and_shrinks_toward_injected_offset() -> None:
-    mon = CalibrationMonitor(alpha=0.05, delta_ci_grid=(-2.0, 2.0, 81), grades=("A", "B"))
-    step = None
-    for k in range(6):
-        y, p, g = _grade_batch(n=1500, shift_a=0.6, shift_b=0.0, seed=10 + k)
-        step = mon.update(y, p, grade=g, label=f"m{k}")
-    assert set(step.grade_delta_ci) == {"A", "B"}
-    lo_a, hi_a = step.grade_delta_ci["A"]
-    lo_b, hi_b = step.grade_delta_ci["B"]
-    assert lo_a <= 0.6 <= hi_a
-    assert lo_b <= 0.0 <= hi_b
-    assert lo_a > 0.0  # sustained drift on A eventually excludes zero
+def _grades(n, labels=("A", "B")):
+    return np.asarray(labels)[np.arange(n) % len(labels)]
 
 
 @pytest.mark.slow
@@ -64,22 +57,135 @@ def test_two_grade_drift_confidence_sequence_coverage() -> None:
     assert hits_b / n_runs >= 0.9
 
 
-def test_persistence_reproduces_grade_ci_bit_for_bit(tmp_path) -> None:
-    batches = [_grade_batch(n=300, shift_a=0.3, shift_b=0.0, seed=60 + k) for k in range(5)]
-    mon = CalibrationMonitor(grades=("A", "B"))
-    direct = [
-        mon.update(y, p, grade=g, label=f"m{k}").grade_delta_ci
-        for k, (y, p, g) in enumerate(batches)
-    ]
+def test_declared_grades_drive_the_alarm_on_single_grade_drift() -> None:
+    mon = CalibrationMonitor(alpha=0.05, grades=("A", "B"))
+    for k in range(8):
+        y_a, p_a = _batch(n=1000, shift=1.2, seed=200 + k)
+        y_b, p_b = _batch(n=1000, shift=0.0, seed=300 + k)
+        g = np.array(["A"] * 1000 + ["B"] * 1000)
+        step = mon.update(np.concatenate([y_a, y_b]), np.concatenate([p_a, p_b]), grade=g)
+    assert step.alarm
+    assert step.e_grades["A"] > step.e_grades["B"]
+    assert "A" in mon.report().grade_table
 
-    resumed = []
-    mon2 = CalibrationMonitor(grades=("A", "B"))
-    for k, (y, p, g) in enumerate(batches):
-        resumed.append(mon2.update(y, p, grade=g, label=f"m{k}").grade_delta_ci)
-        path = tmp_path / f"state{k}.json"
-        mon2.to_json(path)
-        mon2 = CalibrationMonitor.from_json(path)
-    assert direct == resumed
+
+def test_declared_grades_are_in_the_mixture_from_the_first_batch() -> None:
+    # MON-6: the mixture weights are fixed by the declared universe.
+    mon = CalibrationMonitor(grades=("A", "B", "C"))
+    for k in range(5):
+        y, p = _batch(seed=40 + k)
+        labels = ("A", "B", "C") if k >= 2 else ("A", "B")  # C appears mid-stream
+        step = mon.update(y, p, grade=_grades(len(p), labels), label=f"m{k}")
+        assert set(step.e_grades) == {"A", "B", "C"}
+        if k < 2:
+            assert step.e_grades["C"] == 1.0  # no data yet: e = 1, weight fixed
+        grade_mean = np.mean([step.e_grades[g] for g in ("A", "B", "C")])
+        expected = np.mean([step.e_offset, step.e_shape, grade_mean])
+        assert step.e_global == pytest.approx(expected, rel=1e-12)
+
+
+def test_undeclared_grades_do_not_enter_the_global_mixture() -> None:
+    # MON-6: grades first seen mid-stream used to re-weight the mixture.
+    plain, graded = CalibrationMonitor(), CalibrationMonitor()
+    with pytest.warns(UserWarning, match="not part of the global alarm"):
+        for k in range(5):
+            y, p = _batch(seed=10 + k)
+            a = plain.update(y, p, label=f"m{k}")
+            b = graded.update(y, p, grade=_grades(len(p)) if k >= 2 else None, label=f"m{k}")
+            assert a.e_global == b.e_global
+            assert a.alarm == b.alarm
+    assert set(graded.steps_[-1].e_grades) == {"A", "B"}  # still tracked and reported
+
+
+def test_undeclared_grade_warning_fires_once_and_survives_persistence() -> None:
+    mon = CalibrationMonitor()
+    y, p = _batch(seed=3)
+    with pytest.warns(UserWarning, match="grades=None"):
+        mon.update(y, p, grade=_grades(len(p)))
+    mon2 = CalibrationMonitor.from_dict(mon.to_dict())
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        mon2.update(y, p, grade=_grades(len(p)))
+
+
+# ---------------------------------------------------------------- grade keys
+
+
+@pytest.mark.parametrize(
+    "labels",
+    [
+        [1.0, "A"],
+        np.array([0.1, 0.2, 0.1], dtype=np.float32),
+        np.array([1e20, -3.0, 2.5, np.nan]),
+        np.array([2**64 - 1, 3], dtype=np.uint64),
+        np.array([1, 2, 1], dtype=np.int8),
+        np.array([True, False]),
+        np.array([b"A", b"B"]),
+        np.array(["1.0", "x"]),
+        (1, 2.0, "B"),
+    ],
+)
+def test_grade_keys_match_grade_key_element_wise(labels: object) -> None:
+    keys = grade_keys(labels)
+    assert keys.tolist() == [grade_key(x) for x in list(labels)]  # type: ignore[call-overload]
+    assert all(type(k) is str for k in keys.tolist())
+
+
+def test_grade_keys_rejects_non_1d() -> None:
+    with pytest.raises(ValueError, match="1-D"):
+        grade_keys(np.zeros((2, 2)))
+
+
+def test_int_and_float_grade_labels_share_one_process() -> None:
+    mon = CalibrationMonitor(grades=(1, 2))
+    y, p = _batch(seed=80)
+    g_int = (np.arange(len(p)) % 2) + 1
+    mon.update(y, p, grade=g_int)
+    step = mon.update(y, p, grade=g_int.astype(float))  # 1.0 is grade "1"
+    assert set(step.e_grades) == {"1", "2"}
+    assert set(step.grade_delta_ci) == {"1", "2"}
+
+
+def test_mixed_and_float32_declared_grades_accept_their_own_labels() -> None:
+    mon = CalibrationMonitor(grades=(1.0, "A"))
+    mon.update([0.0, 1.0], [0.1, 0.2], grade=[1.0, "A"])
+    g32 = np.array([0.1, 0.2], dtype=np.float32)
+    mon = CalibrationMonitor(grades=tuple(g32))
+    mon.update([0.0, 1.0], [0.1, 0.2], grade=g32)
+    assert set(mon.steps_[-1].e_grades) == {grade_key(x) for x in g32}
+
+
+class _Scale:
+    def __init__(self, fp: str) -> None:
+        self._fp = fp
+
+    def fingerprint(self) -> str:
+        return self._fp
+
+    def assign(self, p: np.ndarray) -> np.ndarray:
+        return np.where(p < 0.1, "G1", "G2")
+
+
+def test_masterscale_fingerprint_recorded_only_for_accepted_batches() -> None:
+    mon = CalibrationMonitor(grades=("Z",))
+    y, p = _batch(n=300, seed=60)
+    with pytest.raises(ValueError, match="not in the declared grades"):
+        mon.update(y, p, grade=_Scale("a" * 64))
+    assert mon.masterscale_fingerprint_ is None
+    assert mon.steps_ == []
+
+    mon = CalibrationMonitor(grades=("G1", "G2"))
+    with pytest.raises(ValueError, match="equal length"):
+        mon.update(y, p[:-1], grade=_Scale("a" * 64))
+    assert mon.masterscale_fingerprint_ is None
+    mon.update(y, p, grade=_Scale("b" * 64))
+    assert mon.masterscale_fingerprint_ == "b" * 64
+    with pytest.raises(ValueError, match="different masterscale"):
+        mon.update(y, p, grade=_Scale("c" * 64))
+    assert mon.masterscale_fingerprint_ == "b" * 64
+
+
+# ---------------------------------------------------------------- legacy payloads
 
 
 def test_0_2_0_monitor_file_loads_and_continues() -> None:
@@ -97,30 +203,64 @@ def test_0_2_0_monitor_file_loads_and_continues() -> None:
             assert set(step.grade_delta_ci) == {"A", "B"}
 
     assert mon.steps_[0].grade_delta_ci == {}
-    assert mon.steps_[-1].grade_delta_ci["A"] is None or isinstance(
-        mon.steps_[-1].grade_delta_ci["A"], tuple
-    )
-
     d = mon.to_dict()
-    mon2 = CalibrationMonitor.from_dict(d)
-    assert mon2.to_dict() == d
+    assert CalibrationMonitor.from_dict(d).to_dict() == d
 
 
-def test_plot_e_process_grades_panel_adds_second_axes() -> None:
-    pytest.importorskip("matplotlib")
-    import matplotlib
+def test_pre_0_4_float_grade_keys_are_renamed_on_load() -> None:
+    mon = CalibrationMonitor(grades=(1.0, 2.0))
+    y, p = _batch(seed=82)
+    g = ((np.arange(len(p)) % 2) + 1).astype(float)
+    mon.update(y, p, grade=g)
+    d = json.loads(mon.to_json())
 
-    matplotlib.use("Agg")
-    from probcal.plots import plot_e_process
+    def legacy(k: str) -> str:
+        return {"1": "1.0", "2": "2.0"}.get(k, k)
 
-    mon = CalibrationMonitor(delta_ci_grid=(-2.0, 2.0, 21), grades=("A", "B"))
-    for k in range(3):
-        y, p, g = _grade_batch(n=200, shift_a=0.4, shift_b=0.0, seed=2000 + k)
-        mon.update(y, p, grade=g, label=f"m{k}")
-    rep = mon.report()
+    # rewrite as a 0.3.x writer keyed them: str(1.0) == "1.0"
+    st = d["state"]
+    d["probcal_version"] = "0.3.3"
+    st["grade_procs"] = {legacy(k): v for k, v in st["grade_procs"].items()}
+    st["grade_cs_log"] = {legacy(k): v for k, v in st["grade_cs_log"].items()}
+    st["grade_cs_max"] = {legacy(k): v for k, v in st["grade_cs_max"].items()}
+    st["g"] = [[legacy(x) for x in a] for a in st["g"]]
+    for s in st["steps"]:
+        s["e_grades"] = {legacy(k): v for k, v in s["e_grades"].items()}
+        s["grade_delta_ci"] = {legacy(k): v for k, v in s["grade_delta_ci"].items()}
 
-    ax_default = plot_e_process(rep)
-    assert len(ax_default.figure.axes) == 1
+    loaded = CalibrationMonitor.from_dict(d)
+    assert loaded.steps_ == mon.steps_
+    assert loaded.update(y, p, grade=g) == mon.update(y, p, grade=g)
 
-    ax_panel = plot_e_process(rep, grades_panel=True)
-    assert len(ax_panel.figure.axes) == 2
+
+def test_pre_0_3_4_partially_float_keyed_payload_is_rekeyed() -> None:
+    # Only grade_procs carries the legacy "1.0" keys: the regex fallback renames them.
+    mon = CalibrationMonitor(grades=(1.0, 2.0))
+    y, p = _batch(n=300, seed=30)
+    mon.update(y, p, grade=((np.arange(len(p)) % 2) + 1).astype(float))
+    d = json.loads(mon.to_json())
+    d["probcal_version"] = "0.3.3"
+    st = d["state"]
+    st["grade_procs"] = {f"{k}.0": v for k, v in st["grade_procs"].items()}
+    assert set(CalibrationMonitor.from_dict(d)._grade_procs) == {"1", "2"}
+
+
+@pytest.mark.parametrize("version", ["0.3.4", "0.3.5", "0.3.5.dev0", "0.4.0"])
+def test_current_payload_string_labels_are_not_rekeyed(version: str) -> None:
+    mon = CalibrationMonitor()
+    labels = np.array(["1.0", "2.0"])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for k in range(3):
+            y, p = _batch(n=300, seed=10 + k)
+            mon.update(y, p, grade=labels[np.arange(len(p)) % 2])
+    d = json.loads(mon.to_json())
+    d["probcal_version"] = version
+    loaded = CalibrationMonitor.from_dict(d)
+    assert set(loaded.steps_[-1].e_grades) == {"1.0", "2.0"}
+    assert loaded.steps_ == mon.steps_
+    y, p = _batch(n=300, seed=20)
+    g = labels[np.arange(len(p)) % 2]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert loaded.update(y, p, grade=g) == mon.update(y, p, grade=g)

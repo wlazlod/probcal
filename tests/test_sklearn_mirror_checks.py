@@ -6,20 +6,17 @@ declared inapplicable in `probcal.sklearn._xfail`, each with its own reason.
 This module re-implements the ones that *do* have a score-level analogue, on
 valid `(n,)` probability data, against the adapter (`SklearnCalibrator`) and
 the bare core (`BetaCalibrator`); `SklearnOffset` has its own mirrors for the
-offset-only declarations (`test_offset_fits_a_single_sample`,
-`test_offset_fits_a_single_feature_column`). Most mirrored checks also run on two-column
-`(n, 2)` probability-matrix input (`_as_X`'s `"adapter-2col"`/`"core-2col"`
-kinds), since `validate_scores` accepts that shape core-wide. `_MIRRORED_BY`
-maps every mirrored check to the test that stands in for it, `_NO_ANALOGUE`
-names the rest, and `test_every_declared_check_is_mirrored_or_explained`
-asserts the two together cover the declared tables exactly, so neither list
-can drift.
+offset-only declarations (`test_offset_single_sample_and_single_column`).
+Most mirrored checks also run on two-column `(n, 2)` probability-matrix input
+(`_as_X`'s `"adapter-2col"`/`"core-2col"` kinds), since `validate_scores`
+accepts that shape core-wide. `_MIRRORED_BY` maps every mirrored check to the
+test that stands in for it, `_NO_ANALOGUE` names the rest, and
+`test_every_declared_check_is_mirrored_or_explained` asserts the two together
+cover the declared tables exactly, so neither list can drift.
 
 The adapter's `n_features_in_` is 1 or 2, depending on whether `X` had one
 score column or a two-column probability matrix at fit, and is enforced at
-predict/transform time; that is mirrored by
-`test_mirror_n_features_in_is_recorded_at_fit` and
-`test_mirror_n_features_in_enforced_after_fitting` below.
+predict/transform time; that is mirrored by `test_mirror_n_features_in`.
 
 Checks with no score-level analogue, and why:
 
@@ -32,7 +29,7 @@ Checks with no score-level analogue, and why:
   do run; the core takes numpy arrays only.
 * `check_readonly_memmap_input`, `check_f_contiguous_array_estimator` — a
   single column has no layout variants; the property they protect (fit must
-  not write into its input) is mirrored by `test_fit_does_not_mutate_inputs`.
+  not write into its input) is mirrored by `test_fit_contract`.
 * `check_fit1d`, `check_fit2d_predict1d` — both expect a raise on 1-D `X`,
   which is the core's primary input form.
 * `check_supervised_y_2d` — expects a `DataConversionWarning` and a silent
@@ -59,7 +56,6 @@ import pytest
 
 pytest.importorskip("sklearn")
 
-from sklearn.base import clone  # noqa: E402
 from sklearn.exceptions import NotFittedError  # noqa: E402
 from sklearn.pipeline import make_pipeline  # noqa: E402
 from sklearn.utils.validation import check_is_fitted  # noqa: E402
@@ -86,35 +82,33 @@ CALIBRATOR_CLASSES = sorted(
 
 # Declared-inapplicable check -> the test in this module that stands in for it.
 _MIRRORED_BY: dict[str, str] = {
-    "check_classifiers_one_label_sample_weights": (
-        "test_one_class_after_zero_weight_trimming_raises"
-    ),
-    "check_dict_unchanged": "test_dict_unchanged_by_predict_side_methods",
-    "check_dont_overwrite_parameters": "test_fit_does_not_overwrite_init_parameters",
-    "check_estimators_dtypes": "test_float32_input_gives_float64_output",
+    "check_classifiers_one_label_sample_weights": "test_adapter_contract",
+    "check_dict_unchanged": "test_predict_contract",
+    "check_dont_overwrite_parameters": "test_fit_contract",
+    "check_estimators_dtypes": "test_predict_contract",
     "check_estimators_fit_returns_self": "test_fit_returns_self",
-    "check_estimators_nan_inf": "test_non_finite_scores_raise",
-    "check_estimators_overwrite_params": "test_fit_does_not_overwrite_init_parameters",
-    "check_estimators_pickle": "test_pickle_round_trip_predicts_identically",
-    "check_fit_check_is_fitted": "test_check_is_fitted_before_and_after_fit",
-    "check_fit_idempotent": "test_fit_idempotent",
-    "check_fit_score_takes_y": "test_fit_takes_y_and_score_scores",
-    "check_methods_sample_order_invariance": "test_methods_sample_order_invariance",
-    "check_methods_subset_invariance": "test_methods_subset_invariance",
-    "check_n_features_in": "test_mirror_n_features_in_is_recorded_at_fit",
-    "check_n_features_in_after_fitting": "test_mirror_n_features_in_enforced_after_fitting",
-    "check_pipeline_consistency": "test_pipeline_consistency",
+    "check_estimators_nan_inf": "test_predict_contract",
+    "check_estimators_overwrite_params": "test_fit_contract",
+    "check_estimators_pickle": "test_adapter_contract",
+    "check_fit_check_is_fitted": "test_fit_contract",
+    "check_fit_idempotent": "test_fit_contract",
+    "check_fit_score_takes_y": "test_fit_contract",
+    "check_methods_sample_order_invariance": "test_predict_contract",
+    "check_methods_subset_invariance": "test_predict_contract",
+    "check_n_features_in": "test_mirror_n_features_in",
+    "check_n_features_in_after_fitting": "test_mirror_n_features_in",
+    "check_pipeline_consistency": "test_adapter_contract",
     "check_sample_weight_equivalence_on_dense_data": (
         "test_integer_sample_weight_equals_row_duplication"
     ),
     "check_sample_weights_invariance": "test_integer_sample_weight_equals_row_duplication",
-    "check_sample_weights_list": "test_sample_weight_as_list_matches_array",
-    "check_sample_weights_not_overwritten": "test_fit_does_not_mutate_inputs",
-    "check_sample_weights_shape": "test_wrong_shape_sample_weight_raises",
-    "check_transformer_general": "test_fit_transform_equals_fit_then_transform",
-    "check_transformer_preserve_dtypes": "test_fit_transform_equals_fit_then_transform",
-    "check_fit2d_1sample": "test_offset_fits_a_single_sample",
-    "check_fit2d_1feature": "test_offset_fits_a_single_feature_column",
+    "check_sample_weights_list": "test_sample_weight_contract",
+    "check_sample_weights_not_overwritten": "test_fit_contract",
+    "check_sample_weights_shape": "test_sample_weight_contract",
+    "check_transformer_general": "test_adapter_contract",
+    "check_transformer_preserve_dtypes": "test_adapter_contract",
+    "check_fit2d_1sample": "test_offset_single_sample_and_single_column",
+    "check_fit2d_1feature": "test_offset_single_sample_and_single_column",
 }
 
 # Declared-inapplicable checks with no score-level analogue at all; each is
@@ -238,209 +232,117 @@ def _state_equal(before: dict, after: dict) -> bool:
 
 
 @pytest.mark.parametrize("kind", _KINDS)
-def test_fit_idempotent(kind: str) -> None:
-    """check_fit_idempotent: a second fit on the same data changes nothing."""
-    est = _make(kind).fit(_as_X(kind, _S), _Y)
+def test_fit_contract(kind: str) -> None:
+    """check_estimators_fit_returns_self, check_fit_idempotent, check_fit_check_is_fitted,
+    check_dont_overwrite_parameters / check_estimators_overwrite_params,
+    check_sample_weights_not_overwritten (fit writes nothing back), check_fit_score_takes_y."""
+    X, y, w = _as_X(kind, _S).copy(), _Y.copy(), _W.copy()
+    X_ref, y_ref, w_ref = X.copy(), y.copy(), w.copy()
+    est = _make(kind)
+    params_before = copy.deepcopy(est.get_params())
+    public_before = {k for k in vars(est) if not k.startswith("_")}
+    with pytest.raises(NotFittedError):
+        check_is_fitted(est)
+    assert est.fit(X, y, sample_weight=w) is est
+    check_is_fitted(est)
+    assert est.get_params() == params_before
+    added = {k for k in vars(est) if not k.startswith("_")} - public_before
+    assert all(k.endswith("_") for k in added), added
+    np.testing.assert_array_equal(X, X_ref)
+    np.testing.assert_array_equal(y, y_ref)
+    np.testing.assert_array_equal(w, w_ref)
+
     first = _proba(kind, est, _Q)
-    est.fit(_as_X(kind, _S), _Y)
+    est.fit(X, y, sample_weight=w)  # y positionally, as a pipeline would call it
     np.testing.assert_array_equal(_proba(kind, est, _Q), first)
+    if kind.startswith("adapter"):  # .score() is a sklearn ClassifierMixin method
+        assert 0.0 <= est.score(X, y) <= 1.0
 
 
 @pytest.mark.parametrize("kind", _KINDS)
 def test_fit_returns_self(kind: str) -> None:
-    """check_estimators_fit_returns_self: fit returns the same object."""
+    """check_estimators_fit_returns_self (also asserted inside test_fit_contract)."""
     est = _make(kind)
     assert est.fit(_as_X(kind, _S), _Y) is est
 
 
 @pytest.mark.parametrize("kind", _KINDS)
-def test_fit_does_not_overwrite_init_parameters(kind: str) -> None:
-    """check_dont_overwrite_parameters / check_estimators_overwrite_params."""
-    est = _make(kind)
-    params_before = copy.deepcopy(est.get_params())
-    public_before = {k for k in vars(est) if not k.startswith("_")}
-    est.fit(_as_X(kind, _S), _Y, sample_weight=_W)
-    assert est.get_params() == params_before
-    added = {k for k in vars(est) if not k.startswith("_")} - public_before
-    assert all(k.endswith("_") for k in added), added
-
-
-@pytest.mark.parametrize("kind", _KINDS)
-def test_check_is_fitted_before_and_after_fit(kind: str) -> None:
-    """check_fit_check_is_fitted (the bare core's hook is also covered in test_sklearn_duck)."""
-    est = _make(kind)
-    with pytest.raises(NotFittedError):
-        check_is_fitted(est)
-    est.fit(_as_X(kind, _S), _Y)
-    check_is_fitted(est)
-
-
-@pytest.mark.parametrize("kind", _KINDS)
-def test_fit_does_not_mutate_inputs(kind: str) -> None:
-    """check_sample_weights_not_overwritten / readonly input: fit writes nothing back."""
-    X, y, w = _as_X(kind, _S).copy(), _Y.copy(), _W.copy()
-    X_ref, y_ref, w_ref = X.copy(), y.copy(), w.copy()
-    est = _make(kind).fit(X, y, sample_weight=w)
-    np.testing.assert_array_equal(X, X_ref)
-    np.testing.assert_array_equal(y, y_ref)
-    np.testing.assert_array_equal(w, w_ref)
-
+def test_predict_contract(kind: str) -> None:
+    """check_dict_unchanged, check_estimators_dtypes, check_estimators_nan_inf,
+    check_methods_subset_invariance, check_methods_sample_order_invariance."""
+    est = _make(kind).fit(_as_X(kind, _S.astype(np.float32)), _Y)
     Q = _as_X(kind, _Q).copy()
     Q_ref = Q.copy()
-    est.predict_proba(Q)
-    np.testing.assert_array_equal(Q, Q_ref)
-
-
-@pytest.mark.parametrize("kind", _KINDS)
-def test_dict_unchanged_by_predict_side_methods(kind: str) -> None:
-    """check_dict_unchanged: predict/transform must not touch fitted state."""
-    est = _make(kind).fit(_as_X(kind, _S), _Y)
     before = copy.deepcopy(vars(est))
     for method in ("predict", "predict_proba", "transform"):
         fn = getattr(est, method, None)
         if fn is not None:
-            fn(_as_X(kind, _Q))
+            fn(Q)
     assert _state_equal(before, vars(est))
+    np.testing.assert_array_equal(Q, Q_ref)
 
+    assert est.predict_proba(_as_X(kind, _Q.astype(np.float32))).dtype == np.float64
+    full = _proba(kind, est, _Q)
+    mask = np.zeros(_Q.size, dtype=bool)
+    mask[::3] = True
+    np.testing.assert_array_equal(_proba(kind, est, _Q[mask]), full[mask])
+    idx = np.random.default_rng(4).permutation(_Q.size)
+    np.testing.assert_array_equal(_proba(kind, est, _Q[idx]), full[idx])
 
-@pytest.mark.parametrize("kind", _KINDS)
-def test_non_finite_scores_raise(kind: str) -> None:
-    """check_estimators_nan_inf: NaN/inf scores are refused in fit and in predict."""
     for bad_value in (np.nan, np.inf):
         bad = _S.copy()
         bad[0] = bad_value
         with pytest.raises(ValueError):
             _make(kind).fit(_as_X(kind, bad), _Y)
-        est = _make(kind).fit(_as_X(kind, _S), _Y)
         with pytest.raises(ValueError):
             est.predict_proba(_as_X(kind, bad))
 
 
 @pytest.mark.parametrize("kind", _KINDS)
-def test_float32_input_gives_float64_output(kind: str) -> None:
-    """check_estimators_dtypes: float32 scores are accepted; probabilities stay float64."""
-    est = _make(kind).fit(_as_X(kind, _S.astype(np.float32)), _Y)
-    out = est.predict_proba(_as_X(kind, _Q.astype(np.float32)))
-    assert out.dtype == np.float64
-
-
-@pytest.mark.parametrize("kind", _KINDS)
-def test_sample_weight_as_list_matches_array(kind: str) -> None:
-    """check_sample_weights_list: a Python list of weights is accepted."""
+def test_sample_weight_contract(kind: str) -> None:
+    """check_sample_weights_list, check_sample_weights_shape."""
     as_list = _make(kind).fit(_as_X(kind, _S), _Y, sample_weight=list(_W))
     as_array = _make(kind).fit(_as_X(kind, _S), _Y, sample_weight=_W)
     np.testing.assert_array_equal(_proba(kind, as_list, _Q), _proba(kind, as_array, _Q))
-
-
-@pytest.mark.parametrize("kind", _KINDS)
-def test_wrong_shape_sample_weight_raises(kind: str) -> None:
-    """check_sample_weights_shape: length and dimension mismatches are refused."""
     for bad in (np.ones(_S.size // 2), np.ones((_S.size, 2))):
         with pytest.raises(ValueError):
             _make(kind).fit(_as_X(kind, _S), _Y, sample_weight=bad)
 
 
-@pytest.mark.parametrize("kind", _KINDS)
-def test_fit_takes_y_and_score_scores(kind: str) -> None:
-    """check_fit_score_takes_y: y is the second positional argument of fit."""
-    est = _make(kind)
-    est.fit(_as_X(kind, _S), _Y)  # positionally, as a pipeline would call it
-    if kind.startswith("adapter"):  # .score() is a sklearn ClassifierMixin method
-        assert 0.0 <= est.score(_as_X(kind, _S), _Y) <= 1.0
-
-
-def test_mirror_n_features_in_is_recorded_at_fit() -> None:
-    """check_n_features_in: n_features_in_ reflects the column count seen at fit."""
-    est2 = SklearnCalibrator().fit(_as_X("adapter-2col", _S), _Y)
-    assert est2.n_features_in_ == 2
-    est1 = SklearnCalibrator().fit(_as_X("adapter", _S), _Y)
-    assert est1.n_features_in_ == 1
-
-
-def test_mirror_n_features_in_enforced_after_fitting() -> None:
-    """check_n_features_in_after_fitting: predicting with a different width raises."""
+def test_mirror_n_features_in() -> None:
+    """check_n_features_in / check_n_features_in_after_fitting: recorded at fit, enforced after."""
+    assert SklearnCalibrator().fit(_as_X("adapter", _S), _Y).n_features_in_ == 1
     est = SklearnCalibrator().fit(_as_X("adapter-2col", _S), _Y)
+    assert est.n_features_in_ == 2
     with pytest.raises(ValueError):
         est.predict_proba(_as_X("adapter", _S))
 
 
 @pytest.mark.parametrize("kind", ["adapter", "adapter-2col"])
-def test_pipeline_consistency(kind: str) -> None:
-    """check_pipeline_consistency: wrapping the adapter in a Pipeline changes nothing."""
+def test_adapter_contract(kind: str) -> None:
+    """check_pipeline_consistency, check_transformer_general / _preserve_dtypes,
+    check_estimators_pickle (adapter side; the core's contract is JSON),
+    check_classifiers_one_label_sample_weights."""
     X, Xq = _as_X(kind, _S), _as_X(kind, _Q)
-    pipe = make_pipeline(SklearnCalibrator()).fit(X, _Y)
     est = SklearnCalibrator().fit(X, _Y)
+    pipe = make_pipeline(SklearnCalibrator()).fit(X, _Y)
     np.testing.assert_array_equal(pipe.predict_proba(Xq), est.predict_proba(Xq))
     assert pipe.score(X, _Y) == est.score(X, _Y)
 
-
-@pytest.mark.parametrize("kind", ["adapter", "adapter-2col"])
-def test_fit_transform_equals_fit_then_transform(kind: str) -> None:
-    """check_transformer_general / check_transformer_preserve_dtypes."""
-    X = _as_X(kind, _S)
     combined = SklearnCalibrator().fit_transform(X, _Y)
-    stepwise = SklearnCalibrator().fit(X, _Y).transform(X)
-    np.testing.assert_array_equal(combined, stepwise)
+    np.testing.assert_array_equal(combined, est.transform(X))
     assert combined.shape == (X.shape[0], 1)
     assert combined.dtype == np.float64
-    Xf32 = X.astype(np.float32)
-    assert SklearnCalibrator().fit_transform(Xf32, _Y).dtype == np.float64
+    assert SklearnCalibrator().fit_transform(X.astype(np.float32), _Y).dtype == np.float64
 
-
-@pytest.mark.parametrize("kind", ["adapter", "adapter-2col"])
-def test_one_class_after_zero_weight_trimming_raises(kind: str) -> None:
-    """check_classifiers_one_label_sample_weights: the refusal names the class problem."""
-    w = np.ones(_S.size)
-    w[_Y == 1.0] = 0.0
-    with pytest.raises(ValueError, match="class"):
-        SklearnCalibrator().fit(_as_X(kind, _S), _Y, sample_weight=w)
-
-
-@pytest.mark.parametrize("kind", ["adapter", "adapter-2col"])
-def test_pickle_round_trip_predicts_identically(kind: str) -> None:
-    """check_estimators_pickle, adapter side: pickle is sklearn's persistence contract."""
-    est = SklearnCalibrator().fit(_as_X(kind, _S), _Y)
     restored = pickle.loads(pickle.dumps(est))
-    np.testing.assert_array_equal(
-        restored.predict_proba(_as_X(kind, _Q)), est.predict_proba(_as_X(kind, _Q))
-    )
+    np.testing.assert_array_equal(restored.predict_proba(Xq), est.predict_proba(Xq))
     np.testing.assert_array_equal(restored.classes_, est.classes_)
 
-
-@pytest.mark.parametrize("cls", CALIBRATOR_CLASSES, ids=lambda c: c.__name__)
-def test_json_round_trip_predicts_identically(cls: type) -> None:
-    """check_estimators_pickle, core side: the core's persistence contract is JSON."""
-    est = cls().fit(_S, _Y)
-    restored = BaseCalibrator.from_json(est.to_json())
-    assert type(restored) is cls
-    np.testing.assert_array_equal(restored.predict_proba(_Q), est.predict_proba(_Q))
-
-
-@pytest.mark.parametrize("kind", ["adapter", "core"])
-def test_clone_then_fit_equals_fresh_fit(kind: str) -> None:
-    """A clone is a fresh estimator with the same parameters (sklearn's clone contract)."""
-    prototype = _make(kind)
-    fitted = clone(prototype).fit(_as_X(kind, _S), _Y)
-    fresh = _make(kind).fit(_as_X(kind, _S), _Y)
-    np.testing.assert_array_equal(_proba(kind, fitted, _Q), _proba(kind, fresh, _Q))
-    assert prototype.get_params() == _make(kind).get_params()
-
-
-@pytest.mark.parametrize("kind", _KINDS)
-def test_methods_subset_invariance(kind: str) -> None:
-    """check_methods_subset_invariance: predicting a subset equals subsetting."""
-    est = _make(kind).fit(_as_X(kind, _S), _Y)
-    mask = np.zeros(_Q.size, dtype=bool)
-    mask[::3] = True
-    np.testing.assert_array_equal(_proba(kind, est, _Q[mask]), _proba(kind, est, _Q)[mask])
-
-
-@pytest.mark.parametrize("kind", _KINDS)
-def test_methods_sample_order_invariance(kind: str) -> None:
-    """check_methods_sample_order_invariance: the map is applied row by row."""
-    est = _make(kind).fit(_as_X(kind, _S), _Y)
-    idx = np.random.default_rng(4).permutation(_Q.size)
-    np.testing.assert_array_equal(_proba(kind, est, _Q[idx]), _proba(kind, est, _Q)[idx])
+    w = np.ones(_S.size)
+    w[_Y == 1.0] = 0.0
+    with pytest.raises(ValueError, match="class"):  # one class left after zero-weight trimming
+        SklearnCalibrator().fit(X, _Y, sample_weight=w)
 
 
 # --------------------------------------------- sample_weight ≡ duplication
@@ -458,22 +360,6 @@ def test_integer_sample_weight_equals_row_duplication(cls: type) -> None:
         np.testing.assert_array_equal(weighted, duplicated)
     else:
         np.testing.assert_allclose(weighted, duplicated, atol=atol, rtol=0.0)
-
-
-def test_adapter_integer_sample_weight_equals_row_duplication() -> None:
-    """The adapter inherits the wrapped calibrator's weighting exactly."""
-    repeats = _W.astype(int)
-    weighted = SklearnCalibrator().fit(_S.reshape(-1, 1), _Y, sample_weight=_W)
-    duplicated = SklearnCalibrator().fit(
-        np.repeat(_S, repeats).reshape(-1, 1), np.repeat(_Y, repeats)
-    )
-    atol = _WEIGHT_DUPLICATION_TOLERANCE["BetaCalibrator"][0]
-    np.testing.assert_allclose(
-        weighted.predict_proba(_Q.reshape(-1, 1)),
-        duplicated.predict_proba(_Q.reshape(-1, 1)),
-        atol=atol,
-        rtol=0.0,
-    )
 
 
 def test_adapter_zero_weight_equals_dropping_the_row() -> None:
@@ -509,17 +395,13 @@ def test_adapter_zero_weight_equals_dropping_the_row() -> None:
 #   behaviour under test.
 
 
-def test_offset_fits_a_single_sample() -> None:
-    """check_fit2d_1sample: fitting a single row works (delta mode needs no solving)."""
+def test_offset_single_sample_and_single_column() -> None:
+    """check_fit2d_1sample (delta mode needs no solving) and check_fit2d_1feature."""
     from probcal._math import expit, logit
 
     est = SklearnOffset(delta=0.2).fit(np.array([[0.3]]))
     expected = expit(logit(np.array([0.3])) + 0.2)
     np.testing.assert_allclose(est.transform(np.array([[0.3]]))[:, 0], expected)
-
-
-def test_offset_fits_a_single_feature_column() -> None:
-    """check_fit2d_1feature: a single valid probability column fits and predicts fine."""
     est = SklearnOffset(delta=0.2).fit(_S.reshape(-1, 1))
     np.testing.assert_array_equal(
         est.predict_proba(_Q.reshape(-1, 1))[:, 1], est.offset_.transform(_Q)
@@ -529,15 +411,12 @@ def test_offset_fits_a_single_feature_column() -> None:
 # ------------------------------------------------------------ table guards
 
 
-def test_every_tolerance_entry_names_a_registered_calibrator() -> None:
-    """The exception table cannot rot: each entry must name a live class."""
+def test_every_declared_check_is_mirrored_or_explained() -> None:
+    """Every declared-inapplicable check is mirrored here or explained above, and every
+    weight-duplication tolerance names a live class with a reason."""
     names = {c.__name__ for c in CALIBRATOR_CLASSES}
     assert set(_WEIGHT_DUPLICATION_TOLERANCE) <= names
     assert all(reason for _atol, reason in _WEIGHT_DUPLICATION_TOLERANCE.values())
-
-
-def test_every_declared_check_is_mirrored_or_explained() -> None:
-    """Every declared-inapplicable check is either mirrored here or explained above."""
     declared = (
         set(CALIBRATOR_XFAIL_CHECKS) | set(CLASSIFIER_XFAIL_CHECKS) | set(OFFSET_XFAIL_CHECKS)
     )

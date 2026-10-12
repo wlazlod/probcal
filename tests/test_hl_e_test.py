@@ -1,15 +1,11 @@
 """Tests for probcal.metrics._safe (mixture-LR grade e-test)."""
 
+import inspect
+
 import numpy as np
 import pytest
 
-from probcal.metrics import HlEResult, hl_e_test
-from probcal.metrics.grade import hl_e_test as hl_e_test_via_grade
-
-
-def test_reexport_identity() -> None:
-    # Same function object via metrics/__init__.py and metrics/grade.py.
-    assert hl_e_test is hl_e_test_via_grade
+from probcal.metrics import hl_e_test
 
 
 def _calibrated_data(
@@ -26,22 +22,8 @@ def test_product_identity() -> None:
     y, p, grades = _calibrated_data()
     res = hl_e_test(y, p, grades)
     np.testing.assert_allclose(res.e_value, np.prod(res.e_grade), rtol=1e-9)
-
-
-def test_p_value_is_min_one_over_e() -> None:
-    y, p, grades = _calibrated_data()
-    res = hl_e_test(y, p, grades)
     assert res.p_value == min(1.0, 1.0 / res.e_value)
-
-
-def test_construction_tag_and_grades_type() -> None:
-    y, p, grades = _calibrated_data()
-    res = hl_e_test(y, p, grades)
-    assert isinstance(res, HlEResult)
     assert res.construction == "mixture-lr"
-    assert res.grades == ("A", "B")
-    assert all(isinstance(g, str) for g in res.grades)
-    assert res.e_grade.shape == (2,)
 
 
 def test_interpret_sentences() -> None:
@@ -78,36 +60,22 @@ def test_miscalibrated_grade_drives_e_value_large() -> None:
     assert res.p_value < 1e-3
 
 
-def test_weights_equal_row_duplication() -> None:
+def test_weights_are_scale_invariant_exponents() -> None:
+    # Each row is one Bernoulli draw: weights become exponents min(1, w/mean(w))
+    # per grade, so rescaling all weights changes nothing and constant weights
+    # reproduce the unweighted e-value.
     grades = np.array(["A", "A", "B", "B"])
     y = np.array([1.0, 0.0, 0.0, 1.0])
     p = np.array([0.2, 0.2, 0.05, 0.05])
-    w = np.array([3, 1, 2, 4])
+    w = np.array([3.0, 1.0, 2.0, 4.0])
 
     weighted = hl_e_test(y, p, grades, sample_weight=w)
+    scaled = hl_e_test(y, p, grades, sample_weight=10.0 * w)
+    np.testing.assert_allclose(weighted.e_value, scaled.e_value, rtol=1e-12)
 
-    y_dup = np.repeat(y, w)
-    p_dup = np.repeat(p, w)
-    grades_dup = np.repeat(grades, w)
-    unweighted = hl_e_test(y_dup, p_dup, grades_dup)
-
-    np.testing.assert_allclose(weighted.e_value, unweighted.e_value, rtol=1e-12)
-    np.testing.assert_allclose(weighted.e_grade, unweighted.e_grade, rtol=1e-12)
-    assert weighted.p_value == unweighted.p_value
-
-
-def test_length_mismatch_raises() -> None:
-    y = np.array([0.0, 1.0, 0.0])
-    p = np.array([0.1, 0.2, 0.3])
-    grades = np.array(["A", "B"])
-    with pytest.raises(ValueError):
-        hl_e_test(y, p, grades)
-
-
-def test_empty_mixture_grid_raises() -> None:
-    y, p, grades = _calibrated_data()
-    with pytest.raises(ValueError):
-        hl_e_test(y, p, grades, mixture_grid=())
+    unweighted = hl_e_test(y, p, grades)
+    constant = hl_e_test(y, p, grades, sample_weight=np.full(4, 7.0))
+    assert constant.e_value == unweighted.e_value
 
 
 def test_default_mixture_grid_matches_monitor_default() -> None:
@@ -115,5 +83,26 @@ def test_default_mixture_grid_matches_monitor_default() -> None:
     # the same default and symmetrization convention.
     from probcal.monitor import CalibrationMonitor
 
-    mon = CalibrationMonitor()
-    assert mon.mixture_grid == (0.1, 0.25, 0.5, 1.0)
+    default = inspect.signature(hl_e_test).parameters["mixture_grid"].default
+    assert CalibrationMonitor().mixture_grid == default == (0.1, 0.25, 0.5, 1.0)
+
+
+def test_bad_arguments_raise() -> None:
+    with pytest.raises(ValueError):  # grades length
+        hl_e_test(np.array([0.0, 1.0, 0.0]), np.array([0.1, 0.2, 0.3]), np.array(["A", "B"]))
+    y, p, grades = _calibrated_data()
+    with pytest.raises(ValueError):
+        hl_e_test(y, p, grades, mixture_grid=())
+
+
+def test_hl_e_test_weighted_null_stays_valid() -> None:
+    rng = np.random.default_rng(4)
+    n, reps = 400, 300
+    rejections = 0
+    for _ in range(reps):
+        p = rng.uniform(0.02, 0.3, n)
+        y = (rng.random(n) < p).astype(float)
+        w = rng.lognormal(0.0, 1.0, n)
+        grades = np.where(p < 0.1, "A", "B")
+        rejections += hl_e_test(y, p, grades, sample_weight=w).e_value >= 20.0
+    assert rejections / reps <= 0.05

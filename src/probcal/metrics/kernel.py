@@ -278,8 +278,8 @@ def skce_test(
     counts = rng.multinomial(n, np.full(n, 1.0 / n), size=n_boot).astype(np.float64)
     quad = np.einsum("bi,ij,bj->b", counts, h_tilde, counts)
     # Same scale as t_obs = n * U_n = S / (n - 1), with S the off-diagonal sum:
-    # the resampled off-diagonal sum over (n - 1). (0.3.x divided by n, which
-    # shrank every replicate by (n - 1) / n and made p-values anti-conservative.)
+    # the resampled off-diagonal sum over (n - 1). Dividing by n instead would
+    # shrink every replicate by (n - 1) / n and make p-values anti-conservative.
     t_b = (quad - counts @ np.diag(h_tilde)) / (n - 1)
     p_value = float((1 + int(np.sum(t_b >= t_obs))) / (n_boot + 1))
     return SkceTestResult(

@@ -24,6 +24,13 @@ class BinStats(NamedTuple):
     """Sum of ``w * p``."""
     n_obs: np.ndarray
     """Raw observation count (int64)."""
+    w2_sum: np.ndarray
+    """Sum of ``w**2`` (equals ``n_obs`` for unit weights)."""
+
+    @property
+    def n_eff(self) -> np.ndarray:
+        """Per-bin effective count ``w_sum**2 / w2_sum`` (``n_obs`` for unit weights)."""
+        return self.w_sum * self.w_sum / self.w2_sum
 
     @property
     def rate(self) -> np.ndarray:
@@ -71,4 +78,5 @@ def bin_stats(
         wy_sum=np.bincount(idx, weights=w * y, minlength=m)[keep],
         wp_sum=np.bincount(idx, weights=w * p, minlength=m)[keep],
         n_obs=count[keep].astype(np.int64),
+        w2_sum=np.bincount(idx, weights=w * w, minlength=m)[keep],
     )

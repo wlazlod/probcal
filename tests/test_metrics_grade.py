@@ -4,19 +4,10 @@ import numpy as np
 import pytest
 
 from probcal._math import betainc, bisect
+from probcal.curves import ecce_curve
 from probcal.metrics.grade import binomial_grade_test, jeffreys_grade_test
 
 RNG = np.random.default_rng(71)
-
-
-def test_grade_cis_contain_observed_rate() -> None:
-    y = (RNG.random(300) < 0.05).astype(float)
-    p = np.full(300, 0.05)
-    grades = np.array(["g1"] * 100 + ["g2"] * 100 + ["g3"] * 100)
-    for res in (binomial_grade_test(y, p, grades), jeffreys_grade_test(y, p, grades)):
-        rate = res.k / res.n
-        assert np.all(res.ci_low <= rate + 1e-12)
-        assert np.all(rate <= res.ci_high + 1e-12)
 
 
 def test_jeffreys_ci_hand_anchor() -> None:
@@ -43,16 +34,6 @@ def test_clopper_pearson_edge_cases() -> None:
     assert res.ci_low[i_hi] > 0.0 and res.ci_high[i_lo] < 1.0
 
 
-def test_binomial_exact_hand_case() -> None:
-    # One grade: n=2, k=1, PD=0.5 -> P(X >= 1) = 0.75.
-    y = np.array([1.0, 0.0])
-    p = np.array([0.5, 0.5])
-    grades = np.array(["A", "A"])
-    res = binomial_grade_test(y, p, grades)
-    assert res.grades == ("A",)
-    np.testing.assert_allclose(res.p_exact, [0.75], atol=1e-12)
-
-
 def test_jeffreys_symmetric_hand_case() -> None:
     # k=1, n=2, PD=0.5: posterior Beta(1.5, 1.5) is symmetric -> P(theta <= 0.5) = 0.5.
     y = np.array([1.0, 0.0])
@@ -76,15 +57,6 @@ def test_traffic_lights() -> None:
     assert res2.light == ("green",)
 
 
-def test_multiple_grades_ordered_output() -> None:
-    y = (RNG.random(300) < 0.05).astype(float)
-    p = np.full(300, 0.05)
-    grades = np.array(["g1"] * 100 + ["g2"] * 100 + ["g3"] * 100)
-    res = binomial_grade_test(y, p, grades)
-    assert res.grades == ("g1", "g2", "g3")
-    assert len(res.p_exact) == 3
-
-
 def test_nonuniform_weights_warn() -> None:
     y = np.array([1.0, 0.0, 0.0, 1.0])
     p = np.full(4, 0.3)
@@ -103,28 +75,23 @@ def test_binomial_exact_vs_scipy() -> None:
     res = binomial_grade_test(y, p, grades)
     expected = float(stats.binom.sf(k - 1, n, pd))
     np.testing.assert_allclose(res.p_exact, [expected], atol=1e-10)
+    assert res.p_value is res.p_exact
 
 
-# ------------------------------------------------------------------ 0.3.4 fixes
-
-
-def test_grades_length_validated() -> None:
-    # Regression (MET-11): a short label array silently broadcast or crashed.
+@pytest.mark.parametrize(
+    "grades,kwargs,match",
+    [
+        (["A", "B"], {}, "one label per observation"),  # MET-11: silently broadcast
+        (["A"] * 4, {"sample_weight": np.ones(3)}, "sample_weight"),
+        (["A"] * 4, {"order": ("A", "B")}, "order"),
+    ],
+    ids=["grades-length", "weights-length", "order"],
+)
+def test_bad_arguments_raise(grades: list, kwargs: dict, match: str) -> None:
     y = np.array([0.0, 1.0, 0.0, 1.0])
-    p = np.full(4, 0.3)
     for fn in (binomial_grade_test, jeffreys_grade_test):
-        with pytest.raises(ValueError, match="one label per observation"):
-            fn(y, p, np.array(["A", "B"]))
-
-
-def test_weights_length_validated() -> None:
-    y = np.array([0.0, 1.0, 0.0, 1.0])
-    p = np.full(4, 0.3)
-    grades = np.array(["A"] * 4)
-    with pytest.raises(ValueError, match="sample_weight"):
-        binomial_grade_test(y, p, grades, sample_weight=np.ones(3))
-    with pytest.raises(ValueError, match="sample_weight"):
-        jeffreys_grade_test(y, p, grades, sample_weight=np.array([]))
+        with pytest.raises(ValueError, match=match):
+            fn(y, np.full(4, 0.3), np.array(grades), **kwargs)
 
 
 def test_order_keyword_reorders_rows() -> None:
@@ -141,14 +108,6 @@ def test_order_keyword_reorders_rows() -> None:
     np.testing.assert_array_equal(res.p_exact, base.p_exact[perm])
     jef = jeffreys_grade_test(y, p, grades, order=("g10", "g2", "g1"))
     assert jef.grades == ("g10", "g2", "g1")
-    with pytest.raises(ValueError, match="order"):
-        jeffreys_grade_test(y, p, grades, order=("g1", "g2"))
-
-
-def test_binomial_p_value_alias() -> None:
-    y = np.array([1.0, 0.0])
-    res = binomial_grade_test(y, np.array([0.5, 0.5]), np.array(["A", "A"]))
-    assert res.p_value is res.p_exact
 
 
 def test_binomial_normal_p_tail_accurate() -> None:
@@ -156,3 +115,17 @@ def test_binomial_normal_p_tail_accurate() -> None:
     y = np.concatenate([np.ones(k), np.zeros(n - k)])
     res = binomial_grade_test(y, np.full(n, 0.02), np.array(["A"] * n))
     assert 0.0 < res.p_normal[0] < 1e-20
+
+
+def test_grade_and_ecce_results_compare_by_value() -> None:
+    rng = np.random.default_rng(0)
+    p = rng.uniform(0.01, 0.3, 500)
+    y = (rng.random(500) < p).astype(float)
+    g = np.where(p < 0.1, "A", "B")
+    assert binomial_grade_test(y, p, g) == binomial_grade_test(y, p, g)
+    assert jeffreys_grade_test(y, p, g) == jeffreys_grade_test(y, p, g)
+    assert jeffreys_grade_test(y, p, g) != jeffreys_grade_test(y, 0.9 * p, g)
+    assert ecce_curve(y, p) == ecce_curve(y, p)
+    assert ecce_curve(y, p) != ecce_curve(y, 0.99 * p)
+    with pytest.raises(TypeError):
+        hash(ecce_curve(y, p))

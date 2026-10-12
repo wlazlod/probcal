@@ -125,7 +125,7 @@ class Chain(JsonIO):
         a chain and no automatic MLE offset (``estimate_offset`` remains an
         explicit choice). ``fit`` always refits every stage, including
         stages that were already fitted at construction; to keep a stage
-        frozen, compose fitted objects and skip ``fit``, as before.
+        frozen, compose fitted objects and skip ``fit``.
         """
         self.calibrator_.fit(s, y, sample_weight=sample_weight)
         p = self.calibrator_.predict_proba(s)

@@ -342,19 +342,26 @@ def jeffreys_upper_bands(
     pooling across grades), so a zero-default grade still gets a strictly
     positive ``hi`` from the Jeffreys prior alone.
 
-    The raw ``hi`` sequence need not come out non-decreasing (a noisy grade
-    can have a smaller posterior upper bound than a better grade), which
-    would make the bands overlap or invert. It is replaced by its running
-    maximum best to worst (``np.maximum.accumulate``, the same prudent hull
-    :func:`pluto_tasche` uses), which never lowers any grade's bound -- it
-    only raises a worse grade's bound to a better grade's -- with a
-    ``UserWarning`` emitted only when that adjustment changed a value. (0.3.x
-    used a size-weighted PAVA fit, which could *lower* a grade's upper bound
-    and give a grade a zero-width band.)
+    The raw ``hi`` sequence need not come out increasing (a noisy grade can
+    have a posterior upper bound no larger than a better grade's), which
+    would make the bands overlap or invert. The prudent hull of
+    :func:`pluto_tasche` -- the running maximum best to worst, which never
+    lowers any grade's bound -- fixes the order but would leave such a grade
+    a zero-width band ``(hi, hi)`` that no calibrated PD can fall into.
+    Instead, a grade whose own bound does not exceed the running maximum is
+    merged into the band before it: the merged band is keyed by the joined
+    labels (``"A+B"``, best to worst), keeps the running-maximum ``hi`` (so
+    no grade's bound is ever lowered), and a ``UserWarning`` names the
+    merged grades. The data cannot order those grades at this confidence;
+    merging them (or collecting more data) is the decision the warning asks
+    for. Every returned band therefore has ``lo < hi``, and the bands are
+    contiguous and strictly increasing. A size-weighted PAVA fit is not
+    used because it can *lower* a grade's upper bound.
 
     The resulting ``{grade: (lo, hi)}`` table is exactly the shape
-    :func:`probcal.thresholds.calibrated_bands_to_raw` consumes to translate
-    a masterscale defined on calibrated PD into raw-score intervals.
+    :func:`probcal.thresholds.calibrated_bands_to_raw` and
+    :class:`probcal.Masterscale` consume to translate a masterscale defined
+    on calibrated PD into raw-score intervals.
 
     Parameters
     ----------
@@ -384,8 +391,9 @@ def jeffreys_upper_bands(
     Returns
     -------
     dict[str, tuple[float, float]]
-        Mapping of grade label to ``(lo, hi)`` calibrated-probability bounds,
-        contiguous and non-decreasing best to worst.
+        Mapping of grade label -- or ``"+"``-joined labels of merged grades
+        -- to ``(lo, hi)`` calibrated-probability bounds, contiguous and
+        strictly increasing best to worst, every band with ``lo < hi``.
 
     Raises
     ------
@@ -428,14 +436,28 @@ def jeffreys_upper_bands(
     hi_raw = np.array(
         [beta_ppf(float(conf), k[i] + 0.5, n[i] - k[i] + 0.5) for i in range(len(order_t))]  # type: ignore[arg-type]
     )
-    hi = np.maximum.accumulate(hi_raw)
-    if np.any(hi != hi_raw):
+    # Running maximum, merging every grade it would leave with a zero-width
+    # band into the preceding band.
+    blocks: list[tuple[list[str], float]] = []
+    for label, h in zip(order_t, hi_raw, strict=True):
+        if blocks and h <= blocks[-1][1]:
+            blocks[-1][0].append(str(label))
+        else:
+            blocks.append(([str(label)], float(h)))
+    merged = [labels for labels, _ in blocks if len(labels) > 1]
+    if merged:
         warnings.warn(
-            "jeffreys_upper_bands: raised upper bounds to the running maximum to keep "
-            "the bands non-decreasing best to worst",
+            "jeffreys_upper_bands: the Jeffreys upper bound of grade(s) "
+            + ", ".join(repr(lab) for labels in merged for lab in labels[1:])
+            + " does not exceed the running maximum of the better grades; merged into "
+            + ", ".join(repr("+".join(labels)) for labels in merged)
+            + " so that every band has positive width",
             UserWarning,
             stacklevel=2,
         )
-
-    lo = np.concatenate(([0.0], hi[:-1]))
-    return {str(label): (float(lo[i]), float(hi[i])) for i, label in enumerate(order_t)}
+    out: dict[str, tuple[float, float]] = {}
+    lo = 0.0
+    for labels, h in blocks:
+        out["+".join(labels)] = (lo, h)
+        lo = h
+    return out

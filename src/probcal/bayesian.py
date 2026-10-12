@@ -47,21 +47,36 @@ class BBQCalibrator(BaseCalibrator):
     Jeffreys Beta(1/2, 1/2) prior, and predicts with the posterior-weighted
     average of the models' (posterior-mean) bin rates.
 
+    Nothing in the model forces the bin rates to increase with the score, and
+    on low-default data a sparse bin often dips below its neighbours, so the
+    averaged map is usually *not* monotone (``is_monotone_ = False``) and
+    refuses to invert. ``monotone=True`` projects each candidate's bin rates
+    onto the non-decreasing cone (weighted PAVA, weights = posterior counts)
+    before averaging; a non-negative mixture of non-decreasing step functions
+    is non-decreasing, so the averaged map is then monotone by construction.
+    The model weights are unchanged (they score the unconstrained binnings).
+
     Parameters
     ----------
     min_bins, max_bins : int or None
         Range of candidate bin counts; defaults to ``[2, ceil(sqrt(n))]``
         capped at 50. Bins are equal-mass in the sample weights.
+    monotone : bool, default False
+        Isotonize each candidate's bin rates before averaging, so the map is
+        guaranteed non-decreasing and ``interval_inverse`` /
+        ``calibrated_bands_to_raw`` are available. Leaves fits that are
+        already monotone in every candidate unchanged.
 
     Attributes
     ----------
     bins_grid_ : numpy.ndarray
         Candidate bin counts.
     model_weights_ : numpy.ndarray
-        Posterior weights over the candidates (sum to 1). Formerly
-        ``weights_`` (deprecated alias, removed in 0.4.0).
+        Posterior weights over the candidates (sum to 1).
+        ``weights_`` is a deprecated alias, removed in 0.4.0.
     model_edges_, model_rates_ : list of numpy.ndarray
-        Interior edges and posterior-mean bin rates of each candidate binning.
+        Interior edges and posterior-mean bin rates of each candidate binning
+        (isotonized when ``monotone=True``).
     is_monotone_ : bool
         Whether the averaged step map is non-decreasing over the whole score
         domain — checked exactly at every bin edge of every candidate.
@@ -73,14 +88,25 @@ class BBQCalibrator(BaseCalibrator):
 
     _STATE_ATTRS = ("bins_grid_", "model_weights_", "model_edges_", "model_rates_", "is_monotone_")
 
-    def __init__(self, min_bins: int | None = None, max_bins: int | None = None) -> None:
+    def __init__(
+        self, min_bins: int | None = None, max_bins: int | None = None, monotone: bool = False
+    ) -> None:
         self.min_bins = min_bins
         self.max_bins = max_bins
+        self.monotone = monotone
 
     @property
     def weights_(self) -> np.ndarray:
         """Deprecated alias of :attr:`model_weights_` (removed in 0.4.0)."""
         return _deprecated_weights(self)
+
+    def _params_for_dict(self) -> dict[str, object]:
+        # Omit the default so default payloads (and their fingerprints) carry
+        # no ``monotone`` key and stay loadable by releases without it.
+        params = self.get_params()
+        if params.get("monotone") is False:
+            del params["monotone"]
+        return params
 
     def _set_state(self, state: dict[str, object]) -> None:
         state = migrate_state(state, {"weights_": "model_weights_"})
@@ -97,6 +123,8 @@ class BBQCalibrator(BaseCalibrator):
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         n = len(s)
+        if not isinstance(self.monotone, (bool, np.bool_)):
+            raise ValueError(f"monotone must be a bool, got {self.monotone!r}")
         lo = 2 if self.min_bins is None else validate_positive_int(self.min_bins, "min_bins")
         if self.max_bins is None:
             hi = min(50, int(np.ceil(np.sqrt(n))))
@@ -117,8 +145,14 @@ class BBQCalibrator(BaseCalibrator):
                 np.sum(lgamma_vec(k + a0) + lgamma_vec(tot - k + b0) - lgamma_vec(tot + a0 + b0))
                 - len(k) * _LOG_BETA_PRIOR
             )
+            post = tot + a0 + b0
+            rates = (k + a0) / post
+            if self.monotone:
+                # Weighted by the posterior counts, each pooled block is the posterior
+                # mean of the merged bins (sum k + a0) / (sum tot + a0 + b0).
+                rates = pava(rates, post).fitted
             edges_list.append(edges)
-            rates_list.append((k + a0) / (tot + a0 + b0))
+            rates_list.append(rates)
         wgt = np.exp(log_marg - log_marg.max())
         self.model_weights_ = wgt / wgt.sum()
         self.model_edges_ = edges_list
@@ -207,7 +241,7 @@ class ENIRCalibrator(BaseCalibrator):
         Indices into ``path_lambdas_`` of the retained breakpoints.
     model_weights_ : numpy.ndarray of shape (K,)
         BIC weights over the retained solutions, renormalized to sum to 1.
-        Formerly ``weights_`` (deprecated alias, removed in 0.4.0).
+        ``weights_`` is a deprecated alias, removed in 0.4.0.
     scores_ : numpy.ndarray of shape (m,)
         Distinct calibration scores: the grid ``path_solutions_`` lives on.
     dropped_weight_ : float

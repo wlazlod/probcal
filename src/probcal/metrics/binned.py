@@ -4,7 +4,8 @@ Pathologies (binning sensitivity, finite-sample bias, HL power issues) are
 documented in ``docs/concepts/metrics.md``. None of these are selection
 criteria; the Hosmer–Lemeshow test is report-only. Sample weights follow the
 package convention in :mod:`probcal.metrics._common` (relative weights;
-Kish effective sample size wherever a sample size enters).
+per-bin variances from the weights themselves wherever a sample size
+enters).
 """
 
 import math
@@ -14,8 +15,8 @@ import numpy as np
 
 from .._math import chi2_sf
 from .._validation import validate_positive_int
-from ._binstats import BinStats, bin_stats
-from ._common import _prep, effective_weights
+from ._binstats import BinStats, bin_index, bin_stats
+from ._common import _prep
 from ._deprecation import UNSET, deprecated, renamed_kwarg
 
 
@@ -88,9 +89,10 @@ def ece_debiased(
     Per-bin squared gaps minus the within-bin variance of the event rate
     (correction in the spirit of Bröcker 2009 / Ferro & Fricker 2012):
     ``sqrt(max(gap_b**2 - rate_b * (1 - rate_b) / (n_b - 1), 0))`` for bins
-    with ``n_b > 1``. ``n_b`` is the bin's effective count under the package
-    weight convention (the sum of the Kish-rescaled weights in the bin; the
-    raw count for unit weights).
+    with ``n_b > 1``. ``n_b`` is the bin's effective count
+    ``sum_b(w)**2 / sum_b(w**2)`` -- the size of an unweighted bin whose
+    event rate has the same variance -- so it follows the weights inside the
+    bin, and is the raw count for unit (or within-bin constant) weights.
 
     Parameters
     ----------
@@ -115,9 +117,9 @@ def ece_debiased(
 
 
 def _debiased(bs: BinStats, w: np.ndarray) -> float:
-    """Variance-corrected ECE from one binning pass (Kish effective bin counts)."""
+    """Variance-corrected ECE from one binning pass (per-bin effective counts)."""
     shares, gaps = _shares_gaps(bs, float(w.sum()))
-    n_eff = bs.w_sum * (float(w.sum()) / float(np.dot(w, w)))
+    n_eff = bs.n_eff
     rate = bs.rate
     multi = n_eff > 1.0
     var_b = rate * (1.0 - rate) / np.where(multi, n_eff - 1.0, 1.0)
@@ -172,8 +174,8 @@ def ece_sweep(
     non-monotone binning). The paper sweeps up to ``b = n``; the sweep here
     stops at ``max_bins`` (default 100) as a cost cap.
 
-    0.3.x took the largest monotone ``b`` anywhere in ``2..100`` instead,
-    skipping over non-monotone counts; ``rule="largest"`` recovers it.
+    ``rule="largest"`` instead takes the largest monotone ``b`` anywhere in
+    ``2..max_bins``, skipping over non-monotone counts.
 
     Parameters
     ----------
@@ -189,7 +191,7 @@ def ece_sweep(
         Upper end of the sweep (capped at ``n``).
     rule : {"first_violation", "largest"}, keyword-only
         ``"first_violation"`` (default, the paper's rule) or ``"largest"``
-        (the 0.3.x rule).
+        (the largest monotone count, non-monotone counts skipped).
 
     Returns
     -------
@@ -249,8 +251,8 @@ class HosmerLemeshowResult:
     statistic : float
         Chi-square test statistic.
     df : int
-        Degrees of freedom: non-empty groups minus 2 (``0`` when fewer than
-        three groups are non-empty).
+        Degrees of freedom: non-empty groups minus ``ddof`` (``0`` when no
+        degree of freedom is left).
     p_value : float
         Upper-tail p-value of the statistic; ``nan`` when ``df == 0``.
     """
@@ -266,15 +268,32 @@ def hosmer_lemeshow(
     *,
     n_bins: int = 10,
     sample_weight: object = None,
+    ddof: int = 0,
     g: object = UNSET,
 ) -> HosmerLemeshowResult:
     """Hosmer–Lemeshow goodness-of-fit test on ``n_bins`` equal-mass risk groups.
 
     The statistic depends on an essentially arbitrary grouping and its power
     scales with n — see the metrics chapter for why this is report-only.
-    Weighted counts use the Kish-rescaled weights (package convention), so
-    the statistic is invariant to rescaling the weights and unit weights give
-    the unweighted test.
+
+    Per group ``g``, ``O_g = sum(w y)`` and ``E_g = sum(w p)`` are compared
+    against ``V_g = S_g * pt_g * (1 - pt_g)``, where ``S_g = sum(w**2)`` and
+    ``pt_g = sum(w**2 p) / S_g``. ``V_g`` is the weighted form of the
+    classical ``n_g pbar_g (1 - pbar_g)``: it equals the exact null variance
+    ``sum(w**2 p (1 - p))`` of ``O_g - E_g`` plus the same within-group
+    spread term ``sum(w**2 (p - pt_g)**2)`` the unweighted statistic carries.
+    The statistic is invariant to rescaling the weights, and unit weights
+    give the unweighted test bit for bit.
+
+    The reference distribution is chi-square on ``groups - ddof`` degrees of
+    freedom. With ``p`` fixed in advance (a model or calibrator fitted on
+    other data, the usual validation setting) the per-group standardized
+    residuals are asymptotically independent, so the statistic is
+    ``chi2(groups)``: ``ddof=0``, the default (Hosmer, Lemeshow and
+    Sturdivant, 2013, on external validation). The classical ``groups - 2``
+    is for a logistic model fitted on the same data; pass ``ddof=2`` for it.
+    On out-of-sample ``p`` it is anti-conservative (about 12% rejections at
+    a nominal 5% with 10 groups).
 
     Parameters
     ----------
@@ -284,10 +303,14 @@ def hosmer_lemeshow(
         Predicted probabilities in ``[0, 1]``.
     n_bins : int, keyword-only
         Requested number of equal-mass risk groups. Tied scores can collapse
-        groups; with fewer than three non-empty groups the test has no
-        degrees of freedom and returns ``df=0``, ``p_value=nan``.
+        groups; when no more than ``ddof`` groups are non-empty the test has
+        no degrees of freedom and returns ``df=0``, ``p_value=nan``.
     sample_weight : array_like or None, keyword-only
         Optional positive weights, same length as ``y``.
+    ddof : int, keyword-only
+        Degrees of freedom subtracted from the number of non-empty groups:
+        ``0`` (default) for ``p`` fixed before seeing ``y``, ``2`` for a
+        logistic model fitted on the same ``(y, p)`` data.
     g : int, keyword-only
         Deprecated spelling of ``n_bins`` (removed in 0.4.0).
 
@@ -297,12 +320,19 @@ def hosmer_lemeshow(
         Chi-square statistic, degrees of freedom, and p-value.
     """
     n_groups = renamed_kwarg("hosmer_lemeshow", "g", "n_bins", g, n_bins, 10)
+    if isinstance(ddof, bool) or not isinstance(ddof, (int, np.integer)) or ddof < 0:
+        raise ValueError(f"ddof must be a non-negative integer, got {ddof!r}")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    bs = bin_stats(y_arr, p_arr, effective_weights(w), n_groups, "mass")
-    obs, exp, nb = bs.wy_sum, bs.wp_sum, bs.w_sum
-    denom = exp * (1.0 - exp / nb)
+    idx, m = bin_index(p_arr, n_groups, "mass")
+    keep = np.bincount(idx, minlength=m) > 0
+    w2 = w * w
+    obs = np.bincount(idx, weights=w * y_arr, minlength=m)[keep]
+    exp = np.bincount(idx, weights=w * p_arr, minlength=m)[keep]
+    s2 = np.bincount(idx, weights=w2, minlength=m)[keep]
+    s2p = np.bincount(idx, weights=w2 * p_arr, minlength=m)[keep]
+    denom = s2p * (1.0 - s2p / s2)
     ok = denom > 0
     stat = float(np.sum((obs[ok] - exp[ok]) ** 2 / denom[ok]))
-    df = max(len(nb) - 2, 0)
+    df = max(len(s2) - int(ddof), 0)
     p_value = chi2_sf(stat, df) if df > 0 else math.nan
     return HosmerLemeshowResult(statistic=stat, df=df, p_value=p_value)

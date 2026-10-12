@@ -103,9 +103,8 @@ each is half-open, `[inf{s : g(s) >= lo}, inf{s : g(s) >= hi})`, and the top
 band is closed at `sup{s : g(s) <= hi}`. Adjacent raw bands share their edge,
 so the translated ladder partitions the raw line without gaps or overlaps,
 and counting raw scores per raw band reproduces `assign`'s counts exactly,
-plateaus of a step calibrator (isotonic, histogram) included. (Before 0.3.4
-the raw bands were closed, and a plateau sitting on a grade edge was counted
-in both neighbouring grades.) Store the output next to the calibrator's
+plateaus of a step calibrator (isotonic, histogram) included: a plateau
+sitting on a grade edge is counted in exactly one grade. Store the output next to the calibrator's
 fingerprint, policy fixed, mapping versioned ([Auditability](auditability.md)).
 
 The same object feeds the scorecard translation (`cs.masterscale(ms)`, see
@@ -216,7 +215,7 @@ sc = Scorecard(
 ).fit(X_cal, y_cal.astype(int))
 
 cs = calibrate_scorecard(sc, X_cal, y_cal)
-print(cs.masterscale(ms))             # {'A': (638.7, inf), 'B': (598.9, 638.7), ...}
+print(cs.masterscale(ms))             # -> {'A': (638.68, inf), 'B': (598.96, 638.68), ...}
 ```
 
 The points are untouched by calibration; only the mapping from points to

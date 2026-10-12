@@ -68,11 +68,25 @@ def test_py_typed_shipped() -> None:
     assert marker.is_file()
 
 
-def test_all_exports_resolve() -> None:
+_REQUIRED_TOP_LEVEL_EXPORTS = (
+    "LogitOffset",
+    "estimate_offset",
+    "offset_from_estimate",
+    "OffsetEstimate",
+    "CalibratorSelector",
+    "adjust_attributions",
+    "CalibratedModel",
+    "make_pd_portfolio",
+)
+
+
+def test_all_exports_resolve_and_cover_the_public_api() -> None:
     import probcal
 
     for name in probcal.__all__:
         assert getattr(probcal, name, None) is not None, f"__all__ names missing attribute: {name}"
+    missing = set(_REQUIRED_TOP_LEVEL_EXPORTS) - set(probcal.__all__)
+    assert not missing, f"public names dropped from probcal.__all__: {sorted(missing)}"
 
 
 def test_no_forbidden_imports() -> None:

@@ -2,6 +2,8 @@
 
 ::: probcal.offset
 
+::: probcal.offset.OffsetEstimate
+
 ::: probcal.wrapper
 
 ::: probcal.selection

@@ -19,7 +19,13 @@ acknowledgement within a few days. There is no bug bounty.
 
 probcal's runtime depends on numpy and the standard library only, and makes no
 network requests. The only file I/O is explicit and caller-directed:
-`to_json(path)` / `from_json(path)` on calibrators and monitors, and
-`validation_report(path=...)`. Serialized artifacts are plain JSON; the package
+`to_json(path)` / `from_json(path)` on every serializable object — the
+calibrators (including `CalibratorSelector`), `LogitOffset`, `Chain`,
+`CalibratedModel`, `Masterscale`, `CalibrationMonitor` and its
+`AppliedAction` records, the `probcal.sklearn` adapters (`to_json(path)`,
+delegated to the inner calibrator), and
+`probcal.integrations.optbinning.CalibratedScorecard` — and
+`validation_report(path=...)` (the report file, plus a `<name>_figures/`
+directory next to it for markdown output). Serialized artifacts are plain JSON; the package
 never unpickles. Reports about anything in the package, its optional
 integrations, its build, or its release pipeline are welcome.

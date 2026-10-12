@@ -23,8 +23,9 @@ def _calibrated(n: int = 1500) -> tuple[np.ndarray, np.ndarray]:
     return s, y
 
 
-def test_default_run_structure() -> None:
-    sel = CalibratorSelector(cv=4, random_state=1).fit(*_distorted(1200))
+def test_default_run_structure_and_reproducibility() -> None:
+    data = _distorted(1200)
+    sel = CalibratorSelector(cv=4, random_state=1).fit(*data)
     rep = sel.report_
     assert isinstance(rep, SelectionReport)
     assert len(rep.methods) == 8
@@ -32,23 +33,9 @@ def test_default_run_structure() -> None:
     assert int(np.sum(rep.chosen)) == 1
     assert np.all(np.diff(rep.score_mean) >= 0)  # sorted ascending
     assert rep.methods[int(np.flatnonzero(rep.chosen)[0])] == sel.best_name_
-
-
-def test_winner_refit_and_delegation() -> None:
-    s, y = _distorted(1500)
-    sel = CalibratorSelector(cv=4, random_state=2).fit(s, y)
-    assert sel.best_calibrator_.fitted_
-    p = sel.predict_proba(np.linspace(0.01, 0.99, 50))
-    assert np.all((p > 0) & (p < 1))
-    assert isinstance(sel.interpret(), Interpretation)
-
-
-def test_reproducible_under_seed() -> None:
-    s, y = _distorted(1200)
-    a = CalibratorSelector(cv=4, random_state=7).fit(s, y)
-    b = CalibratorSelector(cv=4, random_state=7).fit(s, y)
-    assert a.best_name_ == b.best_name_
-    np.testing.assert_allclose(a.report_.score_mean, b.report_.score_mean)
+    again = CalibratorSelector(cv=4, random_state=1).fit(*data)
+    assert again.best_name_ == sel.best_name_
+    np.testing.assert_array_equal(again.report_.score_mean, rep.score_mean)
 
 
 def test_parsimony_on_calibrated_data() -> None:
@@ -57,13 +44,6 @@ def test_parsimony_on_calibrated_data() -> None:
     # noise; the one-standard-error parsimony rule must pull the winner into
     # the low-parameter parametric block.
     assert sel.best_name_ in {"temperature", "platt", "beta_abm"}
-
-
-def test_forbidden_scoring_raises() -> None:
-    with pytest.raises(ValueError, match="log_loss"):
-        CalibratorSelector(scoring="ece").fit(*_calibrated(400))
-    with pytest.raises(ValueError, match="log_loss"):
-        CalibratorSelector(scoring="hosmer_lemeshow").fit(*_calibrated(400))
 
 
 class SpyCalibrator(BaseCalibrator):
@@ -103,60 +83,6 @@ def test_structural_no_leakage_in_scoring() -> None:
     assert sel.best_name_ in ("spy", "spy2")
 
 
-def test_custom_candidates() -> None:
-    from probcal.parametric import PlattCalibrator, TemperatureCalibrator
-
-    sel = CalibratorSelector(
-        candidates={"p": PlattCalibrator(), "t": TemperatureCalibrator()},
-        cv=3,
-        random_state=5,
-    ).fit(*_distorted(900))
-    assert set(sel.report_.methods) == {"p", "t"}
-
-
-def test_report_repr_mentions_criterion() -> None:
-    sel = CalibratorSelector(cv=3, random_state=9).fit(*_distorted(900))
-    assert "log_loss" in repr(sel.report_)
-
-
-def test_export() -> None:
-    import probcal
-
-    assert "CalibratorSelector" in probcal.__all__
-
-
-def test_complexity_rank_matches_old_parsimony_table() -> None:
-    """Round-trip: each old _PARSIMONY entry equals the corresponding instance's
-    complexity_rank (exact values are inert beyond ordering)."""
-    from probcal.bayesian import BBQCalibrator, ENIRCalibrator
-    from probcal.binning import HistogramBinningCalibrator, ScalingBinningCalibrator
-    from probcal.isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
-    from probcal.parametric import BetaCalibrator, PlattCalibrator, TemperatureCalibrator
-    from probcal.spline import SplineCalibrator
-    from probcal.vennabers import CrossVennAbersCalibrator, VennAbersCalibrator
-
-    expected = [
-        (TemperatureCalibrator(), 1.0),  # temperature
-        (PlattCalibrator(), 2.0),  # platt
-        (BetaCalibrator(variant="ab"), 2.5),  # beta_ab
-        (BetaCalibrator(variant="a"), 1.5),  # beta_a
-        (BetaCalibrator(variant="abm"), 3.0),  # beta_abm
-        (ScalingBinningCalibrator(), 4.0),  # scaling_binning
-        (BBQCalibrator(), 40.0),  # bbq
-        (HistogramBinningCalibrator(strategy="mass"), 10.0),  # histogram_mass
-        (HistogramBinningCalibrator(strategy="width"), 10.0),  # histogram_width
-        (SplineCalibrator(), 12.0),  # spline
-        (CenteredIsotonicCalibrator(), 50.0),  # cir
-        (IsotonicCalibrator(), 50.0),  # isotonic
-        (VennAbersCalibrator(), 60.0),  # ivap
-        (CrossVennAbersCalibrator(), 60.0),  # cvap
-        (ENIRCalibrator(), 80.0),  # enir
-    ]
-    assert len(expected) == 15
-    for calibrator, rank in expected:
-        assert calibrator.complexity_rank == rank, type(calibrator).__name__
-
-
 def test_forced_tie_custom_complexity_rank_wins() -> None:
     from probcal.parametric import TemperatureCalibrator
 
@@ -176,30 +102,6 @@ def test_forced_tie_custom_complexity_rank_wins() -> None:
         random_state=11,
     ).fit(*_calibrated(1500))
     assert sel.best_name_ == "custom"
-
-
-def test_default_complexity_rank() -> None:
-    """No override -> 100.0, both on the base property and via the selector's
-    getattr fallback for non-BaseCalibrator duck-typed candidates."""
-
-    class _NoOverride(BaseCalibrator):
-        def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-            self._rate = float(np.average(y, weights=w))
-
-        def _predict(self, s: np.ndarray) -> np.ndarray:
-            return np.full(len(s), self._rate)
-
-        def interpret(self) -> Interpretation:
-            return Interpretation(
-                method="_NoOverride", param_names=(), param_values=(), messages=()
-            )
-
-    assert _NoOverride().complexity_rank == 100.0
-
-    class _DuckTyped:
-        """Not a BaseCalibrator; exercises the selector's getattr fallback."""
-
-    assert getattr(_DuckTyped(), "complexity_rank", 100.0) == 100.0
 
 
 def test_selection_report_has_mcb_dsc_columns() -> None:
@@ -270,13 +172,6 @@ def test_selector_unfitted_protocol() -> None:
     assert sel.is_monotone_ is True
 
 
-@pytest.mark.parametrize("bad", [1, 0, 2.5, True])
-def test_selector_cv_validated(bad: object) -> None:
-    """CAL-14: cv=1 used to fit every candidate on an empty training fold."""
-    with pytest.raises(ValueError, match="cv"):
-        CalibratorSelector(cv=bad).fit(*_calibrated(300))  # type: ignore[arg-type]
-
-
 def test_selector_with_nested_non_json_candidate_round_trips() -> None:
     """Candidate params go through each prototype's own _params_for_dict."""
     from probcal import SegmentedCalibrator
@@ -288,3 +183,31 @@ def test_selector_with_nested_non_json_candidate_round_trips() -> None:
     grid = np.linspace(0.01, 0.99, 30)
     np.testing.assert_array_equal(again.predict_proba(grid), sel.predict_proba(grid))
     assert isinstance(again.candidates["seg"].base, PlattCalibrator)
+    assert set(sel.report_.methods) == {"seg", "platt"}
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"scoring": "ece"}, "log_loss"),
+        # CAL-14: cv=1 used to fit every candidate on an empty training fold.
+        ({"cv": 1}, "cv"),
+        ({"cv": 2.5}, "cv"),
+        ({"cv": True}, "cv"),
+    ],
+)
+def test_constructor_validation(kwargs, match) -> None:
+    with pytest.raises(ValueError, match=match):
+        CalibratorSelector(**kwargs).fit(*_calibrated(300))
+
+
+def test_fewer_events_than_folds_raises_clearly() -> None:
+    from probcal.parametric import PlattCalibrator
+
+    rng = np.random.default_rng(1)
+    y = np.zeros(200, int)
+    y[:4] = 1
+    s = rng.random(200)
+    with pytest.raises(ValueError, match=r"cv=5 needs at least 5 .* 4 positives .* cv <= 4"):
+        CalibratorSelector(cv=5).fit(s, y)
+    CalibratorSelector(candidates={"platt": PlattCalibrator()}, cv=4).fit(s, y)

@@ -34,7 +34,7 @@ a whole masterscale, refusing unattainable targets instead of clamping.
 
 **Monitor and act.** Anytime-valid **monitoring** runs on an e-process whose alarm keeps
 its type-I guarantee at every look, under
-[stated assumptions](guide/monitoring.md#assumptions-and-scope). It localizes the onset
+[stated assumptions](concepts/monitoring.md#validity-conditions). It localizes the onset
 of drift and issues a
 recommendation that can be applied as a new offset, on the record.
 [Monitor and act](guide/monitoring.md).

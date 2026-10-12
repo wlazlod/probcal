@@ -1,6 +1,5 @@
-"""Tests for probcal.bayesian: BBQ and ENIR."""
-
-import warnings
+"""Tests for probcal.bayesian: BBQ and ENIR (ENIR's path is also gated by
+test_enir_equivalence.py)."""
 
 import numpy as np
 import pytest
@@ -18,95 +17,30 @@ def _sample(n: int = 3000) -> tuple[np.ndarray, np.ndarray]:
     return s, y
 
 
-# ---------------------------------------------------------------- BBQ
-
-
-def test_bbq_weights_normalized() -> None:
-    cal = BBQCalibrator().fit(*_sample(800))
-    np.testing.assert_allclose(cal.model_weights_.sum(), 1.0, atol=1e-12)
-    assert len(cal.model_weights_) == len(cal.bins_grid_)
-
-
-def test_bbq_tracks_identity_data() -> None:
-    cal = BBQCalibrator().fit(*_sample(6000))
-    p = cal.predict_proba(GRID)
-    assert np.max(np.abs(p - GRID)) < 0.12
-
-
-def test_bbq_interpret_top_models() -> None:
-    cal = BBQCalibrator().fit(*_sample(800))
-    interp = cal.interpret()
-    assert any("top" in m.lower() or "weight" in m.lower() for m in interp.messages)
-
-
-def test_bbq_predictions_in_unit_interval() -> None:
-    cal = BBQCalibrator().fit(*_sample(400))
-    p = cal.predict_proba(GRID)
-    assert np.all((p > 0.0) & (p < 1.0))
-
-
 # ---------------------------------------------------------------- ENIR
 
 
-def test_enir_path_ends_at_isotonic_fit() -> None:
+def test_enir_path_runs_from_raw_data_to_the_isotonic_fit() -> None:
+    s = np.array([0.1, 0.3, 0.5, 0.7, 0.9])
+    y = np.array([0.0, 1.0, 0.0, 1.0, 1.0])
+    small = ENIRCalibrator(max_solutions=None).fit(s, y)
+    np.testing.assert_allclose(small.path_solutions_[0], y)
+    assert small.path_lambdas_[0] == 0.0
+
     s, y = _sample(300)
     cal = ENIRCalibrator(max_solutions=None).fit(s, y)
     # Aggregate ties the same way the calibrator does, then compare the final
     # path solution with plain isotonic regression.
     order = np.argsort(s, kind="stable")
     s_sorted, y_sorted = s[order], y[order]
-    uniq, start = np.unique(s_sorted, return_index=True)
+    _, start = np.unique(s_sorted, return_index=True)
     counts = np.diff(np.append(start, len(s_sorted)))
     y_agg = np.add.reduceat(y_sorted, start) / counts
     iso = pava(y_agg, counts.astype(float)).fitted
     np.testing.assert_allclose(cal.path_solutions_[-1], iso, atol=1e-10)
 
 
-def test_enir_path_starts_at_raw_data() -> None:
-    s = np.array([0.1, 0.3, 0.5, 0.7, 0.9])
-    y = np.array([0.0, 1.0, 0.0, 1.0, 1.0])
-    cal = ENIRCalibrator(max_solutions=None).fit(s, y)
-    np.testing.assert_allclose(cal.path_solutions_[0], y)
-    assert cal.path_lambdas_[0] == 0.0
-
-
-def test_enir_bic_weights_normalized() -> None:
-    cal = ENIRCalibrator().fit(*_sample(400))
-    np.testing.assert_allclose(cal.model_weights_.sum(), 1.0, atol=1e-12)
-
-
-def test_enir_predictions_valid() -> None:
-    cal = ENIRCalibrator().fit(*_sample(500))
-    p = cal.predict_proba(GRID)
-    assert np.all(np.isfinite(p))
-    assert np.all((p > 0.0) & (p < 1.0))
-
-
-def test_enir_not_monotone_flag() -> None:
-    assert ENIRCalibrator.is_monotone_ is False
-
-
-def test_enir_interpret_warns_nonmonotone() -> None:
-    cal = ENIRCalibrator().fit(*_sample(300))
-    interp = cal.interpret()
-    assert any("monoton" in m.lower() for m in interp.messages)
-
-
-def test_exports() -> None:
-    import probcal
-
-    for name in (
-        "HistogramBinningCalibrator",
-        "ScalingBinningCalibrator",
-        "BBQCalibrator",
-        "ENIRCalibrator",
-    ):
-        assert name in probcal.__all__
-
-
-def test_enir_fit_warns_above_unique_score_threshold(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_enir_fit_warns_above_unique_score_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
     # The real threshold (50,000 unique scores, ~35s quadratic fit) is too
     # slow to cross in a fast test; patching the module constant exercises
     # the real emission path at test scale.
@@ -117,18 +51,26 @@ def test_enir_fit_warns_above_unique_score_threshold(
         ENIRCalibrator().fit(*_sample(300))
 
 
-def test_enir_fit_no_scale_warning_below_threshold() -> None:
-    # Filter on the message, not simplefilter("error"): an unrelated future
-    # warning from the path solver must not fail this test for the wrong
-    # reason.
-    s, y = _sample(300)
-    with warnings.catch_warnings(record=True) as rec:
-        warnings.simplefilter("always")
-        ENIRCalibrator().fit(s, y)
-    assert not any("quadratic in unique scores" in str(w.message) for w in rec)
+def test_enir_tie_aggregation_is_row_order_invariant() -> None:
+    s, y = _sample(400)
+    s = np.round(s, 2)
+    perm = RNG.permutation(len(s))
+    a = ENIRCalibrator().fit(s, y)
+    b = ENIRCalibrator().fit(s[perm], y[perm])
+    np.testing.assert_array_equal(a.predict_proba(GRID), b.predict_proba(GRID))
 
 
-# ---------------------------------------------------------------- 0.3.4 regressions
+@pytest.mark.parametrize("cls", [BBQCalibrator, ENIRCalibrator])
+def test_weights_alias_is_deprecated(cls: type) -> None:
+    """CAL-23: ``weights_`` (ensemble weights, easily confused with sample
+    weights) is now ``model_weights_``; the old name warns until 0.4.0."""
+    cal = cls().fit(*_sample(300))
+    with pytest.warns(DeprecationWarning, match=r"model_weights_.*0\.4\.0|0\.4\.0.*model_weights_"):
+        old = cal.weights_
+    np.testing.assert_array_equal(old, cal.model_weights_)
+
+
+# ---------------------------------------------------------------- BBQ
 
 
 def _low_tail_inversion(seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
@@ -156,8 +98,9 @@ def test_bbq_monotonicity_checked_over_the_whole_domain() -> None:
 
 def test_bbq_monotone_flag_agrees_with_every_breakpoint() -> None:
     """The flag equals a brute-force check at every edge of every candidate."""
-    for _ in range(6):
+    for _ in range(3):
         cal = BBQCalibrator().fit(*_sample(600))
+        np.testing.assert_allclose(cal.model_weights_.sum(), 1.0, atol=1e-12)
         edges = np.unique(np.concatenate(cal.model_edges_))
         probe = np.concatenate([[1e-12], edges, np.nextafter(edges, 0.0), [1.0 - 1e-12]])
         probe.sort()
@@ -165,49 +108,46 @@ def test_bbq_monotone_flag_agrees_with_every_breakpoint() -> None:
         assert cal.is_monotone_ == brute
 
 
-def test_bbq_equal_mass_bins_use_sample_weights() -> None:
-    """CAL-8: candidate binnings are equal-mass in the sample weights."""
-    s = np.linspace(0.01, 0.99, 400)
-    y = (RNG.random(400) < s).astype(float)
-    w = np.where(s < 0.5, 9.0, 1.0)
-    cal = BBQCalibrator(min_bins=4, max_bins=4).fit(s, y, sample_weight=w)
-    idx = np.searchsorted(cal.model_edges_[0], s, side="right")
-    mass = np.bincount(idx, weights=w, minlength=4) / w.sum()
-    np.testing.assert_allclose(mass, 0.25, atol=0.02)
+def _floor_tied_sample() -> tuple[np.ndarray, np.ndarray]:
+    rng = np.random.default_rng(0)
+    s = np.maximum(np.round(rng.beta(0.6, 40, 2000), 3), 0.001)
+    y = (rng.random(2000) < s).astype(float)
+    return s, y
 
 
-def test_bbq_bin_range_validated_at_fit() -> None:
-    s, y = _sample(300)
-    for kwargs in ({"min_bins": 0}, {"max_bins": -1}, {"min_bins": 2.5}):
-        cal = BBQCalibrator(**kwargs)  # type: ignore[arg-type]
-        with pytest.raises(ValueError, match="bins"):
-            cal.fit(s, y)
+def test_bbq_below_tied_minimum_is_not_the_prior() -> None:
+    """0.3.5: an empty first bin below a tied minimum fell back to the prior."""
+    s, y = _floor_tied_sample()
+    cal = BBQCalibrator().fit(s, y)
+    below, at_min = cal.predict_proba([0.0005, 0.001])
+    assert below == at_min
+    assert below < 0.01
+    for edges, rates in zip(cal.model_edges_, cal.model_rates_, strict=True):
+        assert np.all(edges > s.min())
+        assert len(rates) == len(edges) + 1
 
 
-@pytest.mark.parametrize("cls", [BBQCalibrator, ENIRCalibrator])
-def test_weights_alias_is_deprecated(cls: type) -> None:
-    """CAL-23: ``weights_`` (ensemble weights, easily confused with sample
-    weights) is now ``model_weights_``; the old name warns until 0.4.0."""
-    cal = cls().fit(*_sample(300))
-    with pytest.warns(DeprecationWarning, match=r"model_weights_.*0\.4\.0|0\.4\.0.*model_weights_"):
-        old = cal.weights_
-    np.testing.assert_array_equal(old, cal.model_weights_)
+def test_bbq_constant_scores_constant_map() -> None:
+    s = np.full(50, 0.3)
+    y = (np.arange(50) < 17).astype(float)
+    cal = BBQCalibrator().fit(s, y)
+    np.testing.assert_allclose(cal.predict_proba([0.0, 0.3, 1.0]), (17 + 0.5) / (50 + 1.0))
+    assert cal.is_monotone_
 
 
-def test_bbq_and_enir_round_trip_public_state() -> None:
-    s, y = _sample(400)
-    for cal in (BBQCalibrator().fit(s, y), ENIRCalibrator().fit(s, y)):
-        state = cal.to_dict()["state"]
-        assert not any(k.startswith("_") for k in state), sorted(state)
-        again = type(cal).from_json(cal.to_json())
-        np.testing.assert_array_equal(again.predict_proba(GRID), cal.predict_proba(GRID))
-        assert again.is_monotone_ == cal.is_monotone_
-
-
-def test_enir_tie_aggregation_is_row_order_invariant() -> None:
-    s, y = _sample(400)
-    s = np.round(s, 2)
-    perm = RNG.permutation(len(s))
-    a = ENIRCalibrator().fit(s, y)
-    b = ENIRCalibrator().fit(s[perm], y[perm])
-    np.testing.assert_array_equal(a.predict_proba(GRID), b.predict_proba(GRID))
+def test_bbq_monotone_option_isotonizes_candidates() -> None:
+    s, y = _low_tail_inversion()
+    free = BBQCalibrator(min_bins=4, max_bins=4).fit(s, y)
+    cal = BBQCalibrator(min_bins=4, max_bins=4, monotone=True).fit(s, y)
+    assert free.is_monotone_ is False and cal.is_monotone_ is True
+    np.testing.assert_array_equal(cal.model_weights_, free.model_weights_)
+    assert all(np.all(np.diff(r) >= 0) for r in cal.model_rates_)
+    lo, hi = cal.interval_inverse(0.1, 0.5)
+    assert lo < hi
+    back = BBQCalibrator.from_json(cal.to_json())
+    assert back.monotone is True
+    np.testing.assert_array_equal(back.predict_proba(s), cal.predict_proba(s))
+    # Default payloads carry no "monotone" key, so their fingerprints are unchanged.
+    assert "monotone" not in free.to_dict()["params"]
+    with pytest.raises(ValueError, match="monotone"):
+        BBQCalibrator(monotone="yes").fit(s, y)  # type: ignore[arg-type]

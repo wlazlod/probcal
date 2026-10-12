@@ -237,17 +237,16 @@ calibration belt).
 
 This matters because a legitimately *steep* calibration map is easy to mistake for separation.
 Scores are clipped to \( [10^{-12}, 1 - 10^{-12}] \), so \( |\operatorname{logit}(s)| \le 27.6 \);
-any true slope above about 1.1 pushes fitted log-odds past 30 at the extremes. Versions before
-0.1.2 aborted the iteration at that point and returned a biased interior iterate: on wide-score
-data with a true slope of 1.5, Platt reported \( a \approx 1.18 \) alongside a misleading
-separation warning. The current core instead halves each Newton step until the objective
-decreases, so steep maps are simply fitted.
+any true slope above about 1.1 pushes fitted log-odds past 30 at the extremes. Aborting the
+iteration there would return a biased interior iterate (on wide-score data with a true slope
+of 1.5, \( a \approx 1.18 \)) alongside a misleading separation warning. The core instead
+halves each Newton step until the objective decreases, so steep maps are simply fitted.
 
 Convergence is judged on the **full** Newton step, `max|H⁻¹g| < tol · (1 + max|β|)`, not on
 the step-halved one. A line search that stalls (no strict decrease is possible) counts as
 converged only if that full step is already below 10⁻⁵ relative, the floating-point floor.
-Along a quasi-separation ray the gradient can vanish while the full step stays large; since
-0.3.4 that case reports `converged=False`, warns, and returns the ridge refit instead of
+Along a quasi-separation ray the gradient can vanish while the full step stays large; that
+case reports `converged=False`, warns, and returns the ridge refit instead of
 claiming convergence.
 
 What to check after fitting: `converged_` on `PlattCalibrator` and `BetaCalibrator` records

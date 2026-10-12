@@ -9,7 +9,9 @@ and the axes-level part of it (spines, grid) is applied explicitly as well, so
 a caller-supplied ``ax`` is styled the same as one created here. Figures this
 module creates are made through ``pyplot`` (so ``plt.show()`` and notebook
 display work) and are therefore registered in pyplot's figure manager; close
-them with ``plt.close(fig)`` when rendering many in a loop.
+them with ``plt.close(fig)`` when rendering many in a loop. A call that raises
+closes any figure it created before failing. ``scale`` is ``"probability"``
+(the default) or ``"logit"``; anything else raises ``ValueError``.
 Theory: ``docs/concepts/visualization.md``.
 """
 
@@ -28,8 +30,9 @@ from ._plots_common import (
     _GREY,
     _ORANGE,
     _RED,
-    _STYLE,
+    _check_scale,
     _get_axes,
+    _plot_context,
     _plt,
     _require_mpl,
     _rug_subsample,
@@ -41,6 +44,7 @@ from ._plots_common import (
 from ._plots_diag import plot_attributes, plot_corp, plot_mcb_dsc, plot_murphy
 from ._results import (
     BeltResult,
+    GroupedMetricReport,
     KernelReliabilityCurve,
     MetricReport,
     ReliabilityCurve,
@@ -49,6 +53,7 @@ from ._results import (
 )
 from .curves import EcceCurve, reliability_binned
 from .metrics import brier_score, reliability_summary, smooth_ece
+from .metrics._evaluate import _group_rows
 from .metrics.grade import JeffreysGradeResult
 
 # Names shown, in order, by `stats=<MetricReport>` when present in the report.
@@ -183,7 +188,7 @@ def plot_reliability(
     rug: bool = True,
     counts: bool = False,
     ax: Any = None,
-    stats: bool | MetricReport = False,
+    stats: bool | MetricReport | GroupedMetricReport = False,
     risk_dist: str | None = "rug",
     by: object = None,
 ) -> Any:
@@ -219,8 +224,8 @@ def plot_reliability(
     ``{"intercept", "slope", "ici", "smooth_ece", "brier"}`` the report
     carries, plus ``n``/``events`` computed from ``y``.
 
-    ``risk_dist`` selects the density layer: ``"rug"`` (default) draws the
-    0.2.0 event/non-event tick marks along the top/bottom edges,
+    ``risk_dist`` selects the density layer: ``"rug"`` (default) draws
+    event/non-event tick marks along the top/bottom edges,
     deterministically thinned to at most 1000 marks per class; ``"split"``
     replaces it with a 30-equal-mass-bin spike histogram of ``p`` (events
     up, non-events down, from a ``y=0.12`` baseline in axis-fraction
@@ -228,19 +233,25 @@ def plot_reliability(
     axis coordinates cannot go below 0, so both classes share the one
     baseline); ``None`` draws no density layer. ``rug=False`` disables the
     density layer regardless of ``risk_dist`` (equivalent to
-    ``risk_dist=None``). ``counts=True`` restores the twin-axis count-bar
+    ``risk_dist=None``). ``counts=True`` adds the twin-axis count-bar
     margin, independent of ``risk_dist``.
 
     Passing ``by`` switches to a faceted grid: one panel per sorted,
-    stringified group in ``by`` (matching :func:`probcal.metrics.evaluate`'s
-    ``by=`` convention) plus a leading "pooled" panel, each a fresh
+    stringified group in ``by`` (grouped exactly as by
+    :func:`probcal.metrics.evaluate`'s ``by=``, which raises when two distinct
+    labels such as ``1`` and ``"1"`` display alike) plus a leading "pooled" panel, each a fresh
     :func:`probcal.curves.reliability_binned` panel built from that group's
     slice of ``y``/``p`` — the given ``curve`` is ignored for the panels
     (it would otherwise be ambiguous which group it represents). ``y`` and
     ``p`` are required in this mode. Every panel honours ``scale``,
     ``annotate``, ``stats``, ``rug``, ``risk_dist`` and ``counts`` exactly as
     the single-panel diagram does (pass ``annotate=False, rug=False`` for
-    light panels), sharing x/y limits across the grid; the function then
+    light panels), with one exception for ``stats``: ``stats=True`` computes
+    each panel's box from that panel's data, and a pooled
+    ``stats=<MetricReport>`` raises (it cannot describe each group) — pass the
+    :class:`probcal.metrics.GroupedMetricReport` from
+    ``evaluate(..., by=...)`` instead, whose pooled and per-group reports fill
+    the matching panels; sharing x/y limits across the grid; the function then
     returns the **Figure**, not an ``Axes`` (unlike the ``by=None`` default,
     matching :func:`plot_comparison`). ``ax`` and ``smooth`` are not
     supported with ``by`` and raise ``ValueError``.
@@ -276,10 +287,12 @@ def plot_reliability(
         Axes to draw on; a new figure and axes are created if ``None``.
         Must be ``None`` when ``by`` is given (a new figure of panels is
         always created).
-    stats : bool or MetricReport, keyword-only
+    stats : bool, MetricReport or GroupedMetricReport, keyword-only
         If truthy and ``y``/``p`` are given, draw the ``n, events,
         intercept, slope, ICI, smECE, Brier`` stats box (``True``) or a
-        ``MetricReport``-driven box, replacing ``annotate``'s box.
+        ``MetricReport``-driven box, replacing ``annotate``'s box. With
+        ``by``, a ``GroupedMetricReport`` over the same groups (a plain
+        ``MetricReport`` raises); without ``by``, not a ``GroupedMetricReport``.
     risk_dist : {"rug", "split"} or None, keyword-only
         Density-layer style; see above. Anything else raises ``ValueError``.
     by : array_like or None, keyword-only
@@ -296,10 +309,12 @@ def plot_reliability(
     Raises
     ------
     ValueError
-        If ``y``/``p`` are not given together, or ``risk_dist`` is not one
-        of ``"rug"``, ``"split"``, ``None``; or if ``by`` is given without
-        both ``y`` and ``p``, with a length that does not match ``y``, or
-        together with ``ax`` or ``smooth``.
+        If ``scale`` is not ``"probability"`` or ``"logit"``, ``y``/``p``
+        are not given together, or ``risk_dist`` is not one of ``"rug"``,
+        ``"split"``, ``None``; if ``by`` is given without both ``y`` and
+        ``p``, with a length that does not match ``y``, with labels that
+        display alike, together with ``ax`` or ``smooth``, or with a
+        ``stats`` report that does not match its groups (see above).
 
     Examples
     --------
@@ -315,6 +330,7 @@ def plot_reliability(
     >>> fig = plot_reliability(curve, y=y, p=p, by=segment)  # doctest: +SKIP
     """
     _require_mpl()
+    _check_scale(scale)
     if (y is None) != (p is None):
         raise ValueError("y and p must be given together")
     if risk_dist not in ("rug", "split", None):
@@ -343,9 +359,14 @@ def plot_reliability(
             stats=stats,
             risk_dist=risk_dist,
         )
+    if isinstance(stats, GroupedMetricReport):
+        raise ValueError(
+            "stats=<GroupedMetricReport> needs by= (one panel per group); for a single "
+            "panel pass its .pooled report"
+        )
     y_arr = None if y is None else np.asarray(y, dtype=np.float64)
     p_arr = None if p is None else np.asarray(p, dtype=np.float64)
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
         _draw_reliability(
             ax,
@@ -454,7 +475,7 @@ def _plot_reliability_faceted(
     annotate: bool,
     rug: bool,
     counts: bool,
-    stats: bool | MetricReport,
+    stats: bool | MetricReport | GroupedMetricReport,
     risk_dist: str | None,
 ) -> Any:
     """``plot_reliability(..., by=...)``: a pooled panel plus one panel per
@@ -462,23 +483,37 @@ def _plot_reliability_faceted(
     (``curve`` is not used here — see the docstring above)."""
     y_arr = np.asarray(y, dtype=np.float64)
     p_arr = np.asarray(p, dtype=np.float64)
-    by_arr = np.asarray(by)
-    if len(by_arr) != len(y_arr):
-        raise ValueError("by must have the same length as y")
-    labels = np.array([str(g) for g in by_arr])
-    groups = tuple(sorted(set(labels.tolist())))
+    # Same grouping (and the same error for labels such as 1 and "1" that
+    # display alike) as metrics.evaluate(by=...).
+    groups, rows = _group_rows(by, len(y_arr))
+    panel_stats: list[bool | MetricReport]
+    if isinstance(stats, GroupedMetricReport):
+        if stats.groups != groups:
+            raise ValueError(
+                f"stats: the GroupedMetricReport covers groups {stats.groups}, but by= "
+                f"yields {groups}; pass the report from evaluate(..., by=<the same labels>)"
+            )
+        panel_stats = [stats.pooled, *stats.reports]
+    elif isinstance(stats, MetricReport):
+        raise ValueError(
+            "stats=<MetricReport> holds one set of pooled metrics and cannot describe each "
+            "group; with by= pass stats=True (computed per panel) or the GroupedMetricReport "
+            "from metrics.evaluate(..., by=...)"
+        )
+    else:
+        panel_stats = [stats] * (len(groups) + 1)
     panels = [("pooled", y_arr, p_arr)]
-    panels += [(g, y_arr[labels == g], p_arr[labels == g]) for g in groups]
+    panels += [(g, y_arr[r], p_arr[r]) for g, r in zip(groups, rows, strict=True)]
 
     n_panels = len(panels)
     ncols = min(3, n_panels)
     nrows = math.ceil(n_panels / ncols)
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         fig, axes = _plt.subplots(
             nrows, ncols, figsize=(6.5 * ncols, 6 * nrows), sharex=True, sharey=True, squeeze=False
         )
         axes_flat = axes.ravel()
-        for ax, (label, yy, pp) in zip(axes_flat, panels, strict=False):
+        for ax, (label, yy, pp), st in zip(axes_flat, panels, panel_stats, strict=False):
             _style_axes(ax)
             _draw_reliability(
                 ax,
@@ -489,7 +524,7 @@ def _plot_reliability_faceted(
                 annotate=annotate,
                 rug=rug,
                 counts=counts,
-                stats=stats,
+                stats=st,
                 risk_dist=risk_dist,
             )
             ax.set_title(label)
@@ -516,11 +551,12 @@ def plot_belt(belt: BeltResult, *, scale: str = "probability", ax: Any = None) -
         The axes the belt was drawn on.
     """
     _require_mpl()
+    _check_scale(scale)
 
     def _band(bound: np.ndarray) -> np.ndarray:
         return _tr(bound, scale, _CI_CLIP_EPS)
 
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
         x = belt.grid_logit if scale == "logit" else belt.grid_p
         ax.plot(x, x, ls="--", c=_GREY, lw=1)
@@ -558,7 +594,8 @@ def plot_comparison(
         The figure containing both panels.
     """
     _require_mpl()
-    with _plt.rc_context(_STYLE):
+    _check_scale(scale)
+    with _plot_context():
         fig, axes = _plt.subplots(1, 2, figsize=(12, 5.5), sharey=True)
         panel_colors = (_RED, _GREEN)
         for ax, curve, label, color in zip(
@@ -592,7 +629,7 @@ def plot_interval(intervals: np.ndarray, s: np.ndarray, *, ax: Any = None) -> An
         The axes the intervals were drawn on.
     """
     _require_mpl()
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         ax = _get_axes(ax, (6.5, 4.5))
         s_arr = np.asarray(s, dtype=np.float64)
         order = np.argsort(s_arr, kind="stable")
@@ -624,7 +661,7 @@ def plot_selection(report: SelectionReport, *, ax: Any = None) -> Any:
         The axes the dot plot was drawn on.
     """
     _require_mpl()
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         ax = _get_axes(ax, (6.5, 0.6 * len(report.methods) + 1.5))
         order = np.argsort(report.score_mean)
         ys = np.arange(len(order))
@@ -686,7 +723,7 @@ def plot_ecce(
     if labels is None:
         labels = [f"curve {i + 1}" for i in range(len(curves))]
     palette = [_RED, _GREEN, _BLUE, _ORANGE]
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         ax = _get_axes(ax, (7.5, 4.8))
         if show_band:
             c0 = curves[0]
@@ -744,7 +781,7 @@ def plot_grade_backtest(result: Any, *, log_scale: bool = True, ax: Any = None) 
     x = np.arange(len(result.grades))
     rate = result.k / result.n
     colors = [light_color.get(li, _GREY) for li in result.light]
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         ax = _get_axes(ax, (1.1 * len(x) + 3.0, 4.8))
         ax.scatter(x, result.pd, marker="_", s=500, c=_BLUE, zorder=2, label="assigned PD")
         ax.errorbar(
@@ -814,7 +851,7 @@ def plot_offset_audit(offset: Any, *, ax: Any = None) -> Any:
     t = np.linspace(lo_g, hi_g, 200)
     lp = float(logit(np.array([offset.pre_mean_]))[0])
     lq = float(logit(np.array([offset.post_mean_]))[0])
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
         ax.plot(t, t, ls="--", c=_GREY, lw=1, label="identity")
         ax.plot(t, t + offset.delta_, c=_BLUE, lw=1.6, label="offset map")
@@ -876,7 +913,7 @@ def plot_e_process(report: Any, *, grades_panel: bool = False, ax: Any = None) -
         ``grades_panel=True`` adds a second axes to the same figure).
     """
     _require_mpl()
-    with _plt.rc_context(_STYLE):
+    with _plot_context():
         ax = _get_axes(ax, (7.5, 6.5) if grades_panel else (7.5, 4.2))
         steps = report.steps
         x = np.arange(1, len(steps) + 1)

@@ -7,6 +7,7 @@ variant is the recommended default): ``docs/concepts/data-splitting.md``.
 import copy
 import inspect
 import json
+import sys
 import warnings
 from datetime import UTC, datetime
 from typing import Any, Self
@@ -23,11 +24,40 @@ from .chain import Chain, _concat_interpretations
 from .offset import LogitOffset
 
 
+def _check_model_classes(model: Any) -> None:
+    """A model exposing ``classes_`` must have been trained on the labels ``{0, 1}``.
+
+    Column 1 of ``predict_proba`` (and the sign of a binary
+    ``decision_function``) refers to ``classes_[1]``; :class:`CalibratedModel`
+    calibrates against a 0/1 target, so any other labelling (e.g.
+    ``["bad", "good"]``, where column 1 is ``P("good")``) would silently
+    calibrate the wrong event.
+    """
+    classes = getattr(model, "classes_", None)
+    if classes is None:
+        return
+    arr = np.asarray(classes)
+    try:
+        ok = arr.shape == (2,) and np.array_equal(arr.astype(np.float64), [0.0, 1.0])
+    except (TypeError, ValueError):
+        ok = False
+    if not ok:
+        raise ValueError(
+            f"the model was trained on classes {list(arr.tolist())}, but CalibratedModel "
+            "calibrates P(y=1) against a 0/1 target and reads the model's score for "
+            "classes_[1]; retrain the model on 0/1 labels (1 = the event, e.g. default), "
+            "or use probcal.sklearn.CalibratedClassifier, which keeps the original labels"
+        )
+
+
 def _model_scores(model: Any, X: object) -> np.ndarray:
     """Duck-typed score extraction: predict_proba column 1, else expit(margin).
 
     ``X`` is handed to the model untouched (a DataFrame stays a DataFrame).
+    A model exposing ``classes_`` must have been trained on ``{0, 1}``
+    labels, so that column 1 is ``P(y=1)``.
     """
+    _check_model_classes(model)
     if hasattr(model, "predict_proba"):
         out = np.asarray(model.predict_proba(X), dtype=np.float64)
         if out.ndim == 2:
@@ -64,15 +94,33 @@ def _take_rows(X: object, mask: np.ndarray) -> object:
     return np.asarray(X)[idx]
 
 
-def _accepts_sample_weight(fit: Any) -> bool:
-    """Whether ``fit`` takes a ``sample_weight`` keyword (named or via ``**kwargs``)."""
+def _accepts_sample_weight(estimator: Any) -> bool:
+    """Whether ``estimator.fit`` can consume ``sample_weight``.
+
+    A named ``sample_weight`` parameter counts (sklearn's
+    ``has_fit_parameter`` test); a bare ``**kwargs`` does not — a
+    ``Pipeline`` takes ``**params`` but rejects ``sample_weight`` unless
+    metadata routing is enabled. Under sklearn's metadata routing a router
+    (``Pipeline``, ``GridSearchCV``, ...) counts as capable, and sklearn's
+    routing machinery has the final word: an undeclared request raises
+    ``UnsetMetadataPassedError`` instead of dropping the weights. sklearn is
+    consulted only when it is already imported (a router implies it is), so
+    this never imports it.
+    """
     try:
-        params = inspect.signature(fit).parameters
-    except (TypeError, ValueError):
+        params = inspect.signature(estimator.fit).parameters
+    except (AttributeError, TypeError, ValueError):
         return False
-    return "sample_weight" in params or any(
-        p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
-    )
+    if "sample_weight" in params:
+        return True
+    if "sklearn" not in sys.modules:
+        return False
+    from sklearn import get_config  # already imported; see the docstring
+    from sklearn.utils.metadata_routing import MetadataRouter, get_routing_for_object
+
+    if get_config().get("enable_metadata_routing", False):
+        return isinstance(get_routing_for_object(estimator), MetadataRouter)
+    return False
 
 
 def _clone(model: Any) -> Any:
@@ -129,6 +177,8 @@ class CalibratedModel(JsonIO):
     """
 
     _weight_warned: bool = False
+    _cal_weights: np.ndarray | None = None
+    _model_ref: dict[str, object] | None = None
 
     def __init__(
         self,
@@ -165,8 +215,10 @@ class CalibratedModel(JsonIO):
         sample_weight : array_like or None
             Positive observation weights. Always used by the calibrator; in
             the cv flow also forwarded to ``model.fit`` when its signature
-            accepts ``sample_weight`` (otherwise a ``UserWarning`` says the
-            model is trained unweighted).
+            names ``sample_weight`` (or, with sklearn metadata routing on,
+            the model is a router); otherwise a ``UserWarning`` says the
+            model is trained unweighted. Also kept for
+            :meth:`offset_to` without ``X``.
 
         Returns
         -------
@@ -177,8 +229,10 @@ class CalibratedModel(JsonIO):
         ------
         ValueError
             If ``flow`` is not ``"prefit"`` or ``"cv"``, ``cv`` is not an
-            integer ``>= 2`` (or a class has fewer than 2 members), or ``X``
-            and ``y`` differ in length.
+            integer ``>= 2`` (or a class has fewer than 2 members; with
+            ``ensemble=True``, fewer than ``cv`` members, since every fold's
+            calibrator needs both classes), ``X`` and ``y`` differ in
+            length, or the model exposes ``classes_`` other than ``{0, 1}``.
         TypeError
             If ``flow="cv"`` and the model has no ``fit(X, y)`` method.
         """
@@ -196,8 +250,9 @@ class CalibratedModel(JsonIO):
             self.calibrator_ = self._fresh_calibrator().fit(s, y_arr, sample_weight=w_arr)
             self._cal_scores = s
         else:
-            cv = validate_cv(self.cv, y_arr)
+            cv = validate_cv(self.cv, y_arr, held_out_both_classes=self.ensemble)
             self._fit_cv(X, y_arr, w_arr if sample_weight is not None else None, cv)
+        self._cal_weights = w_arr if sample_weight is not None else None
         self.fit_meta_ = {
             "n_obs": int(len(y_arr)),
             "n_events": float(np.sum(w_arr * y_arr)),
@@ -215,7 +270,7 @@ class CalibratedModel(JsonIO):
         """``model.fit(X, y[, sample_weight=w])``; warns once when weights are dropped."""
         if w is None:
             model.fit(X, y)
-        elif _accepts_sample_weight(model.fit):
+        elif _accepts_sample_weight(model):
             model.fit(X, y, sample_weight=w)
         else:
             if not self._weight_warned:
@@ -305,17 +360,19 @@ class CalibratedModel(JsonIO):
         target_mean: float | None = None,
         delta: float | None = None,
         X: object = None,
+        sample_weight: object = None,
     ) -> Self:
         """Append an inspectable :class:`LogitOffset` stage.
 
         Mode B (``target_mean``) anchors the portfolio mean of the current
-        pipeline output — computed on ``X`` when given, else on the stored
-        calibration scores. The offset is never folded into
-        the calibrator's parameters.
+        pipeline output — computed on ``X`` when given (weighted by
+        ``sample_weight``), else on the stored calibration scores, weighted
+        by the ``sample_weight`` given to :meth:`fit`. The offset is never
+        folded into the calibrator's parameters.
 
-        Positional use (``offset_to(0.03)``, the 0.3 signature
-        ``(target_mean, delta, X)``) still works but emits a
-        ``DeprecationWarning``; it will be removed in 0.4.0.
+        Positional use (``offset_to(0.03)``, signature
+        ``(target_mean, delta, X)``) is deprecated: it emits a
+        ``DeprecationWarning`` and will be removed in 0.4.0.
 
         Parameters
         ----------
@@ -327,7 +384,10 @@ class CalibratedModel(JsonIO):
             with ``target_mean``.
         X : array_like or None, keyword-only
             Inputs to compute the current pipeline output on; ``None`` uses
-            the stored calibration scores instead.
+            the stored calibration scores (and calibration weights) instead.
+        sample_weight : array_like or None, keyword-only
+            Positive weights for the portfolio mean on ``X``; only valid
+            together with ``X``.
 
         Returns
         -------
@@ -350,15 +410,22 @@ class CalibratedModel(JsonIO):
         self._check_fitted()
         if X is not None:
             p_now = self.predict_proba(X)
+            weights = sample_weight
         else:
+            if sample_weight is not None:
+                raise ValueError(
+                    "sample_weight is only accepted together with X; without X the "
+                    "calibration weights given to fit() are used"
+                )
             if self._cal_scores is None:
                 raise RuntimeError(
                     "calibration scores are not serialized; after from_dict, pass X so "
                     "the offset stage can record its audit means on current output"
                 )
             p_now = self._base_predict_from_scores(self._cal_scores)
+            weights = getattr(self, "_cal_weights", None)
         off = LogitOffset(delta=delta, target_mean=target_mean)
-        off.fit(p_now)
+        off.fit(p_now, sample_weight=weights)
         self.offsets_.append(off)
         return self
 
@@ -537,7 +604,9 @@ class CalibratedModel(JsonIO):
         The base model is never serialized — only a reference (class name,
         the user-supplied ``model_id``, and ``get_params()`` when available
         and JSON-encodable); reattach it on load via
-        ``CalibratedModel.from_dict(d, model=...)``. The stored calibration
+        ``CalibratedModel.from_dict(d, model=...)``. A wrapper loaded without
+        a model writes back the reference it was loaded with, so its
+        fingerprint is unchanged. The stored calibration
         scores are not serialized either: after a reload,
         ``offset_to`` needs an explicit ``X``.
 
@@ -555,14 +624,13 @@ class CalibratedModel(JsonIO):
                 "serialize a pooled (ensemble=False) or prefit wrapper instead"
             )
         ref_model = self.model_ if self.model_ is not None else self.model
-        model_params: object = None
-        if hasattr(ref_model, "get_params"):
-            try:
-                candidate = ref_model.get_params()
-                json.dumps(candidate, allow_nan=False)
-                model_params = candidate
-            except (TypeError, ValueError):
-                model_params = None
+        stored_ref = getattr(self, "_model_ref", None)
+        model_ref: object
+        if ref_model is None and stored_ref is not None:
+            # Loaded without a model: keep the reference it was saved with.
+            model_ref = stored_ref
+        else:
+            model_ref = self._model_ref_of(ref_model)
         return envelope(
             self,
             params={
@@ -575,14 +643,26 @@ class CalibratedModel(JsonIO):
             state={
                 "calibrator": self.calibrator_.to_dict(),
                 "offsets": [off.to_dict() for off in self.offsets_],
-                "model_ref": {
-                    "class_name": type(ref_model).__name__,
-                    "model_id": self.model_id,
-                    "params": model_params,
-                },
+                "model_ref": model_ref,
             },
             fit_meta=encode_value(dict(getattr(self, "fit_meta_", {}))),
         )
+
+    def _model_ref_of(self, ref_model: Any) -> dict[str, object]:
+        """Class name, ``model_id`` and JSON-encodable ``get_params()`` of a model."""
+        model_params: object = None
+        if hasattr(ref_model, "get_params"):
+            try:
+                candidate = ref_model.get_params()
+                json.dumps(candidate, allow_nan=False)
+                model_params = candidate
+            except (TypeError, ValueError):
+                model_params = None
+        return {
+            "class_name": type(ref_model).__name__,
+            "model_id": self.model_id,
+            "params": model_params,
+        }
 
     @classmethod
     def from_dict(cls, d: dict, model: Any = None) -> "CalibratedModel":
@@ -623,6 +703,9 @@ class CalibratedModel(JsonIO):
         obj.ensemble_ = []
         obj.model_ = model
         obj._cal_scores = None  # type: ignore[assignment]
+        obj._cal_weights = None
+        stored_ref = state.get("model_ref")
+        obj._model_ref = dict(stored_ref) if isinstance(stored_ref, dict) else None
         obj.fit_meta_ = dict(d.get("fit_meta", {}))
         obj.fitted_ = True
         return obj

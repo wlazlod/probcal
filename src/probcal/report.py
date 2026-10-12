@@ -53,6 +53,8 @@ from .metrics import (
 # Availability check only (no import): keeps this module matplotlib-free at
 # import time even when the [viz] extra is installed. `_figure_sink` below
 # is the only place that actually imports matplotlib (via `_plots_common`).
+__all__ = ["validation_report"]
+
 _HAS_MPL = find_spec("matplotlib") is not None
 
 
@@ -123,20 +125,25 @@ class _FigureSink:
     def figure(self, draw: Any, name: str) -> str:
         """``draw()`` returns an Axes or Figure; render it to PNG and reference it."""
         _require_mpl()
-        from ._plots_common import _plt  # local: the only matplotlib import site
+        from ._plots_common import (
+            _closing_new_figures,
+            _plt,
+        )  # local: the only matplotlib import site
 
-        artist = draw()
+        with _closing_new_figures():  # a draw() that raises leaves no figure behind
+            artist = draw()
         fig = artist if hasattr(artist, "savefig") else artist.figure
-        if self.fmt == "html":
-            buf = io.BytesIO()
-            fig.savefig(buf, format="png", dpi=110)
+        try:
+            if self.fmt == "html":
+                buf = io.BytesIO()
+                fig.savefig(buf, format="png", dpi=110)
+                b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                return f'<img src="data:image/png;base64,{b64}" alt="{name}">'
+            assert self.fig_dir is not None
+            self.fig_dir.mkdir(parents=True, exist_ok=True)
+            fig.savefig(self.fig_dir / f"{name}.png", format="png", dpi=110)
+        finally:
             _plt.close(fig)
-            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-            return f'<img src="data:image/png;base64,{b64}" alt="{name}">'
-        assert self.fig_dir is not None
-        self.fig_dir.mkdir(parents=True, exist_ok=True)
-        fig.savefig(self.fig_dir / f"{name}.png", format="png", dpi=110)
-        _plt.close(fig)
         return f"![{name}]({self.fig_dir_name}/{name}.png)"
 
 
@@ -303,6 +310,17 @@ def _section_grades(
     bands = jeffreys_upper_bands(y_arr, p_arr, labels, order=order)
     band_headers = ("grade", "lo", "hi")
     band_rows = [(g, lo, hi) for g, (lo, hi) in bands.items()]
+    # Bands keyed "A+B" merge grades whose own upper bound did not exceed the
+    # better grades' (the data cannot order them at this confidence).
+    merged = [g for g in bands if g not in order]
+    merged_note = ""
+    if merged:
+        text = (
+            "Merged bands (" + ", ".join(merged) + ") join grades whose own Jeffreys upper "
+            "bound does not exceed that of a better grade: the data cannot order them at "
+            "this confidence."
+        )
+        merged_note = f"<p>{_escape_html(text)}</p>" if fmt == "html" else f"\n{text}\n"
 
     order_label = ", ".join(order)
     how = "by the masterscale" if is_scale else "by mean predicted probability"
@@ -328,6 +346,7 @@ def _section_grades(
         + _table(fmt, pt_headers, pt_rows)
         + _subheading(fmt, "Jeffreys upper masterscale bands")
         + _table(fmt, band_headers, band_rows)
+        + merged_note
     )
     return _section(fmt, "Rating grades", body)
 

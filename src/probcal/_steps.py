@@ -5,6 +5,7 @@ per-bin weighted sums, right-continuous step evaluation, the generalized
 inverse of a non-decreasing step map, and legacy state-name migration.
 """
 
+import math
 from collections.abc import Callable, Mapping
 
 import numpy as np
@@ -36,16 +37,78 @@ def aggregate_ties(
 
 
 def equal_mass_edges(values: np.ndarray, n_bins: int, w: np.ndarray | None = None) -> np.ndarray:
-    """Interior equal-mass edges, deduplicated (ties can collapse bins).
+    """Interior equal-mass edges, deduplicated, with no empty bin.
 
     With ``w`` given and not constant, the edges are weighted quantiles
     (:func:`probcal._math.weighted_quantile`), so the bins carry equal
     *weight*; unit or constant weights keep ``np.quantile`` exactly.
+
+    Ties can make quantile edges coincide (deduplicated) or leave a bin of
+    the ``side="right"`` rule without any value — most commonly bin 0 when
+    more than ``1/n_bins`` of the mass is tied at the minimum, so the first
+    edge equals ``min(values)``. Each empty bin is merged into its upper
+    neighbour by dropping its lower edge (the first edge, for bin 0), so
+    every bin of the returned edges holds at least one value. When no bin is
+    empty the quantile edges are returned unchanged.
     """
     qs = np.linspace(0.0, 1.0, n_bins + 1)[1:-1]
     if w is None or bool(np.all(w == w[0])):
-        return np.unique(np.quantile(values, qs))
-    return np.unique(weighted_quantile(values, qs, w))
+        edges = np.unique(np.quantile(values, qs))
+    else:
+        edges = np.unique(weighted_quantile(values, qs, w))
+    occupied = np.unique(np.searchsorted(edges, values, side="right"))
+    if len(occupied) == len(edges) + 1:
+        return edges
+    # Bin k is [edges[k-1], edges[k]); keep the lower edge of every occupied
+    # bin except the lowest one, which becomes the new (non-empty) bin 0.
+    return edges[occupied[1:] - 1]
+
+
+def refine_lower(x: float, reaches: Callable[[float], bool], max_ulps: int = 64) -> float:
+    """Smallest float near ``x`` in ``[0, 1]`` at which ``reaches`` holds.
+
+    ``reaches`` must be monotone (false below some point, true above it), as
+    ``lambda v: g(v) >= t`` is for a non-decreasing ``g``. A closed-form
+    estimate ``x`` of the crossing is off by a few ulps either way; it is
+    stepped down while its predecessor still reaches, then up until it
+    reaches, so that ``g(x) >= t > g(prev(x))`` holds in floating point —
+    the rule :meth:`probcal.Masterscale.assign` applies to ``g(x)``.
+    """
+    x = float(x)
+    for _ in range(max_ulps):
+        if x <= 0.0:
+            break
+        prev = math.nextafter(x, 0.0)
+        if not reaches(prev):
+            break
+        x = prev
+    for _ in range(max_ulps):
+        if x >= 1.0 or reaches(x):
+            break
+        x = math.nextafter(x, 1.0)
+    return x
+
+
+def refine_upper(x: float, within: Callable[[float], bool], max_ulps: int = 64) -> float:
+    """Largest float near ``x`` in ``[0, 1]`` at which ``within`` holds.
+
+    Mirror of :func:`refine_lower` for a predicate that is true below some
+    point and false above it, such as ``lambda v: g(v) <= t``: stepped up
+    while the successor stays within, then down until ``x`` is within.
+    """
+    x = float(x)
+    for _ in range(max_ulps):
+        if x >= 1.0:
+            break
+        nxt = math.nextafter(x, 1.0)
+        if not within(nxt):
+            break
+        x = nxt
+    for _ in range(max_ulps):
+        if x <= 0.0 or within(x):
+            break
+        x = math.nextafter(x, 0.0)
+    return x
 
 
 def bin_sums(
@@ -78,19 +141,15 @@ def step_inverse_left(
 
     Callers guarantee ``t > levels[0]``. With ``pullback`` (the inverse of an
     increasing inner map ``forward``, e.g. the Platt stage of scaling-binning)
-    the edge is mapped back to the raw scale and nudged by ulps until
-    ``forward(x) >= edge``, so the returned bound is inside the preimage.
+    the edge is mapped back to the raw scale and refined by ulps in either
+    direction (:func:`refine_lower`) to the smallest ``x`` with
+    ``forward(x) >= edge``.
     """
     j = int(np.searchsorted(levels, t, side="left"))
     edge = float(starts[j])
     if pullback is None or forward is None:
         return edge
-    x = pullback(edge)
-    for _ in range(64):
-        if forward(x) >= edge or x >= 1.0:
-            break
-        x = float(np.nextafter(x, 1.0))
-    return x
+    return refine_lower(pullback(edge), lambda v: forward(v) >= edge)
 
 
 def step_inverse_right(
@@ -104,7 +163,8 @@ def step_inverse_right(
 
     The bound is itself in the preimage, so consumers may treat both bounds
     as closed. ``1.0`` when ``t`` reaches the top level. With ``pullback``
-    the edge is mapped back and nudged down until ``forward(x) < edge``.
+    the edge is mapped back and refined (:func:`refine_upper`) to the largest
+    ``x`` with ``forward(x) < edge``.
     """
     j = int(np.searchsorted(levels, t, side="right")) - 1
     if j >= len(levels) - 1:
@@ -112,12 +172,7 @@ def step_inverse_right(
     edge = float(starts[j + 1])
     if pullback is None or forward is None:
         return float(np.nextafter(edge, 0.0))
-    x = float(np.nextafter(pullback(edge), 0.0))
-    for _ in range(64):
-        if forward(x) < edge or x <= 0.0:
-            break
-        x = float(np.nextafter(x, 0.0))
-    return x
+    return refine_upper(math.nextafter(pullback(edge), 0.0), lambda v: forward(v) < edge)
 
 
 def migrate_state(
@@ -140,17 +195,14 @@ def linear_inverse_left(
     """``inf{x : g(x) >= t}`` for ``g = np.interp(x, xs, ms)`` with ``ms`` non-decreasing.
 
     Callers guarantee ``ms[0] < t <= ms[-1]``. The closed-form crossing on the
-    bracketing segment is nudged up by ulps until ``forward(x) >= t``.
+    bracketing segment is refined by ulps in either direction
+    (:func:`refine_lower`) to the smallest ``x`` with ``forward(x) >= t``.
     """
     j = int(np.searchsorted(ms, t, side="left"))
     frac = (t - ms[j - 1]) / (ms[j] - ms[j - 1])
     x = float(xs[j - 1] + frac * (xs[j] - xs[j - 1]))
     x = min(max(x, float(xs[j - 1])), float(xs[j]))
-    for _ in range(64):
-        if forward(x) >= t or x >= 1.0:
-            break
-        x = float(np.nextafter(x, 1.0))
-    return x
+    return refine_lower(x, lambda v: forward(v) >= t)
 
 
 def linear_inverse_right(
@@ -158,14 +210,11 @@ def linear_inverse_right(
 ) -> float:
     """``sup{x : g(x) <= t}`` for ``g = np.interp(x, xs, ms)``; ``ms[0] <= t < ms[-1]``.
 
-    Nudged down by ulps until ``forward(x) <= t``.
+    Refined by ulps in either direction (:func:`refine_upper`) to the
+    largest ``x`` with ``forward(x) <= t``.
     """
     j = int(np.searchsorted(ms, t, side="right")) - 1
     frac = (t - ms[j]) / (ms[j + 1] - ms[j])
     x = float(xs[j] + frac * (xs[j + 1] - xs[j]))
     x = min(max(x, float(xs[j])), float(xs[j + 1]))
-    for _ in range(64):
-        if forward(x) <= t or x <= 0.0:
-            break
-        x = float(np.nextafter(x, 0.0))
-    return x
+    return refine_upper(x, lambda v: forward(v) <= t)

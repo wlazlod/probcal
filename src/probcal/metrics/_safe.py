@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import bern_log_lr, expit, logit, logsumexp
+from .._math import bern_log_lr, expit, exponent_weights, logit, logsumexp
 from .._results import Interpretation, _ResultBase
 from ._common import _prep
 from ._grades import grade_labels, resolve_order
@@ -173,7 +173,9 @@ def hl_e_test(
         Positive logit-scale offsets; symmetrized to ``+/-`` before
         averaging (matching ``CalibrationMonitor(mixture_grid=...)``).
     sample_weight : array_like or None, keyword-only
-        Optional positive weights, same length as ``y``.
+        Optional positive weights, same length as ``y``. Each grade's
+        likelihood ratios are raised to ``min(1, w / mean(w))`` over that
+        grade, which keeps every factor an e-value for any weights.
 
     Returns
     -------
@@ -218,7 +220,8 @@ def hl_e_test(
     log_e_grade = np.empty(len(labels))
     for i, label in enumerate(labels):
         mask = g_arr == label
-        y_g, p_g, z_g, w_g = y_arr[mask], p_arr[mask], z_arr[mask], w_arr[mask]
+        y_g, p_g, z_g = y_arr[mask], p_arr[mask], z_arr[mask]
+        w_g = exponent_weights(w_arr[mask])
         log_terms = np.array([bern_log_lr(y_g, p_g, expit(z_g + delta), w_g) for delta in offsets])
         log_e_grade[i] = logsumexp(log_terms) - log_norm
 

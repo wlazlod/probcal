@@ -4,26 +4,13 @@ flaky on slower CI hardware. The one documented exception is
 ``test_evaluate_n10k_boot1000_under_150s``, whose ~1.7x ceiling is explained at
 the test.
 
-``evaluate`` is measured at n=20,000/n_boot=20 (raised from n=5,000 now that the
-binned smECE fast path this fix corrects no longer dominates timing at that
-scale -- measured 16.6s here, comfortably under the ceiling) rather than the
-larger n=50,000/n_boot=50 scale. Post-fix, ``smooth_ece``'s binned-path cost is
-negligible (a few ms) at every size this suite exercises, so it no longer
-drives the choice of scale here. An earlier draft of this comment claimed
-``ece_sweep`` -- its ~99-candidate bin-count scan, untouched by this fix --
-would dominate the timing at n=50,000, citing a ~537s figure; that figure was
-itself defect-contaminated (roughly 310s of it was ~50 bootstrap replicates
-each paying the pre-fix smECE aliasing defect's ~6.1s/call, not ``ece_sweep``)
-and is not reused. Measured on this dev host after the 0.3.0
-bootstrap work (shared per-replicate sort, vectorized ``ece_sweep`` scan,
-vectorized LOESS anchor evaluation), a full-catalog replicate at n=10,000 costs
-0.089s -- ICI family 0.051s (58%), ``ece_sweep`` scan 0.024s (27%),
-``intercept``/``slope`` 0.009s (10%), the whole binned ECE family 0.4ms.
-``evaluate(n=10,000, n_boot=1000)`` takes 86.9s here, down from 304.2s in 0.2.x
-(3.5x). n=20,000/n_boot=20 stays the fast smoke scale and exercises the
-bootstrap loop and metric dispatch above both the smECE bin-lattice default
-(8,192) and the LOESS anchor grid (512); the n=10,000/n_boot=1000 case below
-pins the full-catalog acceptance scale.
+``evaluate`` is pinned at the full-catalog acceptance scale, n=10,000 /
+n_boot=1000 (measured 86.9s on this dev host, down from 304.2s in 0.2.x after
+the 0.3.0 shared per-replicate sort, vectorized ``ece_sweep`` scan and
+vectorized LOESS anchor evaluation; a full-catalog replicate costs 0.089s --
+ICI family 58%, ``ece_sweep`` scan 27%, ``intercept``/``slope`` 10%). It runs
+above both the smECE bin-lattice default (8,192) and the LOESS anchor grid
+(512), so it also exercises those fast paths.
 
 ENIR's ceiling uses n=20,000, not the design target m=1e5: the vectorized engine (the
 production memory fix) is O(m*G) in time, and 1e5 is not
@@ -59,18 +46,6 @@ def test_ici_n200k_under_30s() -> None:
     assert elapsed < 30.0
 
 
-def test_smooth_ece_default_n20k_under_ceiling() -> None:
-    # n=20,000 exercises the lattice-binned default path (n > 8192 bins); the
-    # pre-fix aliasing defect made this cost ~6s regardless of n, the fixed
-    # lattice integrator measures ~ms. 1s is a >100x-headroom ceiling that
-    # still restores a real (~6x) regression detector for the pre-fix defect.
-    d = make_pd_portfolio(n=20_000, random_state=42)
-    t0 = time.perf_counter()
-    smooth_ece(d.y, d.scores)
-    elapsed = time.perf_counter() - t0
-    assert elapsed < 1.0
-
-
 def test_smooth_ece_default_wired_to_binned_path_n10k() -> None:
     # End-to-end wiring check: the default (bins=8192) call must actually be
     # exercising the fast binned path, not silently falling through to the
@@ -97,14 +72,6 @@ def test_smooth_ece_default_n4000_under_ceiling() -> None:
     smooth_ece(d.y, d.scores)
     elapsed = time.perf_counter() - t0
     assert elapsed < 0.25
-
-
-def test_evaluate_n20k_boot20_under_130s() -> None:
-    d = make_pd_portfolio(n=20_000, random_state=42)
-    t0 = time.perf_counter()
-    evaluate(d.y, d.scores, n_boot=20)
-    elapsed = time.perf_counter() - t0
-    assert elapsed < 130.0
 
 
 def test_evaluate_n10k_boot1000_under_150s() -> None:

@@ -75,8 +75,8 @@ def make_pd_portfolio(
     intercept : float
         Log-odds shift of ``p_true`` applied *after* the mean anchor:
         ``intercept > 0`` means the scores underestimate risk
-        (calibration-in-the-large error). Until 0.3 it was applied before the
-        anchor and therefore had no effect.
+        (calibration-in-the-large error). It is applied after the anchor
+        because the anchor would otherwise absorb it.
     asymmetry : float
         Relative extra distortion of the low-PD tail (``a_lo/a_hi - 1``).
     score_location, score_scale : float

@@ -109,12 +109,12 @@ better: the same or more discrimination for the same or less miscalibration.
 `plot_mcb_dsc` accepts either a `{name: (y, p)}` mapping, where each entry's CORP
 decomposition is computed fresh and every entry's `y` must share the same weighted mean so
 that UNC (and therefore the diagonals) is comparable across candidates, or, directly, a
-fitted `CalibratorSelector`'s `report_`. As of probcal 0.3, `SelectionReport` carries `mcb`,
-`dsc` and `unc` columns alongside the existing `score_mean`/`score_sd`/`guardrails_ok`: one
+fitted `CalibratorSelector`'s `report_`. `SelectionReport` carries `mcb`, `dsc` and `unc`
+columns alongside `score_mean`/`score_sd`/`guardrails_ok`: one
 `corp_fit`/`decompose` call per candidate on its own out-of-fold predictions, decomposing
 Brier when the selection criterion is Brier and log loss otherwise (matching whichever
-score actually drove the ranking). A report loaded from before 0.3 (e.g. an old golden)
-has `mcb=dsc=unc=None`, and `plot_mcb_dsc` raises rather than plotting a plane with columns
+score actually drove the ranking). A report saved by probcal < 0.3 (e.g. an old golden)
+loads with `mcb=dsc=unc=None`, and `plot_mcb_dsc` raises rather than plotting a plane with columns
 that were never computed.
 
 ## Coverage simulation

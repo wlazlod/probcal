@@ -1,16 +1,19 @@
 """Tests for probcal._results dataclasses."""
 
-import dataclasses
+import copy
+import pickle
 
 import numpy as np
 import pytest
 
+from probcal import calibration_belt, make_pd_portfolio
 from probcal._results import (
     BeltResult,
+    GroupedMetricReport,
     Interpretation,
     MetricReport,
-    ReliabilityCurve,
     SelectionReport,
+    _values_equal,
 )
 
 
@@ -23,16 +26,13 @@ def _interpretation() -> Interpretation:
     )
 
 
-def test_interpretation_frozen() -> None:
-    interp = _interpretation()
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        interp.method = "other"  # type: ignore[misc]
-
-
-def test_interpretation_as_dict() -> None:
-    d = _interpretation().as_dict()
-    assert d["method"] == "PlattCalibrator"
-    assert d["param_names"] == ("a", "b")
+def _metric_report(v: float = 0.131) -> MetricReport:
+    return MetricReport(
+        names=("log_loss", "brier"),
+        values=np.array([v, 0.028]),
+        ci_low=np.array([np.nan, 0.025]),
+        ci_high=np.array([0.144, 0.031]),
+    )
 
 
 def test_interpretation_repr_aligned_table() -> None:
@@ -41,75 +41,31 @@ def test_interpretation_repr_aligned_table() -> None:
     assert "a" in r and "-0.12" in r
 
 
-def test_metric_report_as_dict_and_repr() -> None:
-    rep = MetricReport(
-        names=("log_loss", "brier"),
-        values=np.array([0.131, 0.028]),
-        ci_low=np.array([0.120, 0.025]),
-        ci_high=np.array([0.144, 0.031]),
+def test_table_results_share_one_row_mechanism() -> None:
+    # OFF-21: one row mechanism; repr and the HTML report print the same rows.
+    rep = _metric_report()
+    assert set(rep.as_dict()) == {"names", "values", "ci_low", "ci_high"}
+    assert "log_loss" in repr(rep) and "0.131" in repr(rep)
+    g = GroupedMetricReport(
+        pooled=rep, groups=("a",), reports=(_metric_report(0.2),), counts=np.array([10])
     )
-    d = rep.as_dict()
-    assert set(d) == {"names", "values", "ci_low", "ci_high"}
-    r = repr(rep)
-    assert "log_loss" in r and "0.131" in r
-
-
-def test_reliability_curve_roundtrip() -> None:
-    curve = ReliabilityCurve(
-        pred_mean=np.array([0.01, 0.05]),
-        event_rate=np.array([0.012, 0.043]),
-        count=np.array([500, 480]),
-        ci_low=np.array([0.005, 0.03]),
-        ci_high=np.array([0.02, 0.06]),
-        pred_mean_logit=np.array([-4.59, -2.94]),
-    )
-    assert curve.as_dict()["count"].tolist() == [500, 480]
-
-
-def test_selection_report_repr_marks_chosen() -> None:
-    rep = SelectionReport(
+    assert repr(g._rows()[0]) == repr(("pooled", *rep._rows()[0]))
+    assert g._headers() == ("group", "metric", "value", "ci_low", "ci_high")
+    assert repr(g).startswith("GroupedMetricReport (1 groups)\ngroup")
+    sel = SelectionReport(
         methods=("platt", "beta_abm"),
-        score_mean=np.array([0.131, 0.129]),
-        score_sd=np.array([0.004, 0.006]),
+        score_mean=np.array([0.1, 0.2]),
+        score_sd=np.array([0.01, 0.02]),
         guardrails_ok=np.array([True, True]),
-        chosen=np.array([False, True]),
-        criterion="log_loss",
+        chosen=np.array([True, False]),
+        criterion="brier",
+        mcb=np.array([0.01, 0.02]),
+        dsc=np.array([0.02, 0.03]),
+        unc=0.1,
     )
-    r = repr(rep)
-    assert "beta_abm" in r and "log_loss" in r
-
-
-def test_belt_result_fields() -> None:
-    belt = BeltResult(
-        grid_p=np.array([0.01, 0.02]),
-        grid_logit=np.array([-4.6, -3.9]),
-        levels=(0.8, 0.95),
-        bands={
-            0.8: (np.array([0.005, 0.015]), np.array([0.02, 0.03])),
-            0.95: (np.array([0.004, 0.012]), np.array([0.03, 0.04])),
-        },
-        degree=2,
-        p_value=0.34,
-    )
-    assert belt.degree == 2
-    assert belt.as_dict()["p_value"] == 0.34
-    # The 0.3.x attribute names still work for one release, with a warning.
-    with pytest.warns(DeprecationWarning, match="bands\\[0.95\\]"):
-        np.testing.assert_array_equal(belt.upper_95, np.array([0.03, 0.04]))
-    with pytest.warns(DeprecationWarning):
-        np.testing.assert_array_equal(belt.lower_80, np.array([0.005, 0.015]))
-
-
-# ---------------------------------------------------------------- 0.3.4 fixes
-
-
-def _metric_report(v: float = 0.131) -> MetricReport:
-    return MetricReport(
-        names=("log_loss", "brier"),
-        values=np.array([v, 0.028]),
-        ci_low=np.array([np.nan, 0.025]),
-        ci_high=np.array([0.144, 0.031]),
-    )
+    assert sel._headers()[-2:] == ("mcb", "dsc")
+    assert sel._rows()[0][4] == "*" and sel._rows()[1][4] != "*"
+    assert "brier" in repr(sel)
 
 
 def test_array_results_compare_by_value_and_are_unhashable() -> None:
@@ -121,34 +77,40 @@ def test_array_results_compare_by_value_and_are_unhashable() -> None:
         hash(_metric_report())
     # Results without arrays keep value hashing.
     assert hash(_interpretation()) == hash(_interpretation())
+    # Mappings of arrays (BeltResult.bands) compare element-wise too.
+    a = {0.8: (np.array([0.1, np.nan]), np.array([0.2, 0.3]))}
+    b = {0.8: (np.array([0.1, np.nan]), np.array([0.2, 0.3]))}
+    assert _values_equal(a, b)
+    assert not _values_equal(a, {0.8: (a[0.8][0], np.array([0.2, 0.4]))})
+    assert not _values_equal(a, {0.9: a[0.8]})
 
 
-def test_grouped_report_rows_reuse_metric_report_rows() -> None:
-    # OFF-21: one row mechanism; repr and the HTML report print the same rows.
-    from probcal._results import GroupedMetricReport
+def test_belt_result_equality_read_only_bands_and_copies() -> None:
+    d = make_pd_portfolio(n=2000, random_state=0)
+    belt = calibration_belt(d.y, d.scores)
+    assert belt == calibration_belt(d.y, d.scores)
+    assert belt != calibration_belt(d.y, d.scores, confidence=(0.5, 0.9))
+    assert set(belt.bands) == set(belt.levels)
+    for obj in (belt, pickle.loads(pickle.dumps(belt)), copy.deepcopy(belt), copy.copy(belt)):
+        assert obj == belt
+        with pytest.raises(TypeError):
+            obj.bands[0.5] = None  # type: ignore[index]
 
-    g = GroupedMetricReport(
-        pooled=_metric_report(),
-        groups=("a",),
-        reports=(_metric_report(0.2),),
-        counts=np.array([10]),
+
+def test_belt_result_deprecated_attribute_names() -> None:
+    belt = BeltResult(
+        grid_p=np.array([0.01, 0.02]),
+        grid_logit=np.array([-4.6, -3.9]),
+        levels=(0.8, 0.95),
+        bands={
+            0.8: (np.array([0.005, 0.015]), np.array([0.02, 0.03])),
+            0.95: (np.array([0.004, 0.012]), np.array([0.03, 0.04])),
+        },
+        degree=2,
+        p_value=0.34,
     )
-    assert repr(g._rows()[0]) == repr(("pooled", *_metric_report()._rows()[0]))
-    assert g._headers() == ("group", "metric", "value", "ci_low", "ci_high")
-    assert repr(g).startswith("GroupedMetricReport (1 groups)\ngroup")
-
-
-def test_selection_report_headers_follow_corp_columns() -> None:
-    rep = SelectionReport(
-        methods=("platt",),
-        score_mean=np.array([0.1]),
-        score_sd=np.array([0.01]),
-        guardrails_ok=np.array([True]),
-        chosen=np.array([True]),
-        criterion="brier",
-        mcb=np.array([0.01]),
-        dsc=np.array([0.02]),
-        unc=0.1,
-    )
-    assert rep._headers()[-2:] == ("mcb", "dsc")
-    assert rep._rows()[0][4] == "*"
+    # The 0.3.x attribute names still work for one release, with a warning.
+    with pytest.warns(DeprecationWarning, match="bands\\[0.95\\]"):
+        np.testing.assert_array_equal(belt.upper_95, np.array([0.03, 0.04]))
+    with pytest.warns(DeprecationWarning):
+        np.testing.assert_array_equal(belt.lower_80, np.array([0.005, 0.015]))

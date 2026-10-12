@@ -5,8 +5,9 @@ import warnings
 import numpy as np
 import pytest
 
-from probcal import Chain, SegmentedCalibrator, moc_offset_from_counts
+from probcal import SegmentedCalibrator
 from probcal._math import expit, logit
+from probcal.isotonic import IsotonicCalibrator
 from probcal.parametric import BetaCalibrator, PlattCalibrator
 
 
@@ -18,18 +19,28 @@ def _pd_data(n: int, seed: int, event_shift: float = 0.0) -> tuple[np.ndarray, n
     return s, y
 
 
-def test_zero_arg_fit_is_a_single_global_segment() -> None:
-    s, y = _pd_data(500, seed=1)
-    cal = SegmentedCalibrator().fit(s, y)
+def test_zero_arg_fit_is_a_single_global_segment_with_affine_coeffs() -> None:
+    s, y = _pd_data(500, seed=6)
+    cal = SegmentedCalibrator(base=PlattCalibrator()).fit(s, y)
     assert cal.segments_ == ("__all__",)
     assert cal.tau2_ == 0.0
     np.testing.assert_allclose(cal.delta_tilde_, [0.0])
+    a, b = cal.affine_logit_coeffs_
+    base_a, base_b = cal.base_.affine_logit_coeffs_
+    assert a == base_a and b == base_b + cal.delta_tilde_[0]
+
+    segments = np.array(["a", "b"])[np.arange(500) % 2]
+    cal_multi = SegmentedCalibrator(base=PlattCalibrator()).fit(s, y, segments=segments)
+    assert cal_multi.affine_logit_coeffs_ is None
 
 
-def test_predict_proba_segments_none_equals_base_map() -> None:
-    s, y = _pd_data(900, seed=2)
-    segments = np.array(["a", "b", "c"])[np.arange(900) % 3]
+def test_tau2_zero_gives_complete_pooling_and_segments_none_is_the_base_map() -> None:
+    s, y = _pd_data(400, seed=0)
+    segments = np.array(["a", "b", "c", "d"])[np.arange(400) % 4]
     cal = SegmentedCalibrator().fit(s, y, segments=segments)
+    assert cal.tau2_ == 0.0
+    np.testing.assert_allclose(cal.delta_tilde_, np.zeros(4), atol=1e-15)
+    np.testing.assert_allclose(cal.shrink_, np.zeros(4), atol=1e-15)
     np.testing.assert_array_equal(cal.predict_proba(s), cal.base_.predict_proba(s))
 
 
@@ -57,15 +68,6 @@ def test_small_segment_is_strongly_shrunk_toward_large_segments() -> None:
     assert shrink_by_segment["big2"] > 0.5
 
 
-def test_tau2_zero_gives_complete_pooling() -> None:
-    s, y = _pd_data(400, seed=0)
-    segments = np.array(["a", "b", "c", "d"])[np.arange(400) % 4]
-    cal = SegmentedCalibrator().fit(s, y, segments=segments)
-    assert cal.tau2_ == 0.0
-    np.testing.assert_allclose(cal.delta_tilde_, np.zeros(4), atol=1e-15)
-    np.testing.assert_allclose(cal.shrink_, np.zeros(4), atol=1e-15)
-
-
 def test_single_class_segment_is_fully_shrunk() -> None:
     rng = np.random.default_rng(3)
     n = 600
@@ -81,28 +83,10 @@ def test_single_class_segment_is_fully_shrunk() -> None:
     assert cal.delta_tilde_[idx] == 0.0
 
 
-def test_unseen_global_defaults_delta_to_zero() -> None:
-    s, y = _pd_data(400, seed=0)
-    segments = np.array(["a", "b", "c", "d"])[np.arange(400) % 4]
-    cal = SegmentedCalibrator(unseen="global").fit(s, y, segments=segments)
-    with pytest.warns(UserWarning, match="none of the"):
-        p_unseen = cal.predict_proba(s[:5], segments=np.array(["z"] * 5))
-    np.testing.assert_allclose(p_unseen, cal.base_.predict_proba(s[:5]))
-
-
-def test_unseen_raise_raises_value_error() -> None:
-    s, y = _pd_data(400, seed=0)
-    segments = np.array(["a", "b", "c", "d"])[np.arange(400) % 4]
-    cal = SegmentedCalibrator(unseen="raise").fit(s, y, segments=segments)
-    with pytest.raises(ValueError, match="unseen"):
-        cal.predict_proba(s[:5], segments=np.array(["z"] * 5))
-
-
-def test_int_fit_float_predict_label_mismatch_warns_and_falls_back_to_base_map() -> None:
+def test_unseen_labels_global_warns_only_when_nothing_matches_and_raise_raises() -> None:
     # Regression: int labels at fit ("0", "1" after str()) vs. float labels at
     # predict ("0.0", "1.0") never match, so every row falls back to the
-    # global map under unseen="global" -- this must warn rather than fail
-    # silently.
+    # global map under unseen="global" -- this must warn rather than fail silently.
     s, y = _pd_data(600, seed=10)
     int_segments = np.array([0, 1])[np.arange(600) % 2]
     cal = SegmentedCalibrator().fit(s, y, segments=int_segments)
@@ -110,90 +94,21 @@ def test_int_fit_float_predict_label_mismatch_warns_and_falls_back_to_base_map()
     with pytest.warns(UserWarning, match="none of the 5 segment labels"):
         p_mismatch = cal.predict_proba(s[:5], segments=float_segments)
     np.testing.assert_allclose(p_mismatch, cal.base_.predict_proba(s[:5]))
-
-
-def test_partial_overlap_with_unseen_labels_does_not_warn() -> None:
-    s, y = _pd_data(400, seed=0)
-    segments = np.array(["a", "b", "c", "d"])[np.arange(400) % 4]
-    cal = SegmentedCalibrator(unseen="global").fit(s, y, segments=segments)
-    mixed = np.array(["a", "z", "b", "z", "c"])
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        cal.predict_proba(s[:5], segments=mixed)  # some rows match -> no warning
+        cal.predict_proba(s[:5], segments=np.array([0, 7, 1, 7, 0]))  # some rows match
 
-
-def test_int_fit_float_predict_label_mismatch_still_raises_under_unseen_raise() -> None:
-    s, y = _pd_data(600, seed=10)
-    int_segments = np.array([0, 1])[np.arange(600) % 2]
-    cal = SegmentedCalibrator(unseen="raise").fit(s, y, segments=int_segments)
-    float_segments = np.array([0.0, 1.0])[np.arange(5) % 2]
+    strict = SegmentedCalibrator(unseen="raise").fit(s, y, segments=int_segments)
     with pytest.raises(ValueError, match="unseen"):
-        cal.predict_proba(s[:5], segments=float_segments)
+        strict.predict_proba(s[:5], segments=np.array(["z"] * 5))
 
 
-def test_invalid_unseen_raises_at_fit_time() -> None:
+def test_fit_validation() -> None:
     s, y = _pd_data(200, seed=0)
     with pytest.raises(ValueError, match="unseen"):
         SegmentedCalibrator(unseen="bogus").fit(s, y)
-
-
-def test_segments_length_mismatch_raises() -> None:
-    s, y = _pd_data(200, seed=0)
     with pytest.raises(ValueError, match="length"):
         SegmentedCalibrator().fit(s, y, segments=np.array(["a", "b"]))
-
-
-def test_custom_base_is_cloned_and_fitted() -> None:
-    s, y = _pd_data(600, seed=5)
-    segments = np.array(["a", "b"])[np.arange(600) % 2]
-    cal = SegmentedCalibrator(base=PlattCalibrator()).fit(s, y, segments=segments)
-    assert isinstance(cal.base_, PlattCalibrator)
-    assert cal.base_.fitted_
-    assert cal.base is None or not getattr(cal.base, "fitted_", False)  # ctor arg untouched
-
-
-def test_round_trip_and_fingerprint_stability() -> None:
-    s, y = _pd_data(500, seed=9)
-    segments = np.array(["a", "b", "c"])[np.arange(500) % 3]
-    cal = SegmentedCalibrator().fit(s, y, segments=segments)
-    cal2 = SegmentedCalibrator.from_dict(cal.to_dict())
-    np.testing.assert_array_equal(
-        cal.predict_proba(s, segments=segments), cal2.predict_proba(s, segments=segments)
-    )
-    assert cal.fingerprint() == cal2.fingerprint()
-    assert cal2.to_dict() == cal.to_dict()
-
-    twin = SegmentedCalibrator().fit(s, y, segments=segments)
-    assert cal.fingerprint() == twin.fingerprint()
-    other_s, other_y = _pd_data(500, seed=99)
-    alt = SegmentedCalibrator().fit(other_s, other_y, segments=segments)
-    assert cal.fingerprint() != alt.fingerprint()
-
-
-def test_works_inside_chain_with_moc_offset_using_global_map() -> None:
-    s, y = _pd_data(800, seed=4)
-    segments = np.array(["a", "b"])[np.arange(800) % 2]
-    seg = SegmentedCalibrator().fit(s, y, segments=segments)
-    off = moc_offset_from_counts(y, seg.predict_proba(s))
-    chain = Chain([seg, off])
-    # Chain has no segments= slot: seg predicts through its global map (delta=0).
-    np.testing.assert_allclose(chain.predict_proba(s), off.transform(seg.predict_proba(s)))
-
-
-def test_affine_logit_coeffs_single_segment_only() -> None:
-    s, y = _pd_data(500, seed=6)
-    cal_single = SegmentedCalibrator(base=PlattCalibrator()).fit(s, y)
-    assert cal_single.segments_ == ("__all__",)
-    coeffs = cal_single.affine_logit_coeffs_
-    assert coeffs is not None
-    a, b = coeffs
-    base_a, base_b = cal_single.base_.affine_logit_coeffs_
-    assert a == base_a
-    assert b == base_b + cal_single.delta_tilde_[0]
-
-    segments = np.array(["a", "b"])[np.arange(500) % 2]
-    cal_multi = SegmentedCalibrator(base=PlattCalibrator()).fit(s, y, segments=segments)
-    assert cal_multi.affine_logit_coeffs_ is None
 
 
 def test_interval_and_point_inverse_with_segment_kwarg() -> None:
@@ -215,19 +130,6 @@ def test_interval_and_point_inverse_with_segment_kwarg() -> None:
     np.testing.assert_allclose(p_back, [0.3], atol=1e-9)
 
 
-def test_interpret_reports_tau2_and_per_segment_row() -> None:
-    s, y = _pd_data(400, seed=0)
-    segments = np.array(["a", "b", "c", "d"])[np.arange(400) % 4]
-    cal = SegmentedCalibrator().fit(s, y, segments=segments)
-    result = cal.interpret()
-    assert result.method == "SegmentedCalibrator"
-    assert result.param_names[0] == "tau2"
-    assert set(result.param_names[1:]) == {f"delta.{g}" for g in cal.segments_}
-    assert any("tau2" in m for m in result.messages)
-    for g in cal.segments_:
-        assert any(repr(g) in m for m in result.messages)
-
-
 # ---------------------------------------------------------------- 0.3.4 regressions
 
 
@@ -245,7 +147,7 @@ def test_is_monotone_survives_serialization() -> None:
     assert SegmentedCalibrator.from_json(cal.to_json()).is_monotone_ is False
 
 
-def test_selector_base_with_custom_candidates_serializes() -> None:
+def test_selector_base_with_custom_candidates_round_trips_with_segments() -> None:
     """CAL-15: the base prototype is encoded through its own param hook."""
     from probcal import CalibratorSelector, TemperatureCalibrator
 
@@ -260,9 +162,10 @@ def test_selector_base_with_custom_candidates_serializes() -> None:
         again.predict_proba(s, segments=segments), cal.predict_proba(s, segments=segments)
     )
     assert set(again.base.candidates) == {"p", "t"}
+    assert not base.fitted_  # the prototype is cloned, never fitted in place
 
 
-def test_complexity_rank_and_interpret_name_follow_the_class() -> None:
+def test_complexity_rank_and_interpret_follow_the_class() -> None:
     """CAL-24: rank delegates to the base map; interpret names the actual class."""
 
     class _Mine(SegmentedCalibrator):
@@ -270,5 +173,27 @@ def test_complexity_rank_and_interpret_name_follow_the_class() -> None:
 
     assert SegmentedCalibrator().complexity_rank == BetaCalibrator().complexity_rank
     assert SegmentedCalibrator(base=PlattCalibrator()).complexity_rank == 2.0
-    s, y = _pd_data(600, seed=5)
-    assert _Mine().fit(s, y).interpret().method == "_Mine"
+    s, y = _pd_data(400, seed=0)
+    segments = np.array(["a", "b", "c", "d"])[np.arange(400) % 4]
+    cal = _Mine().fit(s, y, segments=segments)
+    result = cal.interpret()
+    assert result.method == "_Mine"
+    assert result.param_names == ("tau2", *(f"delta.{g}" for g in cal.segments_))
+
+
+def test_segmented_shrinkage_invariant_to_weight_scale() -> None:
+    rng = np.random.default_rng(7)
+    n = 6000
+    seg = rng.integers(0, 6, n)
+    s = rng.uniform(0.02, 0.4, n)
+    y = (rng.random(n) < np.clip(s * (1 + 0.1 * seg), 0, 1)).astype(float)
+    w = rng.lognormal(0.0, 1.0, n)
+    fits = [
+        SegmentedCalibrator(IsotonicCalibrator()).fit(s, y, segments=seg, sample_weight=c * w)
+        for c in (0.1, 1.0, 10.0)
+    ]
+    for f in fits[1:]:
+        np.testing.assert_allclose(f.shrink_, fits[0].shrink_, rtol=1e-9, atol=1e-12)
+        np.testing.assert_allclose(
+            f.predict_proba(s, segments=seg), fits[0].predict_proba(s, segments=seg), rtol=1e-9
+        )

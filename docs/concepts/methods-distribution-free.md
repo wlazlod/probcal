@@ -94,7 +94,7 @@ that time inevitably breaks, and its intervals quantify sampling uncertainty, no
 
 A computational note completes the picture. Read naively, each test score costs two isotonic
 fits on \( n + 1 \) points. Vovk and Petej (2014) show the augmented fits can instead be served
-from structures precomputed once from the calibration set, and since 0.1.3 probcal does exactly
+from structures precomputed once from the calibration set, and probcal does exactly
 that: fitting sweeps the cumulative-sum diagram left to right, maintaining the lower hulls of
 the prefix and suffix point sets and reading the fitted value at every insertion position from
 the bridge between them. The result is two tables of length \( n + 1 \) (`F0_` and `F1_`,
@@ -105,16 +105,18 @@ rather than \( O(mn) \). The brute-force refit is retained in the test suite as 
 correctness reference the precomputation is checked against.
 
 **Ties.** Isotonic regression pools equal scores, and the augmented fits must do the same.
-Since 0.3.4 the IVAP pools tied calibration scores into one point (weights summed) before
+The IVAP pools tied calibration scores into one point (weights summed) before
 building the tables, and a test score equal to a calibration score joins that point rather
 than being inserted beside it. The lookup reads `F1_` at `searchsorted(..., side="left")` and
 `F0_` at `side="right"`: a test point labelled 1 (or 0) strictly between two calibration scores
 has the same augmented fit as one merged into the next (or previous) point. The output is
 therefore invariant to the row order of the calibration data, bit for bit, and the test
 reference is the literal pooled definition (two PAVA refits per query on the pooled set).
-On tie-free data with queries away from the calibration scores nothing changes; in-sample
-queries and rounded scores move by up to a few 10⁻² in probability (`ties_pooled_` records the
-behaviour; payloads saved before 0.3.4 keep their tables and their old lookup).
+On tie-free data with queries away from the calibration scores pooling has no effect; for
+in-sample queries and rounded scores it moves the output by up to a few 10⁻² in probability
+relative to unpooled insertion. `ties_pooled_` records the behaviour: payloads saved by
+probcal < 0.3.4 load with `ties_pooled_=False` and keep their stored tables and unpooled
+lookup.
 
 ## The cross Venn–Abers predictor (CVAP)
 

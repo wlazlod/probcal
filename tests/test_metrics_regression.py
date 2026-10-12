@@ -1,5 +1,8 @@
 """Tests for probcal.metrics.regression."""
 
+import math
+import warnings
+
 import numpy as np
 import pytest
 
@@ -30,24 +33,11 @@ def test_intercept_recovers_pure_shift() -> None:
     assert abs(calibration_intercept(y, p) - (-0.6)) < 0.08
 
 
-def test_calibration_test_null_and_alternative() -> None:
-    y_ok, p_ok = _from_distortion(1.0, 0.0)
-    y_bad, p_bad = _from_distortion(0.6, -0.5)
-    res_ok = calibration_test(y_ok, p_ok)
-    res_bad = calibration_test(y_bad, p_bad)
-    assert res_ok.p_value > 0.01
-    assert res_bad.p_value < 1e-6
-    assert abs(res_bad.beta - 0.6) < 0.06
-
-
-def test_guardrails_pass_on_calibrated() -> None:
+def test_guardrails_flags() -> None:
     y, p = _from_distortion(1.0, 0.0)
     g = calibration_guardrails(y, p)
     assert g.slope_ok and g.intercept_ok and g.spiegelhalter_ok
     assert g.all_ok
-
-
-def test_guardrails_fail_on_distorted() -> None:
     y, p = _from_distortion(0.5, -0.8)
     g = calibration_guardrails(y, p)
     assert not g.all_ok
@@ -86,9 +76,17 @@ def test_calibration_test_weights_are_relative() -> None:
     a = calibration_test(y, p, sample_weight=w)
     b = calibration_test(y, p, sample_weight=10.0 * w)
     assert b.statistic == pytest.approx(a.statistic, rel=1e-8)
-    n_eff = w.sum() ** 2 / np.dot(w, w)
+    assert b.df == pytest.approx(a.df, rel=1e-8)
+    # Second-order Rao-Scott: lr / (lbar (1 + a2)) on chi2(2 / (1 + a2)),
+    # lambda = eig(I^-1 J) at the null.
     raw = _old_calibration_test_lr(y, p, w)
-    assert a.statistic == pytest.approx(raw * n_eff / w.sum(), rel=1e-8)
+    z = np.log(p / (1 - p))
+    X = np.column_stack([np.ones_like(z), z])
+    v = p * (1 - p)
+    lam = np.linalg.eigvals(np.linalg.solve((X.T * (w * v)) @ X, (X.T * (w * w * v)) @ X)).real
+    a2 = np.var(lam) / lam.mean() ** 2
+    assert a.statistic == pytest.approx(raw / (lam.mean() * (1 + a2)), rel=1e-8)
+    assert a.df == pytest.approx(2 / (1 + a2), rel=1e-10)
 
 
 def test_calibration_test_tail_and_aliases() -> None:
@@ -109,3 +107,48 @@ def test_guardrails_match_individual_metrics() -> None:
     assert g.slope == calibration_slope(y, p, sample_weight=w)
     assert g.intercept == calibration_intercept(y, p, sample_weight=w)
     assert g.spiegelhalter_p == spiegelhalter_z(y, p, sample_weight=w).p_value
+
+
+def test_calibration_test_rao_scott_type_one_error_and_units() -> None:
+    # Heavy rows (weight 10) near p=0.15, the rest near p=0.5.
+    rng = np.random.default_rng(1)
+    hi = np.arange(4000) < 400
+    p = np.where(hi, 0.15, 0.5) + rng.uniform(-0.01, 0.01, 4000)
+    w = np.where(hi, 10.0, 1.0)
+    rng = np.random.default_rng(5)
+    rej = [
+        calibration_test((rng.random(len(p)) < p).astype(float), p, sample_weight=w).p_value < 0.05
+        for _ in range(400)
+    ]
+    assert 0.02 <= np.mean(rej) <= 0.09
+    y, pp = _from_distortion(1.0, 0.0, n=3000)
+    unit = calibration_test(y, pp)
+    assert unit.df == 2.0
+    const = calibration_test(y, pp, sample_weight=np.full(len(y), 4.0))
+    assert const.statistic == pytest.approx(unit.statistic, rel=1e-10)
+    assert const.df == 2.0
+    weighted = calibration_test(y, pp, sample_weight=np.where(pp < 0.2, 5.0, 1.0))
+    assert 0.0 < weighted.df < 2.0
+
+
+def test_constant_p_slope_nan_and_intercept_only_test() -> None:
+    c = 0.05
+    y = np.array([0, 1, 0, 0, 1, 0, 0, 0, 1, 0.0])
+    p = np.full(10, c)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        with pytest.raises(UserWarning, match="not identified"):
+            calibration_slope(y, p)  # the warning is not about separation
+    with pytest.warns(UserWarning, match="not identified"):
+        assert math.isnan(calibration_slope(y, p))
+    with pytest.warns(UserWarning, match="not identified"):
+        res = calibration_test(y, p)
+    assert res.df == 1.0 and math.isnan(res.beta)
+    # Intercept-only LR with slope fixed at 1: the fitted rate is the observed rate.
+    rate = y.mean()
+    lr = 2 * np.sum(y * np.log(rate / c) + (1 - y) * np.log((1 - rate) / (1 - c)))
+    assert res.statistic == pytest.approx(max(lr, 0.0), abs=1e-9)
+    assert res.alpha == pytest.approx(np.log(rate / (1 - rate)) - np.log(c / (1 - c)), abs=1e-7)
+    with pytest.warns(UserWarning, match="not identified"):
+        g = calibration_guardrails(y, p)
+    assert math.isnan(g.slope) and not g.slope_ok

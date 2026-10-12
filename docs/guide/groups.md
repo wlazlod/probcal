@@ -47,10 +47,10 @@ only one outcome class raises the same `ValueError` a direct call on that
 slice would, naming the offending group. `plot_reliability(by=...)` draws
 the same panels: a pooled panel plus one per group, laid out on shared axes
 (`curve` itself is ignored in this mode; each panel rebuilds its own
-binned curve from that group's data). Since 0.3.4 every panel follows the
+binned curve from that group's data). Every panel follows the
 single-panel defaults, stats box and rug included, and `annotate`, `stats`,
 `rug`, `risk_dist`, `counts` and `scale` are forwarded to each panel; pass
-`annotate=False, rug=False` for the lighter panels of 0.3.x. `ax=` and
+`annotate=False, rug=False` for lighter panels. `ax=` and
 `smooth=` cannot be combined with `by=` and raise `ValueError`.
 
 **What this is not.** `by=` reports side by side; it runs no test of

@@ -50,8 +50,8 @@ def reliability_summary(
     No new math: intercept and slope from the recalibration regression, ICI
     and E90 from the LOESS distance family, and Spiegelhalter's p-value.
     Lives here because, like `evaluate`, it aggregates across submodules;
-    ``probcal.plots`` only formats the result. ``grid_size=None`` recovers
-    0.1.2 values exactly.
+    ``probcal.plots`` only formats the result. ``grid_size=None`` fits the
+    LOESS exactly at every prediction.
 
     Parameters
     ----------
@@ -62,8 +62,8 @@ def reliability_summary(
     sample_weight : array_like or None, keyword-only
         Optional positive weights, same length as ``y``.
     grid_size : int or None, keyword-only
-        LOESS evaluation grid size for the ICI/E90 terms; ``None`` recovers
-        0.1.2 values exactly.
+        LOESS evaluation grid size for the ICI/E90 terms; ``None`` fits it
+        exactly at every prediction.
 
     Returns
     -------
@@ -77,7 +77,7 @@ def reliability_summary(
         n=len(y_arr),
         events=int(y_arr.sum()),
         intercept=_intercept(y_arr, p_arr, w),
-        slope=float(_slope_fit(y_arr, p_arr, w)[1][1]),
+        slope=float(_slope_fit(y_arr, p_arr, w, "reliability_summary")[1][1]),
         ici=fam["ici"],
         e90=fam["e90"],
         spiegelhalter_p=_spiegelhalter(y_arr, p_arr, w).p_value,

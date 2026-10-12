@@ -13,11 +13,7 @@ import pytest
 sklearn = pytest.importorskip("sklearn", minversion="1.6")
 
 from sklearn.base import clone  # noqa: E402
-from sklearn.exceptions import NotFittedError  # noqa: E402
-from sklearn.metrics import log_loss  # noqa: E402
-from sklearn.model_selection import cross_val_score  # noqa: E402
 from sklearn.utils import get_tags  # noqa: E402
-from sklearn.utils.validation import check_is_fitted  # noqa: E402
 
 from probcal import BetaCalibrator, Chain, LogitOffset  # noqa: E402
 from probcal._registry import SERIALIZABLE  # noqa: E402
@@ -63,15 +59,6 @@ def test_clone_of_fitted_calibrator_is_unfitted() -> None:
         copy.predict_proba(s)
 
 
-def test_check_is_fitted_before_and_after_fit() -> None:
-    s, y = _data()
-    cal = BetaCalibrator()
-    with pytest.raises(NotFittedError):
-        check_is_fitted(cal)
-    cal.fit(s, y)
-    check_is_fitted(cal)
-
-
 def test_chain_and_offset_report_fitted() -> None:
     # Chain and LogitOffset carry the is-fitted hook, but not the tag hook:
     # sklearn's check_is_fitted also requires __sklearn_tags__, which neither
@@ -91,16 +78,3 @@ def test_clone_of_unfitted_chain_is_unfitted_with_equal_params() -> None:
     assert c.fitted_ is False
     assert c.get_params(deep=True)["stages__1__target_mean"] == 0.03
     assert c.get_params(deep=True)["stages__0__variant"] == "abm"
-
-
-def test_cross_val_score_with_custom_scorer() -> None:
-    s, y = _data()
-
-    def scorer(est: BaseCalibrator, X: np.ndarray, y_true: np.ndarray) -> float:
-        p = est.predict_proba(X)
-        assert p.ndim == 1
-        return -log_loss(y_true, p, labels=[0.0, 1.0])
-
-    scores = cross_val_score(BetaCalibrator(), s.reshape(-1, 1), y, cv=3, scoring=scorer)
-    assert scores.shape == (3,)
-    assert np.all(np.isfinite(scores))

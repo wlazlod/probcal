@@ -42,6 +42,11 @@ def test_affine_exact_platt_hand_computed() -> None:
     np.testing.assert_allclose(res.phi_adj, a * phi, atol=1e-14)
     np.testing.assert_allclose(res.base_adj, np.full(len(z), a * base + b), atol=1e-14)
     np.testing.assert_allclose(res.target, a * z + b, atol=1e-12)
+    # A LogitOffset is the a = 1 affine stage.
+    off = adjust_attributions(phi, base, LogitOffset(delta=-0.35).fit(expit(z)))
+    assert off.method_used == "affine-exact"
+    np.testing.assert_allclose(off.phi_adj, phi, atol=1e-14)
+    np.testing.assert_allclose(off.base_adj, np.full(len(z), base - 0.35), atol=1e-14)
 
 
 def test_affine_equals_aumann_shapley_for_affine_calibrators() -> None:
@@ -51,15 +56,6 @@ def test_affine_equals_aumann_shapley_for_affine_calibrators() -> None:
         res_as = adjust_attributions(phi, base, cal, method="aumann-shapley")
         np.testing.assert_allclose(res_aff.phi_adj, res_as.phi_adj, atol=1e-12)
         np.testing.assert_allclose(res_aff.base_adj, res_as.base_adj, atol=1e-12)
-
-
-def test_offset_is_affine_stage() -> None:
-    phi, base, z = _shap_setup()
-    off = LogitOffset(delta=-0.35).fit(expit(z))
-    res = adjust_attributions(phi, base, off)
-    assert res.method_used == "affine-exact"
-    np.testing.assert_allclose(res.phi_adj, phi, atol=1e-14)  # a = 1
-    np.testing.assert_allclose(res.base_adj, np.full(len(z), base - 0.35), atol=1e-14)
 
 
 def test_reconstruction_for_nonaffine_calibrators() -> None:
@@ -72,17 +68,12 @@ def test_reconstruction_for_nonaffine_calibrators() -> None:
         assert res.max_reconstruction_error < 1e-10
         expected_target = logit(cal.predict_proba(expit(z)))
         np.testing.assert_allclose(res.target, expected_target, atol=1e-10)
-
-
-def test_sign_and_ranking_invariance_for_monotone_g() -> None:
-    phi, base, _ = _shap_setup()
-    cal = _fitted(BetaCalibrator)
-    res = adjust_attributions(phi, base, cal)
-    # Positive row multiplier: signs preserved, within-row |phi| order preserved.
-    assert np.all(np.sign(res.phi_adj) == np.sign(phi))
-    for i in range(len(phi)):
+        if isinstance(cal, IsotonicCalibrator):
+            continue
+        # Strictly monotone g: positive row multiplier, signs and |phi| order kept.
+        assert np.all(np.sign(res.phi_adj) == np.sign(phi))
         np.testing.assert_array_equal(
-            np.argsort(np.abs(res.phi_adj[i])), np.argsort(np.abs(phi[i]))
+            np.argsort(np.abs(res.phi_adj), axis=1), np.argsort(np.abs(phi), axis=1)
         )
 
 
@@ -116,20 +107,15 @@ def test_ducktyped_explanation_object() -> None:
             self.values = phi
             self.base_values = np.full(50, base)
 
-    res = adjust_attributions(FakeExplanation(), None, _fitted_platt())
-    assert res.phi_adj.shape == (50, 5)
+    cal = _fitted_platt()
+    res = adjust_attributions(FakeExplanation(), None, cal)
+    np.testing.assert_array_equal(res.phi_adj, adjust_attributions(phi, base, cal).phi_adj)
 
 
 def test_forcing_affine_on_nonaffine_raises() -> None:
     phi, base, _ = _shap_setup(20)
     with pytest.raises(ValueError, match="affine"):
         adjust_attributions(phi, base, _fitted(BetaCalibrator), method="affine")
-
-
-def test_export() -> None:
-    import probcal
-
-    assert "adjust_attributions" in probcal.__all__
 
 
 class _ProbaModel:
@@ -169,13 +155,30 @@ def test_affine_target_is_exact_beyond_the_probability_clip() -> None:
     assert res.max_reconstruction_error < 1e-12
 
 
-def test_adjusted_attribution_equality_is_array_aware() -> None:
-    # OFF-3: the frozen dataclass's generated __eq__ raised on arrays.
-    phi, base, _ = _shap_setup()
-    cal = _fitted_platt()
-    r1 = adjust_attributions(phi, base, cal)
-    r2 = adjust_attributions(phi, base, cal)
-    assert r1 == r2
-    assert r1 != adjust_attributions(phi * 2.0, base, cal)
-    with pytest.raises(TypeError):
-        hash(r1)
+def test_adjust_attributions_unwraps_sklearn_adapters() -> None:
+    pytest.importorskip("sklearn")
+    import warnings
+
+    from sklearn.linear_model import LogisticRegression
+
+    from probcal.sklearn import CalibratedClassifier, SklearnCalibrator
+
+    rng = np.random.default_rng(1)
+    X = rng.normal(size=(400, 3))
+    y = (rng.random(400) < expit(X[:, 0] - 1.0)).astype(int)
+    lr = LogisticRegression().fit(X, y)
+    s = lr.predict_proba(X)[:, 1]
+    phi = X * lr.coef_[0]
+    base = np.full(len(y), lr.intercept_[0])
+
+    ref = adjust_attributions(phi, base, IsotonicCalibrator().fit(s, y))
+    got = adjust_attributions(phi, base, SklearnCalibrator(IsotonicCalibrator()).fit(s, y))
+    np.testing.assert_allclose(got.target, ref.target)
+    np.testing.assert_allclose(got.phi_adj, ref.phi_adj)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cc = CalibratedClassifier(lr, calibrator=PlattCalibrator(), cv="prefit").fit(X, y)
+    r = adjust_attributions(phi, base, cc)
+    assert r.method_used == "affine-exact"
+    np.testing.assert_allclose(r.target, logit(cc.predict_proba(X)[:, 1]), atol=1e-8)

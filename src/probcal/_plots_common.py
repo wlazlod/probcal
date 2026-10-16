@@ -155,16 +155,14 @@ def _text_box(ax: Any, txt: str) -> None:
     ax.text(0.03, 0.97, txt, transform=ax.transAxes, va="top", fontsize=9, bbox=_BOX)
 
 
-def _logit_axis(ax: Any, axis: str = "both") -> None:
-    """Label logit-positioned ticks in probabilities."""
+def _logit_axis(ax: Any) -> None:
+    """Label logit-positioned ticks on both axes in probabilities."""
     ticks = logit(np.array(_TICK_PROBS))
     labels = [f"{q:g}" for q in _TICK_PROBS]
-    if axis in ("x", "both"):
-        ax.set_xticks(ticks)
-        ax.set_xticklabels(labels)
-    if axis in ("y", "both"):
-        ax.set_yticks(ticks)
-        ax.set_yticklabels(labels)
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(labels)
+    ax.set_yticks(ticks)
+    ax.set_yticklabels(labels)
 
 
 def _rug_subsample(values: np.ndarray) -> np.ndarray:

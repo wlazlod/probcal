@@ -21,7 +21,7 @@ paths with an escape hatch; the shape of fitted internals that are not
 part of the calibrator protocol (such as `ENIRCalibrator.path_solutions_`);
 performance, documentation, and packaging. What it may not: public
 signatures, exported names, the calibrator protocol, and the ability to
-read every schema-1 artifact written by probcal 0.3.0 or later.
+read every schema-1 artifact written by probcal 0.3.4 or later.
 
 ## Public surface
 

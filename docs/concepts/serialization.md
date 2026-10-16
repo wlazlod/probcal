@@ -58,12 +58,11 @@ raise `ValueError` naming what was found.
 
 ## The compatibility promise
 
-**Every 0.x release reads schema-1 payloads written by probcal 0.3.0 or
+**Every 0.x release reads schema-1 payloads written by probcal 0.3.4 or
 later.** A schema bump ships only together
 with a converter for old files and a changelog entry. The promise is
 enforced, not aspirational: `tests/golden/` holds one committed JSON per
-registered class, written by the oldest supported release (0.3.0, or the
-release that introduced the class if later), and
+registered class, written by the oldest supported release (0.3.4), and
 CI loads each one and reproduces its stored predictions (to 1e-12) on every
 run. A change that breaks reading old files breaks the build.
 

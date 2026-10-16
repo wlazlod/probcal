@@ -1,6 +1,5 @@
 """Per-grade e-processes, grade keys, and grade confidence sequences."""
 
-import json
 import warnings
 
 import numpy as np
@@ -182,49 +181,10 @@ def test_masterscale_fingerprint_recorded_only_for_accepted_batches() -> None:
     assert mon.masterscale_fingerprint_ == "b" * 64
 
 
-# ---------------------------------------------------------------- 0.3.0-0.3.3 payloads
+# ---------------------------------------------------------------- string labels
 
 
-def test_pre_0_4_float_grade_keys_are_renamed_on_load() -> None:
-    mon = CalibrationMonitor(grades=(1.0, 2.0))
-    y, p = _batch(seed=82)
-    g = ((np.arange(len(p)) % 2) + 1).astype(float)
-    mon.update(y, p, grade=g)
-    d = json.loads(mon.to_json())
-
-    def legacy(k: str) -> str:
-        return {"1": "1.0", "2": "2.0"}.get(k, k)
-
-    # rewrite as a 0.3.x writer keyed them: str(1.0) == "1.0"
-    st = d["state"]
-    d["probcal_version"] = "0.3.3"
-    st["grade_procs"] = {legacy(k): v for k, v in st["grade_procs"].items()}
-    st["grade_cs_log"] = {legacy(k): v for k, v in st["grade_cs_log"].items()}
-    st["grade_cs_max"] = {legacy(k): v for k, v in st["grade_cs_max"].items()}
-    st["g"] = [[legacy(x) for x in a] for a in st["g"]]
-    for s in st["steps"]:
-        s["e_grades"] = {legacy(k): v for k, v in s["e_grades"].items()}
-        s["grade_delta_ci"] = {legacy(k): v for k, v in s["grade_delta_ci"].items()}
-
-    loaded = CalibrationMonitor.from_dict(d)
-    assert loaded.steps_ == mon.steps_
-    assert loaded.update(y, p, grade=g) == mon.update(y, p, grade=g)
-
-
-def test_pre_0_3_4_partially_float_keyed_payload_is_rekeyed() -> None:
-    # Only grade_procs carries the legacy "1.0" keys: the regex fallback renames them.
-    mon = CalibrationMonitor(grades=(1.0, 2.0))
-    y, p = _batch(n=300, seed=30)
-    mon.update(y, p, grade=((np.arange(len(p)) % 2) + 1).astype(float))
-    d = json.loads(mon.to_json())
-    d["probcal_version"] = "0.3.3"
-    st = d["state"]
-    st["grade_procs"] = {f"{k}.0": v for k, v in st["grade_procs"].items()}
-    assert set(CalibrationMonitor.from_dict(d)._grade_procs) == {"1", "2"}
-
-
-@pytest.mark.parametrize("version", ["0.3.4", "0.3.5", "0.3.5.dev0", "0.4.0"])
-def test_current_payload_string_labels_are_not_rekeyed(version: str) -> None:
+def test_float_like_string_labels_round_trip_unchanged() -> None:
     mon = CalibrationMonitor()
     labels = np.array(["1.0", "2.0"])
     with warnings.catch_warnings():
@@ -232,9 +192,7 @@ def test_current_payload_string_labels_are_not_rekeyed(version: str) -> None:
         for k in range(3):
             y, p = _batch(n=300, seed=10 + k)
             mon.update(y, p, grade=labels[np.arange(len(p)) % 2])
-    d = json.loads(mon.to_json())
-    d["probcal_version"] = version
-    loaded = CalibrationMonitor.from_dict(d)
+    loaded = CalibrationMonitor.from_json(mon.to_json())
     assert set(loaded.steps_[-1].e_grades) == {"1.0", "2.0"}
     assert loaded.steps_ == mon.steps_
     y, p = _batch(n=300, seed=20)

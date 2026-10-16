@@ -17,7 +17,7 @@ import numpy as np
 from ._math import lgamma_vec, pava
 from ._registry import register
 from ._results import Interpretation
-from ._steps import aggregate_ties, bin_sums, equal_mass_edges, eval_step, migrate_state
+from ._steps import aggregate_ties, bin_sums, equal_mass_edges, eval_step
 from ._validation import EPS, validate_positive_int
 from .base import BaseCalibrator
 
@@ -91,13 +91,6 @@ class BBQCalibrator(BaseCalibrator):
         return params
 
     def _set_state(self, state: dict[str, object]) -> None:
-        # Payloads written by probcal < 0.3.4: ``weights_`` and ``models``
-        # ([[edges, rates], ...]) instead of the per-field lists.
-        state = migrate_state(state, {"weights_": "model_weights_"})
-        models = state.pop("models", None)
-        if models is not None:
-            state["model_edges_"] = [e for e, _ in models]  # type: ignore[attr-defined]
-            state["model_rates_"] = [r for _, r in models]  # type: ignore[attr-defined]
         super()._set_state(state)
         # An empty edge list decodes as a plain list; keep every member an array.
         edges: list[object] = self.__dict__["model_edges_"]
@@ -253,8 +246,7 @@ class ENIRCalibrator(BaseCalibrator):
         self.max_solutions = max_solutions
 
     def _set_state(self, state: dict[str, object]) -> None:
-        # Payloads written by probcal < 0.3.4 use ``_x`` and ``weights_``.
-        super()._set_state(migrate_state(state, {"_x": "scores_", "weights_": "model_weights_"}))
+        super()._set_state(state)
         self._mixed = self.model_weights_ @ self.path_solutions_  # recomputed, not stored
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
@@ -281,7 +273,7 @@ class ENIRCalibrator(BaseCalibrator):
 
     # TODO(ENIR): an O(m log m) event-driven engine (heap-scheduled breakpoint
     # trajectory) remains possible here if the equivalence gate is relaxed
-    # from bit-exact to atol=1e-10 against the frozen v0.1.2 reference — the
+    # from bit-exact to atol=1e-10 against the frozen reference — the
     # exact-tie separation subtlety that blocked it is a
     # tolerance artifact of the reference's 1e-15 threshold, not a
     # mathematical obstacle to a lazily-scheduled replay.

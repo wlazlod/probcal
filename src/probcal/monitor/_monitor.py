@@ -4,7 +4,6 @@ Statistical design, validity conditions, and references:
 ``docs/concepts/monitoring.md``.
 """
 
-import re
 import warnings
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -108,13 +107,6 @@ def _validate_delta_ci_grid(grid: object) -> None:
             "delta_ci_grid must be (lo, hi, count) with finite lo <= 0 <= hi, lo < hi "
             f"and an integer count >= 2, got {grid!r}"
         )
-
-
-_LEGACY_FLOAT_KEY = re.compile(r"^-?\d+\.0$")
-
-
-def _version_tuple(v: object) -> tuple[int, ...]:
-    return tuple(int(x) for x in re.findall(r"\d+", str(v))[:3])
 
 
 @dataclass(frozen=True)
@@ -839,7 +831,7 @@ class CalibrationMonitor(JsonIO):
             "max_log_global": float(self._max_log_global),
             "alarmed": self._alarmed,
             # Constant: weights never warn (the guarantee is exact), but
-            # 0.3.x readers require the key.
+            # earlier schema-1 readers require the key.
             "warned_weights": False,
             "steps": [self._step_to_dict(s) for s in self.steps_],
         }
@@ -862,10 +854,6 @@ class CalibrationMonitor(JsonIO):
     def from_dict(cls, d: dict) -> "CalibrationMonitor":
         """Rebuild a monitor mid-stream; the trajectory continues bit-for-bit.
 
-        Payloads written by probcal 0.3.0-0.3.3 key float grade labels as
-        ``"1.0"``; those keys are renamed to the normalized ``"1"`` on load
-        so new batches continue the same per-grade processes.
-
         Raises
         ------
         ValueError
@@ -878,26 +866,23 @@ class CalibrationMonitor(JsonIO):
                 params[k] = tuple(params[k])
         mon = cls(**params)
         st: dict[str, Any] = decode_value(d["state"], arrays=False)  # type: ignore[assignment]
-        rekey = _legacy_rekey(d, params["grades"])
         mon._z = [np.asarray(a, dtype=np.float64) for a in st["z"]]
         mon._y = [np.asarray(a, dtype=np.float64) for a in st["y"]]
         mon._w = [np.asarray(a, dtype=np.float64) for a in st["w"]]
-        mon._g = [
-            np.asarray([rekey(x) for x in a], dtype=str) if a is not None else None for a in st["g"]
-        ]
+        mon._g = [np.asarray(a, dtype=str) if a is not None else None for a in st["g"]]
         mon._offset.set_state(st["offset"])
         mon._log_shape = float(st["log_shape"])
         mon._grade_procs = {}
         for g, ps in st["grade_procs"].items():
             proc = OffsetProcess(mon._sym_grid())
             proc.set_state(ps)
-            mon._grade_procs[rekey(g)] = proc
+            mon._grade_procs[g] = proc
         mon._cs.set_state(st["cs_log"], st["cs_max"])
         mon._grade_cs = {}
         for g, log in st["grade_cs_log"].items():
             cs = ConfidenceSequence(mon._cs.grid)
             cs.set_state(log, st["grade_cs_max"][g])
-            mon._grade_cs[rekey(g)] = cs
+            mon._grade_cs[g] = cs
         mon._max_log_global = float(st["max_log_global"])
         mon._alarmed = bool(st["alarmed"])
         mon._warned_grades = bool(st.get("warned_grades", False))
@@ -906,34 +891,8 @@ class CalibrationMonitor(JsonIO):
         for sd in st["steps"]:
             sd = dict(sd)
             sd["delta_ci"] = tuple(sd["delta_ci"]) if sd["delta_ci"] is not None else None
-            sd["e_grades"] = {rekey(g): v for g, v in sd["e_grades"].items()}
             sd["grade_delta_ci"] = {
-                rekey(g): (tuple(v) if v is not None else None)
-                for g, v in sd["grade_delta_ci"].items()
+                g: (tuple(v) if v is not None else None) for g, v in sd["grade_delta_ci"].items()
             }
             mon.steps_.append(MonitorStep(**sd))
         return mon
-
-
-def _legacy_rekey(d: dict, grades: tuple | None) -> Any:
-    """Key renaming for payloads written before grade-label normalization.
-
-    Payloads written by probcal 0.3.0-0.3.3 key declared grades ``str(g)`` and
-    data labels ``np.asarray(grade).astype(str)``, so a float label ``1.0``
-    is keyed ``"1.0"``. For such payloads, keys of declared grades map to
-    :func:`grade_key`, and undeclared ``"<int>.0"`` keys (float arrays) map
-    to ``"<int>"``. Payloads from 0.3.4 on are already normalized: identity.
-    """
-    if _version_tuple(d.get("probcal_version", "0")) >= (0, 3, 4):
-        return str
-    declared = {str(g): grade_key(g) for g in grades or ()}
-
-    def rekey(k: object) -> str:
-        k = str(k)
-        if k in declared:
-            return declared[k]
-        if _LEGACY_FLOAT_KEY.match(k):
-            return k[:-2]
-        return k
-
-    return rekey

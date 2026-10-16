@@ -9,8 +9,8 @@ Each release opens with a short summary; the itemized entries sit under *Details
 
 ## [0.4.0] - 2026-10-17
 
-A cleanup release. The aliases deprecated in 0.3.4 are gone, payloads written before 0.3.0 no
-longer load, and the code is about 720 lines shorter. Numerical results are bit-identical to
+A cleanup release. The aliases deprecated in 0.3.4 are gone, payloads written before 0.3.4 no
+longer load, and the code is about 850 lines shorter. Numerical results are bit-identical to
 0.3.5, and so are the payloads written. Two bugs are fixed: `adjust_attributions` on a
 `CalibratedScorecard`, and `calibrate_scorecard` with a `Chain` prototype.
 
@@ -30,20 +30,23 @@ longer load, and the code is about 720 lines shorter. Numerical results are bit-
   - `BeltResult.lower_80`, `upper_80`, `lower_95` and `upper_95`: use `BeltResult.bands`.
   - Positional arguments to `CalibratedModel.offset_to` and to `LogitOffset.fit`'s
     `sample_weight`: pass them by keyword.
-- **Payloads written by probcal < 0.3.0** no longer load. The removed cases:
-  - Monitor steps without `log_e_increment`, and the "drift onset unavailable" path. As a
-    result, `MonitorStep.log_e_increment` and `grade_delta_ci` are required fields.
-  - Selection reports without CORP columns. `SelectionReport.mcb`, `dsc` and `unc` are
+- **Payloads written by probcal < 0.3.4** no longer load. Payloads written by 0.3.4 and 0.3.5
+  load unchanged, and the golden test files are now written by 0.3.4. The removed cases:
+  - Monitor steps without `log_e_increment`, and the "drift onset unavailable" path.
+    `MonitorStep.log_e_increment` and `grade_delta_ci` are now required fields.
+  - Selection reports without CORP columns. `SelectionReport.mcb`, `dsc` and `unc` are now
     required fields.
-
-  Payloads written by 0.3.0–0.3.5 load unchanged. The golden test files are now written by
-  0.3.0 (by 0.3.2 for `Masterscale`).
+  - Old state names in BBQ, ENIR, IVAP, CVAP and Spline payloads.
+  - Monitor grade keys written as `"1.0"`.
+  - The CSV-based scorecard fingerprint.
 - **Private helpers.** Nothing outside the package used these:
   - `_math.norm_cdf`, `_math.gammainc_lower` and `BaseCalibrator._clone`;
   - `metrics._common.binary_y` and `metrics._common.effective_weights`;
   - the `metrics._deprecation` module;
   - `CalibrationMonitor._cs_grid` and `_cs_max`;
-  - the `_prep` and `_resolve_grades` re-exports.
+  - `_steps.migrate_state`;
+  - the `_prep` and `_resolve_grades` re-exports;
+  - other unused helpers, unused parameters and stale `type: ignore`/`noqa` comments.
 
 ### Fixed
 
@@ -51,8 +54,6 @@ longer load, and the code is about 720 lines shorter. Numerical results are bit-
   `CalibratedModel`, `CalibratorSelector`, the sklearn adapters and `CalibratedScorecard`.
   With a non-affine calibrator, a scorecard used to raise `IndexError`.
 - `calibrate_scorecard` clones a `Chain` prototype correctly. It used to raise `TypeError`.
-- A `SplineCalibrator` loaded from a payload written before 0.3.4 can be saved again and
-  fingerprinted.
 - `smooth_ece` works on numpy 1.26, the declared minimum. It had used `np.trapezoid`, which
   requires numpy 2.0.
 - The HTML report escapes `&` in the CORP note.
@@ -85,6 +86,8 @@ longer load, and the code is about 720 lines shorter. Numerical results are bit-
   - `SegmentedCalibrator` looks up segments with vectorised code.
   - `pava` expands blocks without a Python loop.
   - Dead branches and redundant docstrings are removed.
+- **Tooling.** A CI job runs the test suite on numpy 1.26, the declared minimum, and mypy
+  reports unused `type: ignore` comments.
 
 </details>
 

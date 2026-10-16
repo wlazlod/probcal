@@ -702,7 +702,7 @@ def plot_ecce(
     The grey envelope (``show_band=True``, from the first curve) is ±2
     *pointwise* standard deviations under calibration — an aid for reading
     the walk, NOT a simultaneous confidence band; the formal max-statistic
-    test of Arrieta-Ibarra et al. (2022) is out of scope for this release.
+    test of Arrieta-Ibarra et al. (2022) is not implemented.
 
     Parameters
     ----------

@@ -3,8 +3,8 @@
 ## Supported versions
 
 Only the latest release line receives fixes. A security fix ships as a patch
-release of the current minor (for example, a report against 0.4.0 is fixed in
-0.4.x); earlier minors are not patched. Check the
+release of the current minor (a report against X.Y.0 is fixed in a later
+X.Y.z); earlier minors are not patched. Check the
 [releases page](https://github.com/wlazlod/probcal/releases) or PyPI for the
 current version.
 

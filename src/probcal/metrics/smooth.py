@@ -303,9 +303,6 @@ def ecce(y: object, p: object, *, sample_weight: object = None) -> EcceResult:
     return _ecce_stats(_ecce_walk(*_prep(y, p, sample_weight)))
 
 
-_ICI_FAMILY = ("ici", "e50", "e90", "emax")
-
-
 def _ici_distances(
     y: np.ndarray, p: np.ndarray, frac: float, grid_size: int | None, *, presorted: bool = False
 ) -> np.ndarray:

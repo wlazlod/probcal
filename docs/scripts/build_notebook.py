@@ -369,7 +369,7 @@ for fname, obj in artifacts.items():
 
 # registry dispatch: the class need not be known in advance
 obj = BaseCalibrator.from_dict(json.loads(cal.to_json()))
-print(f"\\nregistry loaded a {type(obj).__name__} — schema 1, readable by every 0.x release from 0.3.0 on")
+print(f"\\nregistry loaded a {type(obj).__name__} from schema-1 JSON")
 """)
 
 

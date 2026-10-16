@@ -183,7 +183,7 @@ class ScalingBinningCalibrator(BaseCalibrator):
         self.edges_ = edges
         self.bin_value_ = sums / cnts  # equal_mass_edges leaves no bin empty
 
-    @property  # type: ignore[override]
+    @property
     def is_monotone_(self) -> bool:  # type: ignore[override]
         """``True`` iff the Platt stage is increasing (see class docstring)."""
         platt = self.__dict__.get("platt_")

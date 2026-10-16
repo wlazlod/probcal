@@ -2,12 +2,12 @@
 
 One implementation each of: tie aggregation, tie-pooled PAVA blocks,
 equal-mass edges (weighted),
-per-bin weighted sums, right-continuous step evaluation, the generalized
-inverse of a non-decreasing step map, and legacy state-name migration.
+per-bin weighted sums, right-continuous step evaluation, and the generalized
+inverse of a non-decreasing step map.
 """
 
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 
 import numpy as np
 
@@ -191,20 +191,6 @@ def step_inverse_right(
     if pullback is None or forward is None:
         return float(np.nextafter(edge, 0.0))
     return refine_upper(math.nextafter(pullback(edge), 0.0), lambda v: forward(v) < edge)
-
-
-def migrate_state(
-    state: Mapping[str, object],
-    renames: Mapping[str, str],
-    drop: tuple[str, ...] = (),
-) -> dict[str, object]:
-    """Map the private state keys of payloads written by probcal < 0.3.4 onto their public names."""
-    out: dict[str, object] = {}
-    for key, value in state.items():
-        if key in drop:
-            continue
-        out[renames.get(key, key)] = value
-    return out
 
 
 def linear_inverse_left(

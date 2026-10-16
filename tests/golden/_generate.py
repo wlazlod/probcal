@@ -7,7 +7,7 @@ One JSON per registered class: ``{"object": to_dict(), "query": [...],
 battery. These files enforce the compatibility promise: the current release
 must load them (schema 1) and reproduce ``expected`` on ``query`` to within
 1e-12. The committed files were written by running this script at the oldest
-supported release (0.3.0); regenerate them only when that floor moves.
+supported release (0.3.4); regenerate them only when that floor moves.
 """
 
 import json

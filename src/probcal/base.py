@@ -620,8 +620,8 @@ class BaseCalibrator(JsonIO, ABC):
         params = cls._params_from_dict(
             decode_value(d.get("params", {}), arrays=False)  # type: ignore[arg-type]
         )
-        obj = cls(**params)  # type: ignore[arg-type]
-        obj._set_state(dict(d.get("state", {})))  # type: ignore[arg-type]
+        obj = cls(**params)
+        obj._set_state(dict(d.get("state", {})))
         obj.fit_meta_ = dict(decode_value(d.get("fit_meta", {}), arrays=False))  # type: ignore[call-overload]
         obj.fitted_ = True
         return obj

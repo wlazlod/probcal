@@ -111,9 +111,6 @@ class CalibratorSelector(CalibratorProtocolMixin, BaseCalibrator):
 
     def _set_state(self, state: dict[str, object]) -> None:
         state = dict(state)
-        # Payloads written by probcal 0.3.0-0.3.3 store is_monotone_; the
-        # property reads the winner instead.
-        state.pop("is_monotone_", None)
         rep = cast(dict, decode_value(state.pop("report")))
         rep["methods"] = tuple(rep["methods"])
         super()._set_state(state)
@@ -227,7 +224,7 @@ class CalibratorSelector(CalibratorProtocolMixin, BaseCalibrator):
         """Delegate to the refitted winner."""
         return self.best_calibrator_.predict_proba(s)
 
-    @property  # type: ignore[override]
+    @property
     def is_monotone_(self) -> bool:  # type: ignore[override]
         """The winner's ``is_monotone_`` (``True`` before fitting)."""
         best = self.__dict__.get("best_calibrator_")

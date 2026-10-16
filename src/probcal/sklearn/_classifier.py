@@ -230,7 +230,7 @@ class CalibratedClassifier(BinaryCalibratedMixin, ClassifierMixin, BaseEstimator
     def _positive_proba(self, X: object) -> np.ndarray:
         return self.calibrator_.predict_proba(self._estimator_scores(self.estimator_, X))
 
-    def __sklearn_tags__(self):  # noqa: ANN204 - sklearn protocol, version-dependent type
+    def __sklearn_tags__(self):
         from sklearn.utils import get_tags
 
         tags = super().__sklearn_tags__()

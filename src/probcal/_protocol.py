@@ -24,7 +24,7 @@ class CalibratorProtocolMixin:
 
     def _fitted_calibrator(self) -> "BaseCalibrator":
         """The fitted calibrator; overridden where fittedness must be checked."""
-        return self.calibrator_  # type: ignore[attr-defined,no-any-return]
+        return self.calibrator_  # type: ignore[attr-defined]
 
     @property
     def is_monotone_(self) -> bool:

@@ -1,9 +1,8 @@
-"""Golden-file guarantee: the current release reads schema-1 payloads from 0.3.0 on.
+"""Golden-file guarantee: the current release reads schema-1 payloads from 0.3.4 on.
 
-The JSONs in tests/golden/ were written by probcal 0.3.0, the oldest release
-whose payloads are supported (Masterscale, added later, by 0.3.2), and are
-committed; this suite proves the current build still loads them and
-reproduces their predictions. Tolerance is allclose at 1e-12, not
+The JSONs in tests/golden/ were written by probcal 0.3.4, the oldest release
+whose payloads are supported, and are committed; this suite proves the
+current build still loads them and reproduces their predictions. Tolerance is allclose at 1e-12, not
 bit-equality: goldens must survive numpy/platform drift.
 """
 

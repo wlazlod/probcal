@@ -34,7 +34,7 @@ pip install "probcal[sklearn]" # + scikit-learn for probcal.sklearn adapters
 Beta on PyPI. The change policy, public surface, and support matrix are on
 the *API stability* page of the docs; serialized artifacts carry the stronger
 promise that every 0.x release reads schema-1 payloads written by probcal
-0.3.0 or later. Development setup:
+0.3.4 or later. Development setup:
 
 ```bash
 git clone https://github.com/wlazlod/probcal && cd probcal
@@ -124,7 +124,7 @@ cal.fingerprint()                                # sha-256 provenance id
 ```
 
 Compatibility promise: every 0.x release reads schema-1 payloads written by probcal
-0.3.0 or later, enforced by committed golden
+0.3.4 or later, enforced by committed golden
 files in CI; schema bumps ship only with a converter. Details: the *Serialization*
 concepts chapter.
 

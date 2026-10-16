@@ -114,9 +114,9 @@ therefore invariant to the row order of the calibration data, bit for bit, and t
 reference is the literal pooled definition (two PAVA refits per query on the pooled set).
 On tie-free data with queries away from the calibration scores pooling has no effect; for
 in-sample queries and rounded scores it moves the output by up to a few 10⁻² in probability
-relative to unpooled insertion. `ties_pooled_` records the behaviour: payloads saved by
-probcal < 0.3.4 load with `ties_pooled_=False` and keep their stored tables and unpooled
-lookup.
+relative to unpooled insertion. `ties_pooled_` is `True` for every fit; it is `False` only
+for a payload re-saved by probcal 0.3.4/0.3.5 from an older fit (stored tables, unpooled
+lookup).
 
 ## The cross Venn–Abers predictor (CVAP)
 

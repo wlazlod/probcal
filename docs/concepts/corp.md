@@ -142,7 +142,7 @@ This is the gap the *Bands* section above predicts, and it is the reason the pac
 guarantee, the CI gate, and this table all state coverage pointwise: the shaded ribbon in
 `plot_corp` is a pointwise envelope, not a simultaneous one, and a reader who needs "the
 whole curve stays inside its band `level` of the time" should not read the ribbon as
-answering that question; nothing in this release does.
+answering that question; probcal provides no simultaneous band.
 
 ## In probcal
 

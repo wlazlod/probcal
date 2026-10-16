@@ -162,22 +162,6 @@ def test_scorecard_fingerprint_does_not_depend_on_csv_formatting(fitted, monkeyp
     assert cs.scorecard_fingerprint() == before
 
 
-def test_legacy_csv_fingerprint_payload_still_loads(fitted) -> None:
-    import hashlib
-
-    cs, sc, X_cal, _ = fitted
-    d = cs.to_dict()
-    legacy = hashlib.sha256(
-        sc.table(style="detailed").to_csv(index=False).encode("utf-8")
-    ).hexdigest()
-    d["state"]["scorecard_fingerprint"] = legacy
-    loaded = CalibratedScorecard.from_dict(d, scorecard=sc)
-    np.testing.assert_array_equal(loaded.predict_proba(X_cal), cs.predict_proba(X_cal))
-    d["state"]["scorecard_fingerprint"] = "0" * 64
-    with pytest.raises(ValueError, match="fingerprint"):
-        CalibratedScorecard.from_dict(d, scorecard=sc)
-
-
 def test_adjust_attributions_reads_a_scorecard_through_its_calibrator(fitted) -> None:
     from probcal import IsotonicCalibrator, adjust_attributions
 

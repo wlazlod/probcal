@@ -7,7 +7,6 @@ bands and point cut-offs, possible because ``Scorecard.score`` is affine in
 the fitted logistic regression's log-odds unless ``rounding=True``.
 """
 
-import hashlib
 import math
 import warnings
 from typing import cast
@@ -62,11 +61,6 @@ def _table_fingerprint(table: object) -> str:
         ],
     }
     return sha256_hex(canonical_json(payload))
-
-
-def _legacy_table_fingerprint(table: object) -> str:
-    """The fingerprint in probcal < 0.3.4 payloads (``to_csv`` text; pandas-version-dependent)."""
-    return hashlib.sha256(table.to_csv(index=False).encode("utf-8")).hexdigest()  # type: ignore[attr-defined]
 
 
 class CalibratedScorecard(JsonIO, CalibratorProtocolMixin):
@@ -212,9 +206,6 @@ class CalibratedScorecard(JsonIO, CalibratorProtocolMixin):
         """Rebuild around a scorecard loaded through optbinning's own tooling.
 
         The stored scorecard-table fingerprint must match ``scorecard``.
-        Payloads written by probcal < 0.3.4 store a ``to_csv``-based
-        fingerprint; it is accepted when it matches (re-saving writes the
-        pandas-version-independent form).
 
         Raises
         ------
@@ -230,16 +221,13 @@ class CalibratedScorecard(JsonIO, CalibratorProtocolMixin):
         obj = cls(
             scorecard,
             load(state["calibrator"]),  # type: ignore[arg-type]
-            tuple(coeffs) if coeffs is not None else None,  # type: ignore[arg-type]
+            tuple(coeffs) if coeffs is not None else None,
         )
-        stored = state["scorecard_fingerprint"]
-        if obj.scorecard_fingerprint() != stored:
-            table = scorecard.table(style="detailed")  # type: ignore[attr-defined]
-            if _legacy_table_fingerprint(table) != stored:
-                raise ValueError(
-                    "the supplied scorecard's table fingerprint does not match the stored "
-                    "one — this calibration layer was fitted against a different scorecard"
-                )
+        if obj.scorecard_fingerprint() != state["scorecard_fingerprint"]:
+            raise ValueError(
+                "the supplied scorecard's table fingerprint does not match the stored "
+                "one — this calibration layer was fitted against a different scorecard"
+            )
         return obj
 
     def scorecard_fingerprint(self) -> str:

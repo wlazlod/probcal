@@ -179,7 +179,7 @@ class SegmentedCalibrator(BaseCalibrator):
         """
         self._segments_arg = segments
         try:
-            return super().fit(s, y, sample_weight)  # type: ignore[return-value]
+            return super().fit(s, y, sample_weight)
         finally:
             self.__dict__.pop("_segments_arg", None)
 
@@ -290,7 +290,7 @@ class SegmentedCalibrator(BaseCalibrator):
 
     # ------------------------------------------------------------- protocol
 
-    @property  # type: ignore[override]
+    @property
     def is_monotone_(self) -> bool:  # type: ignore[override]
         """The fitted base map's ``is_monotone_`` (``True`` before fitting).
 

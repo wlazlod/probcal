@@ -15,7 +15,6 @@ import numpy as np
 from ._math import bern_loglik, expit, irls_logistic, logit, natural_cubic_basis
 from ._registry import register
 from ._results import Interpretation
-from ._steps import migrate_state
 from ._validation import stratified_folds, validate_cv, validate_positive_int
 from .base import BaseCalibrator
 
@@ -108,13 +107,6 @@ class SplineCalibrator(BaseCalibrator):
         self.lambdas = lambdas
         self.cv = cv
         self.random_state = random_state
-
-    def _set_state(self, state: dict[str, object]) -> None:
-        # Payloads written by probcal < 0.3.4 use ``_knots`` and ``_theta`` and
-        # carry no ``converged_`` flag (read as converged).
-        state = migrate_state(state, {"_knots": "knots_", "_theta": "theta_"})
-        state.setdefault("converged_", True)
-        super()._set_state(state)
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         cv = validate_cv(self.cv, y)

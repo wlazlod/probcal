@@ -105,6 +105,3 @@ def recommend(
         "the recommendation is a diagnostic, not a test — see the monitoring chapter",
     )
     return ("re-offset" if (slope_ok and not shape_needed) else "re-fit"), reasoning
-
-
-__all__ = ["recommend", "residual_shape_lr", "slope_ci"]

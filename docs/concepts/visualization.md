@@ -144,7 +144,7 @@ tick at the position where it occurs. The grey envelope is ±2 *pointwise* stand
 deviations of the walk under calibration: an honest reading aid, not a simultaneous
 confidence band. A walk can exit a pointwise envelope somewhere by chance more often than
 the nominal level suggests, and the formal max-statistic test of Arrieta-Ibarra et al.
-(2022) is not implemented in this release.
+(2022) is not implemented.
 
 ![ECCE drift walks for raw and beta-calibrated scores: the raw walk drifts far outside the pointwise envelope while the calibrated walk hovers near zero](img/ecce.png)
 

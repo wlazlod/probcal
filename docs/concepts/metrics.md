@@ -529,8 +529,7 @@ Measured on the dev host at n=10⁴, one full-catalog replicate costs about 28 m
 (`ici`/`e50`/`e90`/`emax`) is the biggest lever. For n above roughly 10⁶, reduce `n_boot`, pass
 a `metrics=` subset, or both.
 
-`docs/scripts/benchmarks.py` measures single calls on demand. Measured on the dev host
-(0.3.4):
+`docs/scripts/benchmarks.py` measures single calls on demand. Measured on the dev host:
 
 | n | call | wall time (s) |
 | --- | --- | --- |

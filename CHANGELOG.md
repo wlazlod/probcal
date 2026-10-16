@@ -30,6 +30,9 @@ longer load, and the code is about 850 lines shorter. Numerical results are bit-
   - `BeltResult.lower_80`, `upper_80`, `lower_95` and `upper_95`: use `BeltResult.bands`.
   - Positional arguments to `CalibratedModel.offset_to` and to `LogitOffset.fit`'s
     `sample_weight`: pass them by keyword.
+  - `predict_proba_2d` on calibrators and `CalibratedModel`. Use
+    `np.column_stack([1 - p, p])`, or the sklearn adapters, whose `predict_proba` returns the
+    `(n, 2)` matrix.
 - **Payloads written by probcal < 0.3.4** no longer load. Payloads written by 0.3.4 and 0.3.5
   load unchanged, and the golden test files are now written by 0.3.4. The removed cases:
   - Monitor steps without `log_e_increment`, and the "drift onset unavailable" path.

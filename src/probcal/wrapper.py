@@ -361,11 +361,6 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
         self._check_fitted()
         return self._pipeline(lambda model: _model_scores(model, X))
 
-    def predict_proba_2d(self, X: object) -> np.ndarray:
-        """Sklearn-style ``(n, 2)`` probability matrix."""
-        p = self.predict_proba(X)
-        return np.column_stack([1.0 - p, p])
-
     # ------------------------------------------------------------------ offsets
 
     def offset_to(

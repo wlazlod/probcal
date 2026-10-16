@@ -250,11 +250,6 @@ class BaseCalibrator(JsonIO, ABC):
         self._check_fitted()
         return self._predict(validate_scores(s))
 
-    def predict_proba_2d(self, s: object) -> np.ndarray:
-        """Sklearn-style ``(n, 2)`` probability matrix ``[P(y=0), P(y=1)]``."""
-        p = self.predict_proba(s)
-        return np.column_stack([1.0 - p, p])
-
     @abstractmethod
     def _predict(self, s: np.ndarray) -> np.ndarray:
         """Apply the fitted map to validated scores."""

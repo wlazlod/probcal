@@ -17,25 +17,13 @@ import numpy as np
 from ._math import lgamma_vec, pava
 from ._registry import register
 from ._results import Interpretation
-from ._steps import aggregate_ties, bin_sums, equal_mass_edges, eval_step, migrate_state
+from ._steps import aggregate_ties, bin_sums, equal_mass_edges, eval_step
 from ._validation import EPS, validate_positive_int
 from .base import BaseCalibrator
 
 _JEFFREYS = 0.5
 # Per-bin log normalizer of the Beta(1/2, 1/2) prior, ln B(a0, b0).
 _LOG_BETA_PRIOR = 2.0 * math.lgamma(_JEFFREYS) - math.lgamma(2.0 * _JEFFREYS)
-
-_WEIGHTS_DEPRECATED = (
-    "{cls}.weights_ is deprecated and will be removed in 0.4.0; use model_weights_ "
-    "(the ensemble weights, not sample weights)"
-)
-
-
-def _deprecated_weights(obj: BaseCalibrator) -> np.ndarray:
-    warnings.warn(
-        _WEIGHTS_DEPRECATED.format(cls=type(obj).__name__), DeprecationWarning, stacklevel=3
-    )
-    return obj.model_weights_  # type: ignore[attr-defined, no-any-return]
 
 
 @register
@@ -73,7 +61,6 @@ class BBQCalibrator(BaseCalibrator):
         Candidate bin counts.
     model_weights_ : numpy.ndarray
         Posterior weights over the candidates (sum to 1).
-        ``weights_`` is a deprecated alias, removed in 0.4.0.
     model_edges_, model_rates_ : list of numpy.ndarray
         Interior edges and posterior-mean bin rates of each candidate binning
         (isotonized when ``monotone=True``).
@@ -95,11 +82,6 @@ class BBQCalibrator(BaseCalibrator):
         self.max_bins = max_bins
         self.monotone = monotone
 
-    @property
-    def weights_(self) -> np.ndarray:
-        """Deprecated alias of :attr:`model_weights_` (removed in 0.4.0)."""
-        return _deprecated_weights(self)
-
     def _params_for_dict(self) -> dict[str, object]:
         # Omit the default so default payloads (and their fingerprints) carry
         # no ``monotone`` key and stay loadable by releases without it.
@@ -109,11 +91,6 @@ class BBQCalibrator(BaseCalibrator):
         return params
 
     def _set_state(self, state: dict[str, object]) -> None:
-        state = migrate_state(state, {"weights_": "model_weights_"})
-        models = state.pop("models", None)  # pre-0.4 layout: [[edges, rates], ...]
-        if models is not None:
-            state["model_edges_"] = [e for e, _ in models]  # type: ignore[attr-defined]
-            state["model_rates_"] = [r for _, r in models]  # type: ignore[attr-defined]
         super()._set_state(state)
         # An empty edge list decodes as a plain list; keep every member an array.
         edges: list[object] = self.__dict__["model_edges_"]
@@ -241,7 +218,6 @@ class ENIRCalibrator(BaseCalibrator):
         Indices into ``path_lambdas_`` of the retained breakpoints.
     model_weights_ : numpy.ndarray of shape (K,)
         BIC weights over the retained solutions, renormalized to sum to 1.
-        ``weights_`` is a deprecated alias, removed in 0.4.0.
     scores_ : numpy.ndarray of shape (m,)
         Distinct calibration scores: the grid ``path_solutions_`` lives on.
     dropped_weight_ : float
@@ -269,13 +245,8 @@ class ENIRCalibrator(BaseCalibrator):
     def __init__(self, max_solutions: int | None = 256) -> None:
         self.max_solutions = max_solutions
 
-    @property
-    def weights_(self) -> np.ndarray:
-        """Deprecated alias of :attr:`model_weights_` (removed in 0.4.0)."""
-        return _deprecated_weights(self)
-
     def _set_state(self, state: dict[str, object]) -> None:
-        super()._set_state(migrate_state(state, {"_x": "scores_", "weights_": "model_weights_"}))
+        super()._set_state(state)
         self._mixed = self.model_weights_ @ self.path_solutions_  # recomputed, not stored
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
@@ -302,7 +273,7 @@ class ENIRCalibrator(BaseCalibrator):
 
     # TODO(ENIR): an O(m log m) event-driven engine (heap-scheduled breakpoint
     # trajectory) remains possible here if the equivalence gate is relaxed
-    # from bit-exact to atol=1e-10 against the frozen v0.1.2 reference — the
+    # from bit-exact to atol=1e-10 against the frozen reference — the
     # exact-tie separation subtlety that blocked it is a
     # tolerance artifact of the reference's 1e-15 threshold, not a
     # mathematical obstacle to a lazily-scheduled replay.

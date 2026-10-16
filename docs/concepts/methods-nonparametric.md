@@ -74,7 +74,8 @@ The step function's ties and flats are an artifact of the least-squares projecti
 data. **Centered isotonic regression** (Oron and Flournoy, 2017) post-processes the PAVA
 solution: each block is collapsed to a single point at its weight-centered score coordinate
 (the weighted mean of the scores in the block) with the block's fitted level as its value, and
-the calibration map is the linear interpolation through these points. The result is strictly
+the calibration map is the linear interpolation through these points (so its
+`interpolation` attribute is `"linear"`). The result is strictly
 increasing wherever the data permit, at negligible extra cost. `CenteredIsotonicCalibrator`
 inherits everything from the isotonic fit, including its interpretation, and adds
 strictness, which is the property to insist on when downstream consumers need distinct
@@ -128,7 +129,7 @@ Beta–Binomial marginal has a closed form, computed with log-gamma functions
 weight on one \( B \) says the data speak clearly about their own resolution; diffuse weight
 says they do not, and
 the averaging is doing real work. `BBQCalibrator.interpret()` reports the top three models by
-weight (`model_weights_`; `weights_` is a deprecated alias until 0.4.0). The
+weight (`model_weights_`). The
 averaged map is smoother than any single binning, but nothing forces it to increase. On
 low-default data a sparse bin often dips below its neighbours through sampling noise alone. In
 a sweep over realistic PD portfolios (n from 500 to 20 000, event rates from 0.5% to 10%),
@@ -138,7 +139,7 @@ rates with weighted PAVA (weights are the posterior counts) before averaging. A 
 mixture of non-decreasing step functions is non-decreasing, so that map is monotone and
 invertible by construction. Its held-out log loss and Brier score are no worse than the
 default's, and the model weights are unchanged. The default is `False`, so a default fit
-reproduces across 0.3.x releases.
+reproduces across releases.
 
 Two deliberate departures from Naeini et al. (2015):
 
@@ -167,8 +168,7 @@ the point where all violations vanish, the solutions trace a path (computable by
 PAVA that merges blocks at known breakpoints) that interpolates between the raw data and the
 fully isotonic fit. ENIR (Naeini and Cooper, 2016) fits the whole path and combines the
 solutions along it, weighted by BIC. The ensemble inherits flexibility from the low-\( \lambda \)
-end and stability from the isotonic end, and the BIC weights (`model_weights_`; `weights_` is
-a deprecated alias until 0.4.0) again say where along that spectrum the data place their
+end and stability from the isotonic end, and the BIC weights (`model_weights_`) again say where along that spectrum the data place their
 trust.
 
 The practical caveat: the combined map may be **non-monotone**. `ENIRCalibrator` sets

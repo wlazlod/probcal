@@ -47,7 +47,7 @@ class HlEResult(_ResultBase):
         ``min(1, 1 / e_value)`` -- a valid (if generally conservative)
         p-value derived from the e-value via Markov's inequality.
     grades : tuple of str
-        Grade labels, sorted.
+        Grade labels: best to worst for a ``Masterscale``, else sorted.
     e_grade : numpy.ndarray
         Per-grade e-value, aligned with ``grades``; ``e_value`` is their
         product.
@@ -148,16 +148,11 @@ def hl_e_test(
     from Markov's inequality and is a valid (generally conservative)
     p-value.
 
-    Sample weights, when given, enter as exponents on the Bernoulli factors
-    (passed straight into ``bern_log_lr``) -- consistent with how
-    ``CalibrationMonitor`` treats weights. This is the literal-frequency
-    reading, an exception to the relative-weight convention of the rest of
-    ``probcal.metrics`` (:mod:`probcal.metrics._common`): rescaling all
-    weights by ``c`` multiplies every log-likelihood-ratio term by ``c``. Note that
-    non-integer weights break the interpretation of
-    ``LR`` as a genuine likelihood ratio of independent Bernoulli draws
-    (the same caveat ``docs/concepts/monitoring.md`` records for the
-    monitor).
+    Sample weights, when given, enter as exponents ``min(1, w / mean(w))``
+    (mean over the grade) on the Bernoulli factors, as in
+    ``CalibrationMonitor``: every factor stays an e-value for any weights,
+    the test is invariant to rescaling the weights, and unit weights give
+    the unweighted test.
 
     Parameters
     ----------

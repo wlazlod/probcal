@@ -175,6 +175,30 @@ jobs:
       - name: Run the sklearn adapter suite
         run: pytest -q tests/test_sklearn*.py tests/test_import_footprint.py
 
+  numpy-min:
+    name: Full fast suite on the minimum numpy (1.26)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      # pyproject declares numpy>=1.26; the other jobs install the latest numpy, so
+      # this is the only job that catches numpy-2-only API slipping into the code.
+      - name: Install dependencies with the oldest supported numpy
+        run: uv pip install --system -e ".[dev,viz]" "numpy==1.26.4"
+
+      - name: Run the tests (slow tests run once, in the `slow` job)
+        run: pytest -q -m "not slow"
+
   integrations:
     name: optbinning + lightgbm integrations on pinned versions
     needs: changes

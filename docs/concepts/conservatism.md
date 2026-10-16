@@ -169,8 +169,7 @@ names the merged grades. So every returned band has `lo < hi`, and the bands are
 and strictly increasing; a merged key means the data cannot order those grades at this
 confidence, and merging them in the masterscale (or collecting more data) is the decision the
 warning asks for. No grade's bound is ever lowered, which is the prudent direction for an
-upper bound. (`level=` is a deprecated alias of `confidence=`; it warns with a `DeprecationWarning` and is removed in
-0.4.0.)
+upper bound.
 
 ```python
 # s_cal, y_cal: held-out calibration scores, outcomes
@@ -253,7 +252,7 @@ tail risk exactly where independence assumes they scatter.
 
 Extending these bounds to a multi-period setting with explicit default correlation (asset
 correlation as in Pluto & Tasche's own follow-on work, or a systematic-factor model as in the
-Basel IRB framework more broadly) is **deliberately out of scope for probcal 0.3**. The
+Basel IRB framework more broadly) is **deliberately out of scope for probcal**. The
 one-period bound is a defensible, well-understood floor, not a correlation-robust one, and
 should be documented as such wherever it informs a masterscale or a production offset.
 

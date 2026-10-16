@@ -100,6 +100,12 @@ the documentation noting that no calibrator is affine there. The module takes pl
 duck-types `shap.Explanation` objects by reading `.values` and `.base_values`, and never
 imports shap.
 
+`calibrator` may be any fitted calibrator or `Chain`, or any probcal wrapper that exposes the
+calibrator protocol: `CalibratedModel`, `CalibratorSelector`, the `probcal.sklearn` adapters,
+and `CalibratedScorecard`. A wrapper is read through its fitted score-level map (a
+`CalibratedModel` through its model-free `chain_`, the others through the fitted calibrator
+they delegate to), so `phi` must explain the score that map takes.
+
 ## The exact-but-heavy alternative, and related work
 
 When exact composed attributions are genuinely required, the route is recomputation with

@@ -15,7 +15,7 @@ import numpy as np
 
 from ._registry import register
 from ._results import Interpretation
-from ._steps import aggregate_ties, migrate_state
+from ._steps import aggregate_ties
 from ._validation import stratified_folds, validate_cv, validate_scores
 from .base import BaseCalibrator
 
@@ -117,9 +117,9 @@ class VennAbersCalibrator(BaseCalibrator):
         inserted at each of the m+1 gaps between the distinct calibration
         scores. Both are non-decreasing, and ``F0_ <= F1_`` elementwise.
     ties_pooled_ : bool
-        ``True`` for every fit. ``False`` only for an object read from a
-        payload written by probcal < 0.3.4, which keeps its stored tables and
-        their lookup (query inserted before any tied calibration scores).
+        ``True`` for every fit. ``False`` only for a payload re-saved by
+        probcal 0.3.4/0.3.5 from an older fit (stored tables, unpooled
+        lookup).
 
     Notes
     -----
@@ -130,19 +130,10 @@ class VennAbersCalibrator(BaseCalibrator):
 
     _STATE_ATTRS = ("scores_", "F0_", "F1_", "ties_pooled_")  # O(m) by design, documented
 
-    def _set_state(self, state: dict[str, object]) -> None:
-        legacy = "_s" in state
-        super()._set_state(migrate_state(state, {"_s": "scores_"}, drop=("_y", "_w")))
-        if legacy:
-            self.ties_pooled_ = False
-        # Lazy interval-width cache, rebuilt on demand.
-        self._widths_cache: tuple[float, float] | None = None
-
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         s_u, y_u, w_u = aggregate_ties(s, y, w)
         self.scores_ = s_u
         self.ties_pooled_ = True
-        self._widths_cache = None
         c = np.concatenate([[0.0], np.cumsum(w_u)])
         z = np.concatenate([[0.0], np.cumsum(w_u * y_u)])
         self.F0_ = _csd_sweep(c, z, 0.0)
@@ -184,11 +175,9 @@ class VennAbersCalibrator(BaseCalibrator):
     def interpret(self) -> Interpretation:
         """Report interval widths over the calibration scores — where to trust the map."""
         self._check_fitted()
-        if self._widths_cache is None:
-            intervals = self._interval(self.scores_)
-            widths = intervals[:, 1] - intervals[:, 0]
-            self._widths_cache = (float(widths.mean()), float(widths.max()))
-        mean_w, max_w = self._widths_cache
+        intervals = self._interval(self.scores_)
+        widths = intervals[:, 1] - intervals[:, 0]
+        mean_w, max_w = float(widths.mean()), float(widths.max())
         return Interpretation(
             method=type(self).__name__,
             param_names=("mean_width", "max_width"),
@@ -236,9 +225,6 @@ class CrossVennAbersCalibrator(BaseCalibrator):
     def __init__(self, cv: int = 5, random_state: int = 42) -> None:
         self.cv = cv
         self.random_state = random_state
-
-    def _set_state(self, state: dict[str, object]) -> None:
-        super()._set_state(migrate_state(state, {"_ivaps": "ivaps_"}))
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         cv = validate_cv(self.cv, y)

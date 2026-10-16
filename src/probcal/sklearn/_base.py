@@ -81,7 +81,7 @@ class BinaryCalibratedMixin(CalibratorProtocolMixin):
 
     def _fitted_calibrator(self) -> BaseCalibrator:
         check_is_fitted(self, "calibrator_")
-        return self.calibrator_  # type: ignore[attr-defined,no-any-return]
+        return self.calibrator_
 
     def _binary_target(self, y: np.ndarray) -> np.ndarray:
         """Set ``classes_`` and return ``y == classes_[1]`` as float64.
@@ -123,7 +123,7 @@ class BinaryCalibratedMixin(CalibratorProtocolMixin):
     def predict(self, X: object) -> np.ndarray:
         """Class labels at the 0.5 calibrated-probability threshold."""
         proba = self.predict_proba(X)
-        return self.classes_[(proba[:, 1] >= 0.5).astype(int)]  # type: ignore[no-any-return]
+        return self.classes_[(proba[:, 1] >= 0.5).astype(int)]
 
     # ------------------------------------------------------------------ JSON surface
 
@@ -148,8 +148,8 @@ class BinaryCalibratedMixin(CalibratorProtocolMixin):
 
     # ------------------------------------------------------------------ tags
 
-    def __sklearn_tags__(self):  # noqa: ANN204 - sklearn protocol, version-dependent type
-        tags = super().__sklearn_tags__()  # type: ignore[misc]
+    def __sklearn_tags__(self):
+        tags = super().__sklearn_tags__()
         tags.classifier_tags.multi_class = False
         tags.target_tags.required = True
         return tags

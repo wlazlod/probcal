@@ -4,10 +4,10 @@ Usage: ``uv run python tests/golden/_generate.py``
 
 One JSON per registered class: ``{"object": to_dict(), "query": [...],
 "expected": [...]}`` with fixed seeds identical to tests/test_serialize.py's
-battery. These files are the enforcement of the compatibility promise: every
-0.x release must load them (schema 1) and reproduce ``expected`` on
-``query`` to within 1e-12. Regenerate ONLY when the schema version bumps —
-that bump requires a converter and a changelog entry.
+battery. These files enforce the compatibility promise: the current release
+must load them (schema 1) and reproduce ``expected`` on ``query`` to within
+1e-12. The committed files were written by running this script at the oldest
+supported release (0.3.4); regenerate them only when that floor moves.
 """
 
 import json

@@ -14,7 +14,7 @@ import warnings
 import numpy as np
 
 from ._math import expit, logit
-from ._registry import SERIALIZABLE, register
+from ._registry import decode_prototype, encode_prototype, register
 from ._results import Interpretation
 from ._validation import validate_scores
 from .base import BaseCalibrator, clone_unfitted
@@ -82,9 +82,8 @@ class SegmentedCalibrator(BaseCalibrator):
     Parameters
     ----------
     base : BaseCalibrator or None
-        Unfitted calibrator cloned and fitted on the pooled data at
-        :meth:`fit` time (``type(base)(**base.get_params())``, the
-        ``wrapper.py`` clone pattern). ``None`` (default) uses
+        Unfitted calibrator cloned (:func:`~probcal.base.clone_unfitted`)
+        and fitted on the pooled data at :meth:`fit` time. ``None`` (default) uses
         :class:`~probcal.parametric.BetaCalibrator`.
     unseen : {"global", "raise"}, keyword-only
         Policy for a segment label at predict/inverse time that was not
@@ -180,7 +179,7 @@ class SegmentedCalibrator(BaseCalibrator):
         """
         self._segments_arg = segments
         try:
-            return super().fit(s, y, sample_weight)  # type: ignore[return-value]
+            return super().fit(s, y, sample_weight)
         finally:
             self.__dict__.pop("_segments_arg", None)
 
@@ -241,22 +240,15 @@ class SegmentedCalibrator(BaseCalibrator):
     # ------------------------------------------------------------- prediction
 
     def _lookup_deltas(self, labels: np.ndarray, *, stacklevel: int = 3) -> np.ndarray:
-        delta_map = dict(zip(self.segments_, self.delta_tilde_.tolist(), strict=True))
-        out = np.zeros(len(labels), dtype=np.float64)
-        unseen_found: set[str] = set()
-        n_seen = 0
-        for i, g in enumerate(labels):
-            if g in delta_map:
-                out[i] = delta_map[g]
-                n_seen += 1
-            elif self.unseen == "raise":
-                unseen_found.add(str(g))
-        if unseen_found:
+        segs = np.asarray(self.segments_)  # sorted at fit time
+        pos = np.searchsorted(segs, labels).clip(max=len(segs) - 1)
+        seen = segs[pos] == labels
+        if self.unseen == "raise" and not seen.all():
             raise ValueError(
-                f"unseen segment(s) {sorted(unseen_found)!r} not in fitted segments_ "
-                f"{self.segments_}; unseen='raise'"
+                f"unseen segment(s) {sorted(set(labels[~seen].tolist()))!r} not in fitted "
+                f"segments_ {self.segments_}; unseen='raise'"
             )
-        if self.unseen == "global" and len(labels) > 0 and n_seen == 0:
+        if self.unseen == "global" and len(labels) > 0 and not seen.any():
             warnings.warn(
                 f"SegmentedCalibrator: none of the {len(labels)} segment labels passed at "
                 f"predict time were seen at fit time ({self.segments_}); the global map "
@@ -266,7 +258,7 @@ class SegmentedCalibrator(BaseCalibrator):
                 # paths reach this through _segment_chain_or_base and pass 4.
                 stacklevel=stacklevel,
             )
-        return out
+        return np.where(seen, self.delta_tilde_[pos], 0.0)
 
     def predict_proba(self, s: object, *, segments: object = None) -> np.ndarray:
         """Calibrated probabilities, with an optional per-observation segment offset.
@@ -298,7 +290,7 @@ class SegmentedCalibrator(BaseCalibrator):
 
     # ------------------------------------------------------------- protocol
 
-    @property  # type: ignore[override]
+    @property
     def is_monotone_(self) -> bool:  # type: ignore[override]
         """The fitted base map's ``is_monotone_`` (``True`` before fitting).
 
@@ -429,19 +421,14 @@ class SegmentedCalibrator(BaseCalibrator):
             self.shrink_,
             strict=True,
         ):
-            se_str = "inf" if not np.isfinite(se) else f"{se:.4f}"
             messages.append(
                 f"segment {g!r}: n={int(n)}, events={ev:.1f}, delta_hat={dh:+.4f}, "
-                f"se={se_str}, delta_tilde={dt:+.4f}, shrink={sh:.3f}"
+                f"se={se:.4f}, delta_tilde={dt:+.4f}, shrink={sh:.3f}"
             )
-        if self.unseen == "global":
-            messages.append(
-                f"unseen segments at predict/inverse time use delta=0 (unseen={self.unseen!r})"
-            )
-        else:
-            messages.append(
-                f"unseen segments at predict/inverse time raise ValueError (unseen={self.unseen!r})"
-            )
+        policy = "use delta=0" if self.unseen == "global" else "raise ValueError"
+        messages.append(
+            f"unseen segments at predict/inverse time {policy} (unseen={self.unseen!r})"
+        )
         return Interpretation(
             method=type(self).__name__,
             param_names=param_names,
@@ -454,35 +441,17 @@ class SegmentedCalibrator(BaseCalibrator):
     def _params_for_dict(self) -> dict[str, object]:
         """Encode the ``base`` prototype by registry name and its own param hook.
 
-        Going through the prototype's ``_params_for_dict`` lets a base whose
-        parameters are not JSON-native (e.g. a ``CalibratorSelector`` with
-        custom candidates) serialize; an unregistered base class raises
-        ``ValueError`` naming it.
+        An unregistered base class raises ``ValueError`` naming it.
         """
-        base_spec = None
-        if self.base is not None:
-            cls_name = type(self.base).__name__
-            if SERIALIZABLE.get(cls_name) is not type(self.base):
-                raise ValueError(
-                    f"cannot serialize base {cls_name}: it is not a registered probcal class"
-                )
-            to_params = getattr(self.base, "_params_for_dict", self.base.get_params)
-            base_spec = {"class": cls_name, "params": to_params()}
+        base_spec = None if self.base is None else encode_prototype(self.base, "base")
         return {"base": base_spec, "unseen": self.unseen}
 
     @classmethod
     def _params_from_dict(cls, params: dict[str, object]) -> dict[str, object]:
-        base_spec = params.get("base")
-        if base_spec is None:
-            base_obj = None
-        else:
-            base_cls = SERIALIZABLE[base_spec["class"]]  # type: ignore[index]
-            from_params = getattr(base_cls, "_params_from_dict", dict)
-            base_obj = base_cls(**from_params(dict(base_spec["params"])))  # type: ignore[index]
-        return {"base": base_obj, "unseen": params.get("unseen", "global")}
+        base_spec = params["base"]
+        base_obj = None if base_spec is None else decode_prototype(base_spec)  # type: ignore[arg-type]
+        return {"base": base_obj, "unseen": params["unseen"]}
 
     def _set_state(self, state: dict[str, object]) -> None:
-        state = dict(state)
-        state.pop("is_monotone_", None)  # read through base_, never stored
         super()._set_state(state)
         self.segments_ = tuple(self.segments_)

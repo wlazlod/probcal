@@ -17,7 +17,7 @@ from probcal._math import (
     loess,
     logit,
     natural_cubic_basis,
-    norm_cdf,
+    norm_sf,
     pava,
     weighted_quantile,
 )
@@ -59,9 +59,9 @@ def test_beta_ppf_validation() -> None:
         beta_ppf(1.0, 1.0, 1.0)
 
 
-def test_norm_cdf_symmetry() -> None:
-    x = np.linspace(-8.0, 8.0, 81)
-    np.testing.assert_allclose(norm_cdf(x) + norm_cdf(-x), np.ones_like(x), atol=1e-14)
+def test_norm_sf_symmetry() -> None:
+    for x in np.linspace(-8.0, 8.0, 81):
+        assert abs(norm_sf(x) + norm_sf(-x) - 1.0) <= 1e-14
 
 
 # ---------------------------------------------------------------- PAVA

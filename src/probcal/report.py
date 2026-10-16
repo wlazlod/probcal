@@ -30,7 +30,6 @@ import io
 import os
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from importlib.util import find_spec
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -49,22 +48,9 @@ from .metrics import (
     jeffreys_upper_bands,
     pluto_tasche_from_arrays,
 )
+from .metrics._grades import _resolve_grades
 
-# Availability check only (no import): keeps this module matplotlib-free at
-# import time even when the [viz] extra is installed. `_figure_sink` below
-# is the only place that actually imports matplotlib (via `_plots_common`).
 __all__ = ["validation_report"]
-
-_HAS_MPL = find_spec("matplotlib") is not None
-
-
-def _require_mpl() -> None:
-    if not _HAS_MPL:
-        raise ImportError(
-            "matplotlib is required for probcal.report figures — install the "
-            "viz extra: pip install probcal[viz]"
-        )
-
 
 # --------------------------------------------------------------------- render
 
@@ -124,12 +110,10 @@ class _FigureSink:
 
     def figure(self, draw: Any, name: str) -> str:
         """``draw()`` returns an Axes or Figure; render it to PNG and reference it."""
-        _require_mpl()
-        from ._plots_common import (
-            _closing_new_figures,
-            _plt,
-        )  # local: the only matplotlib import site
+        # Local import: keeps ``import probcal.report`` matplotlib-free.
+        from ._plots_common import _closing_new_figures, _plt, _require_mpl
 
+        _require_mpl()
         with _closing_new_figures():  # a draw() that raises leaves no figure behind
             artist = draw()
         fig = artist if hasattr(artist, "savefig") else artist.figure
@@ -189,6 +173,10 @@ def _bullets(fmt: str, items: "tuple[str, ...]") -> str:
     if fmt == "html":
         return "<ul>" + "".join(f"<li>{_escape_html(m)}</li>" for m in items) + "</ul>"
     return "\n".join(f"- {m}" for m in items) + "\n"
+
+
+def _para(fmt: str, text: str) -> str:
+    return f"<p>{_escape_html(text)}</p>" if fmt == "html" else f"\n{text}\n"
 
 
 def _subheading(fmt: str, text: str) -> str:
@@ -261,16 +249,13 @@ def _section_corp_decomposition(fmt: str, corp: Any) -> str:
         ("brier", corp.brier, corp.brier_mcb, corp.brier_dsc, corp.brier_unc),
         ("log_loss", corp.log_loss, corp.log_loss_mcb, corp.log_loss_dsc, corp.log_loss_unc),
     ]
-    note = "score == mcb - dsc + unc (Dimitriadis, Gneiting & Jordan 2021)."
-    note_html = f"<p>{note}</p>" if fmt == "html" else f"\n{note}\n"
-    return _section(fmt, "CORP decomposition", _table(fmt, headers, rows) + note_html)
+    note = _para(fmt, "score == mcb - dsc + unc (Dimitriadis, Gneiting & Jordan 2021).")
+    return _section(fmt, "CORP decomposition", _table(fmt, headers, rows) + note)
 
 
 def _section_grades(
     fmt: str, y_arr: np.ndarray, p_arr: np.ndarray, grades: object, *, sink: _FigureSink
 ) -> str:
-    from .metrics.grade import _resolve_grades
-
     is_scale = isinstance(grades, Masterscale)
     labels, scale_order = _resolve_grades(grades, p_arr)
     if scale_order is not None:
@@ -315,21 +300,15 @@ def _section_grades(
     merged = [g for g in bands if g not in order]
     merged_note = ""
     if merged:
-        text = (
+        merged_note = _para(
+            fmt,
             "Merged bands (" + ", ".join(merged) + ") join grades whose own Jeffreys upper "
             "bound does not exceed that of a better grade: the data cannot order them at "
-            "this confidence."
+            "this confidence.",
         )
-        merged_note = f"<p>{_escape_html(text)}</p>" if fmt == "html" else f"\n{text}\n"
 
-    order_label = ", ".join(order)
     how = "by the masterscale" if is_scale else "by mean predicted probability"
-    if fmt == "html":
-        order_note = f"Grades ordered best to worst {how}: {_escape_html(order_label)}."
-        order_note_block = f"<p>{order_note}</p>"
-    else:
-        order_note = f"Grades ordered best to worst {how}: {order_label}."
-        order_note_block = f"\n{order_note}\n"
+    order_note = _para(fmt, f"Grades ordered best to worst {how}: {', '.join(order)}.")
 
     table_block = ""
     if isinstance(grades, Masterscale):
@@ -337,7 +316,7 @@ def _section_grades(
         table_block = _subheading(fmt, "Grade table") + _result_table(fmt, tab)
 
     body = (
-        order_note_block
+        order_note
         + table_block
         + _subheading(fmt, "Per-grade backtest (Jeffreys)")
         + sink.figure(draw, "grade_backtest")

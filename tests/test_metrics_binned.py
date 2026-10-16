@@ -9,7 +9,6 @@ from probcal.metrics._binstats import bin_stats
 from probcal.metrics._common import _prep
 from probcal.metrics.binned import (
     _sweep_best_b,
-    adaptive_ece,
     ece,
     ece_debiased,
     ece_sweep,
@@ -60,18 +59,6 @@ def test_bad_arguments_raise() -> None:
     for call, match in _BAD_ARGS:
         with pytest.raises(ValueError, match=match):
             call(y, p)
-
-
-def test_deprecated_aliases() -> None:
-    y, p = _calibrated(1000)
-    with pytest.warns(DeprecationWarning, match="removed in 0.4.0"):
-        v = adaptive_ece(y, p, n_bins=10)
-    assert v == ece(y, p, n_bins=10, strategy="mass")
-    with pytest.warns(DeprecationWarning, match="n_bins"):
-        res = hosmer_lemeshow(y, p, g=8)
-    assert res == hosmer_lemeshow(y, p, n_bins=8)
-    with pytest.raises(TypeError, match="only n_bins"):
-        hosmer_lemeshow(y, p, g=8, n_bins=5)
 
 
 # ------------------------------------------------------------------ Hosmer-Lemeshow

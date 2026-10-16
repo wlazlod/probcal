@@ -157,7 +157,7 @@ class Chain(JsonIO):
         ``fit`` again for the new value to take effect.
         """
         if "stages" in params:
-            self.__init__(params.pop("stages"))  # type: ignore[misc, arg-type]
+            self.__init__(params.pop("stages"))  # type: ignore[misc]
         nested: dict[int, dict[str, object]] = {}
         replacements: dict[int, object] = {}
         for key, value in params.items():

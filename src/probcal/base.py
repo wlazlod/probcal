@@ -2,6 +2,7 @@
 
 import inspect
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Self
 
@@ -146,6 +147,22 @@ def clone_unfitted(obj: object) -> object:
     return type(obj)(**{k: _clone_param(v) for k, v in params.items()})
 
 
+def _bisect(flips: Callable[[float], bool]) -> tuple[float, float]:
+    """80 bisection steps on ``[EPS, 1 - EPS]`` for a predicate false below, true above.
+
+    Returns the final bracket ``(lo, hi)``: ``flips(hi)`` holds, ``flips(lo)``
+    does not (unless an end of the domain already decides it).
+    """
+    lo, hi = EPS, 1.0 - EPS
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if flips(mid):
+            hi = mid
+        else:
+            lo = mid
+    return lo, hi
+
+
 _NOT_MONOTONE = (
     "{name} is not monotone (is_monotone_=False); its preimage may be a union of "
     "intervals. Use a monotone calibrator for thresholding and recourse."
@@ -232,11 +249,6 @@ class BaseCalibrator(JsonIO, ABC):
         """
         self._check_fitted()
         return self._predict(validate_scores(s))
-
-    def predict_proba_2d(self, s: object) -> np.ndarray:
-        """Sklearn-style ``(n, 2)`` probability matrix ``[P(y=0), P(y=1)]``."""
-        p = self.predict_proba(s)
-        return np.column_stack([1.0 - p, p])
 
     @abstractmethod
     def _predict(self, s: np.ndarray) -> np.ndarray:
@@ -468,19 +480,16 @@ class BaseCalibrator(JsonIO, ABC):
         to the smallest float ``s`` with ``g(s) >= t`` as evaluated, so the
         bound agrees with grading ``g(s)`` against ``t``.
         """
+
+        def reaches(v: float) -> bool:
+            return self._predict_scalar(v) >= t
+
         closed = self._affine_inverse(t)
         if closed is not None:
-            return refine_lower(closed, lambda v: self._predict_scalar(v) >= t)
-        lo_s, hi_s = EPS, 1.0 - EPS
-        if self._predict_scalar(lo_s) >= t:
-            return lo_s
-        for _ in range(80):
-            mid = 0.5 * (lo_s + hi_s)
-            if self._predict_scalar(mid) >= t:
-                hi_s = mid
-            else:
-                lo_s = mid
-        return refine_lower(hi_s, lambda v: self._predict_scalar(v) >= t)
+            return refine_lower(closed, reaches)
+        if reaches(EPS):
+            return EPS
+        return refine_lower(_bisect(reaches)[1], reaches)
 
     def _inverse_right(self, t: float) -> float:
         """sup{s : g(s) <= t}: closed form when affine, else monotone bisection.
@@ -488,19 +497,16 @@ class BaseCalibrator(JsonIO, ABC):
         Refined by ulps (:func:`probcal._steps.refine_upper`) to the largest
         float ``s`` with ``g(s) <= t`` as evaluated.
         """
+
+        def within(v: float) -> bool:
+            return self._predict_scalar(v) <= t
+
         closed = self._affine_inverse(t)
         if closed is not None:
-            return refine_upper(closed, lambda v: self._predict_scalar(v) <= t)
-        lo_s, hi_s = EPS, 1.0 - EPS
-        if self._predict_scalar(hi_s) <= t:
-            return hi_s
-        for _ in range(80):
-            mid = 0.5 * (lo_s + hi_s)
-            if self._predict_scalar(mid) <= t:
-                lo_s = mid
-            else:
-                hi_s = mid
-        return refine_upper(lo_s, lambda v: self._predict_scalar(v) <= t)
+            return refine_upper(closed, within)
+        if within(1.0 - EPS):
+            return 1.0 - EPS
+        return refine_upper(_bisect(lambda v: not within(v))[0], within)
 
     # ------------------------------------------------------------- parameters
 
@@ -523,10 +529,6 @@ class BaseCalibrator(JsonIO, ABC):
                 )
             setattr(self, key, value)
         return self
-
-    def _clone(self) -> Self:
-        """A fresh, unfitted copy with the same constructor parameters."""
-        return type(self)(**self.get_params())
 
     # ------------------------------------------------------------- serialization
 
@@ -613,8 +615,8 @@ class BaseCalibrator(JsonIO, ABC):
         params = cls._params_from_dict(
             decode_value(d.get("params", {}), arrays=False)  # type: ignore[arg-type]
         )
-        obj = cls(**params)  # type: ignore[arg-type]
-        obj._set_state(dict(d.get("state", {})))  # type: ignore[arg-type]
+        obj = cls(**params)
+        obj._set_state(dict(d.get("state", {})))
         obj.fit_meta_ = dict(decode_value(d.get("fit_meta", {}), arrays=False))  # type: ignore[call-overload]
         obj.fitted_ = True
         return obj

@@ -10,13 +10,10 @@ and what is report-only — is the table in ``docs/concepts/metrics.md``.
 
 from .._results import GroupedMetricReport
 from .._results import MetricReport as MetricReport
-from ._evaluate import _METRIC_CATALOG as _METRIC_CATALOG
-from ._evaluate import _point_metrics as _point_metrics
 from ._evaluate import evaluate
 from ._summary import ReliabilitySummary, reliability_summary
 from .binned import (
     HosmerLemeshowResult,
-    adaptive_ece,
     ece,
     ece_debiased,
     ece_sweep,
@@ -86,7 +83,6 @@ __all__ = [
     "ReliabilitySummary",
     "SkceTestResult",
     "SpiegelhalterResult",
-    "adaptive_ece",
     "binomial_grade_test",
     "brier_score",
     "brier_skill_score",

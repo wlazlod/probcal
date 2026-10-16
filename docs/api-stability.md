@@ -21,7 +21,7 @@ paths with an escape hatch; the shape of fitted internals that are not
 part of the calibrator protocol (such as `ENIRCalibrator.path_solutions_`);
 performance, documentation, and packaging. What it may not: public
 signatures, exported names, the calibrator protocol, and the ability to
-read every schema-1 artifact.
+read every schema-1 artifact written by probcal 0.3.4 or later.
 
 ## Public surface
 
@@ -78,21 +78,7 @@ and the changelog. Behavioral changes that alter numbers ship with a
 detailed changelog entry and, where feasible, a parameter that
 recovers the old values.
 
-Deprecated in 0.3.4, all removed in 0.4.0 (each warns with a
-`DeprecationWarning` naming its replacement; until then the deprecated
-spelling keeps working):
-
-| Deprecated | Replacement |
-|---|---|
-| `metrics.adaptive_ece(...)` | `metrics.ece(..., strategy="mass")` |
-| `metrics.ecce(..., presorted=...)` | drop the argument (it is still honoured) |
-| `metrics.evaluate(..., seed=...)` | `random_state=` (passing both raises `TypeError`) |
-| `metrics.hosmer_lemeshow(..., g=...)` | `n_bins=` |
-| `level=` on `metrics.jeffreys_upper_bands`, `curves.reliability_smooth`, `curves.corp_reliability` | `confidence=` (`CorpResult.level` keeps its name) |
-| `BeltResult.lower_80` / `upper_80` / `lower_95` / `upper_95` | `belt.bands[level]`, with the levels in `belt.levels` |
-| `BBQCalibrator.weights_`, `ENIRCalibrator.weights_` | `model_weights_` |
-| positional `CalibratedModel.offset_to(...)` | keywords `target_mean=` / `delta=` / `X=` |
-| positional `LogitOffset.fit(p, sample_weight)` | `LogitOffset.fit(p, sample_weight=...)` |
+There are no pending deprecations.
 
 The changelog lists every release that adds or removes a deprecation.
 

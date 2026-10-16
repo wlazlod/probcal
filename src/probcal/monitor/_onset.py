@@ -60,6 +60,3 @@ def estimate_onset(increments: np.ndarray) -> int:
     if not best > 0.0:
         return 0
     return int(np.flatnonzero(suffix_sums == best)[0])
-
-
-__all__ = ["estimate_onset"]

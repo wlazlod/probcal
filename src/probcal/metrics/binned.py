@@ -14,10 +14,9 @@ from dataclasses import dataclass
 import numpy as np
 
 from .._math import chi2_sf
-from .._validation import validate_positive_int
+from .._validation import validate_nonneg_int, validate_positive_int
 from ._binstats import BinStats, bin_index, bin_stats
 from ._common import _prep
-from ._deprecation import UNSET, deprecated, renamed_kwarg
 
 
 def _shares_gaps(bs: BinStats, w_total: float) -> tuple[np.ndarray, np.ndarray]:
@@ -119,12 +118,7 @@ def ece_debiased(
 def _debiased(bs: BinStats, w: np.ndarray) -> float:
     """Variance-corrected ECE from one binning pass (per-bin effective counts)."""
     shares, gaps = _shares_gaps(bs, float(w.sum()))
-    n_eff = bs.n_eff
-    rate = bs.rate
-    multi = n_eff > 1.0
-    var_b = rate * (1.0 - rate) / np.where(multi, n_eff - 1.0, 1.0)
-    corrected = np.where(multi, np.sqrt(np.maximum(gaps**2 - var_b, 0.0)), gaps)
-    return float(np.sum(shares * corrected))
+    return float(np.sum(shares * np.sqrt(bs.debias(gaps**2))))
 
 
 def _ece_family(y: np.ndarray, p: np.ndarray, w: np.ndarray, names: set[str]) -> dict[str, float]:
@@ -202,44 +196,8 @@ def ece_sweep(
         raise ValueError(f"rule must be one of {_SWEEP_RULES}, got {rule!r}")
     cap = validate_positive_int(max_bins, "max_bins")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    best_b = _sweep_best_b(y_arr, p_arr, w, cap, rule)
-    if best_b == 1:
-        _reduce(np.ones(1), np.zeros(1), norm)  # validate norm
-        return abs(float(np.average(p_arr, weights=w)) - float(np.average(y_arr, weights=w)))
-    bs = bin_stats(y_arr, p_arr, w, best_b, "mass")
+    bs = bin_stats(y_arr, p_arr, w, _sweep_best_b(y_arr, p_arr, w, cap, rule), "mass")
     return _reduce(*_shares_gaps(bs, float(w.sum())), norm)
-
-
-def adaptive_ece(
-    y: object,
-    p: object,
-    *,
-    n_bins: int = 15,
-    norm: str = "l1",
-    sample_weight: object = None,
-) -> float:
-    """Deprecated alias of ``ece(strategy="mass")`` (removed in 0.4.0).
-
-    Parameters
-    ----------
-    y : array_like
-        Binary outcomes in ``{0, 1}``.
-    p : array_like
-        Predicted probabilities in ``[0, 1]``.
-    n_bins : int, keyword-only
-        Requested number of bins.
-    norm : {"l1", "l2", "max"}, keyword-only
-        Norm passed through to :func:`ece`.
-    sample_weight : array_like or None, keyword-only
-        Optional positive weights, same length as ``y``.
-
-    Returns
-    -------
-    float
-        Equal-mass binned calibration error under the chosen norm.
-    """
-    deprecated('adaptive_ece() is an alias of ece(strategy="mass"); call ece directly')
-    return ece(y, p, n_bins=n_bins, strategy="mass", norm=norm, sample_weight=sample_weight)
 
 
 @dataclass(frozen=True)
@@ -269,7 +227,6 @@ def hosmer_lemeshow(
     n_bins: int = 10,
     sample_weight: object = None,
     ddof: int = 0,
-    g: object = UNSET,
 ) -> HosmerLemeshowResult:
     """Hosmer–Lemeshow goodness-of-fit test on ``n_bins`` equal-mass risk groups.
 
@@ -311,19 +268,15 @@ def hosmer_lemeshow(
         Degrees of freedom subtracted from the number of non-empty groups:
         ``0`` (default) for ``p`` fixed before seeing ``y``, ``2`` for a
         logistic model fitted on the same ``(y, p)`` data.
-    g : int, keyword-only
-        Deprecated spelling of ``n_bins`` (removed in 0.4.0).
 
     Returns
     -------
     HosmerLemeshowResult
         Chi-square statistic, degrees of freedom, and p-value.
     """
-    n_groups = renamed_kwarg("hosmer_lemeshow", "g", "n_bins", g, n_bins, 10)
-    if isinstance(ddof, bool) or not isinstance(ddof, (int, np.integer)) or ddof < 0:
-        raise ValueError(f"ddof must be a non-negative integer, got {ddof!r}")
+    ddof = validate_nonneg_int(ddof, "ddof")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    idx, m = bin_index(p_arr, n_groups, "mass")
+    idx, m = bin_index(p_arr, n_bins, "mass")
     keep = np.bincount(idx, minlength=m) > 0
     w2 = w * w
     obs = np.bincount(idx, weights=w * y_arr, minlength=m)[keep]
@@ -333,6 +286,6 @@ def hosmer_lemeshow(
     denom = s2p * (1.0 - s2p / s2)
     ok = denom > 0
     stat = float(np.sum((obs[ok] - exp[ok]) ** 2 / denom[ok]))
-    df = max(len(s2) - int(ddof), 0)
+    df = max(len(s2) - ddof, 0)
     p_value = chi2_sf(stat, df) if df > 0 else math.nan
     return HosmerLemeshowResult(statistic=stat, df=df, p_value=p_value)

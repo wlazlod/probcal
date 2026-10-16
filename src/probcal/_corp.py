@@ -12,12 +12,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from ._math import pava
-from ._steps import aggregate_ties
-from ._steps import eval_step as _eval_step
-
-_CLIP = 1e-12
-"""Log-loss clip for degenerate PAV levels (exact 0 or 1 blocks)."""
+from ._math import bern_loglik
+from ._steps import eval_step, isotonic_blocks
 
 
 def corp_fit(
@@ -45,26 +41,15 @@ def corp_fit(
     pav : numpy.ndarray
         PAV fit expanded to observations, in the original input order.
     """
-    s_u, ybar_u, w_u = aggregate_ties(p, y, w)
-    res = pava(ybar_u, w_u)
-    starts = res.block_start
-    ends = np.append(starts[1:], len(s_u))
-    lo = s_u[starts]
-    hi = s_u[ends - 1]
-    # expand block level back to unique scores, then to observations
-    level_u = res.fitted
-    idx_u = np.searchsorted(s_u, p)  # p values are exactly in s_u
-    pav = level_u[idx_u]
+    s_u, _, res, lo, hi = isotonic_blocks(p, y, w)
+    pav = res.fitted[np.searchsorted(s_u, p)]  # p values are exactly in s_u
     return lo, hi, res.block_mean, res.block_weight, pav
 
 
 def _mean_score(y: np.ndarray, q: np.ndarray, w: np.ndarray, score: str) -> float:
     if score == "brier":
-        s = (y - q) ** 2
-    else:
-        qc = np.clip(q, _CLIP, 1.0 - _CLIP)
-        s = -(y * np.log(qc) + (1.0 - y) * np.log1p(-qc))
-    return float(np.sum(w * s) / np.sum(w))
+        return float(np.sum(w * (y - q) ** 2) / np.sum(w))
+    return -bern_loglik(y, q, w) / float(np.sum(w))
 
 
 def decompose(
@@ -161,6 +146,6 @@ def corp_bands(
         else:  # "confidence"
             idx = rng.integers(0, p.size, p.size)
             lo, _, lev, _, _ = corp_fit(y[idx], p[idx], w[idx])
-        sims[b] = _eval_step(lo, lev, grid)
+        sims[b] = eval_step(lo, lev, grid)
     a = (1.0 - level) / 2.0
     return grid, np.quantile(sims, a, axis=0), np.quantile(sims, 1.0 - a, axis=0)

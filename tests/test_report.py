@@ -107,9 +107,9 @@ def test_same_seed_is_byte_identical_after_stripping_timestamp() -> None:
 
 
 def test_missing_matplotlib_raises_helpful_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    import probcal.report as report_mod
+    import probcal._plots_common as plots_common
 
-    monkeypatch.setattr(report_mod, "_HAS_MPL", False)
+    monkeypatch.setattr(plots_common, "_HAS_MPL", False)
     y, p, _ = _portfolio(n=100)
     with pytest.raises(ImportError, match=r"probcal\[viz\]"):
         validation_report(y, p, n_boot=10)

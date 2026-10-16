@@ -41,24 +41,17 @@ def grade_labels(
     return labels, order
 
 
-def check_order(order: object, labels: np.ndarray) -> tuple[str, ...]:
-    """``order`` as a tuple of str; must be a permutation of the unique labels."""
-    order_t = tuple(str(g) for g in np.asarray(order).reshape(-1))
-    unique_labels = tuple(sorted(np.unique(labels).tolist()))
-    if len(set(order_t)) != len(order_t) or tuple(sorted(order_t)) != unique_labels:
-        raise ValueError(f"order {order_t} does not match the unique grade labels {unique_labels}")
-    return order_t
-
-
 def resolve_order(
     labels: np.ndarray, order: object, default_order: tuple[str, ...] | None
 ) -> tuple[str, ...]:
-    """Explicit ``order`` (validated) > masterscale order > sorted labels."""
-    if order is not None:
-        return check_order(order, labels)
-    if default_order is not None:
-        return default_order
-    return tuple(sorted(np.unique(labels).tolist()))
+    """Explicit ``order`` (a permutation of the labels) > masterscale order > sorted labels."""
+    unique_labels = tuple(sorted(np.unique(labels).tolist()))
+    if order is None:
+        return unique_labels if default_order is None else default_order
+    order_t = tuple(str(g) for g in np.asarray(order).reshape(-1))
+    if len(set(order_t)) != len(order_t) or tuple(sorted(order_t)) != unique_labels:
+        raise ValueError(f"order {order_t} does not match the unique grade labels {unique_labels}")
+    return order_t
 
 
 def aggregate(

@@ -7,6 +7,93 @@ Each release opens with a short summary; the itemized entries sit under *Details
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-17
+
+A cleanup release. The aliases deprecated in 0.3.4 are gone, payloads written before 0.3.4 no
+longer load, and the code is about 850 lines shorter. Numerical results are bit-identical to
+0.3.5, and so are the payloads written. Two bugs are fixed: `adjust_attributions` on a
+`CalibratedScorecard`, and `calibrate_scorecard` with a `Chain` prototype.
+
+<details markdown="1">
+<summary>Details</summary>
+
+### Removed
+
+- **Deprecated names** (warned since 0.3.4):
+  - `metrics.adaptive_ece`: use `ece(strategy="mass")`.
+  - `hosmer_lemeshow(g=)`: use `n_bins=`.
+  - `ecce(presorted=)`.
+  - `evaluate(seed=)`: use `random_state=`.
+  - `level=` on `reliability_smooth`, `corp_reliability` and `jeffreys_upper_bands`: use
+    `confidence=`.
+  - `BBQCalibrator.weights_` and `ENIRCalibrator.weights_`: use `model_weights_`.
+  - `BeltResult.lower_80`, `upper_80`, `lower_95` and `upper_95`: use `BeltResult.bands`.
+  - Positional arguments to `CalibratedModel.offset_to` and to `LogitOffset.fit`'s
+    `sample_weight`: pass them by keyword.
+  - `predict_proba_2d` on calibrators and `CalibratedModel`. Use
+    `np.column_stack([1 - p, p])`, or the sklearn adapters, whose `predict_proba` returns the
+    `(n, 2)` matrix.
+- **Payloads written by probcal < 0.3.4** no longer load. Payloads written by 0.3.4 and 0.3.5
+  load unchanged, and the golden test files are now written by 0.3.4. The removed cases:
+  - Monitor steps without `log_e_increment`, and the "drift onset unavailable" path.
+    `MonitorStep.log_e_increment` and `grade_delta_ci` are now required fields.
+  - Selection reports without CORP columns. `SelectionReport.mcb`, `dsc` and `unc` are now
+    required fields.
+  - Old state names in BBQ, ENIR, IVAP, CVAP and Spline payloads.
+  - Monitor grade keys written as `"1.0"`.
+  - The CSV-based scorecard fingerprint.
+- **Private helpers.** Nothing outside the package used these:
+  - `_math.norm_cdf`, `_math.gammainc_lower` and `BaseCalibrator._clone`;
+  - `metrics._common.binary_y` and `metrics._common.effective_weights`;
+  - the `metrics._deprecation` module;
+  - `CalibrationMonitor._cs_grid` and `_cs_max`;
+  - `_steps.migrate_state`;
+  - the `_prep` and `_resolve_grades` re-exports;
+  - other unused helpers, unused parameters and stale `type: ignore`/`noqa` comments.
+
+### Fixed
+
+- `adjust_attributions` accepts any wrapper that exposes the calibrator protocol:
+  `CalibratedModel`, `CalibratorSelector`, the sklearn adapters and `CalibratedScorecard`.
+  With a non-affine calibrator, a scorecard used to raise `IndexError`.
+- `calibrate_scorecard` clones a `Chain` prototype correctly. It used to raise `TypeError`.
+- `smooth_ece` works on numpy 1.26, the declared minimum. It had used `np.trapezoid`, which
+  requires numpy 2.0.
+- The HTML report escapes `&` in the CORP note.
+- The `hl_e_test` docstring and the metrics page describe its weights as scale-invariant
+  exponents, which is how the code treats them.
+
+### Changed
+
+- **`CalibratedModel` and `CalibratorSelector`** take `interval_inverse`, `point_inverse` and
+  (selector) `interpret` from the shared calibrator protocol. Results are unchanged.
+  - For the ensemble flow, the inverses raise `NotImplementedError` with a pointer to
+    `ensemble=False`.
+  - A selector candidate whose class only shares a registered name is rejected when saving.
+- **`CenteredIsotonicCalibrator().interpolation`** reads `"linear"`. The CIR map is a linear
+  interpolation through block centres, so the attribute now says what the map does.
+- **Validation.** `n_boot` and `n_resamples` must be integers; `reliability_smooth` used to
+  truncate 2.7 to 2. Level, `alpha` and count arguments share one validator, which changes
+  some error messages. Examples: `"confidence must satisfy 0 < confidence < 1"`, and
+  `"y must not be empty"` for an empty monitor batch.
+- **`CalibratedModel(flow="cv")`** decides once, before the fold fits, whether the model
+  accepts `sample_weight`, and warns once.
+- **Internals.** Code that did the same job several times now has one shared version:
+  - one bisection for every numeric inverse;
+  - one weighted Bernoulli log-likelihood;
+  - one within-bin variance correction;
+  - one prototype encoder and decoder for `SegmentedCalibrator` and `CalibratorSelector`.
+
+  Other internal cleanups:
+  - CIR reuses the isotonic linear path.
+  - `SegmentedCalibrator` looks up segments with vectorised code.
+  - `pava` expands blocks without a Python loop.
+  - Dead branches and redundant docstrings are removed.
+- **Tooling.** A CI job runs the test suite on numpy 1.26, the declared minimum, and mypy
+  reports unused `type: ignore` comments.
+
+</details>
+
 ## [0.3.5] - 2026-10-12
 
 A correctness release that finishes the work started in 0.3.4. 0.3.4 used Kish's effective n
@@ -602,7 +689,8 @@ First public release on PyPI: thirteen binary calibrators from Platt to Venn–A
 
 </details>
 
-[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.3.5...HEAD
+[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/wlazlod/probcal/compare/v0.3.5...v0.4.0
 [0.3.5]: https://github.com/wlazlod/probcal/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/wlazlod/probcal/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/wlazlod/probcal/compare/v0.3.2...v0.3.3

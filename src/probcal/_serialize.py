@@ -232,7 +232,7 @@ class JsonIO:
                 text = fh.read()
         else:
             text = str(path_or_str)
-        return cls.from_dict(json.loads(text), **kwargs)  # type: ignore[attr-defined,no-any-return]
+        return cls.from_dict(json.loads(text), **kwargs)  # type: ignore[attr-defined]
 
     def fingerprint(self) -> str:
         """SHA-256 of the canonical serialized form, version- and timestamp-blind.

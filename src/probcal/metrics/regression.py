@@ -11,8 +11,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import chi2_sf, expit, irls_logistic, logit
-from .._validation import EPS
+from .._math import bern_loglik, chi2_sf, expit, irls_logistic, logit
 from ._common import _prep, rao_scott
 from .smooth import _spiegelhalter
 
@@ -176,16 +175,12 @@ def calibration_test(
     X, beta_hat = _slope_fit(y_arr, p_arr, w, "calibration_test")
     alpha, beta = float(beta_hat[0]), float(beta_hat[1])
 
-    def _ll(prob: np.ndarray) -> float:
-        prob = np.clip(prob, EPS, 1.0 - EPS)
-        return float(np.sum(w * (y_arr * np.log(prob) + (1.0 - y_arr) * np.log1p(-prob))))
-
     if math.isnan(beta):  # constant logit(p): intercept-only (offset) test
         X = X[:, :1]
         fitted = expit(alpha + logit(p_arr))
     else:
         fitted = expit(X @ beta_hat)
-    lr = max(2.0 * (_ll(fitted) - _ll(p_arr)), 0.0)
+    lr = max(2.0 * (bern_loglik(y_arr, fitted, w) - bern_loglik(y_arr, p_arr, w)), 0.0)
     stat, df = rao_scott(lr, X, p_arr, w)
     p_value = chi2_sf(stat, df)
     return CalibrationTestResult(statistic=stat, p_value=p_value, alpha=alpha, beta=beta, df=df)

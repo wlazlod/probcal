@@ -25,11 +25,11 @@ unit weights reproduce the unweighted numbers exactly.
   is *not* used: it misstates these variances whenever the
   weights vary with ``p``.
 
-Two count-form functions document a different, literal reading:
-``pluto_tasche_from_arrays`` sums weights as obligor/default counts (integer
-weights equal row duplication) and ``hl_e_test`` uses weights as exponents on
-the likelihood-ratio factors, matching ``CalibrationMonitor``. The per-grade
-binomial/Jeffreys tests use raw integer counts and ignore weights.
+One count-form function reads weights literally: ``pluto_tasche_from_arrays``
+sums them as obligor/default counts (integer weights equal row duplication).
+``hl_e_test`` raises each likelihood-ratio factor to ``min(1, w / mean(w))``
+within its grade, as ``CalibrationMonitor`` does (also scale-invariant). The
+per-grade binomial/Jeffreys tests use raw integer counts and ignore weights.
 """
 
 import numpy as np
@@ -37,16 +37,12 @@ import numpy as np
 from .._validation import validate_binary_y, validate_scores, validate_weights
 
 
-def binary_y(y: object, *, require_both_classes: bool = True) -> np.ndarray:
-    """``validate_binary_y`` (kept as the metrics-local name)."""
-    return validate_binary_y(y, require_both_classes=require_both_classes)
+def _prep(y: object, p: object, sample_weight: object) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Validated ``(y, p, w)``: two-class binary ``y``, clipped ``p``, positive ``w``.
 
-
-def _prep(
-    y: object, p: object, sample_weight: object, *, require_both_classes: bool = True
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Validated ``(y, p, w)``: binary ``y``, clipped ``p``, positive ``w`` (ones if ``None``)."""
-    y_arr = binary_y(y, require_both_classes=require_both_classes)
+    ``w`` is all ones for ``sample_weight=None``.
+    """
+    y_arr = validate_binary_y(y)
     p_arr = validate_scores(p, name="p")
     if len(y_arr) != len(p_arr):
         raise ValueError("y and p must have equal length")
@@ -54,16 +50,9 @@ def _prep(
     return y_arr, p_arr, w_arr
 
 
-def effective_weights(w: np.ndarray) -> np.ndarray:
-    """Kish-rescaled weights ``w * sum(w) / sum(w**2)``; they sum to ``n_eff``.
-
-    Unit weights come back bit-identical (the factor is exactly 1.0). Only
-    appropriate where one common event rate governs the rows (e.g. a
-    posterior on a portfolio's mean rate); the ``probcal.metrics`` tests do
-    not use it, since with ``p`` varying across rows it misstates
-    ``sum(w**2 * p * (1 - p))``.
-    """
-    return w * (float(w.sum()) / float(np.dot(w, w)))
+def gram(X: np.ndarray, d: np.ndarray) -> np.ndarray:
+    """``X' diag(d) X``."""
+    return (X * d[:, None]).T @ X
 
 
 def rao_scott(lr: float, X: np.ndarray, mu: np.ndarray, w: np.ndarray) -> tuple[float, float]:
@@ -87,8 +76,8 @@ def rao_scott(lr: float, X: np.ndarray, mu: np.ndarray, w: np.ndarray) -> tuple[
     if is_uniform(w):
         return lr / float(w[0]), float(k)
     v = mu * (1.0 - mu)
-    info = (X * (w * v)[:, None]).T @ X
-    meat = (X * (w * w * v)[:, None]).T @ X
+    info = gram(X, w * v)
+    meat = gram(X, w * w * v)
     try:
         lam = np.linalg.eigvals(np.linalg.solve(info, meat)).real
     except np.linalg.LinAlgError:
@@ -100,6 +89,6 @@ def rao_scott(lr: float, X: np.ndarray, mu: np.ndarray, w: np.ndarray) -> tuple[
     return lr / (lbar * (1.0 + a2)), k / (1.0 + a2)
 
 
-def is_uniform(w: np.ndarray | None) -> bool:
-    """``True`` for ``None`` or all-equal weights."""
-    return w is None or bool(np.all(w == w[0]))
+def is_uniform(w: np.ndarray) -> bool:
+    """``True`` for all-equal weights."""
+    return bool(np.all(w == w[0]))

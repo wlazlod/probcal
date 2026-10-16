@@ -18,9 +18,7 @@ import numpy as np
 
 from .._math import beta_ppf
 from .._results import Interpretation, _ResultBase
-from .._validation import validate_scores, validate_weights
-from ._common import binary_y
-from ._deprecation import UNSET, renamed_kwarg
+from .._validation import validate_binary_y, validate_level, validate_scores, validate_weights
 from ._grades import aggregate, grade_labels, is_masterscale, resolve_order
 
 
@@ -48,18 +46,11 @@ class PlutoTascheResult(_ResultBase):
     confidence : float
         Confidence level used for every grade's bound.
     monotonized : bool
-        ``True`` only if ``pd_upper`` needed the running-maximum touch-up
-        (see below) to stay non-decreasing best to worst. Pooled sets are
-        nested (grade ``i``'s pooled set contains grade ``i + 1``'s), so
-        for a portfolio whose observed per-grade default rates already
-        respect rating order, ``pd_upper`` comes out non-decreasing on its
-        own and this flag is ``False``; a noisy grade whose own rate
-        exceeds the worse-grade pool it joins can still produce a real
-        (not merely floating-point) local dip. ``pd_upper`` is always
-        non-decreasing on return either way: the raw bound is replaced by
-        its cumulative maximum best to worst (a prudent hull), which never
-        *lowers* any grade's bound -- only raises a grade whose raw bound
-        fell below a better grade's, never the reverse.
+        ``True`` if the raw bounds were not already non-decreasing best to
+        worst and ``pd_upper`` is their running maximum (a prudent hull that
+        only ever raises a bound). Pooled sets are nested, so this happens
+        only when a noisy grade's own rate exceeds the worse-grade pool it
+        joins.
     """
 
     grades: tuple[str, ...]
@@ -182,8 +173,7 @@ def pluto_tasche(
         raise ValueError("grade_n and grade_d must be 1-D arrays of equal length")
     if len(n) == 0:
         raise ValueError("pluto_tasche requires at least one grade")
-    if not 0.0 < confidence < 1.0:
-        raise ValueError("confidence must lie in (0, 1)")
+    confidence = validate_level(confidence, "confidence")
     if np.any(n < 0.0) or np.any(d < 0.0):
         raise ValueError("grade_n and grade_d must be non-negative")
     if np.any(d > n):
@@ -202,25 +192,14 @@ def pluto_tasche(
     if np.any(n_pooled == 0.0):
         raise ValueError("pluto_tasche: grade pooled with worse grades has zero obligors (n* == 0)")
 
-    pd_upper = np.empty(k, dtype=np.float64)
-    for i in range(k):
-        ns, ds = n_pooled[i], d_pooled[i]
-        # n_pooled - d_pooled cannot go negative here: d <= n was validated
-        # per grade above, and both are cumulative sums over the same
-        # (worse-grades-first) order, so the inequality is preserved term
-        # by term -- beta_ppf's second shape parameter stays > 0 (b == 0
-        # only in the d* == n* case handled explicitly).
-        pd_upper[i] = 1.0 if ds == ns else beta_ppf(confidence, ds + 1.0, ns - ds)
-
-    # Pooled sets are nested (grade i's pooled set contains grade i + 1's),
-    # so pd_upper comes out non-decreasing already whenever the observed
-    # per-grade default rates respect rating order. A noisy grade whose own
-    # rate exceeds the worse-grade pool it joins can still produce a real
-    # local dip; the most-prudent reading of such a dip is to raise the
-    # worse grade's bound up to the better grade's, never to lower the
-    # better grade's bound to match -- so the touch-up is the cumulative
-    # maximum best to worst (a prudent hull), which never reduces any
-    # grade's bound.
+    # d <= n per grade implies d* <= n*, so the second shape is > 0 unless d* == n*.
+    pd_upper = np.array(
+        [
+            1.0 if ds == ns else beta_ppf(confidence, ds + 1.0, ns - ds)
+            for ns, ds in zip(n_pooled, d_pooled, strict=True)
+        ]
+    )
+    # Most-prudent touch-up of a local dip: raise the worse grade, never lower the better.
     hull = np.maximum.accumulate(pd_upper)
     monotonized = bool(np.any(hull != pd_upper))
 
@@ -299,7 +278,7 @@ def pluto_tasche_from_arrays(
     >>> res.n
     array([100., 400., 300.])
     """
-    y_arr = binary_y(y, require_both_classes=False)
+    y_arr = validate_binary_y(y, require_both_classes=False)
     if is_masterscale(grades):
         if p is None:
             raise ValueError(
@@ -327,7 +306,6 @@ def jeffreys_upper_bands(
     *,
     confidence: float = 0.9,
     order: object = None,
-    level: object = UNSET,
 ) -> dict[str, tuple[float, float]]:
     """Jeffreys per-grade upper bounds as a contiguous masterscale band table.
 
@@ -385,8 +363,6 @@ def jeffreys_upper_bands(
         ``grades`` exactly. ``None`` (default) uses the masterscale's order,
         or orders label-array grades by their mean ``p``, ascending (lowest
         predicted PD first).
-    level : float, keyword-only
-        Deprecated spelling of ``confidence`` (removed in 0.4.0).
 
     Returns
     -------
@@ -415,27 +391,21 @@ def jeffreys_upper_bands(
     >>> bands["A"][1] < bands["B"][1]
     True
     """
-    conf = renamed_kwarg("jeffreys_upper_bands", "level", "confidence", level, confidence, 0.9)
-    y_arr = binary_y(y, require_both_classes=False)
+    y_arr = validate_binary_y(y, require_both_classes=False)
     p_arr = validate_scores(p, name="p")
     if len(p_arr) != len(y_arr):
         raise ValueError("y and p must have equal length")
     g_arr, default_order = grade_labels(grades, p_arr, len(y_arr))
-    if not 0.0 < float(conf) < 1.0:  # type: ignore[arg-type]
-        raise ValueError("confidence must lie in (0, 1)")
+    conf = validate_level(confidence, "confidence")
 
-    if order is None and default_order is None:
-        sorted_labels = resolve_order(g_arr, None, None)
-        _, _, mean_p, _ = aggregate(g_arr, sorted_labels, y_arr, p=p_arr)
+    order_t = resolve_order(g_arr, order, default_order)
+    n, k, mean_p, _ = aggregate(g_arr, order_t, y_arr, p=p_arr)
+    if order is None and default_order is None:  # label array: order by mean p
         assert mean_p is not None
-        order_t = tuple(sorted_labels[i] for i in np.argsort(mean_p, kind="stable"))
-    else:
-        order_t = resolve_order(g_arr, order, default_order)
-    n, k, _, _ = aggregate(g_arr, order_t, y_arr)
+        perm = np.argsort(mean_p, kind="stable")
+        order_t, n, k = tuple(order_t[i] for i in perm), n[perm], k[perm]
 
-    hi_raw = np.array(
-        [beta_ppf(float(conf), k[i] + 0.5, n[i] - k[i] + 0.5) for i in range(len(order_t))]  # type: ignore[arg-type]
-    )
+    hi_raw = np.array([beta_ppf(conf, k[i] + 0.5, n[i] - k[i] + 0.5) for i in range(len(order_t))])
     # Running maximum, merging every grade it would leave with a zero-width
     # band into the preceding band.
     blocks: list[tuple[list[str], float]] = []

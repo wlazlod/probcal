@@ -125,7 +125,7 @@ class SklearnOffset(TransformerMixin, BaseEstimator):
     # sklearn >= 1.6 refuses an estimator defining ``_more_tags`` without
     # ``__sklearn_tags__``, so the override must exist even though it adds
     # nothing to the inherited tags.
-    def __sklearn_tags__(self):  # noqa: ANN204 - sklearn protocol, version-dependent type
+    def __sklearn_tags__(self):
         return super().__sklearn_tags__()
 
     def _more_tags(self) -> dict[str, object]:  # sklearn < 1.6

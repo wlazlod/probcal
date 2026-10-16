@@ -144,15 +144,3 @@ def test_fit_mode_b_monitor_and_offset_mle_share_the_root_finder() -> None:
     off = LogitOffset(target_mean=float(y.mean())).fit(p)
     assert off.delta_ == _offset_mle(logit(p), y, np.ones(300))
     assert plug_in_delta(logit(p), y, w) == _offset_mle(logit(p), y, w)
-
-
-def test_positional_sample_weight_is_deprecated_but_works() -> None:
-    # OFF-26: sample_weight is keyword-only; the 0.3 positional form warns.
-    p = np.array([0.05, 0.1, 0.3])
-    w = np.array([1.0, 2.0, 3.0])
-    ref = LogitOffset(target_mean=0.12).fit(p, sample_weight=w)
-    with pytest.warns(DeprecationWarning, match="removed in 0.4.0"):
-        old = LogitOffset(target_mean=0.12).fit(p, w)
-    assert old.delta_ == ref.delta_
-    with pytest.raises(TypeError):
-        LogitOffset(target_mean=0.12).fit(p, w, sample_weight=w)

@@ -13,7 +13,6 @@ import numpy as np
 
 from .._math import loess, logit, norm_sf, weighted_quantile
 from ._common import _prep, is_uniform
-from ._deprecation import UNSET, deprecated
 
 
 def _smece_at_sigma(loc: np.ndarray, mass: np.ndarray, sigma: float) -> float:
@@ -21,7 +20,9 @@ def _smece_at_sigma(loc: np.ndarray, mass: np.ndarray, sigma: float) -> float:
     grid = np.linspace(loc.min() - 5.0 * sigma, loc.max() + 5.0 * sigma, 257)
     diff = (grid[:, None] - loc[None, :]) / sigma
     kern = np.exp(-0.5 * diff**2) / (sigma * math.sqrt(2.0 * math.pi))
-    return float(np.trapezoid(np.abs(kern @ mass), grid))
+    f = np.abs(kern @ mass)
+    # Trapezoid rule, written out: np.trapezoid needs numpy >= 2.0.
+    return float((np.diff(grid) * (f[1:] + f[:-1]) / 2.0).sum())
 
 
 def _bisect_fixed_point(f: Callable[[float], float]) -> tuple[float, float]:
@@ -98,109 +99,62 @@ def _smece_fixed_point_lattice(m: np.ndarray, width: float) -> tuple[float, floa
     return _bisect_fixed_point(lambda sigma: _smece_at_sigma_lattice(m, width, sigma))
 
 
-def _lattice(t: np.ndarray, bins: int) -> tuple[np.ndarray, float, float]:
-    """Equal-width logit lattice: per-sample bin index, bin width, and lower
-    edge over ``[t.min(), t.max()]``.
+def _lattice_index(t: np.ndarray, t_lo: float, width: float, bins: int) -> np.ndarray:
+    """Cell index of each ``t`` on the ``bins``-cell lattice starting at ``t_lo``.
 
-    Shared by ``smooth_ece``'s binned solve (via ``_smece_solve``) and
-    ``curves.reliability_smooth`` so the two lattices cannot drift apart.
+    Shared by ``smooth_ece``'s lattice solve and ``curves.reliability_smooth``
+    (which re-bins bootstrap resamples on the point estimate's lattice).
     """
-    t_lo, t_hi = float(t.min()), float(t.max())
-    width = (t_hi - t_lo) / bins
-    idx = np.clip(((t - t_lo) / width).astype(np.int64), 0, bins - 1)
-    return idx, width, t_lo
+    return np.clip(((t - t_lo) / width).astype(np.int64), 0, bins - 1)
+
+
+Lattice = tuple[float, float, int]
+"""``(width, t_lo, bins)`` of the equal-width logit lattice a smECE was solved on."""
 
 
 def _smece_solve(
     t: np.ndarray, mass: np.ndarray, bins: int | None
-) -> tuple[float, float, np.ndarray | None, float, float, int | None]:
-    """Core smECE fixed-point solve behind ``smooth_ece``, exposing the
-    lattice state a caller needs to build a numerically consistent curve.
+) -> tuple[float, float, Lattice | None]:
+    """``smooth_ece``'s path selection and fixed-point solve.
 
-    Holds ``smooth_ece``'s whole path selection and solve, so
-    ``curves.reliability_smooth`` can share it without re-deriving
-    ``sigma_star`` — the two are therefore identical by construction, not by
-    agreement.
-
-    Returns
-    -------
-    value : float
-        The smECE value (``smooth_ece``'s return value).
-    sigma : float
-        The fixed-point bandwidth ``sigma_star``.
-    m : numpy.ndarray or None
-        The binned residual-mass vector actually solved on, when the
-        lattice path was used; ``None`` when the exact O(n) path ran
-        instead (``bins=None``, a degenerate logit range, or an
-        infeasible/under-resolved refinement) — a caller then has to fall
-        back to direct O(n * grid) kernel smoothing at ``sigma``.
-    width : float
-        Bin width of ``m``'s lattice (``0.0`` when ``m`` is ``None``).
-    t_lo : float
-        Lower edge of the logit lattice (``t.min()``), always meaningful.
-    b : int or None
-        Bin count of ``m``'s lattice (``None`` when ``m`` is ``None``).
+    Returns ``(value, sigma, lattice)``; ``lattice`` is ``None`` when the
+    exact O(n) path ran (``bins=None``, a degenerate logit range, or an
+    infeasible/under-resolved refinement). ``curves.reliability_smooth``
+    shares this solve, so its ``sigma_star`` is ``smooth_ece``'s by
+    construction.
     """
     t_lo, t_hi = float(t.min()), float(t.max())
     if bins is None or t_hi == t_lo:
-        value, sigma = _smece_fixed_point(t, mass)
-        return value, sigma, None, 0.0, t_lo, None
+        return (*_smece_fixed_point(t, mass), None)
 
-    def _binned_solve(b: int) -> tuple[float, float, np.ndarray, float]:
-        idx, width, _ = _lattice(t, b)
-        m = np.bincount(idx, weights=mass, minlength=b)
-        value, sigma = _smece_fixed_point_lattice(m, width)
-        return value, sigma, m, width
+    def _binned_solve(b: int) -> tuple[float, float, Lattice]:
+        width = (t_hi - t_lo) / b
+        m = np.bincount(_lattice_index(t, t_lo, width, b), weights=mass, minlength=b)
+        return (*_smece_fixed_point_lattice(m, width), (width, t_lo, b))
 
-    value, sigma, m, width = _binned_solve(bins)
-    if sigma >= 8.0 * width:
-        return value, sigma, m, width, t_lo, bins
+    value, sigma, lattice = _binned_solve(bins)
+    if sigma >= 8.0 * lattice[0]:
+        return value, sigma, lattice
     # Under-resolved: one adaptive refinement sized so 8 bins span sigma.
     b2 = math.ceil((t_hi - t_lo) / (sigma / 8.0))
-    if b2 > _SMECE_MAX_BINS:
-        value, sigma = _smece_fixed_point(t, mass)  # refinement infeasible: exact
-        return value, sigma, None, 0.0, t_lo, None
-    value, sigma, m, width = _binned_solve(b2)
-    if sigma >= 8.0 * width:
-        return value, sigma, m, width, t_lo, b2
-    value, sigma = _smece_fixed_point(t, mass)  # O(n) worst case, no warning
-    return value, sigma, None, 0.0, t_lo, None
+    if b2 <= _SMECE_MAX_BINS:
+        value, sigma, lattice = _binned_solve(b2)
+        if sigma >= 8.0 * lattice[0]:
+            return value, sigma, lattice
+    # Refinement infeasible or still under-resolved: exact O(n) path, no warning.
+    return (*_smece_fixed_point(t, mass), None)
 
 
 def _lattice_kernel_smooth(
     m: np.ndarray, width: float, sigma: float, t_lo: float
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Truncated-Gaussian convolution of a lattice-binned mass vector,
-    returning the pointwise smoothed values (not just their integral).
+    """Kernel-smoothed value of a lattice mass vector at each (coarsened) cell centre.
 
-    Coarsening (mass-conserving factor ``max(1, int(sigma/(8*width)))``) and
-    kernel truncation (+-5 sigma) mirror ``_smece_at_sigma_lattice``'s
-    general branch exactly, so ``curves.reliability_smooth``'s kernel
-    matches the one that produced ``sigma_star``. Unlike
-    ``_smece_at_sigma_lattice``, this always convolves (no isolated-mass
-    total-variation shortcut): a curve needs the smoothed value at every
-    point, not only the integral of its absolute value.
-
-    Parameters
-    ----------
-    m : numpy.ndarray
-        Lattice-binned mass vector (e.g. ``bincount(w)`` or
-        ``bincount(w * y)``), on the same lattice ``sigma_star`` was solved
-        on.
-    width : float
-        That lattice's bin width.
-    sigma : float
-        Kernel bandwidth (``sigma_star``).
-    t_lo : float
-        Lower edge of the (uncoarsened) lattice.
-
-    Returns
-    -------
-    centers, smoothed : numpy.ndarray
-        Logit-scale centers of the (possibly coarsened) lattice cells, and
-        the kernel-smoothed value at each center, in ``m``'s own mass-per-
-        cell scale (a ratio of two such vectors, e.g. ``num / den``, cancels
-        the coarsening factor and is scale-free).
+    Same coarsening and +-5 sigma truncated kernel as
+    :func:`_smece_at_sigma_lattice`, but always convolved (no total-variation
+    shortcut): a curve needs pointwise values. Returns ``(centers, smoothed)``
+    on the logit scale, ``smoothed`` in ``m``'s mass-per-cell units (so a
+    ratio of two such vectors is free of the coarsening factor).
     """
     mc, w2 = _coarsen(m, width, sigma)
     smoothed = np.convolve(mc, _gauss_taps(sigma, w2), mode="same")
@@ -219,29 +173,17 @@ def smooth_ece(
     reported value is the fixed point ``smECE(sigma) = sigma`` found by
     bisection.
 
-    ``bins`` pre-aggregates the weighted residual measure onto a regular grid
-    over the logit range before solving the fixed point; the binned measure
-    is then evaluated in closed form on its own lattice by direct Gaussian
-    convolution, at a cost independent of n and of sigma. The lattice path
-    engages for every call with a non-degenerate logit range, whatever ``n``,
-    so typical calibration-set sizes avoid the exact O(n)-per-step path.
-    With ``bins=None``, or a degenerate range
-    (``t.max() == t.min()``), the exact computation (a 257-point grid
-    evaluator) runs instead.
-    Otherwise, if the found ``sigma`` is smaller than 8 bin widths (the
-    kernel would be under-resolved by the bins), the solve is repeated once
-    on an adaptively refined binning (``bins <- ceil(range / (sigma/8))``);
-    the exact computation is used only when that refinement is infeasible
-    (refined bin count above ``2**20``) or still under-resolved — reachable
-    for near-perfectly-calibrated data spread over a wide logit range (e.g.
-    extreme/clipped scores), so the worst case is the exact path's O(n)
-    cost per bisection step. For ``n <= bins`` the lattice value may differ from the exact
-    grid at the ~1e-4 level on typical portfolios (measured <= 2.4e-4 on
-    ``make_pd_portfolio``); on wide clipped-logit-range data the gap can be
-    much larger because the exact path's fixed 257-point grid under-resolves
-    small-sigma kernels there — in that regime the lattice value is the
-    better one (>= 8 samples per sigma). ``bins=None`` forces the exact
-    computation.
+    ``bins`` aggregates the weighted residual measure onto an equal-width
+    logit lattice and solves the fixed point there by direct convolution
+    (cost independent of n and sigma). If the solved ``sigma`` spans fewer
+    than 8 cells, the solve is repeated once on a lattice refined to 8 cells
+    per sigma; if that would exceed ``2**20`` cells or is still
+    under-resolved -- or with ``bins=None`` or a degenerate logit range --
+    the exact computation (a 257-point grid evaluator, O(n) per bisection
+    step) runs instead. The lattice value differs from the exact one by
+    ~1e-4 on typical portfolios; on wide clipped-logit data the exact path's
+    fixed grid under-resolves small-sigma kernels and the lattice value is
+    the better one.
 
     Parameters
     ----------
@@ -333,9 +275,7 @@ def _ecce_stats(walk: _Walk) -> EcceResult:
     )
 
 
-def ecce(
-    y: object, p: object, *, sample_weight: object = None, presorted: object = UNSET
-) -> EcceResult:
+def ecce(y: object, p: object, *, sample_weight: object = None) -> EcceResult:
     """Cumulative-deviation calibration error (Arrieta-Ibarra et al., 2022).
 
     Sort by prediction and walk the cumulative sum of weighted residuals,
@@ -354,22 +294,13 @@ def ecce(
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
         Optional positive weights, same length as ``y``.
-    presorted : bool, keyword-only
-        Deprecated (removed in 0.4.0): a throughput switch declaring ``p``
-        already sorted ascending. Still honoured.
 
     Returns
     -------
     EcceResult
         Max and mean absolute cumulative deviation.
     """
-    if presorted is not UNSET:
-        deprecated("ecce(presorted=...) is internal; drop the argument")
-    y_arr, p_arr, w = _prep(y, p, sample_weight)
-    return _ecce_stats(_ecce_walk(y_arr, p_arr, w, presorted=bool(presorted)))
-
-
-_ICI_FAMILY = ("ici", "e50", "e90", "emax")
+    return _ecce_stats(_ecce_walk(*_prep(y, p, sample_weight)))
 
 
 def _ici_distances(
@@ -382,7 +313,7 @@ def _ici_distances(
 def _ici_family(
     y: np.ndarray,
     p: np.ndarray,
-    w: np.ndarray | None,
+    w: np.ndarray,
     names: Iterable[str],
     *,
     frac: float = 0.75,
@@ -392,8 +323,8 @@ def _ici_family(
     """The ICI family off one shared LOESS fit.
 
     ``ici`` is the ``w``-weighted mean distance; ``e50``/``e90`` are the
-    distance quantiles — ``np.quantile`` for ``w=None`` or all-equal weights
-    (bit-identical to the unweighted values), otherwise
+    distance quantiles — ``np.quantile`` for all-equal weights (bit-identical
+    to the unweighted values), otherwise
     :func:`~probcal._math.weighted_quantile`; ``emax`` is the maximum, which
     positive weights cannot move.
     """
@@ -402,7 +333,7 @@ def _ici_family(
     uniform = is_uniform(w)
     out: dict[str, float] = {}
     if "ici" in sel:
-        out["ici"] = float(np.average(d, weights=np.ones(len(p)) if w is None else w))
+        out["ici"] = float(np.average(d, weights=w))
     for name, q in (("e50", 0.5), ("e90", 0.9)):
         if name in sel:
             out[name] = float(np.quantile(d, q)) if uniform else float(weighted_quantile(d, q, w))
@@ -415,8 +346,7 @@ def _ici_public(
     name: str, y: object, p: object, frac: float, sample_weight: object, grid_size: int | None
 ) -> float:
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    wq = None if sample_weight is None else w
-    return _ici_family(y_arr, p_arr, wq, (name,), frac=frac, grid_size=grid_size)[name]
+    return _ici_family(y_arr, p_arr, w, (name,), frac=frac, grid_size=grid_size)[name]
 
 
 def ici(

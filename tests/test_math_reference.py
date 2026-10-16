@@ -8,11 +8,11 @@ import numpy as np
 import pytest
 
 from probcal._math import (
+    _gammainc_pq_scalar,
     beta_ppf,
     betainc,
     chi2_ppf,
     expit,
-    gammainc_lower,
     irls_logistic,
     lgamma_vec,
     loess,
@@ -38,8 +38,9 @@ def test_gammainc_lower_vs_scipy() -> None:
     sp = pytest.importorskip("scipy.special")
     x = np.linspace(1e-8, 200.0, 2001)
     for s in (0.5, 1.0, 2.5, 10.0, 50.0, 150.0):
-        err = np.max(np.abs(gammainc_lower(s, x) - sp.gammainc(s, x)))
-        assert err < 1e-12, f"gammainc_lower(s={s}): max abs err {err:.2e}"
+        ours = np.array([_gammainc_pq_scalar(s, float(v))[0] for v in x])
+        err = np.max(np.abs(ours - sp.gammainc(s, x)))
+        assert err < 1e-12, f"P(s={s}, x): max abs err {err:.2e}"
 
 
 def test_beta_ppf_vs_scipy() -> None:

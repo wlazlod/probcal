@@ -30,15 +30,6 @@ def _calibrated_sample(n: int = 2000) -> tuple[np.ndarray, np.ndarray]:
     return s, y
 
 
-def test_predict_proba_2d() -> None:
-    s, y = _calibrated_sample()
-    cal = PlattCalibrator().fit(s, y)
-    p2 = cal.predict_proba_2d(s[:5])
-    assert p2.shape == (5, 2)
-    np.testing.assert_allclose(p2.sum(axis=1), 1.0)
-    np.testing.assert_allclose(p2[:, 1], cal.predict_proba(s[:5]))
-
-
 @pytest.mark.parametrize(
     ("call", "exc", "match"),
     [

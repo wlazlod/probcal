@@ -71,8 +71,7 @@ def reliability_summary(
         Stats-box fields for the annotated reliability diagram.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    wq = None if sample_weight is None else w
-    fam = _ici_family(y_arr, p_arr, wq, ("ici", "e90"), grid_size=grid_size)
+    fam = _ici_family(y_arr, p_arr, w, ("ici", "e90"), grid_size=grid_size)
     return ReliabilitySummary(
         n=len(y_arr),
         events=int(y_arr.sum()),

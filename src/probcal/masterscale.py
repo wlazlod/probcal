@@ -397,7 +397,7 @@ class Masterscale(JsonIO):
         """
         check_payload(cls, d)
         bands = {str(n): (float(b[0]), float(b[1])) for n, b in d["params"]["bands"].items()}
-        prov = decode_value(d.get("state", {}).get("provenance"), arrays=False)
+        prov = decode_value(d["state"]["provenance"], arrays=False)
         return cls(bands, provenance=prov)  # type: ignore[arg-type]
 
     # ---------------------------------------------------------------- dunder

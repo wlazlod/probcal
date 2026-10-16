@@ -13,7 +13,7 @@ import numpy as np
 from .._math import beta_ppf, betainc, norm_sf
 from .._results import _ResultBase
 from .._validation import validate_weights
-from ._common import _prep
+from ._common import _prep, is_uniform
 
 # Re-exported so `probcal.metrics.grade.pluto_tasche` sits alongside the
 # per-grade backtests it complements; defined in `_conservative.py`.
@@ -23,7 +23,6 @@ from ._conservative import (  # noqa: F401
     pluto_tasche,
     pluto_tasche_from_arrays,
 )
-from ._grades import _resolve_grades as _resolve_grades  # re-exported for probcal.report
 from ._grades import aggregate, grade_labels, resolve_order
 
 # Re-exported so `probcal.metrics.grade.hl_e_test` sits alongside the other
@@ -45,8 +44,7 @@ def _grade_counts(
     """Validated per-grade ``(labels, n, k, mean PD)`` for the binomial/Jeffreys tests."""
     y_arr, p_arr, _ = _prep(y, p, None)
     if sample_weight is not None:
-        w = validate_weights(sample_weight, len(y_arr))
-        if not np.all(w == w[0]):
+        if not is_uniform(validate_weights(sample_weight, len(y_arr))):
             warnings.warn(
                 "grade tests use raw integer counts; non-uniform sample weights are ignored",
                 UserWarning,
@@ -143,23 +141,15 @@ def binomial_grade_test(
         Per-grade counts, p-values, traffic lights, and display intervals.
     """
     labels, n, k, pd = _grade_counts(y, p, grades, sample_weight, order)
-    p_exact = np.empty(len(labels))
-    p_normal = np.empty(len(labels))
-    for i in range(len(labels)):
-        if k[i] == 0:
-            p_exact[i] = 1.0
-        else:
-            p_exact[i] = float(betainc(float(k[i]), float(n[i] - k[i] + 1), pd[i]))
-        se = np.sqrt(n[i] * pd[i] * (1.0 - pd[i]))
-        z = (k[i] - n[i] * pd[i]) / se if se > 0 else 0.0
-        p_normal[i] = norm_sf(z)
-    light = tuple(_traffic_light(v) for v in p_exact)
-    ci_low = np.empty(len(labels))
-    ci_high = np.empty(len(labels))
+    p_exact, p_normal, ci_low, ci_high = (np.empty(len(labels)) for _ in range(4))
     for i in range(len(labels)):
         ki, ni = int(k[i]), int(n[i])
+        p_exact[i] = 1.0 if ki == 0 else float(betainc(float(ki), float(ni - ki + 1), pd[i]))
+        se = np.sqrt(n[i] * pd[i] * (1.0 - pd[i]))
+        p_normal[i] = norm_sf((k[i] - n[i] * pd[i]) / se if se > 0 else 0.0)
         ci_low[i] = 0.0 if ki == 0 else beta_ppf(0.05, float(ki), float(ni - ki + 1))
         ci_high[i] = 1.0 if ki == ni else beta_ppf(0.95, float(ki + 1), float(ni - ki))
+    light = tuple(_traffic_light(v) for v in p_exact)
     return BinomialGradeResult(
         grades=labels,
         n=n,
@@ -246,16 +236,13 @@ def jeffreys_grade_test(
         Per-grade counts, p-values, traffic lights, and display intervals.
     """
     labels, n, k, pd = _grade_counts(y, p, grades, sample_weight, order)
-    p_value = np.empty(len(labels))
-    for i in range(len(labels)):
-        p_value[i] = float(betainc(k[i] + 0.5, n[i] - k[i] + 0.5, pd[i]))
-    light = tuple(_traffic_light(v) for v in p_value)
-    ci_low = np.empty(len(labels))
-    ci_high = np.empty(len(labels))
+    p_value, ci_low, ci_high = (np.empty(len(labels)) for _ in range(3))
     for i in range(len(labels)):
         a, b = k[i] + 0.5, n[i] - k[i] + 0.5
+        p_value[i] = float(betainc(a, b, pd[i]))
         ci_low[i] = beta_ppf(0.05, a, b)
         ci_high[i] = beta_ppf(0.95, a, b)
+    light = tuple(_traffic_light(v) for v in p_value)
     return JeffreysGradeResult(
         grades=labels,
         n=n,

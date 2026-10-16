@@ -47,25 +47,22 @@ def validate_scores(s: object, *, name: str = "s") -> np.ndarray:
         ``[0, 1]``.
     """
     arr = np.asarray(s, dtype=np.float64)
+    shape = arr.shape
     if arr.ndim == 2 and arr.shape[1] == 1:
         arr = arr.ravel()
-    elif arr.ndim == 2 and arr.shape[1] == 2:
-        ok = (
-            bool(np.all(np.isfinite(arr)))
-            and bool(np.all(arr >= 0.0))
-            and bool(np.all(arr <= 1.0))
-            and bool(np.all(np.abs(arr.sum(axis=1) - 1.0) <= 1e-6))
-        )
-        if not ok:
-            raise ValueError(
-                f"{name}: expected 1-D scores, a single column, or a two-column "
-                f"probability matrix (rows summing to 1); got shape {arr.shape}"
-            )
+    elif (
+        arr.ndim == 2
+        and arr.shape[1] == 2
+        and bool(np.all(np.isfinite(arr)))
+        and bool(np.all(arr >= 0.0))
+        and bool(np.all(arr <= 1.0))
+        and bool(np.all(np.abs(arr.sum(axis=1) - 1.0) <= 1e-6))
+    ):
         arr = arr[:, 1]
     if arr.ndim != 1:
         raise ValueError(
             f"{name}: expected 1-D scores, a single column, or a two-column "
-            f"probability matrix (rows summing to 1); got shape {arr.shape}"
+            f"probability matrix (rows summing to 1); got shape {shape}"
         )
     if not np.all(np.isfinite(arr)):
         raise ValueError(f"{name} must contain only finite values")
@@ -209,3 +206,18 @@ def validate_positive_int(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or int(value) < 1:
         raise ValueError(f"{name} must be a positive integer, got {value!r}")
     return int(value)
+
+
+def validate_nonneg_int(value: object, name: str) -> int:
+    """``value`` must be an integer ``>= 0`` (bool rejected)."""
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or int(value) < 0:
+        raise ValueError(f"{name} must be a non-negative integer, got {value!r}")
+    return int(value)
+
+
+def validate_level(value: object, name: str) -> float:
+    """``value`` must be a probability level strictly inside ``(0, 1)``."""
+    level = float(value)  # type: ignore[arg-type]
+    if not 0.0 < level < 1.0:
+        raise ValueError(f"{name} must satisfy 0 < {name} < 1, got {value!r}")
+    return level

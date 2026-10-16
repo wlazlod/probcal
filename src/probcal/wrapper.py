@@ -9,13 +9,15 @@ import inspect
 import json
 import sys
 import warnings
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Self
 
 import numpy as np
 
 from ._math import expit
-from ._registry import register
+from ._protocol import CalibratorProtocolMixin
+from ._registry import load, register
 from ._results import Interpretation
 from ._serialize import JsonIO, check_payload, data_fingerprint, encode_value, envelope
 from ._validation import stratified_folds, validate_binary_y, validate_cv, validate_weights
@@ -134,7 +136,7 @@ def _clone(model: Any) -> Any:
 
 
 @register
-class CalibratedModel(JsonIO):
+class CalibratedModel(CalibratorProtocolMixin, JsonIO):
     """Wrap any scoring model with a probcal calibrator (and optional offsets).
 
     Parameters
@@ -174,9 +176,18 @@ class CalibratedModel(JsonIO):
         The fold pairs (ensemble flow only).
     offsets_ : list[LogitOffset]
         Appended offset stages, each separately inspectable.
+
+    Notes
+    -----
+    ``interval_inverse`` and ``point_inverse`` invert the full pipeline
+    (calibrator, then every offset) through :attr:`chain_` — see
+    :meth:`Chain.interval_inverse` and :meth:`Chain.point_inverse`; the
+    bounds are on the model's probability output (or its logit). The
+    ensemble flow (K distinct maps) has no single preimage, so both raise
+    ``NotImplementedError`` there.
     """
 
-    _weight_warned: bool = False
+    _cal_scores: np.ndarray | None = None
     _cal_weights: np.ndarray | None = None
     _model_ref: dict[str, object] | None = None
 
@@ -242,23 +253,24 @@ class CalibratedModel(JsonIO):
         if _n_rows(X) != len(y_arr):
             raise ValueError(f"X has {_n_rows(X)} rows but y has {len(y_arr)}")
         w_arr = validate_weights(sample_weight, len(y_arr))
+        weighted = sample_weight is not None
         self.offsets_: list[LogitOffset] = []
         self.ensemble_: list[tuple[Any, BaseCalibrator]] = []
         if self.flow == "prefit":
             self.model_ = self.model
             s = _model_scores(self.model_, X)
             self.calibrator_ = self._fresh_calibrator().fit(s, y_arr, sample_weight=w_arr)
-            self._cal_scores = s
         else:
             cv = validate_cv(self.cv, y_arr, held_out_both_classes=self.ensemble)
-            self._fit_cv(X, y_arr, w_arr if sample_weight is not None else None, cv)
-        self._cal_weights = w_arr if sample_weight is not None else None
+            s = self._fit_cv(X, y_arr, w_arr, cv, weighted=weighted)
+        self._cal_scores = s
+        self._cal_weights = w_arr if weighted else None
         self.fit_meta_ = {
             "n_obs": int(len(y_arr)),
             "n_events": float(np.sum(w_arr * y_arr)),
             "weight_sum": float(w_arr.sum()),
             "fitted_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "data_fingerprint": data_fingerprint(self._cal_scores, y_arr, w_arr),
+            "data_fingerprint": data_fingerprint(s, y_arr, w_arr),
         }
         self.fitted_ = True
         return self
@@ -266,50 +278,51 @@ class CalibratedModel(JsonIO):
     def _fresh_calibrator(self) -> BaseCalibrator:
         return clone_unfitted(self.calibrator)  # type: ignore[return-value]
 
-    def _fit_model(self, model: Any, X: object, y: np.ndarray, w: np.ndarray | None) -> None:
-        """``model.fit(X, y[, sample_weight=w])``; warns once when weights are dropped."""
-        if w is None:
-            model.fit(X, y)
-        elif _accepts_sample_weight(model):
-            model.fit(X, y, sample_weight=w)
-        else:
-            if not self._weight_warned:
-                warnings.warn(
-                    f"{type(model).__name__}.fit does not accept sample_weight; the model is "
-                    "trained unweighted (the calibrator still uses the weights)",
-                    UserWarning,
-                    stacklevel=4,
-                )
-                self._weight_warned = True
-            model.fit(X, y)
-
-    def _fit_cv(self, X: object, y: np.ndarray, w: np.ndarray | None, cv: int) -> None:
+    def _fit_cv(
+        self, X: object, y: np.ndarray, w: np.ndarray, cv: int, *, weighted: bool
+    ) -> np.ndarray:
+        """Cross-fitted flow; returns the pooled out-of-fold scores."""
         if not hasattr(self.model, "fit"):
             raise TypeError("flow='cv' requires a model with fit(X, y)")
-        self._weight_warned = False
-        w_cal = w if w is not None else np.ones(len(y))
+        # Whether the model fits take the weights is decided once, up front.
+        model_weighted = weighted and _accepts_sample_weight(self.model)
+        if weighted and not model_weighted:
+            warnings.warn(
+                f"{type(self.model).__name__}.fit does not accept sample_weight; the model is "
+                "trained unweighted (the calibrator still uses the weights)",
+                UserWarning,
+                stacklevel=3,
+            )
+
+        def fit_clone(rows: np.ndarray | None) -> Any:
+            model = _clone(self.model)
+            X_fit, y_fit, w_fit = (
+                (X, y, w) if rows is None else (_take_rows(X, rows), y[rows], w[rows])
+            )
+            if model_weighted:
+                model.fit(X_fit, y_fit, sample_weight=w_fit)
+            else:
+                model.fit(X_fit, y_fit)
+            return model
+
         folds = stratified_folds(y, cv, self.random_state)
         oof_scores = np.empty(len(y))
         for k in range(cv):
-            train, held = folds != k, folds == k
-            fold_model = _clone(self.model)
-            self._fit_model(
-                fold_model, _take_rows(X, train), y[train], None if w is None else w[train]
-            )
+            fold_model = fit_clone(folds != k)
+            held = folds == k
             s_held = _model_scores(fold_model, _take_rows(X, held))
             oof_scores[held] = s_held
             if self.ensemble:
                 fold_cal = self._fresh_calibrator()
-                fold_cal.fit(s_held, y[held], sample_weight=w_cal[held])
+                fold_cal.fit(s_held, y[held], sample_weight=w[held])
                 self.ensemble_.append((fold_model, fold_cal))
-        self._cal_scores = oof_scores
         if self.ensemble:
             self.model_ = None
             self.calibrator_ = None  # type: ignore[assignment]
         else:
-            self.calibrator_ = self._fresh_calibrator().fit(oof_scores, y, sample_weight=w_cal)
-            self.model_ = _clone(self.model)
-            self._fit_model(self.model_, X, y, w)
+            self.calibrator_ = self._fresh_calibrator().fit(oof_scores, y, sample_weight=w)
+            self.model_ = fit_clone(None)
+        return oof_scores
 
     # ------------------------------------------------------------------ prediction
 
@@ -321,11 +334,15 @@ class CalibratedModel(JsonIO):
         """Fitted state for sklearn >= 1.6 (model and calibrator both fitted)."""
         return bool(getattr(self, "fitted_", False))
 
-    def _base_predict(self, X: object) -> np.ndarray:
+    def _pipeline(self, scores: "Callable[[Any], np.ndarray]") -> np.ndarray:
+        """Calibrated, offset output; ``scores(model)`` gives each calibrator's input."""
         if self.ensemble_:
-            preds = [cal.predict_proba(_model_scores(model, X)) for model, cal in self.ensemble_]
-            return np.mean(preds, axis=0)
-        return self.calibrator_.predict_proba(_model_scores(self.model_, X))
+            p = np.mean([cal.predict_proba(scores(model)) for model, cal in self.ensemble_], axis=0)
+        else:
+            p = self.calibrator_.predict_proba(scores(self.model_))
+        for off in self.offsets_:
+            p = off.transform(p)
+        return p
 
     def predict_proba(self, X: object) -> np.ndarray:
         """Calibrated (and offset) probabilities ``P(y=1)`` for new inputs.
@@ -342,10 +359,7 @@ class CalibratedModel(JsonIO):
             Calibrated probabilities, after any appended offset stages.
         """
         self._check_fitted()
-        p = self._base_predict(X)
-        for off in self.offsets_:
-            p = off.transform(p)
-        return p
+        return self._pipeline(lambda model: _model_scores(model, X))
 
     def predict_proba_2d(self, X: object) -> np.ndarray:
         """Sklearn-style ``(n, 2)`` probability matrix."""
@@ -356,7 +370,7 @@ class CalibratedModel(JsonIO):
 
     def offset_to(
         self,
-        *args: object,
+        *,
         target_mean: float | None = None,
         delta: float | None = None,
         X: object = None,
@@ -369,10 +383,6 @@ class CalibratedModel(JsonIO):
         ``sample_weight``), else on the stored calibration scores, weighted
         by the ``sample_weight`` given to :meth:`fit`. The offset is never
         folded into the calibrator's parameters.
-
-        Positional use (``offset_to(0.03)``, signature
-        ``(target_mean, delta, X)``) is deprecated: it emits a
-        ``DeprecationWarning`` and will be removed in 0.4.0.
 
         Parameters
         ----------
@@ -394,19 +404,6 @@ class CalibratedModel(JsonIO):
         Self
             The wrapper, with the new offset appended to ``offsets_``.
         """
-        if args:
-            if len(args) > 3:
-                raise TypeError("offset_to takes at most 3 positional arguments (deprecated)")
-            warnings.warn(
-                "positional arguments to CalibratedModel.offset_to are deprecated and will "
-                "be removed in 0.4.0; use offset_to(target_mean=..., delta=..., X=...)",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            given = dict(zip(("target_mean", "delta", "X"), args, strict=False))
-            target_mean = given.get("target_mean", target_mean)  # type: ignore[assignment]
-            delta = given.get("delta", delta)  # type: ignore[assignment]
-            X = given.get("X", X)
         self._check_fitted()
         if X is not None:
             p_now = self.predict_proba(X)
@@ -417,13 +414,14 @@ class CalibratedModel(JsonIO):
                     "sample_weight is only accepted together with X; without X the "
                     "calibration weights given to fit() are used"
                 )
-            if self._cal_scores is None:
+            cal_scores = self._cal_scores
+            if cal_scores is None:
                 raise RuntimeError(
                     "calibration scores are not serialized; after from_dict, pass X so "
                     "the offset stage can record its audit means on current output"
                 )
-            p_now = self._base_predict_from_scores(self._cal_scores)
-            weights = getattr(self, "_cal_weights", None)
+            p_now = self._pipeline(lambda _: cal_scores)
+            weights = self._cal_weights
         off = LogitOffset(delta=delta, target_mean=target_mean)
         off.fit(p_now, sample_weight=weights)
         self.offsets_.append(off)
@@ -462,104 +460,29 @@ class CalibratedModel(JsonIO):
         new.offsets_.append(copy.deepcopy(offset))
         return new
 
-    def _base_predict_from_scores(self, s: np.ndarray) -> np.ndarray:
-        if self.ensemble_:
-            preds = [cal.predict_proba(s) for _, cal in self.ensemble_]
-            p = np.mean(preds, axis=0)
-        else:
-            p = self.calibrator_.predict_proba(s)
-        for off in self.offsets_:
-            p = off.transform(p)
-        return p
-
     # ------------------------------------------------------------------ protocol
-    # Everything below delegates to the equivalent Chain (calibrator + offsets);
-    # the ensemble flow (K distinct maps) has no single chain.
+    # interval_inverse / point_inverse come from CalibratorProtocolMixin,
+    # through the equivalent Chain (calibrator + offsets); the ensemble flow
+    # (K distinct maps) has no single chain.
 
-    def _require_chain(self, what: str) -> Chain:
-        self._check_fitted()
-        if self.ensemble_:
-            raise NotImplementedError(
-                f"{what} is not defined for the ensemble flow (K distinct maps); "
-                "use ensemble=False for threshold translation"
-            )
+    def _fitted_calibrator(self) -> Chain:  # type: ignore[override]
         return self.chain_
+
+    def _calibrators(self) -> list[BaseCalibrator]:
+        """The fitted calibrator stage(s): one, or one per ensemble fold."""
+        self._check_fitted()
+        return [cal for _, cal in self.ensemble_] or [self.calibrator_]
 
     @property
     def is_monotone_(self) -> bool:
-        """Monotone iff the calibrator stage is (offsets always are)."""
-        self._check_fitted()
-        if self.ensemble_:
-            return all(cal.is_monotone_ for _, cal in self.ensemble_)
-        return self.chain_.is_monotone_
+        """Monotone iff every calibrator stage is (offsets always are)."""
+        return all(cal.is_monotone_ for cal in self._calibrators())
 
     @property
     def affine_logit_coeffs_(self) -> tuple[float, float] | None:
         """Composed ``(a, b + sum(deltas))`` when the calibrator stage is affine."""
         self._check_fitted()
-        if self.ensemble_:
-            return None
-        return self.chain_.affine_logit_coeffs_
-
-    def interval_inverse(
-        self,
-        lo: float,
-        hi: float,
-        *,
-        space: str = "probability",
-        buffer_logit: float = 0.0,
-    ) -> tuple[float, float]:
-        """Preimage of a calibrated interval through the full pipeline.
-
-        Delegates to :meth:`Chain.interval_inverse` on :attr:`chain_`: the
-        buffer shrinks the final interval, each offset subtracts its delta
-        on the logit scale, and the calibrator's own inverse finishes the
-        job. Returns bounds on the model's probability output
-        (``space="probability"``) or their logits.
-
-        Parameters
-        ----------
-        lo, hi : float
-            Calibrated-probability bounds; ``lo=0``/``hi=1`` map to the full
-            raw range (−inf/+inf on the logit scale).
-        space : {"probability", "logit"}, keyword-only
-            Scale of the returned raw bounds.
-        buffer_logit : float, keyword-only
-            Shrink the calibrated interval by this margin in logit space
-            before inverting.
-
-        Returns
-        -------
-        tuple of float
-            ``(raw_lo, raw_hi)`` preimage bounds, on the scale requested by
-            ``space``.
-
-        Raises
-        ------
-        NotImplementedError
-            If the wrapper was fitted with ``ensemble=True`` (K distinct
-            maps have no single preimage).
-        UnattainableTargetError
-            If the (buffered) interval does not intersect the pipeline's
-            output range.
-        ValueError
-            If ``lo``, ``hi`` are not ordered in ``[0, 1]``.
-        """
-        chain = self._require_chain("interval_inverse")
-        return chain.interval_inverse(lo, hi, space=space, buffer_logit=buffer_logit)
-
-    def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
-        """Exact preimage of pipeline probabilities (see :meth:`Chain.point_inverse`).
-
-        Raises
-        ------
-        NotImplementedError
-            For the ensemble flow, or a calibrator without an exact inverse.
-        UnattainableTargetError
-            If a target lies outside ``(0, 1)`` or is not representable.
-        """
-        chain = self._require_chain("point_inverse")
-        return chain.point_inverse(p, space=space)
+        return None if self.ensemble_ else self.chain_.affine_logit_coeffs_
 
     def interpret(self) -> Interpretation:
         """Concatenated interpretation of the calibrator and every offset stage.
@@ -570,12 +493,8 @@ class CalibratedModel(JsonIO):
             Parameters and messages concatenated across the calibrator
             stage(s) and every appended offset, in application order.
         """
-        self._check_fitted()
-        if self.ensemble_:
-            parts = [cal.interpret() for _, cal in self.ensemble_]
-            parts += [off.interpret() for off in self.offsets_]
-        else:
-            parts = [stage.interpret() for stage in self.chain_.stages]  # type: ignore[attr-defined]
+        stages: list[BaseCalibrator | LogitOffset] = [*self._calibrators(), *self.offsets_]
+        parts = [stage.interpret() for stage in stages]
         return _concat_interpretations("CalibratedModel", parts, qualify=False)
 
     @property
@@ -590,10 +509,18 @@ class CalibratedModel(JsonIO):
         offsets rather than copying them, so calling ``fit`` on the chain
         refits this :class:`CalibratedModel`'s calibrator and offsets in
         place.
+
+        Raises
+        ------
+        NotImplementedError
+            For the ensemble flow.
         """
         self._check_fitted()
         if self.ensemble_:
-            raise NotImplementedError("the ensemble flow has no single equivalent chain")
+            raise NotImplementedError(
+                "the ensemble flow (K distinct maps) has no single equivalent chain; "
+                "use ensemble=False for threshold translation"
+            )
         return Chain([self.calibrator_, *self.offsets_])
 
     # ------------------------------------------------------------------ serialization
@@ -624,11 +551,9 @@ class CalibratedModel(JsonIO):
                 "serialize a pooled (ensemble=False) or prefit wrapper instead"
             )
         ref_model = self.model_ if self.model_ is not None else self.model
-        stored_ref = getattr(self, "_model_ref", None)
-        model_ref: object
-        if ref_model is None and stored_ref is not None:
+        if ref_model is None and self._model_ref is not None:
             # Loaded without a model: keep the reference it was saved with.
-            model_ref = stored_ref
+            model_ref = self._model_ref
         else:
             model_ref = self._model_ref_of(ref_model)
         return envelope(
@@ -645,7 +570,7 @@ class CalibratedModel(JsonIO):
                 "offsets": [off.to_dict() for off in self.offsets_],
                 "model_ref": model_ref,
             },
-            fit_meta=encode_value(dict(getattr(self, "fit_meta_", {}))),
+            fit_meta=encode_value(self.fit_meta_),
         )
 
     def _model_ref_of(self, ref_model: Any) -> dict[str, object]:
@@ -684,29 +609,15 @@ class CalibratedModel(JsonIO):
             If the schema version is unknown or the payload class differs.
         """
         check_payload(cls, d)
-        from ._registry import load
-
-        params = d.get("params", {})
-        state = d.get("state", {})
+        state = d["state"]
         calibrator = load(state["calibrator"])
-        obj = cls(
-            model,
-            calibrator,  # type: ignore[arg-type]
-            flow=params.get("flow", "prefit"),
-            cv=params.get("cv", 5),
-            ensemble=params.get("ensemble", False),
-            random_state=params.get("random_state", 42),
-            model_id=params.get("model_id"),
-        )
+        obj = cls(model, calibrator, **d["params"])  # type: ignore[arg-type]
         obj.calibrator_ = calibrator  # type: ignore[assignment]
-        obj.offsets_ = [LogitOffset.from_dict(o) for o in state.get("offsets", [])]
+        obj.offsets_ = [LogitOffset.from_dict(o) for o in state["offsets"]]
         obj.ensemble_ = []
         obj.model_ = model
-        obj._cal_scores = None  # type: ignore[assignment]
-        obj._cal_weights = None
-        stored_ref = state.get("model_ref")
-        obj._model_ref = dict(stored_ref) if isinstance(stored_ref, dict) else None
-        obj.fit_meta_ = dict(d.get("fit_meta", {}))
+        obj._model_ref = dict(state["model_ref"])
+        obj.fit_meta_ = dict(d["fit_meta"])
         obj.fitted_ = True
         return obj
 

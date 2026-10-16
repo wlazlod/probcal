@@ -1,11 +1,10 @@
-"""Golden-file guarantee: every 0.x release reads schema 1.
+"""Golden-file guarantee: the current release reads schema-1 payloads from 0.3.0 on.
 
-The JSONs in tests/golden/ were written by the release that introduced
-serialization and are committed; this suite proves the current build still
-loads them and reproduces their predictions. Tolerance is allclose at
-1e-12, not bit-equality: goldens must survive numpy/platform drift.
-Regeneration (tests/golden/_generate.py) is legitimate only
-alongside a schema bump with a converter and a changelog entry.
+The JSONs in tests/golden/ were written by probcal 0.3.0, the oldest release
+whose payloads are supported (Masterscale, added later, by 0.3.2), and are
+committed; this suite proves the current build still loads them and
+reproduces their predictions. Tolerance is allclose at 1e-12, not
+bit-equality: goldens must survive numpy/platform drift.
 """
 
 import json
@@ -39,8 +38,8 @@ class _StubModel:
 def test_every_registered_class_has_a_golden() -> None:
     names = {p.stem for p in _GOLDEN_FILES}
     assert names == set(SERIALIZABLE), (
-        "golden coverage drifted from the registry; regenerate ONLY with a "
-        "schema bump + converter + changelog entry"
+        "golden coverage drifted from the registry; generate the missing class "
+        "at the oldest supported release"
     )
 
 

@@ -8,7 +8,6 @@ import pytest
 
 from probcal import calibration_belt, make_pd_portfolio
 from probcal._results import (
-    BeltResult,
     GroupedMetricReport,
     Interpretation,
     MetricReport,
@@ -95,22 +94,3 @@ def test_belt_result_equality_read_only_bands_and_copies() -> None:
         assert obj == belt
         with pytest.raises(TypeError):
             obj.bands[0.5] = None  # type: ignore[index]
-
-
-def test_belt_result_deprecated_attribute_names() -> None:
-    belt = BeltResult(
-        grid_p=np.array([0.01, 0.02]),
-        grid_logit=np.array([-4.6, -3.9]),
-        levels=(0.8, 0.95),
-        bands={
-            0.8: (np.array([0.005, 0.015]), np.array([0.02, 0.03])),
-            0.95: (np.array([0.004, 0.012]), np.array([0.03, 0.04])),
-        },
-        degree=2,
-        p_value=0.34,
-    )
-    # The 0.3.x attribute names still work for one release, with a warning.
-    with pytest.warns(DeprecationWarning, match="bands\\[0.95\\]"):
-        np.testing.assert_array_equal(belt.upper_95, np.array([0.03, 0.04]))
-    with pytest.warns(DeprecationWarning):
-        np.testing.assert_array_equal(belt.lower_80, np.array([0.005, 0.015]))

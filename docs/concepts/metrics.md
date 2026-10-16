@@ -37,10 +37,10 @@ finite, and is read as a **relative frequency weight**:
   these is invariant to multiplying all weights by a constant, and unit weights give the
   unweighted statistic exactly.
 
-Two count-form functions read weights literally instead: `pluto_tasche_from_arrays` sums
-weights as obligor and default counts (an integer weight equals row duplication), and
-`hl_e_test` uses weights as exponents on the likelihood-ratio factors, matching
-`CalibrationMonitor`. The per-grade binomial and Jeffreys tests use raw integer counts and
+One count-form function reads weights literally instead: `pluto_tasche_from_arrays` sums
+weights as obligor and default counts (an integer weight equals row duplication).
+`hl_e_test` raises each likelihood-ratio factor to `min(1, w / mean(w))` within its grade,
+matching `CalibrationMonitor`, so it too is invariant to rescaling the weights. The per-grade binomial and Jeffreys tests use raw integer counts and
 ignore weights.
 
 Because the test statistics use the exact weighted variances above, Hosmer–Lemeshow and the
@@ -153,12 +153,10 @@ The paper sweeps up to \( B = n \); probcal stops at `max_bins=100` as a cost ca
 `ece_sweep(rule="largest")` instead takes the largest monotone \( B \) anywhere in 2..100,
 skipping over non-monotone counts. On synthetic continuous data the two rules choose a
 different \( B \) in about half of the cases (the first-violation rule usually the smaller
-one), and the values differ by at most ~0.01 absolute at n=500 and ~0.003 at n=10⁴. `adaptive_ece` is a deprecated alias for
-equal-mass ECE (`ece(strategy="mass")`), kept because the literature uses the name; it warns
-and is removed in 0.4.0.
+one), and the values differ by at most ~0.01 absolute at n=500 and ~0.003 at n=10⁴.
 
 The **Hosmer–Lemeshow test** (Hosmer and Lemeshow, 1980) groups observations into \( g \)
-risk deciles (`hosmer_lemeshow(..., n_bins=10)`; `g=` is a deprecated alias of `n_bins=`) and
+risk deciles (`hosmer_lemeshow(..., n_bins=10)`) and
 forms
 
 \[
@@ -380,9 +378,7 @@ full data plus one independent call per group, returning a `GroupedMetricReport`
 instead of a plain `MetricReport`. Groups are formed from the raw label values (so `1` and
 `"1"` are different groups) and displayed as `str(value)`, ordered by display name; two
 distinct values that print the same raise `ValueError`. Group `i` (in that order) uses
-`random_state + 1000 * i` rather than reusing `random_state` for every group. (`seed=` is a
-deprecated alias of `random_state=`; it warns with a `DeprecationWarning` and is removed in
-0.4.0.) The offset is fixed and label-independent, so
+`random_state + 1000 * i` rather than reusing `random_state` for every group. The offset is fixed and label-independent, so
 reproducibility does not depend on how many groups exist or what they are named, and no two
 groups' bootstrap draws can coincide by construction. This is side-by-side reporting, not a
 test: no comparison across groups is computed, and no multiple-comparison correction is

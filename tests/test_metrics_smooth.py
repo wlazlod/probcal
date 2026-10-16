@@ -25,6 +25,11 @@ from probcal.metrics.smooth import (
 RNG = np.random.default_rng(61)
 
 
+def _trapezoid(f: np.ndarray, x: np.ndarray) -> float:
+    """Trapezoid rule (np.trapezoid needs numpy >= 2.0)."""
+    return float((np.diff(x) * (f[1:] + f[:-1]) / 2.0).sum())
+
+
 def _calibrated(n: int = 5000) -> tuple[np.ndarray, np.ndarray]:
     p = expit(RNG.normal(-0.8, 1.2, n))
     y = (RNG.random(n) < p).astype(float)
@@ -121,7 +126,7 @@ def test_smece_lattice_evaluator_beats_257_grid_accuracy() -> None:
         diff = (chunk[:, None] - t[None, :]) / sigma_star
         kern = np.exp(-0.5 * diff**2) / (sigma_star * np.sqrt(2.0 * np.pi))
         smoothed[i : i + block] = kern @ mass
-    ref = float(np.trapezoid(np.abs(smoothed), dense_grid))
+    ref = float(_trapezoid(np.abs(smoothed), dense_grid))
 
     grid_value = _smece_at_sigma(t, mass, sigma_star)
 
@@ -177,14 +182,6 @@ def test_ecce_stat_mean_is_weight_averaged() -> None:
     dup = ecce(y[rep], p[rep])
     assert res.stat_max == pytest.approx(dup.stat_max)
     assert res.stat_mean == pytest.approx(dup.stat_mean)
-
-
-def test_ecce_presorted_keyword_deprecated() -> None:
-    y, p = _calibrated(500)
-    order = np.argsort(p)
-    with pytest.warns(DeprecationWarning, match="presorted"):
-        res = ecce(y[order], p[order], presorted=True)
-    assert res == ecce(y, p)
 
 
 def test_spiegelhalter_zero_variance_is_nan() -> None:

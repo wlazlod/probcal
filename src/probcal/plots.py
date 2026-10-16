@@ -20,7 +20,7 @@ from typing import Any
 
 import numpy as np
 
-from ._math import logit
+from ._math import logit1
 from ._plots_common import (
     _AMBER,
     _BLUE,
@@ -64,6 +64,20 @@ _SPLIT_BINS = 30
 _SPLIT_BASELINE = 0.12
 
 
+def _drawable(
+    event_rate: np.ndarray, x_p: np.ndarray, x_logit: np.ndarray, scale: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """Mask of the points drawable on ``scale`` and their x-coordinates.
+
+    On ``scale="logit"`` an event rate of exactly 0 or 1 has no finite logit,
+    so those points are dropped.
+    """
+    if scale == "logit":
+        keep = (event_rate > 0.0) & (event_rate < 1.0)
+        return keep, x_logit[keep]
+    return np.ones(len(event_rate), dtype=bool), x_p
+
+
 def _draw_kernel_curve(ax: Any, curve: KernelReliabilityCurve, scale: str) -> None:
     """Render a ``KernelReliabilityCurve``: a density-weighted line
     (``LineCollection``, wide where predictions are dense), the
@@ -77,12 +91,7 @@ def _draw_kernel_curve(ax: Any, curve: KernelReliabilityCurve, scale: str) -> No
     """
     from matplotlib.collections import LineCollection
 
-    if scale == "logit":
-        keep = (curve.event_rate > 0.0) & (curve.event_rate < 1.0)
-        grid = curve.grid_logit[keep]
-    else:
-        keep = np.ones(len(curve.event_rate), dtype=bool)
-        grid = curve.grid_p
+    keep, grid = _drawable(curve.event_rate, curve.grid_p, curve.grid_logit, scale)
     rate = _tr(curve.event_rate[keep], scale)
     ci_low = _tr(curve.ci_low[keep], scale, _CI_CLIP_EPS)
     ci_high = _tr(curve.ci_high[keep], scale, _CI_CLIP_EPS)
@@ -402,16 +411,12 @@ def _draw_reliability(
     """Body of :func:`plot_reliability` on a given (styled) ``ax``; ``color``
     is the binned series' color (``plot_comparison`` uses before/after colors,
     so the legend matches the points)."""
+    keep, x = _drawable(curve.event_rate, curve.pred_mean, curve.pred_mean_logit, scale)
+    diag: Any = [0, 1]
     if scale == "logit":
-        keep = (curve.event_rate > 0.0) & (curve.event_rate < 1.0)
-        x = curve.pred_mean_logit[keep]
         anchor = x if len(x) else curve.pred_mean_logit[np.isfinite(curve.pred_mean_logit)]
         lo, hi = (anchor.min(), anchor.max()) if len(anchor) else _DEFAULT_LOGIT_SPAN
-        diag: Any = np.linspace(lo - 0.5, hi + 0.5, 50)
-    else:
-        keep = np.ones(len(curve.event_rate), dtype=bool)
-        x = curve.pred_mean
-        diag = [0, 1]
+        diag = np.linspace(lo - 0.5, hi + 0.5, 50)
     yv = _tr(curve.event_rate[keep], scale)
     ylo = _tr(curve.ci_low[keep], scale, _CI_CLIP_EPS)
     yhi = _tr(curve.ci_high[keep], scale, _CI_CLIP_EPS)
@@ -846,17 +851,15 @@ def plot_offset_audit(offset: Any, *, ax: Any = None) -> Any:
     _require_mpl()
     if not getattr(offset, "fitted_", False):
         raise RuntimeError("LogitOffset is not fitted; call fit() first")
-    lo_g = float(logit(np.array([0.001]))[0])
-    hi_g = float(logit(np.array([0.5]))[0])
-    t = np.linspace(lo_g, hi_g, 200)
-    lp = float(logit(np.array([offset.pre_mean_]))[0])
-    lq = float(logit(np.array([offset.post_mean_]))[0])
+    t = np.linspace(*_DEFAULT_LOGIT_SPAN, 200)
+    lp = logit1(offset.pre_mean_)
+    lq = logit1(offset.post_mean_)
     with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
         ax.plot(t, t, ls="--", c=_GREY, lw=1, label="identity")
         ax.plot(t, t + offset.delta_, c=_BLUE, lw=1.6, label="offset map")
         if offset.target_mean is not None:
-            ax.axhline(float(logit(np.array([offset.target_mean]))[0]), c=_GREY, lw=0.8, alpha=0.7)
+            ax.axhline(logit1(offset.target_mean), c=_GREY, lw=0.8, alpha=0.7)
         pre_xy = (lp, lp)
         post_xy = (lq - offset.delta_, lq)
         ax.scatter(*pre_xy, c=_RED, s=60, zorder=3, label="pre mean")
@@ -966,12 +969,7 @@ def _draw_grades_panel(ax: Any, steps: Any, x: np.ndarray) -> None:
     ax.tick_params(axis="x", labelbottom=False)
     palette = (_BLUE, _ORANGE, _GREEN, _RED, _AMBER)
     for i, g in enumerate(grade_names):
-        lo = np.array(
-            [s.grade_delta_ci[g][0] if s.grade_delta_ci.get(g) else np.nan for s in steps]
-        )
-        hi = np.array(
-            [s.grade_delta_ci[g][1] if s.grade_delta_ci.get(g) else np.nan for s in steps]
-        )
+        lo, hi = np.array([s.grade_delta_ci.get(g) or (np.nan, np.nan) for s in steps]).T
         color = palette[i % len(palette)]
         gax.fill_between(x, lo, hi, color=color, alpha=0.25, label=f"grade {g}")
     gax.axhline(0.0, color=_GREY, linewidth=0.8)

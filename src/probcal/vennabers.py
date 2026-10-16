@@ -131,18 +131,17 @@ class VennAbersCalibrator(BaseCalibrator):
     _STATE_ATTRS = ("scores_", "F0_", "F1_", "ties_pooled_")  # O(m) by design, documented
 
     def _set_state(self, state: dict[str, object]) -> None:
+        # Payloads written by probcal < 0.3.4 store ``_s``/``_y``/``_w`` and tables
+        # built without tie pooling.
         legacy = "_s" in state
         super()._set_state(migrate_state(state, {"_s": "scores_"}, drop=("_y", "_w")))
         if legacy:
             self.ties_pooled_ = False
-        # Lazy interval-width cache, rebuilt on demand.
-        self._widths_cache: tuple[float, float] | None = None
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         s_u, y_u, w_u = aggregate_ties(s, y, w)
         self.scores_ = s_u
         self.ties_pooled_ = True
-        self._widths_cache = None
         c = np.concatenate([[0.0], np.cumsum(w_u)])
         z = np.concatenate([[0.0], np.cumsum(w_u * y_u)])
         self.F0_ = _csd_sweep(c, z, 0.0)
@@ -184,11 +183,9 @@ class VennAbersCalibrator(BaseCalibrator):
     def interpret(self) -> Interpretation:
         """Report interval widths over the calibration scores — where to trust the map."""
         self._check_fitted()
-        if self._widths_cache is None:
-            intervals = self._interval(self.scores_)
-            widths = intervals[:, 1] - intervals[:, 0]
-            self._widths_cache = (float(widths.mean()), float(widths.max()))
-        mean_w, max_w = self._widths_cache
+        intervals = self._interval(self.scores_)
+        widths = intervals[:, 1] - intervals[:, 0]
+        mean_w, max_w = float(widths.mean()), float(widths.max())
         return Interpretation(
             method=type(self).__name__,
             param_names=("mean_width", "max_width"),
@@ -238,6 +235,7 @@ class CrossVennAbersCalibrator(BaseCalibrator):
         self.random_state = random_state
 
     def _set_state(self, state: dict[str, object]) -> None:
+        # Payloads written by probcal < 0.3.4 use ``_ivaps``.
         super()._set_state(migrate_state(state, {"_ivaps": "ivaps_"}))
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:

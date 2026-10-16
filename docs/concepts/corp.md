@@ -113,9 +113,7 @@ fitted `CalibratorSelector`'s `report_`. `SelectionReport` carries `mcb`, `dsc` 
 columns alongside `score_mean`/`score_sd`/`guardrails_ok`: one
 `corp_fit`/`decompose` call per candidate on its own out-of-fold predictions, decomposing
 Brier when the selection criterion is Brier and log loss otherwise (matching whichever
-score actually drove the ranking). A report saved by probcal < 0.3 (e.g. an old golden)
-loads with `mcb=dsc=unc=None`, and `plot_mcb_dsc` raises rather than plotting a plane with columns
-that were never computed.
+score actually drove the ranking).
 
 ## Coverage simulation
 
@@ -162,7 +160,7 @@ print(result.brier, result.brier_mcb, result.brier_dsc, result.brier_unc)
 ax = plot_corp(result, scale="logit")
 
 sel = CalibratorSelector(cv=4, random_state=42).fit(p, y)
-ax = plot_mcb_dsc(sel.report_)                       # mcb/dsc/unc columns, probcal >= 0.3
+ax = plot_mcb_dsc(sel.report_)                       # uses the mcb/dsc/unc columns
 ax = plot_mcb_dsc({"raw": (y, p), "recalibrated": (y, sel.predict_proba(p))})
 ```
 

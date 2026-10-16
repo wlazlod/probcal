@@ -13,8 +13,16 @@ import numpy as np
 
 from .._math import bern_log_lr, expit, logit, logsumexp
 from .._registry import register
+from .._results import _to_frame
 from .._serialize import JsonIO, check_payload, decode_value, encode_value, envelope
-from .._validation import validate_positive_int, validate_scores, validate_weights
+from .._validation import (
+    validate_binary_y,
+    validate_level,
+    validate_nonneg_int,
+    validate_positive_int,
+    validate_scores,
+    validate_weights,
+)
 from ._diagnostics import recommend
 from ._onset import estimate_onset
 from ._processes import (
@@ -29,16 +37,8 @@ _RECOMMENDATION_WINDOWS = ("since_onset", "trailing")
 
 _COMPONENTS = ("offset", "shape")
 
-
-def _validate_outcomes(y: object) -> np.ndarray:
-    """Binary outcomes; unlike fit-time validation, one-class batches are legal
-    (a quiet month can mature with zero events)."""
-    arr = np.asarray(y, dtype=np.float64)
-    if arr.ndim != 1:
-        raise ValueError(f"y must be a 1-D array, got shape {arr.shape}")
-    if not np.all((arr == 0.0) | (arr == 1.0)):
-        raise ValueError("y must contain only values in {0, 1}")
-    return arr
+# Constructor parameters held as tuples (JSON lists in the payload).
+_SEQUENCE_PARAMS = ("components", "grades", "mixture_grid", "delta_ci_grid")
 
 
 def grade_key(v: object) -> str:
@@ -149,18 +149,15 @@ class MonitorStep:
     grade_delta_ci : dict[str, tuple[float, float] | None]
         Per-grade time-uniform confidence sequence for that grade's own
         offset, same construction and grid as ``delta_ci`` (empty when no
-        grades were given; absent for steps loaded from a pre-0.3 payload).
-    log_e_increment : float or None
+        grades were given).
+    log_e_increment : float
         This batch's additive plug-in log-LR increment: the sum of the
         plug-in ``bern_log_lr`` contributions of the components in the
         alarm — offset and shape when monitored (0.0 when a plug-in is the
         identity), plus the declared grades' plug-ins. Unlike ``e_global``
         — a logsumexp mixture, not additive across batches — this is the purely additive series
         :func:`~probcal.monitor._onset.estimate_onset` localizes drift
-        onset from. Steps written by :meth:`CalibrationMonitor.update` always
-        carry a float; steps loaded from a pre-0.3 payload carry ``None``
-        (that payload records no increments), and a monitor holding any
-        such step reports no onset at all.
+        onset from.
     """
 
     label: str
@@ -175,8 +172,8 @@ class MonitorStep:
     delta_ci: tuple[float, float] | None
     delta_hat: float
     slope_hat: float
-    grade_delta_ci: dict[str, tuple[float, float] | None] = field(default_factory=dict)
-    log_e_increment: float | None = None
+    grade_delta_ci: dict[str, tuple[float, float] | None]
+    log_e_increment: float
 
 
 @dataclass(frozen=True)
@@ -203,8 +200,7 @@ class MonitorReport:
         Label of the batch :func:`~probcal.monitor._onset.estimate_onset`
         points to as the drift onset (backward-CUSUM argmax of
         ``MonitorStep.log_e_increment``); ``None`` unless ``alarm_at`` is
-        also set, and ``None`` as well when any step carries no increment
-        (a pre-0.3 payload). An estimate, not a test.
+        also set. An estimate, not a test.
     """
 
     steps: tuple[MonitorStep, ...]
@@ -217,12 +213,7 @@ class MonitorReport:
 
     def to_frame(self) -> object:
         """Steps as a list of dicts, or a pandas DataFrame when pandas is importable."""
-        rows = [asdict(s) for s in self.steps]
-        try:
-            import pandas as pd
-        except ImportError:
-            return rows
-        return pd.DataFrame(rows)
+        return _to_frame([asdict(s) for s in self.steps])
 
 
 @register
@@ -286,9 +277,7 @@ class CalibrationMonitor(JsonIO):
         diagnostic INPUTS and uses ``plug_in_window`` (or all past batches) instead,
         unconditionally. ``onset_label`` and the onset sentence in
         ``reasoning`` are populated under both modes — only the
-        diagnostic window differs. When onset is unavailable (any step
-        loaded from a pre-0.3 payload carries no increment), both modes
-        fall back to ``"trailing"`` and ``onset_label`` is ``None``.
+        diagnostic window differs.
 
     Attributes
     ----------
@@ -320,8 +309,7 @@ class CalibrationMonitor(JsonIO):
         *,
         recommendation_window: str = "since_onset",
     ) -> None:
-        if not 0.0 < alpha < 1.0:
-            raise ValueError(f"alpha must lie in (0, 1), got {alpha}")
+        validate_level(alpha, "alpha")
         unknown = [c for c in components if c not in _COMPONENTS]
         if unknown or not components:
             raise ValueError(
@@ -332,12 +320,7 @@ class CalibrationMonitor(JsonIO):
                 "recommendation_window must be one of "
                 f"{_RECOMMENDATION_WINDOWS}, got {recommendation_window!r}"
             )
-        if (
-            isinstance(min_history, bool)
-            or not isinstance(min_history, (int, np.integer))
-            or min_history < 0
-        ):
-            raise ValueError(f"min_history must be an integer >= 0, got {min_history!r}")
+        validate_nonneg_int(min_history, "min_history")
         if plug_in_window is not None:
             validate_positive_int(plug_in_window, "plug_in_window")
         mixture_grid = tuple(mixture_grid)
@@ -399,24 +382,11 @@ class CalibrationMonitor(JsonIO):
         self._grade_cs: dict[str, ConfidenceSequence] = {}
         self._max_log_global = -np.inf
         self._alarmed = False
-        # Never set (weights keep the guarantee exact); kept so payloads
-        # that carry the flag round-trip unchanged.
-        self._warned_weights = False
         self._warned_grades = False
         self.masterscale_fingerprint_: str | None = None
         # Fingerprint of the masterscale passed to the batch in progress;
         # recorded as masterscale_fingerprint_ only once that batch is accepted.
         self._pending_fingerprint: str | None = None
-
-    @property
-    def _cs_grid(self) -> np.ndarray:
-        """Offset nulls of the portfolio-level confidence sequence."""
-        return self._cs.grid
-
-    @property
-    def _cs_max(self) -> np.ndarray:
-        """Running maximum log-e per null of the portfolio-level CS."""
-        return self._cs.max
 
     def _trailing_start(self) -> int:
         """First batch index of the ``plug_in_window`` trailing window."""
@@ -461,7 +431,7 @@ class CalibrationMonitor(JsonIO):
         """
         return self._since(self._trailing_start(), grade, exponents=True)
 
-    def _recommendation_window_start(self, onset_idx: int | None) -> int:
+    def _recommendation_window_start(self, onset_idx: int) -> int:
         """Start index of the post-alarm diagnostic/action window.
 
         Shared by :meth:`report` (the trailing-window diagnostics) and
@@ -473,29 +443,13 @@ class CalibrationMonitor(JsonIO):
         ``plug_in_window`` still bounds how far back the since-onset window
         can reach. ``"trailing"``: the ``plug_in_window`` trailing start (or
         0, i.e. all history, when ``plug_in_window`` is ``None``) --
-        ``onset_idx`` is ignored. An
-        ``onset_idx`` of ``None`` (onset unavailable, see
-        :meth:`_onset_available`) takes the ``"trailing"`` branch whatever
-        ``recommendation_window`` says.
+        ``onset_idx`` is ignored.
         """
-        if self.recommendation_window == "since_onset" and onset_idx is not None:
+        if self.recommendation_window == "since_onset":
             return max(onset_idx, self._trailing_start())
         return self._trailing_start()
 
-    def _onset_available(self) -> bool:
-        """Whether every step carries a plug-in log-LR increment.
-
-        Steps loaded from a pre-0.3 payload carry ``log_e_increment =
-        None`` -- that payload simply does not record the series
-        :func:`~probcal.monitor._onset.estimate_onset` reads, and there is
-        no way to reconstruct it from the retained batches. Onset is then
-        unavailable and both :meth:`report` and
-        :meth:`apply_recommendation` fall back to the ``"trailing"``
-        window.
-        """
-        return all(s.log_e_increment is not None for s in self.steps_)
-
-    def _onset_index(self) -> int | None:
+    def _onset_index(self) -> int:
         """Backward-CUSUM argmax onset index, by index -- not by label.
 
         The estimate reads the increments up to and including the first
@@ -508,12 +462,9 @@ class CalibrationMonitor(JsonIO):
         Shared by :meth:`report` and :meth:`apply_recommendation` so the
         two never disagree about which batch onset points to (batch labels
         are opaque and may repeat, so a lookup by label could point at the
-        wrong index). Returns ``None`` when onset is unavailable
-        (:meth:`_onset_available`). Meaningful only once at least one batch
-        has been processed.
+        wrong index). Meaningful only once at least one batch has been
+        processed.
         """
-        if not self._onset_available():
-            return None
         end = next((i for i, s in enumerate(self.steps_) if s.alarm), len(self.steps_) - 1)
         increments = np.array([s.log_e_increment for s in self.steps_[: end + 1]], dtype=np.float64)
         return estimate_onset(increments)
@@ -607,9 +558,8 @@ class CalibrationMonitor(JsonIO):
             On an empty batch, mismatched lengths, invalid values, or a
             grade label outside the declared ``grades``.
         """
-        y_arr = _validate_outcomes(y)
-        if y_arr.size == 0:
-            raise ValueError("batch is empty: y and p must contain at least one observation")
+        # One-class batches are legal: a quiet month can mature with zero events.
+        y_arr = validate_binary_y(y, require_both_classes=False)
         p_arr = validate_scores(p, name="p")
         if len(y_arr) != len(p_arr):
             raise ValueError("y and p must have equal length")
@@ -728,29 +678,24 @@ class CalibrationMonitor(JsonIO):
         """Trajectory plus the diagnostic re-offset/re-fit recommendation."""
         alarm_at = next((s.label for s in self.steps_ if s.alarm), None)
         grade_table = dict(self.steps_[-1].e_grades) if self.steps_ else {}
-        if alarm_at is None:
-            return MonitorReport(
-                steps=tuple(self.steps_),
-                alarm_at=None,
-                recommendation="none",
-                reasoning=("no alarm: the global e-process never reached 1/alpha",),
+        onset_label = None
+        recommendation = "none"
+        reasoning: tuple[str, ...] = ("no alarm: the global e-process never reached 1/alpha",)
+        if alarm_at is not None:
+            onset_idx = self._onset_index()
+            onset_label = self.steps_[onset_idx].label
+            # Shared with apply_recommendation(), so the diagnostic window here
+            # and the action window there never disagree.
+            pz, py, pw = self._since(self._recommendation_window_start(onset_idx))
+            recommendation, reasoning = recommend(
+                pz,
+                py,
+                pw,
+                alarm_at=alarm_at,
+                e_shape=self.steps_[-1].e_shape,
                 alpha=self.alpha,
-                grade_table=grade_table,
+                onset_label=onset_label,
             )
-        onset_idx = self._onset_index()
-        onset_label = self.steps_[onset_idx].label if onset_idx is not None else None
-        # Shared with apply_recommendation(), so the diagnostic window here
-        # and the action window there never disagree.
-        pz, py, pw = self._since(self._recommendation_window_start(onset_idx))
-        recommendation, reasoning = recommend(
-            pz,
-            py,
-            pw,
-            alarm_at=alarm_at,
-            e_shape=self.steps_[-1].e_shape,
-            alpha=self.alpha,
-            onset_label=onset_label,
-        )
         return MonitorReport(
             steps=tuple(self.steps_),
             alarm_at=alarm_at,
@@ -767,8 +712,7 @@ class CalibrationMonitor(JsonIO):
         ``"re-offset"``: estimates the log-odds shift by maximum likelihood
         (:func:`~probcal.offset.estimate_offset`) on the batches of the
         recommendation window (the same window :meth:`report` uses for its
-        trailing-window diagnostics; the trailing one when onset is
-        unavailable), composes the fitted offset onto ``target`` (see
+        trailing-window diagnostics), composes the fitted offset onto ``target`` (see
         below), and returns a **fresh** monitor with the same constructor
         parameters (:meth:`_ctor_params`) to watch the corrected pipeline.
         The monitor is fresh, not continued: its e-process is a martingale
@@ -865,19 +809,13 @@ class CalibrationMonitor(JsonIO):
     def to_dict(self) -> dict[str, object]:
         """Versioned snapshot; the state includes every past batch — that is
         what makes each decision reproducible (spec invariant)."""
-        p = self._ctor_params()
+        params = self._ctor_params()
+        for k in _SEQUENCE_PARAMS:
+            if params[k] is not None:
+                params[k] = list(params[k])
         return envelope(
             self,
-            params={
-                "alpha": p["alpha"],
-                "components": list(p["components"]),
-                "grades": list(p["grades"]) if p["grades"] is not None else None,
-                "mixture_grid": list(p["mixture_grid"]),
-                "delta_ci_grid": list(p["delta_ci_grid"]),
-                "min_history": p["min_history"],
-                "plug_in_window": p["plug_in_window"],
-                "recommendation_window": p["recommendation_window"],
-            },
+            params=params,
             state=encode_value(self._state_dict()),
             fit_meta={
                 "n_batches": len(self._z),
@@ -900,7 +838,9 @@ class CalibrationMonitor(JsonIO):
             "grade_cs_max": {g: cs.max.tolist() for g, cs in self._grade_cs.items()},
             "max_log_global": float(self._max_log_global),
             "alarmed": self._alarmed,
-            "warned_weights": self._warned_weights,
+            # Constant: weights never warn (the guarantee is exact), but
+            # 0.3.x readers require the key.
+            "warned_weights": False,
             "steps": [self._step_to_dict(s) for s in self.steps_],
         }
         if self._warned_grades:  # written only when set: payloads without the flag keep their bytes
@@ -922,7 +862,7 @@ class CalibrationMonitor(JsonIO):
     def from_dict(cls, d: dict) -> "CalibrationMonitor":
         """Rebuild a monitor mid-stream; the trajectory continues bit-for-bit.
 
-        Payloads written by probcal < 0.3.4 key float grade labels as
+        Payloads written by probcal 0.3.0-0.3.3 key float grade labels as
         ``"1.0"``; those keys are renamed to the normalized ``"1"`` on load
         so new batches continue the same per-grade processes.
 
@@ -933,11 +873,9 @@ class CalibrationMonitor(JsonIO):
         """
         check_payload(cls, d)
         params = dict(d["params"])
-        params["components"] = tuple(params["components"])
-        params["grades"] = tuple(params["grades"]) if params["grades"] is not None else None
-        params["mixture_grid"] = tuple(params["mixture_grid"])
-        params["delta_ci_grid"] = tuple(params["delta_ci_grid"])
-        params["recommendation_window"] = params.get("recommendation_window", "since_onset")
+        for k in _SEQUENCE_PARAMS:
+            if params[k] is not None:
+                params[k] = tuple(params[k])
         mon = cls(**params)
         st: dict[str, Any] = decode_value(d["state"], arrays=False)  # type: ignore[assignment]
         rekey = _legacy_rekey(d, params["grades"])
@@ -955,16 +893,13 @@ class CalibrationMonitor(JsonIO):
             proc.set_state(ps)
             mon._grade_procs[rekey(g)] = proc
         mon._cs.set_state(st["cs_log"], st["cs_max"])
-        grade_cs_log = st.get("grade_cs_log", {})
-        grade_cs_max = st.get("grade_cs_max", {})
         mon._grade_cs = {}
-        for g in grade_cs_log:
+        for g, log in st["grade_cs_log"].items():
             cs = ConfidenceSequence(mon._cs.grid)
-            cs.set_state(grade_cs_log[g], grade_cs_max[g])
+            cs.set_state(log, st["grade_cs_max"][g])
             mon._grade_cs[rekey(g)] = cs
         mon._max_log_global = float(st["max_log_global"])
         mon._alarmed = bool(st["alarmed"])
-        mon._warned_weights = bool(st["warned_weights"])
         mon._warned_grades = bool(st.get("warned_grades", False))
         mon.masterscale_fingerprint_ = st.get("masterscale_fingerprint")
         mon.steps_ = []
@@ -974,7 +909,7 @@ class CalibrationMonitor(JsonIO):
             sd["e_grades"] = {rekey(g): v for g, v in sd["e_grades"].items()}
             sd["grade_delta_ci"] = {
                 rekey(g): (tuple(v) if v is not None else None)
-                for g, v in sd.get("grade_delta_ci", {}).items()
+                for g, v in sd["grade_delta_ci"].items()
             }
             mon.steps_.append(MonitorStep(**sd))
         return mon
@@ -983,7 +918,7 @@ class CalibrationMonitor(JsonIO):
 def _legacy_rekey(d: dict, grades: tuple | None) -> Any:
     """Key renaming for payloads written before grade-label normalization.
 
-    Payloads written by probcal < 0.3.4 key declared grades ``str(g)`` and
+    Payloads written by probcal 0.3.0-0.3.3 key declared grades ``str(g)`` and
     data labels ``np.asarray(grade).astype(str)``, so a float label ``1.0``
     is keyed ``"1.0"``. For such payloads, keys of declared grades map to
     :func:`grade_key`, and undeclared ``"<int>.0"`` keys (float arrays) map

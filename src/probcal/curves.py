@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ._corp import corp_bands, corp_fit, decompose
-from ._math import chi2_ppf, chi2_sf, expit, irls_logistic, loess, logit
+from ._math import bern_loglik, chi2_ppf, chi2_sf, expit, irls_logistic, loess, logit
 from ._results import (
     BeltResult,
     CorpResult,
@@ -27,11 +27,16 @@ from ._results import (
     SmoothReliabilityCurve,
     _ResultBase,
 )
-from ._validation import EPS, validate_positive_int
+from ._validation import validate_level, validate_nonneg_int, validate_positive_int
 from .metrics._binstats import bin_stats
-from .metrics._common import _prep, is_uniform, rao_scott
-from .metrics._deprecation import UNSET, renamed_kwarg
-from .metrics.smooth import _ecce_walk, _lattice_kernel_smooth, _smece_solve
+from .metrics._common import _prep, gram, is_uniform, rao_scott
+from .metrics.smooth import (
+    Lattice,
+    _ecce_walk,
+    _lattice_index,
+    _lattice_kernel_smooth,
+    _smece_solve,
+)
 
 _Z_95 = 1.959963984540054
 
@@ -209,7 +214,7 @@ def _kernel_rate_density(
     w: np.ndarray,
     sigma: float,
     grid_logit: np.ndarray,
-    lattice: tuple[float, float, int] | None,
+    lattice: Lattice | None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Evaluate the Nadaraya-Watson kernel rate/density at ``sigma`` on
     ``grid_logit``, sharing the smECE lattice and kernel when available.
@@ -222,7 +227,7 @@ def _kernel_rate_density(
     """
     if lattice is not None:
         width, t_lo, b = lattice
-        idx = np.clip(((t - t_lo) / width).astype(np.int64), 0, b - 1)
+        idx = _lattice_index(t, t_lo, width, b)
         num = np.bincount(idx, weights=w * y, minlength=b)
         den = np.bincount(idx, weights=w, minlength=b)
         centers, num_s = _lattice_kernel_smooth(num, width, sigma, t_lo)
@@ -264,13 +269,12 @@ def reliability_smooth(
     confidence: float = 0.9,
     random_state: int = 42,
     bins: int | None = 8192,
-    level: object = UNSET,
 ) -> KernelReliabilityCurve:
     """smECE-consistent kernel reliability curve (Blasiok-Nakkiran).
 
     Shares its bandwidth and lattice with ``metrics.smooth_ece``: both solve
     the same fixed point ``sigma_star`` on the same equal-width logit
-    lattice (``metrics.smooth._lattice`` / ``_smece_solve``), so
+    lattice (``metrics.smooth._smece_solve``), so
     ``curve.smooth_ece`` reproduces ``metrics.smooth_ece(y, p, bins=bins)``
     exactly instead of merely agreeing with it. The event rate and
     prediction density are then Nadaraya-Watson kernel estimates at that one
@@ -318,8 +322,6 @@ def reliability_smooth(
     bins : int or None, keyword-only
         Lattice bin count passed through to the shared smECE solve; see
         ``metrics.smooth_ece``. ``None`` forces the exact path.
-    level : float, keyword-only
-        Deprecated spelling of ``confidence`` (removed in 0.4.0).
 
     Returns
     -------
@@ -344,19 +346,14 @@ def reliability_smooth(
     >>> abs(float(curve.density.sum()) - 1.0) < 1e-10
     True
     """
-    conf = float(renamed_kwarg("reliability_smooth", "level", "confidence", level, confidence, 0.9))  # type: ignore[arg-type]
-    if not (0.0 < conf < 1.0):
-        raise ValueError("confidence must satisfy 0 < confidence < 1")
-    n_boot = int(n_boot)
-    if n_boot < 0:
-        raise ValueError(f"n_boot must be >= 0, got {n_boot}")
+    conf = validate_level(confidence, "confidence")
+    n_boot = validate_nonneg_int(n_boot, "n_boot")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     grid_p = _grid(p_arr, grid_size)
     grid_logit = logit(grid_p)
     t = logit(p_arr)
     mass = (w / w.sum()) * (y_arr - p_arr)
-    smooth_ece_value, sigma_star, m, width, t_lo, b = _smece_solve(t, mass, bins)
-    lattice = None if m is None or b is None else (width, t_lo, b)
+    smooth_ece_value, sigma_star, lattice = _smece_solve(t, mass, bins)
 
     event_rate, density = _kernel_rate_density(t, y_arr, w, sigma_star, grid_logit, lattice)
 
@@ -411,7 +408,6 @@ def corp_reliability(
     confidence: float = 0.9,
     n_resamples: int = 200,
     random_state: int = 42,
-    level: object = UNSET,
 ) -> CorpResult:
     """CORP reliability diagram with the Brier/log-loss MCB-DSC-UNC decomposition.
 
@@ -443,8 +439,6 @@ def corp_reliability(
         ``bands=None``).
     random_state : int, keyword-only
         Seed for ``numpy.random.default_rng``, used by the band resampling.
-    level : float, keyword-only
-        Deprecated spelling of ``confidence`` (removed in 0.4.0).
 
     Returns
     -------
@@ -481,11 +475,8 @@ def corp_reliability(
     """
     if bands not in _BANDS:
         raise ValueError('bands must be "consistency", "confidence", or None')
-    conf = float(renamed_kwarg("corp_reliability", "level", "confidence", level, confidence, 0.9))  # type: ignore[arg-type]
-    if not (0.0 < conf < 1.0):
-        raise ValueError("confidence must satisfy 0 < confidence < 1")
-    if n_resamples < 0:
-        raise ValueError("n_resamples must be >= 0")
+    conf = validate_level(confidence, "confidence")
+    n_resamples = validate_nonneg_int(n_resamples, "n_resamples")
     if n_resamples == 0:
         bands = None
     y_arr, p_arr, w = _prep(y, p, sample_weight)
@@ -585,24 +576,6 @@ def ecce_curve(y: object, p: object, *, sample_weight: object = None) -> EcceCur
     )
 
 
-def _belt_result(
-    grid_p: np.ndarray,
-    grid_z: np.ndarray,
-    levels: tuple[float, float],
-    bands: dict[float, tuple[np.ndarray, np.ndarray]],
-    degree: int,
-    p_value: float,
-) -> BeltResult:
-    return BeltResult(
-        grid_p=grid_p,
-        grid_logit=grid_z,
-        levels=levels,
-        bands=bands,
-        degree=degree,
-        p_value=p_value,
-    )
-
-
 def calibration_belt(
     y: object,
     p: object,
@@ -661,11 +634,9 @@ def calibration_belt(
     Returns
     -------
     BeltResult
-        Grid coordinates, both confidence bands, selected polynomial degree,
-        and the associated calibration-test p-value. The band for
-        ``confidence[0]`` is stored in ``lower_80``/``upper_80`` and the band
-        for ``confidence[1]`` in ``lower_95``/``upper_95`` whatever the
-        levels are (the names follow the defaults).
+        Grid coordinates, the band ``bands[level] = (lower, upper)`` for
+        each of the two ``levels``, the selected polynomial degree, and the
+        associated calibration-test p-value.
     """
     levels = tuple(float(c) for c in confidence)
     if len(levels) != 2 or not all(0.0 < c < 1.0 for c in levels):
@@ -686,22 +657,16 @@ def calibration_belt(
         t = (zz - centre) / spread
         return np.column_stack([t**k for k in range(deg + 1)])
 
-    def loglik(prob: np.ndarray) -> float:
-        prob = np.clip(prob, EPS, 1.0 - EPS)
-        return float(np.sum(w * (y_arr * np.log(prob) + (1.0 - y_arr) * np.log1p(-prob))))
-
     def information_inv(X: np.ndarray, mu: np.ndarray) -> np.ndarray:
         """Inverse of the (ridged) model-based information."""
-        info = (X * (w * mu * (1.0 - mu))[:, None]).T @ X
-        return np.linalg.inv(info + 1e-10 * np.eye(X.shape[1]))
+        return np.linalg.inv(gram(X, w * mu * (1.0 - mu)) + 1e-10 * np.eye(X.shape[1]))
 
     def covariance(X: np.ndarray, mu: np.ndarray) -> np.ndarray:
         """Coefficient covariance: ``I**-1`` scaled to unit weights, or the sandwich."""
         info_inv = information_inv(X, mu)
         if uniform:
             return info_inv * float(w[0])
-        meat = (X * (w * w * mu * (1.0 - mu))[:, None]).T @ X
-        return info_inv @ meat @ info_inv
+        return info_inv @ gram(X, w * w * mu * (1.0 - mu)) @ info_inv
 
     def step_stat(lr: float, X: np.ndarray, mu: np.ndarray) -> float:
         """1-df LR statistic for the last column, divided by its design effect."""
@@ -715,14 +680,14 @@ def calibration_belt(
     # never a basis for extension.
     degree = 1
     fit = irls_logistic(design(1, z), y_arr, w=w)
-    ll = loglik(expit(design(1, z) @ fit.beta))
+    ll = bern_loglik(y_arr, expit(design(1, z) @ fit.beta), w)
     while degree < 4 and not fit.separation:
         X_cand = design(degree + 1, z)
         cand = irls_logistic(X_cand, y_arr, w=w)
         if cand.separation:
             break
         mu_cand = expit(X_cand @ cand.beta)
-        ll_cand = loglik(mu_cand)
+        ll_cand = bern_loglik(y_arr, mu_cand, w)
         if chi2_sf(step_stat(max(2.0 * (ll_cand - ll), 0.0), X_cand, mu_cand), 1.0) >= 0.05:
             break
         degree += 1
@@ -731,7 +696,7 @@ def calibration_belt(
     # Associated calibration test: fitted polynomial vs the identity map.
     df = degree + 1
     X = design(degree, z)
-    stat, df_rs = rao_scott(max(2.0 * (ll - loglik(p_arr)), 0.0), X, p_arr, w)
+    stat, df_rs = rao_scott(max(2.0 * (ll - bern_loglik(y_arr, p_arr, w)), 0.0), X, p_arr, w)
     p_value = chi2_sf(stat, df_rs)
 
     # Bands from the (sandwich) covariance ellipsoid.
@@ -746,4 +711,11 @@ def calibration_belt(
     for conf in levels:
         radius = np.sqrt(chi2_ppf(conf, float(df)) * se_sq)
         bands[conf] = (expit(eta - radius), expit(eta + radius))
-    return _belt_result(grid_p, grid_z, (levels[0], levels[1]), bands, degree, p_value)
+    return BeltResult(
+        grid_p=grid_p,
+        grid_logit=grid_z,
+        levels=(levels[0], levels[1]),
+        bands=bands,
+        degree=degree,
+        p_value=p_value,
+    )

@@ -6,9 +6,7 @@ import pytest
 from probcal._math import expit
 from probcal.datasets import make_pd_portfolio
 from probcal.metrics import (
-    _METRIC_CATALOG,
     ReliabilitySummary,
-    _point_metrics,
     calibration_intercept,
     calibration_slope,
     e90,
@@ -18,6 +16,7 @@ from probcal.metrics import (
     reliability_summary,
     spiegelhalter_z,
 )
+from probcal.metrics._evaluate import _METRIC_CATALOG, _point_metrics
 
 RNG = np.random.default_rng(73)
 
@@ -207,13 +206,3 @@ def test_evaluate_n_boot_zero_gives_point_estimates_only() -> None:
     assert np.all(np.isnan(rep.ci_low)) and np.all(np.isnan(rep.ci_high))
     full = evaluate(y, p, n_boot=5, metrics=("brier", "ece"))
     np.testing.assert_array_equal(rep.values, full.values)
-
-
-def test_evaluate_seed_keyword_deprecated() -> None:
-    y, p = _calibrated(300)
-    with pytest.warns(DeprecationWarning, match="random_state"):
-        old = evaluate(y, p, n_boot=10, seed=4, metrics=("brier",))
-    new = evaluate(y, p, n_boot=10, random_state=4, metrics=("brier",))
-    np.testing.assert_array_equal(old.ci_low, new.ci_low)
-    with pytest.raises(TypeError, match="only random_state"):
-        evaluate(y, p, n_boot=10, seed=4, random_state=5)

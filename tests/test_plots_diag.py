@@ -70,13 +70,6 @@ def test_plot_mcb_dsc_places_one_point_per_candidate():
     assert ax2.collections[0].get_offsets().shape[0] == len(sel.report_.methods)
     plt.close("all")
 
-    # SelectionReport without mcb/dsc (pre-0.3 report) raises.
-    import dataclasses
-
-    stale = dataclasses.replace(sel.report_, mcb=None, dsc=None, unc=None)
-    with pytest.raises(ValueError, match="report has no mcb/dsc columns"):
-        plot_mcb_dsc(stale)
-
 
 def test_plot_attributes_reference_lines_and_both_methods():
 

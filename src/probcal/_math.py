@@ -98,6 +98,16 @@ def exponent_weights(w: np.ndarray) -> np.ndarray:
     return np.minimum(1.0, w / np.mean(w))
 
 
+def bern_loglik(y: np.ndarray, q: np.ndarray, w: np.ndarray) -> float:
+    """Weighted Bernoulli log-likelihood ``sum(w (y log q + (1 - y) log(1 - q)))``.
+
+    ``q`` is clipped to ``[EPS, 1 - EPS]`` so outcomes at a forecast of 0 or 1
+    stay finite.
+    """
+    q = np.clip(q, EPS, 1.0 - EPS)
+    return float(np.sum(w * (y * np.log(q) + (1.0 - y) * np.log1p(-q))))
+
+
 def bern_log_lr(y: np.ndarray, p_null: np.ndarray, q_alt: np.ndarray, w: np.ndarray) -> float:
     """Weighted log Bernoulli likelihood ratio of ``q_alt`` against ``p_null``."""
     q = np.clip(q_alt, EPS, 1.0 - EPS)
@@ -167,12 +177,23 @@ def bisect(
 # ------------------------------------------------------------------ special functions
 
 _lgamma_ufunc = np.frompyfunc(math.lgamma, 1, 1)
-_erfc_ufunc = np.frompyfunc(math.erfc, 1, 1)
 
 
 def lgamma_vec(x: object) -> np.ndarray:
     """Vectorized ``math.lgamma`` cast to float64."""
     return np.asarray(_lgamma_ufunc(np.asarray(x, dtype=np.float64)), dtype=np.float64)
+
+
+def _lentz_step(an: float, bn: float, c: float, d: float) -> tuple[float, float, float]:
+    """One modified-Lentz update for the term ``an / (bn + ...)``: new ``(c, d, delta)``."""
+    d = bn + an * d
+    if abs(d) < _FPMIN:
+        d = _FPMIN
+    c = bn + an / c
+    if abs(c) < _FPMIN:
+        c = _FPMIN
+    d = 1.0 / d
+    return c, d, d * c
 
 
 def _betacf(a: float, b: float, x: float) -> float:
@@ -186,24 +207,9 @@ def _betacf(a: float, b: float, x: float) -> float:
     h = d
     for m in range(1, _CF_MAX_ITER + 1):
         m2 = 2 * m
-        aa = m * (b - m) * x / ((qam + m2) * (a + m2))
-        d = 1.0 + aa * d
-        if abs(d) < _FPMIN:
-            d = _FPMIN
-        c = 1.0 + aa / c
-        if abs(c) < _FPMIN:
-            c = _FPMIN
-        d = 1.0 / d
-        h *= d * c
-        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
-        d = 1.0 + aa * d
-        if abs(d) < _FPMIN:
-            d = _FPMIN
-        c = 1.0 + aa / c
-        if abs(c) < _FPMIN:
-            c = _FPMIN
-        d = 1.0 / d
-        delta = d * c
+        c, d, delta = _lentz_step(m * (b - m) * x / ((qam + m2) * (a + m2)), 1.0, c, d)
+        h *= delta
+        c, d, delta = _lentz_step(-(a + m) * (qab + m) * x / ((a + m2) * (qap + m2)), 1.0, c, d)
         h *= delta
         if abs(delta - 1.0) < _CF_EPS:
             break
@@ -277,16 +283,8 @@ def _gammainc_pq_scalar(s: float, x: float) -> tuple[float, float]:
     d = 1.0 / b0
     h = d
     for i in range(1, _CF_MAX_ITER + 1):
-        an = -i * (i - s)
         b0 += 2.0
-        d = an * d + b0
-        if abs(d) < _FPMIN:
-            d = _FPMIN
-        c = b0 + an / c
-        if abs(c) < _FPMIN:
-            c = _FPMIN
-        d = 1.0 / d
-        delta = d * c
+        c, d, delta = _lentz_step(-i * (i - s), b0, c, d)
         h *= delta
         if abs(delta - 1.0) < _CF_EPS:
             break
@@ -294,37 +292,8 @@ def _gammainc_pq_scalar(s: float, x: float) -> tuple[float, float]:
     return 1.0 - q, q
 
 
-def _gammainc_lower_scalar(s: float, x: float) -> float:
-    return _gammainc_pq_scalar(s, x)[0]
-
-
-def gammainc_lower(s: float, x: object) -> np.ndarray:
-    """Regularized lower incomplete gamma function ``P(s, x)``.
-
-    Series representation for ``x < s + 1``, Lentz continued fraction for the
-    complement otherwise. Gives the chi-square CDF as
-    ``chi2_cdf(x, df) = P(df / 2, x / 2)``.
-
-    Parameters
-    ----------
-    s : float
-        Positive shape parameter.
-    x : array_like
-        Non-negative evaluation points.
-
-    Returns
-    -------
-    numpy.ndarray
-        ``P(s, x)`` elementwise.
-    """
-    arr = np.asarray(x, dtype=np.float64)
-    flat = arr.reshape(-1)
-    out = np.array([_gammainc_lower_scalar(float(s), float(v)) for v in flat])
-    return out.reshape(arr.shape)
-
-
 def chi2_ppf(q: float, df: float) -> float:
-    """Chi-square quantile function via bisection on :func:`gammainc_lower`.
+    """Chi-square quantile function via bisection on the regularized ``P(df/2, x/2)``.
 
     Parameters
     ----------
@@ -340,10 +309,14 @@ def chi2_ppf(q: float, df: float) -> float:
     """
     if not 0.0 < q < 1.0:
         raise ValueError("chi2_ppf: q must lie in (0, 1)")
+
+    def cdf(x: float) -> float:
+        return _gammainc_pq_scalar(df / 2.0, x / 2.0)[0]
+
     hi = df + 10.0 * math.sqrt(2.0 * df) + 10.0
-    while float(gammainc_lower(df / 2.0, hi / 2.0)) < q:
+    while cdf(hi) < q:
         hi *= 2.0
-    return bisect(lambda x: float(gammainc_lower(df / 2.0, x / 2.0)) - q, 0.0, hi, tol=1e-12)
+    return bisect(lambda x: cdf(x) - q, 0.0, hi, tol=1e-12)
 
 
 def chi2_sf(x: float, df: float) -> float:
@@ -385,26 +358,6 @@ def beta_ppf(q: float, a: float, b: float) -> float:
     if not 0.0 < q < 1.0:
         raise ValueError("beta_ppf: q must lie in (0, 1)")
     return bisect(lambda x: float(betainc(a, b, x)) - q, 0.0, 1.0, tol=1e-12)
-
-
-def norm_cdf(x: object) -> np.ndarray:
-    """Standard normal CDF via the complementary error function.
-
-    ``erfc`` is used instead of ``erf`` for relative accuracy in the tails
-    (a deliberate deviation from the literal spec wording).
-
-    Parameters
-    ----------
-    x : array_like
-        Evaluation points.
-
-    Returns
-    -------
-    numpy.ndarray
-        ``Phi(x)`` elementwise.
-    """
-    arr = np.asarray(x, dtype=np.float64)
-    return 0.5 * np.asarray(_erfc_ufunc(-arr / math.sqrt(2.0)), dtype=np.float64)
 
 
 def norm_sf(x: float) -> float:
@@ -462,12 +415,9 @@ def pava(y: object, w: object) -> PavaResult:
             weight[k - 1] = total
             k -= 1
     n_blocks = k + 1
-    fitted = np.empty(n, dtype=np.float64)
-    for j in range(n_blocks):
-        end = start[j + 1] if j + 1 < n_blocks else n
-        fitted[start[j] : end] = mean[j]
+    sizes = np.diff(np.append(start[:n_blocks], n))
     return PavaResult(
-        fitted=fitted,
+        fitted=np.repeat(mean[:n_blocks], sizes),
         block_start=start[:n_blocks].copy(),
         block_mean=mean[:n_blocks].copy(),
         block_weight=weight[:n_blocks].copy(),
@@ -877,16 +827,15 @@ def loess(
         anchors = np.unique(np.quantile(ev, np.linspace(0.0, 1.0, grid_size)))
         return np.interp(ev, anchors, _loess_fit_sorted_vec(xs, ys, anchors, r, degree))
     if xeval is None:
-        fit = _loess_fit_sorted_vec(xs, ys, xs, r, degree)
-        if order is None:
-            return fit
-        out = np.empty_like(fit)
-        out[order] = fit
+        ev_order, evs = order, xs
     else:
         ev_order = np.argsort(ev, kind="stable")
-        fit = _loess_fit_sorted_vec(xs, ys, ev[ev_order], r, degree)
-        out = np.empty_like(fit)
-        out[ev_order] = fit
+        evs = ev[ev_order]
+    fit = _loess_fit_sorted_vec(xs, ys, evs, r, degree)
+    if ev_order is None:
+        return fit
+    out = np.empty_like(fit)
+    out[ev_order] = fit
     return out
 
 

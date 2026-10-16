@@ -1,7 +1,8 @@
 """Delegation of the probcal calibrator protocol to a fitted inner calibrator.
 
 sklearn-free on purpose (it lives outside ``probcal.sklearn``, whose import
-requires scikit-learn): shared by the sklearn adapters and by
+requires scikit-learn): shared by ``CalibratedModel``, ``CalibratorSelector``,
+the sklearn adapters and
 ``probcal.integrations.optbinning.CalibratedScorecard``.
 """
 

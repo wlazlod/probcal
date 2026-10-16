@@ -4,4 +4,5 @@ Both are listed in the changelog with the reasoning and keep an escape hatch
 where the old behaviour had legitimate uses. A deprecated symbol warns with a
 `DeprecationWarning` for at least one minor release before removal, naming its
 replacement. Serialized artifacts carry a stronger promise: every 0.x release
-reads schema 1, pinned by golden files in CI.
+reads the schema-1 payloads written by probcal 0.3.0 or later, pinned by
+golden files in CI.

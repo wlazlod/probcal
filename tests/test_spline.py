@@ -116,3 +116,18 @@ def test_spline_reports_convergence_and_final_edof() -> None:
     bwb = (basis * (mu * (1 - mu))[:, None]).T @ basis
     hess = bwb + cal.lambda_ * _second_difference_penalty(basis.shape[1])
     np.testing.assert_allclose(cal.edof_, np.trace(np.linalg.solve(hess, bwb)), rtol=1e-12)
+
+
+def test_spline_payload_without_converged_flag_loads_and_resaves() -> None:
+    # Payloads written by probcal < 0.3.4 use ``_knots``/``_theta`` and have no
+    # ``converged_``; they load as converged and serialize again.
+    cal = SplineCalibrator().fit(*_identity_sample(2000))
+    d = cal.to_dict()
+    state = dict(d["state"])
+    state["_knots"] = state.pop("knots_")
+    state["_theta"] = state.pop("theta_")
+    del state["converged_"]
+    old = SplineCalibrator.from_dict({**d, "state": state})
+    assert old.converged_ is True
+    np.testing.assert_array_equal(old.predict_proba(GRID), cal.predict_proba(GRID))
+    assert old.to_dict()["state"] == d["state"]

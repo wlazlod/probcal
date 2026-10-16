@@ -27,7 +27,8 @@ from ._plots_common import (
 )
 from ._results import CorpResult, SelectionReport
 from .curves import corp_reliability, reliability_binned
-from .metrics.scores import MurphyCurve, _prep, murphy_curve
+from .metrics._common import _prep
+from .metrics.scores import MurphyCurve, murphy_curve
 
 
 def plot_corp(
@@ -151,9 +152,9 @@ def plot_mcb_dsc(
         mean to ``1e-12`` (UNC, and therefore the iso-score diagonals, is
         only shared across candidates when it is) — or a fitted
         :class:`probcal.selection.CalibratorSelector`'s ``report_``, whose
-        ``mcb``/``dsc``/``unc`` columns (probcal >= 0.3) are plotted
-        directly; ``score`` is then informational only, since the report
-        already fixed Brier vs. log loss at selection time.
+        ``mcb``/``dsc``/``unc`` columns are plotted directly; ``score`` is
+        then informational only, since the report already fixed Brier vs.
+        log loss at selection time.
     score : {"brier", "log_loss"}, keyword-only
         Which CORP decomposition to plot for a mapping input.
     ax : matplotlib.axes.Axes or None, keyword-only
@@ -167,9 +168,7 @@ def plot_mcb_dsc(
     Raises
     ------
     ValueError
-        If ``score`` is not ``"brier"`` or ``"log_loss"``; if a
-        ``SelectionReport`` is given without ``mcb``/``dsc`` columns
-        (as in one loaded from a payload written by probcal < 0.3); if a
+        If ``score`` is not ``"brier"`` or ``"log_loss"``, or if a
         mapping's candidates do not share the same weighted mean ``y``.
 
     Examples
@@ -187,8 +186,6 @@ def plot_mcb_dsc(
         raise ValueError('score must be "brier" or "log_loss"')
 
     if isinstance(candidates, SelectionReport):
-        if candidates.mcb is None or candidates.dsc is None or candidates.unc is None:
-            raise ValueError("report has no mcb/dsc columns; refit with probcal>=0.3")
         names = list(candidates.methods)
         mcb = np.asarray(candidates.mcb, dtype=np.float64)
         dsc = np.asarray(candidates.dsc, dtype=np.float64)
@@ -211,9 +208,9 @@ def plot_mcb_dsc(
                     "(UNC would differ across candidates)"
                 )
             r = corp_reliability(y_arr, p_arr, sample_weight=w_arr, bands=None)
-            mcb[i] = r.brier_mcb if score == "brier" else r.log_loss_mcb
-            dsc[i] = r.brier_dsc if score == "brier" else r.log_loss_dsc
-            unc = r.brier_unc if score == "brier" else r.log_loss_unc
+            mcb[i] = getattr(r, f"{score}_mcb")
+            dsc[i] = getattr(r, f"{score}_dsc")
+            unc = getattr(r, f"{score}_unc")
 
     mean_score = mcb - dsc + unc
 
@@ -439,11 +436,9 @@ def plot_murphy(
         if len(y_a) != len(y_b):
             raise ValueError("diff=True needs paired (y, p) of equal length")
 
-        theta = murphy_curve(y_a, p_a).thresholds
-        delta = (
-            murphy_curve(y_a, p_a, thresholds=theta).score
-            - murphy_curve(y_b, p_b, thresholds=theta).score
-        )
+        curve_a = murphy_curve(y_a, p_a)
+        theta = curve_a.thresholds
+        delta = curve_a.score - murphy_curve(y_b, p_b, thresholds=theta).score
         rng = np.random.default_rng(random_state)
         n = len(y_a)
         boot = np.empty((n_boot, len(theta)))

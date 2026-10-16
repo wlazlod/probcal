@@ -10,6 +10,7 @@ the fitted logistic regression's log-odds unless ``rounding=True``.
 import hashlib
 import math
 import warnings
+from typing import cast
 
 import numpy as np
 
@@ -24,7 +25,8 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
 from .._math import logit
 from .._protocol import CalibratorProtocolMixin
 from .._serialize import JsonIO, canonical_json, check_payload, encode_value, envelope, sha256_hex
-from ..base import BaseCalibrator
+from ..base import BaseCalibrator, clone_unfitted
+from ..masterscale import Masterscale
 from ..parametric import BetaCalibrator
 from ..thresholds import calibrated_bands_to_raw
 
@@ -160,7 +162,7 @@ class CalibratedScorecard(JsonIO, CalibratorProtocolMixin):
             )
         a_pts, b_pts = self.points_affine_coeffs_
         bands_d: dict[str, tuple[float, float]] = (
-            bands.bands if hasattr(bands, "bands") else bands  # type: ignore[attr-defined,assignment]
+            bands.bands if isinstance(bands, Masterscale) else bands  # type: ignore[assignment]
         )
         raw = calibrated_bands_to_raw(self.calibrator_, bands_d, space="logit")
         out: dict[str, tuple[float, float]] = {}
@@ -224,14 +226,14 @@ class CalibratedScorecard(JsonIO, CalibratorProtocolMixin):
 
         check_payload(cls, d)
         state = d["state"]
-        coeffs = state.get("points_affine_coeffs")
+        coeffs = state["points_affine_coeffs"]
         obj = cls(
             scorecard,
             load(state["calibrator"]),  # type: ignore[arg-type]
             tuple(coeffs) if coeffs is not None else None,  # type: ignore[arg-type]
         )
-        stored = state.get("scorecard_fingerprint")
-        if stored is not None and obj.scorecard_fingerprint() != stored:
+        stored = state["scorecard_fingerprint"]
+        if obj.scorecard_fingerprint() != stored:
             table = scorecard.table(style="detailed")  # type: ignore[attr-defined]
             if _legacy_table_fingerprint(table) != stored:
                 raise ValueError(
@@ -288,7 +290,7 @@ def calibrate_scorecard(
         ``rounding=True`` breaks affinity).
     """
     proto = calibrator if calibrator is not None else BetaCalibrator()
-    cal = type(proto)(**proto.get_params())
+    cal = cast(BaseCalibrator, clone_unfitted(proto))
     p_model = np.asarray(scorecard.predict_proba(X_cal))[:, 1]  # type: ignore[attr-defined]
     cal.fit(p_model, y_cal, sample_weight=sample_weight)
 

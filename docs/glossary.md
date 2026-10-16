@@ -112,7 +112,7 @@ is the provenance id monitors, registries, and recourse engines record.
 
 **Golden file.** A committed JSON artifact in `tests/golden/` that a release
 must still load and reproduce bit for bit. It is how "every 0.x release reads
-schema 1" is enforced.
+schema 1 as written by 0.3.0 or later" is enforced.
 
 **Chain.** `probcal.Chain`: a calibrator followed by offsets, fitted and
 inverted as one object, so a recourse engine sees a single map.

@@ -12,7 +12,7 @@ from typing import Any
 
 import numpy as np
 
-from ._math import logit
+from ._math import logit, logit1
 
 try:
     import matplotlib.pyplot as _plt
@@ -48,7 +48,7 @@ _RUG_MAX = 1000
 _CLIP_EPS = 1e-12
 _CI_CLIP_EPS = 1e-6
 # Logit-axis fallback span when a curve has no finite point to anchor the identity.
-_DEFAULT_LOGIT_SPAN = (float(logit(np.array([0.001]))[0]), float(logit(np.array([0.5]))[0]))
+_DEFAULT_LOGIT_SPAN = (logit1(0.001), logit1(0.5))
 
 
 def _require_mpl() -> None:

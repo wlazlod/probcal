@@ -250,13 +250,6 @@ def test_monotone_hull_never_lowers_a_bound() -> None:
     assert old[0] < own_a
 
 
-def test_level_keyword_deprecated() -> None:
-    grades, y, p = _band_dataset()
-    with pytest.warns(DeprecationWarning, match="confidence"):
-        old = jeffreys_upper_bands(y, p, grades, level=0.8)
-    assert old == jeffreys_upper_bands(y, p, grades, confidence=0.8)
-
-
 def test_bad_arguments_raise() -> None:
     with pytest.raises(ValueError, match="obligors"):
         pluto_tasche(np.array([100.0, 0.0]), np.array([0.0, 0.0]), confidence=0.9)

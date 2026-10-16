@@ -11,8 +11,9 @@ from typing import cast
 import numpy as np
 
 from ._corp import corp_fit, decompose
-from ._registry import SERIALIZABLE, register
-from ._results import Interpretation, SelectionReport
+from ._protocol import CalibratorProtocolMixin
+from ._registry import decode_prototype, encode_prototype, register
+from ._results import SelectionReport
 from ._serialize import decode_value, encode_value
 from ._validation import stratified_folds, validate_cv
 from .base import BaseCalibrator, clone_unfitted
@@ -47,7 +48,7 @@ def _default_candidates() -> dict[str, BaseCalibrator]:
 
 
 @register
-class CalibratorSelector(BaseCalibrator):
+class CalibratorSelector(CalibratorProtocolMixin, BaseCalibrator):
     """Choose a calibrator by inner cross-validation on the calibration data.
 
     Custom candidates declare their tie-break position by overriding
@@ -105,37 +106,18 @@ class CalibratorSelector(BaseCalibrator):
 
     def _state(self) -> dict[str, object]:
         base = super()._state()
-        r = self.report_
-        base["report"] = {
-            "methods": list(r.methods),
-            "score_mean": encode_value(r.score_mean),
-            "score_sd": encode_value(r.score_sd),
-            "guardrails_ok": encode_value(r.guardrails_ok),
-            "chosen": encode_value(r.chosen),
-            "criterion": r.criterion,
-            "mcb": encode_value(r.mcb),
-            "dsc": encode_value(r.dsc),
-            "unc": encode_value(r.unc),
-        }
+        base["report"] = encode_value(self.report_.as_dict())
         return base
 
     def _set_state(self, state: dict[str, object]) -> None:
         state = dict(state)
-        state.pop("is_monotone_", None)  # pre-0.4 payloads; the property reads the winner
-        rep = state.pop("report")
+        # Payloads written by probcal 0.3.0-0.3.3 store is_monotone_; the
+        # property reads the winner instead.
+        state.pop("is_monotone_", None)
+        rep = cast(dict, decode_value(state.pop("report")))
+        rep["methods"] = tuple(rep["methods"])
         super()._set_state(state)
-        self.report_ = SelectionReport(
-            methods=tuple(rep["methods"]),  # type: ignore[index]
-            score_mean=decode_value(rep["score_mean"]),  # type: ignore[index, arg-type]
-            score_sd=decode_value(rep["score_sd"]),  # type: ignore[index, arg-type]
-            guardrails_ok=decode_value(rep["guardrails_ok"]),  # type: ignore[index, arg-type]
-            chosen=decode_value(rep["chosen"]),  # type: ignore[index, arg-type]
-            criterion=rep["criterion"],  # type: ignore[index]
-            # .get(..., None): payloads written by probcal < 0.3 lack these columns.
-            mcb=decode_value(rep.get("mcb")),  # type: ignore[attr-defined, arg-type]
-            dsc=decode_value(rep.get("dsc")),  # type: ignore[attr-defined, arg-type]
-            unc=decode_value(rep.get("unc")),  # type: ignore[attr-defined, arg-type]
-        )
+        self.report_ = SelectionReport(**rep)
 
     def _params_for_dict(self) -> dict[str, object]:
         """Encode candidate prototypes by registry name.
@@ -146,16 +128,10 @@ class CalibratorSelector(BaseCalibrator):
         params = dict(self.get_params())
         cands = params.get("candidates")
         if cands is not None:
-            enc = {}
-            for name, proto in cands.items():  # type: ignore[attr-defined]
-                cls_name = type(proto).__name__
-                if cls_name not in SERIALIZABLE:
-                    raise ValueError(
-                        f"cannot serialize candidate {name!r}: {cls_name} is not a "
-                        "registered probcal class"
-                    )
-                to_params = getattr(proto, "_params_for_dict", proto.get_params)
-                enc[name] = {"class": cls_name, "params": to_params()}
+            enc = {
+                name: encode_prototype(proto, f"candidate {name!r}")
+                for name, proto in cands.items()  # type: ignore[attr-defined]
+            }
             params["candidates"] = {"__candidates__": enc}
         return params
 
@@ -164,12 +140,9 @@ class CalibratorSelector(BaseCalibrator):
         params = dict(params)
         cands = params.get("candidates")
         if isinstance(cands, dict) and "__candidates__" in cands:
-            built = {}
-            for name, spec in cands["__candidates__"].items():  # type: ignore[attr-defined]
-                proto_cls = SERIALIZABLE[spec["class"]]
-                from_params = getattr(proto_cls, "_params_from_dict", dict)
-                built[name] = proto_cls(**from_params(dict(spec["params"])))
-            params["candidates"] = built
+            params["candidates"] = {
+                name: decode_prototype(spec) for name, spec in cands["__candidates__"].items()
+            }
         return params
 
     def _fit(self, s_arr: np.ndarray, y_arr: np.ndarray, w_arr: np.ndarray) -> None:
@@ -246,63 +219,22 @@ class CalibratorSelector(BaseCalibrator):
 
     # ------------------------------------------------------------- delegation
 
-    def _winner(self) -> BaseCalibrator | None:
-        return self.__dict__.get("best_calibrator_")
+    def _fitted_calibrator(self) -> BaseCalibrator:
+        self._check_fitted()
+        return self.best_calibrator_
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         """Delegate to the refitted winner."""
         return self.best_calibrator_.predict_proba(s)
 
-    def interpret(self) -> Interpretation:
-        """Delegate to the refitted winner."""
-        self._check_fitted()
-        return self.best_calibrator_.interpret()
-
     @property  # type: ignore[override]
     def is_monotone_(self) -> bool:  # type: ignore[override]
         """The winner's ``is_monotone_`` (``True`` before fitting)."""
-        best = self._winner()
-        return True if best is None else bool(getattr(best, "is_monotone_", True))
-
-    @property
-    def affine_logit_coeffs_(self) -> tuple[float, float] | None:
-        """The winner's affine-logit coefficients, or ``None``."""
-        self._check_fitted()
-        return self.best_calibrator_.affine_logit_coeffs_
+        best = self.__dict__.get("best_calibrator_")
+        return True if best is None else bool(best.is_monotone_)
 
     @property
     def complexity_rank(self) -> float:
         """The winner's parsimony rank once fitted; 100.0 before."""
-        best = self._winner()
+        best = self.__dict__.get("best_calibrator_")
         return 100.0 if best is None else float(getattr(best, "complexity_rank", 100.0))
-
-    def interval_inverse(
-        self,
-        lo: float,
-        hi: float,
-        *,
-        space: str = "probability",
-        buffer_logit: float = 0.0,
-    ) -> tuple[float, float]:
-        """Delegate to the winner's exact ``interval_inverse``."""
-        self._check_fitted()
-        return self.best_calibrator_.interval_inverse(
-            lo, hi, space=space, buffer_logit=buffer_logit
-        )
-
-    def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
-        """Delegate to the winner's ``point_inverse``."""
-        self._check_fitted()
-        return self.best_calibrator_.point_inverse(p, space=space)
-
-    def _point_inverse_logit(self, p: np.ndarray) -> np.ndarray:
-        return self.best_calibrator_._point_inverse_logit(p)
-
-    def _output_range(self) -> tuple[float, float]:
-        return self.best_calibrator_._output_range()
-
-    def _inverse_left(self, t: float) -> float:
-        return self.best_calibrator_._inverse_left(t)
-
-    def _inverse_right(self, t: float) -> float:
-        return self.best_calibrator_._inverse_right(t)

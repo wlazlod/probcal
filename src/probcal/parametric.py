@@ -26,6 +26,9 @@ _IRLS_NOT_CONVERGED = (
 )
 
 _BETA_INVERSE_KAPPA = 1.524  # minimax hyperbola parameter (max deviation 0.076)
+_BETA_INVERSE_MAX_STEPS = 4  # Halley iteration cap
+_BETA_INVERSE_RTOL = 1e-13  # early-exit residual certificate, relative to max(1, |K|)
+_BETA_INVERSE_RTOL_FINAL = 1e-10  # post-loop certificate, relative to max(1, |K|)
 
 
 def _fit_logit_scale(
@@ -53,23 +56,15 @@ def _fit_logit_scale(
     return u, ("lo" if u == lo else "hi" if u == hi else None)
 
 
-def _beta_point_inverse_z(
-    K: np.ndarray,
-    a: float,
-    b: float,
-    kappa: float = _BETA_INVERSE_KAPPA,
-    max_steps: int = 4,
-    rtol: float = 1e-13,
-    rtol_final: float = 1e-10,
-) -> np.ndarray:
+def _beta_point_inverse_z(K: np.ndarray, a: float, b: float) -> np.ndarray:
     """Exact-to-machine-precision root of ``a*z + (b-a)*softplus(z) = K``.
 
     Layer 1 seeds with the minimax-hyperbola approximation to softplus
     (``kappa=1.524``, max deviation 0.076): the admissible root of the
     resulting quadratic is exact at ``a=b`` and in both tails, with error
     bounded by ``0.076*|b-a|/min(a,b)`` elsewhere. Layer 2 refines with up to
-    ``max_steps`` (default 4) Halley corrections, exiting early once the
-    residual certificate ``|f(z)| <= rtol * max(1, |K|)`` is met; the
+    4 Halley corrections, exiting early once the residual certificate
+    ``|f(z)| <= 1e-13 * max(1, |K|)`` is met; the
     certificate bounds the coordinate error by ``|f(z)| / min(a, b)``. A
     fixed 2 steps would not suffice (machine precision only up to
     asymmetry ratio 3, ~1e-10 at ratio 10, ~1e-4 at ratio 50 without a 3rd
@@ -84,7 +79,8 @@ def _beta_point_inverse_z(
     rather than silently return an uncertified value (the package's
     no-silent-clamp doctrine — see ``UnattainableTargetError``), a final
     residual is recomputed after the loop and checked against a looser
-    tolerance ``rtol_final * max(1, |K|)``. A failure raises ``RuntimeError``
+    tolerance ``1e-10 * max(1, |K|)`` (the error bound ``residual / min(a, b)``
+    stays negligible there). A failure raises ``RuntimeError``
     naming the worst residual: the method either returns a certified-exact
     root, or it raises — never a silently uncertified one.
 
@@ -95,23 +91,12 @@ def _beta_point_inverse_z(
     a, b : float
         Beta-calibration exponents, both strictly positive (degenerate
         ``a=0``/``b=0``/``a=b`` cases are handled by the caller).
-    kappa : float
-        Minimax hyperbola parameter for the Layer-1 seed.
-    max_steps : int
-        Fixed Halley iteration cap.
-    rtol : float
-        Early-exit residual certificate tolerance, relative to
-        ``max(1, |K|)``.
-    rtol_final : float
-        Post-loop certificate tolerance, relative to ``max(1, |K|)``; looser
-        than ``rtol`` (the error bound ``residual / min(a, b)`` stays
-        negligible at ``1e-10``) but still enforced unconditionally.
 
     Returns
     -------
     numpy.ndarray
         ``z`` solving the equation, elementwise, certified to
-        ``|h(z) - K| <= rtol_final * max(1, |K|)``.
+        ``|h(z) - K| <= 1e-10 * max(1, |K|)``.
 
     Raises
     ------
@@ -121,21 +106,22 @@ def _beta_point_inverse_z(
         domain — see above); names the worst residual and suggests
         ``interval_inverse``.
     """
-    z = ((a + b) * K - (b - a) * np.sqrt(K**2 + kappa * a * b)) / (2.0 * a * b)
-    for _ in range(max_steps):
+    z = ((a + b) * K - (b - a) * np.sqrt(K**2 + _BETA_INVERSE_KAPPA * a * b)) / (2.0 * a * b)
+    for _ in range(_BETA_INVERSE_MAX_STEPS):
         s = expit(z)
         f = a * z + (b - a) * np.logaddexp(0.0, z) - K
-        if np.all(np.abs(f) <= rtol * np.maximum(1.0, np.abs(K))):
+        if np.all(np.abs(f) <= _BETA_INVERSE_RTOL * np.maximum(1.0, np.abs(K))):
             break
         f1 = a + (b - a) * s
         f2 = (b - a) * s * (1.0 - s)
         z = z - 2.0 * f * f1 / (2.0 * f1**2 - f * f2)
     f_final = a * z + (b - a) * np.logaddexp(0.0, z) - K
-    tol_final = rtol_final * np.maximum(1.0, np.abs(K))
+    tol_final = _BETA_INVERSE_RTOL_FINAL * np.maximum(1.0, np.abs(K))
     if np.any(np.abs(f_final) > tol_final):
         raise RuntimeError(
             f"beta point inverse (a={a:g}, b={b:g}) failed to certify to residual <= "
-            f"{rtol_final:g}*max(1,|K|) after {max_steps} Halley steps (max observed "
+            f"{_BETA_INVERSE_RTOL_FINAL:g}*max(1,|K|) after {_BETA_INVERSE_MAX_STEPS} Halley "
+            "steps (max observed "
             f"residual {float(np.max(np.abs(f_final))):.3g}); this exponent ratio is "
             "outside the verified domain — use interval_inverse"
         )

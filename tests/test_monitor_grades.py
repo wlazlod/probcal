@@ -1,7 +1,6 @@
 """Per-grade e-processes, grade keys, and grade confidence sequences."""
 
 import json
-import pathlib
 import warnings
 
 import numpy as np
@@ -11,8 +10,6 @@ from probcal._math import expit, logit
 from probcal.datasets import make_pd_portfolio
 from probcal.monitor import CalibrationMonitor
 from probcal.monitor._monitor import grade_key, grade_keys
-
-_DATA_DIR = pathlib.Path(__file__).parent / "data"
 
 
 def _grade_batch(
@@ -185,26 +182,7 @@ def test_masterscale_fingerprint_recorded_only_for_accepted_batches() -> None:
     assert mon.masterscale_fingerprint_ == "b" * 64
 
 
-# ---------------------------------------------------------------- legacy payloads
-
-
-def test_0_2_0_monitor_file_loads_and_continues() -> None:
-    path = _DATA_DIR / "monitor_0_2_0.json"
-    mon = CalibrationMonitor.from_json(path)
-    assert len(mon.steps_) == 3
-    assert all(s.grade_delta_ci == {} for s in mon.steps_)
-
-    # A 0.2.0 monitor declared no grades: per-grade processes are tracked
-    # and reported, but stay out of the global alarm (and say so once).
-    with pytest.warns(UserWarning, match="grades=None"):
-        for k in range(2):
-            y, p, g = _grade_batch(n=300, shift_a=0.5, shift_b=0.0, seed=900 + k)
-            step = mon.update(y, p, grade=g, label=f"new{k}")
-            assert set(step.grade_delta_ci) == {"A", "B"}
-
-    assert mon.steps_[0].grade_delta_ci == {}
-    d = mon.to_dict()
-    assert CalibrationMonitor.from_dict(d).to_dict() == d
+# ---------------------------------------------------------------- 0.3.0-0.3.3 payloads
 
 
 def test_pre_0_4_float_grade_keys_are_renamed_on_load() -> None:

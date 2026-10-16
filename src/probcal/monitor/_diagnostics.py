@@ -10,8 +10,7 @@ import math
 
 import numpy as np
 
-from .._math import expit
-from .._validation import EPS
+from .._math import bern_loglik, expit
 from ..metrics._common import rao_scott
 from ..metrics.regression import calibration_slope
 from ._processes import plug_in_delta, plug_in_shape
@@ -34,13 +33,8 @@ def residual_shape_lr(z: np.ndarray, y: np.ndarray, w: np.ndarray, delta: float)
     if z.size == 0 or np.unique(y).size < 2:
         return 0.0
     c, a = plug_in_shape(z, y, w)
-
-    def ll(q: np.ndarray) -> float:
-        qc = np.clip(q, EPS, 1.0 - EPS)
-        return float(np.sum(w * (y * np.log(qc) + (1.0 - y) * np.log1p(-qc))))
-
     mu = expit(z + delta)
-    lr = max(0.0, 2.0 * (ll(expit(c + a * z)) - ll(mu)))
+    lr = max(0.0, 2.0 * (bern_loglik(y, expit(c + a * z), w) - bern_loglik(y, mu, w)))
     # Slope score with the (free) intercept projected out under the null info.
     v = w * mu * (1.0 - mu)
     z_c = z - float(np.sum(v * z)) / float(np.sum(v))
@@ -77,7 +71,7 @@ def recommend(
     alarm_at: str,
     e_shape: float,
     alpha: float,
-    onset_label: str | None,
+    onset_label: str,
 ) -> tuple[str, tuple[str, ...]]:
     """The re-offset/re-fit rule on the diagnostic window, plus its reasoning.
 
@@ -106,13 +100,8 @@ def recommend(
         f"Cox-vs-offset residual LR on the trailing window {resid_lr:.2f} "
         + ("exceeds" if shape_needed else "is within")
         + " the chi-square(1) 5% bound 3.84",
-        (
-            f"estimated drift onset at {onset_label} (backward-CUSUM argmax of the "
-            "plug-in log-LR increments — an estimate, not a test)"
-            if onset_label is not None
-            else "drift onset unavailable: steps recorded before 0.3.0 carry no log-e "
-            "increments (trailing window used)"
-        ),
+        f"estimated drift onset at {onset_label} (backward-CUSUM argmax of the "
+        "plug-in log-LR increments — an estimate, not a test)",
         "the recommendation is a diagnostic, not a test — see the monitoring chapter",
     )
     return ("re-offset" if (slope_ok and not shape_needed) else "re-fit"), reasoning

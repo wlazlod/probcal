@@ -2,7 +2,6 @@
 
 import copy
 import json
-import pathlib
 import pickle
 
 import numpy as np
@@ -270,16 +269,10 @@ def test_monitor_update_masterscale_equivalence_and_fingerprint() -> None:
     d = a.to_dict()
     assert d["state"]["masterscale_fingerprint"] == MS.fingerprint()
     assert "masterscale_fingerprint" not in b.to_dict()["state"]
+    assert CalibrationMonitor.from_dict(b.to_dict()).masterscale_fingerprint_ is None
     back = CalibrationMonitor.from_dict(d)
     assert back.masterscale_fingerprint_ == MS.fingerprint()
     assert back.fingerprint() == a.fingerprint()
-
-
-def test_pre_0_3_3_monitor_payload_loads_without_the_field() -> None:
-    golden = pathlib.Path(__file__).parent / "golden" / "CalibrationMonitor.json"
-    d = json.loads(golden.read_text())["object"]
-    assert "masterscale_fingerprint" not in d["state"]
-    assert CalibrationMonitor.from_dict(d).masterscale_fingerprint_ is None
 
 
 def test_validation_report_with_masterscale(tmp_path, monkeypatch) -> None:

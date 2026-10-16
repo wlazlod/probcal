@@ -10,12 +10,11 @@ Oron & Flournoy (2017) — full records in the documentation.
 
 import numpy as np
 
-from ._math import pava
 from ._registry import register
 from ._results import Interpretation
 from ._steps import (
-    aggregate_ties,
     eval_step,
+    isotonic_blocks,
     linear_inverse_left,
     linear_inverse_right,
     step_inverse_left,
@@ -74,22 +73,19 @@ class IsotonicCalibrator(BaseCalibrator):
             raise ValueError(
                 f"interpolation must be 'none' or 'linear', got {self.interpolation!r}"
             )
-        s_u, y_u, w_u = aggregate_ties(s, y, w)
-        res = pava(y_u, w_u)
+        s_u, w_u, res, self.block_first_s_, self.block_last_s_ = isotonic_blocks(s, y, w)
         starts = res.block_start
-        ends = np.append(starts[1:], len(s_u)) - 1
         self.block_mean_ = res.block_mean
-        self.block_first_s_ = s_u[starts]
-        self.block_last_s_ = s_u[ends]
         self.block_center_s_ = np.add.reduceat(w_u * s_u, starts) / np.add.reduceat(w_u, starts)
         self.n_blocks_ = int(len(starts))
 
-    def _block_mid(self) -> np.ndarray:
+    def _knots(self) -> np.ndarray:
+        """Score coordinates the ``"linear"`` map interpolates through: block midpoints."""
         return 0.5 * (self.block_first_s_ + self.block_last_s_)
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         if self.interpolation == "linear":
-            return np.interp(s, self._block_mid(), self.block_mean_)
+            return np.interp(s, self._knots(), self.block_mean_)
         return eval_step(self.block_first_s_, self.block_mean_, s)
 
     @property
@@ -103,16 +99,14 @@ class IsotonicCalibrator(BaseCalibrator):
     def _inverse_left(self, t: float) -> float:
         if self.interpolation == "linear":
             # The interpolated map is continuous: invert it on the bracketing
-            # segment between block midpoints, not through the step blocks.
-            return linear_inverse_left(self._block_mid(), self.block_mean_, t, self._predict_scalar)
+            # segment between knots, not through the step blocks.
+            return linear_inverse_left(self._knots(), self.block_mean_, t, self._predict_scalar)
         # Left edge of the first block whose level reaches t (spec block-edge semantics).
         return step_inverse_left(self.block_mean_, self.block_first_s_, t)
 
     def _inverse_right(self, t: float) -> float:
         if self.interpolation == "linear":
-            return linear_inverse_right(
-                self._block_mid(), self.block_mean_, t, self._predict_scalar
-            )
+            return linear_inverse_right(self._knots(), self.block_mean_, t, self._predict_scalar)
         # Largest raw score whose level stays within t: one float below the
         # next block's left edge, so the returned bound is itself in the
         # preimage — consumers may treat both bounds as closed.
@@ -177,16 +171,11 @@ class CenteredIsotonicCalibrator(IsotonicCalibrator):
     """
 
     def __init__(self) -> None:
-        super().__init__(interpolation="none")
+        super().__init__(interpolation="linear")
 
-    def _predict(self, s: np.ndarray) -> np.ndarray:
-        return np.interp(s, self.block_center_s_, self.block_mean_)
-
-    def _inverse_left(self, t: float) -> float:
-        return linear_inverse_left(self.block_center_s_, self.block_mean_, t, self._predict_scalar)
-
-    def _inverse_right(self, t: float) -> float:
-        return linear_inverse_right(self.block_center_s_, self.block_mean_, t, self._predict_scalar)
+    def _knots(self) -> np.ndarray:
+        """CIR interpolates through the weight-centered block coordinates."""
+        return self.block_center_s_
 
     def interpret(self) -> Interpretation:
         """Isotonic reading plus the strictness property CIR adds."""

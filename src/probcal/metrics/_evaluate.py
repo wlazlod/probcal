@@ -6,8 +6,8 @@ from typing import overload
 import numpy as np
 
 from .._results import GroupedMetricReport, MetricReport
+from .._validation import validate_nonneg_int
 from ._common import _prep
-from ._deprecation import UNSET, renamed_kwarg
 from .binned import _ece_family, ece_sweep
 from .regression import calibration_intercept, calibration_slope
 from .scores import brier_score, brier_skill_score, log_loss
@@ -38,7 +38,7 @@ _METRIC_CATALOG: tuple[str, ...] = (
 def _point_metrics(
     y: np.ndarray,
     p: np.ndarray,
-    w: np.ndarray | None,
+    w: np.ndarray,
     names: tuple[str, ...] | None = None,
     *,
     presorted: bool = False,
@@ -66,12 +66,10 @@ def _point_metrics(
     }
     out: dict[str, float] = {k: fn() for k, fn in dispatch.items() if k in sel}
     if sel & {"ece", "ece_debiased", "mce"}:  # one shared 15-bin pass
-        yv, pv, wv = _prep(y, p, w)
-        out |= _ece_family(yv, pv, wv, sel)
+        out |= _ece_family(y, p, w, sel)
 
     if sel & {"ecce_max", "ecce_mean"}:
-        w_arr = np.ones(len(p)) if w is None else w
-        ec = _ecce_stats(_ecce_walk(y, p, w_arr, presorted=presorted))
+        ec = _ecce_stats(_ecce_walk(y, p, w, presorted=presorted))
         out["ecce_max"] = ec.stat_max
         out["ecce_mean"] = ec.stat_mean
 
@@ -87,12 +85,6 @@ def _point_metrics(
     return {k: out[k] for k in _METRIC_CATALOG if k in sel}
 
 
-def _validate_n_boot(n_boot: object) -> int:
-    if isinstance(n_boot, bool) or not isinstance(n_boot, (int, np.integer)) or int(n_boot) < 0:
-        raise ValueError(f"n_boot must be a non-negative integer, got {n_boot!r}")
-    return int(n_boot)
-
-
 @overload
 def evaluate(
     y: object,
@@ -104,7 +96,6 @@ def evaluate(
     metrics: Sequence[str] | None = None,
     stratify: bool = True,
     by: None = None,
-    seed: object = UNSET,
 ) -> MetricReport: ...
 
 
@@ -119,7 +110,6 @@ def evaluate(
     metrics: Sequence[str] | None = None,
     stratify: bool = True,
     by: object,
-    seed: object = UNSET,
 ) -> GroupedMetricReport: ...
 
 
@@ -133,7 +123,6 @@ def evaluate(
     metrics: Sequence[str] | None = None,
     stratify: bool = True,
     by: object = None,
-    seed: object = UNSET,
 ) -> MetricReport | GroupedMetricReport:
     """Full metric report with seeded bootstrap percentile confidence intervals.
 
@@ -182,8 +171,6 @@ def evaluate(
         report. Group-conditional statistical *testing* (formal
         multiplicity-adjusted comparisons across groups) is out of scope
         here; see ``docs/guide/groups.md``.
-    seed : int, keyword-only
-        Deprecated spelling of ``random_state`` (removed in 0.4.0).
 
     Returns
     -------
@@ -231,8 +218,7 @@ def evaluate(
     >>> len(grouped.reports) == len(grouped.groups)
     True
     """
-    rs = int(renamed_kwarg("evaluate", "seed", "random_state", seed, random_state, 42))  # type: ignore[call-overload]
-    n_boot = _validate_n_boot(n_boot)
+    n_boot = validate_nonneg_int(n_boot, "n_boot")
     if by is not None:
         return _evaluate_grouped(
             y,
@@ -240,11 +226,11 @@ def evaluate(
             by,
             sample_weight=sample_weight,
             n_boot=n_boot,
-            random_state=rs,
+            random_state=random_state,
             metrics=metrics,
             stratify=stratify,
         )
-    return _evaluate(y, p, sample_weight, n_boot, rs, metrics, stratify)
+    return _evaluate(y, p, sample_weight, n_boot, random_state, metrics, stratify)
 
 
 def _evaluate(

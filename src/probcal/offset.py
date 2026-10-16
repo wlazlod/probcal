@@ -10,7 +10,6 @@ documentation.
 """
 
 import math
-import warnings
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Self
@@ -37,8 +36,8 @@ from .base import (
     shrink_interval,
     validate_interval,
 )
+from .metrics._common import _prep
 from .metrics.regression import GuardrailReport, calibration_guardrails
-from .metrics.scores import _prep
 
 _DELTA_BRACKET = 40.0
 
@@ -79,9 +78,6 @@ class AuditReport:
             f"  guardrails ok:  {gb.all_ok} -> {ga.all_ok}",
         ]
         return "\n".join(lines)
-
-
-_NOT_FITTED = "{name} is not fitted; call fit() first"
 
 
 def _solve_delta(z: np.ndarray, w: np.ndarray, target: float) -> float:
@@ -155,9 +151,9 @@ class LogitOffset(JsonIO):
 
     def _check_fitted(self) -> None:
         if not self.fitted_:
-            raise RuntimeError(_NOT_FITTED.format(name=type(self).__name__))
+            raise RuntimeError(f"{type(self).__name__} is not fitted; call fit() first")
 
-    def fit(self, p: object, *args: object, y: object = None, sample_weight: object = None) -> Self:
+    def fit(self, p: object, *, y: object = None, sample_weight: object = None) -> Self:
         """Fix ``delta`` (mode A) or solve it against the target mean (mode B).
 
         Parameters
@@ -167,9 +163,7 @@ class LogitOffset(JsonIO):
         y : array_like or None, keyword-only
             Ignored; accepted for compatibility with the chain fit protocol.
         sample_weight : array_like or None, keyword-only
-            Weights for the portfolio mean. Passing it positionally
-            (signature ``fit(p, sample_weight)``) is deprecated: it emits a
-            ``DeprecationWarning`` and will be removed in 0.4.0.
+            Weights for the portfolio mean.
 
         Returns
         -------
@@ -185,16 +179,6 @@ class LogitOffset(JsonIO):
             If ``target_mean`` cannot be reached by any shift in
             ``[-40, 40]``; the message names the attainable range.
         """
-        if args:
-            if len(args) > 1 or sample_weight is not None:
-                raise TypeError("LogitOffset.fit takes p plus keyword-only y and sample_weight")
-            warnings.warn(
-                "passing sample_weight positionally to LogitOffset.fit is deprecated and "
-                "will be removed in 0.4.0; use fit(p, sample_weight=...)",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            sample_weight = args[0]
         if (self.delta is None) == (self.target_mean is None):
             raise ValueError("LogitOffset: give exactly one of delta or target_mean")
         p_arr = validate_scores(p, name="p")
@@ -408,7 +392,7 @@ class LogitOffset(JsonIO):
                     "timestamp_": self.timestamp_,
                 }
             ),
-            fit_meta=encode_value(dict(getattr(self, "fit_meta_", {}))),
+            fit_meta=encode_value(self.fit_meta_),
         )
 
     @classmethod
@@ -421,40 +405,22 @@ class LogitOffset(JsonIO):
             If the schema version is unknown or the payload class differs.
         """
         check_payload(cls, d)
-        params = decode_value(d.get("params", {}), arrays=False)
-        obj = cls(delta=params.get("delta"), target_mean=params.get("target_mean"))  # type: ignore[attr-defined]
-        for key, value in d.get("state", {}).items():
+        obj = cls(**decode_value(d["params"], arrays=False))  # type: ignore[arg-type]
+        for key, value in d["state"].items():
             setattr(obj, key, decode_value(value, arrays=False))
-        obj.fit_meta_ = dict(decode_value(d.get("fit_meta", {}), arrays=False))  # type: ignore[call-overload]
+        obj.fit_meta_ = dict(decode_value(d["fit_meta"], arrays=False))  # type: ignore[call-overload]
         obj.fitted_ = True
         return obj
 
 
 def _offset_mle(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
-    """Offset-only logistic MLE: root of the score equation on already-valid inputs.
+    """Offset-only logistic MLE on already-valid inputs (logits ``z``, 0/1 ``y``, weights ``w``).
 
-    Solves ``mean_w(sigma(z + delta)) = mean_w(y)`` by bisection in
-    ``[-40, 40]`` (:func:`_solve_delta`, the same root-finder as
-    ``LogitOffset(target_mean=...)``) — equivalently, the unique root of the
-    offset-only logistic score equation ``sum(w * (y - sigma(z + delta))) = 0``.
-    Callers are responsible for degenerate cases (empty input, a target
-    outside ``(0, 1)``); this function is shared, unchanged, by
-    :func:`estimate_offset` and ``probcal.monitor._processes.plug_in_delta``
-    so the two stay bit-identical.
-
-    Parameters
-    ----------
-    z : numpy.ndarray
-        Logits, ``logit(p)``.
-    y : numpy.ndarray
-        Binary outcomes in ``{0, 1}``.
-    w : numpy.ndarray
-        Positive weights.
-
-    Returns
-    -------
-    float
-        The fitted log-odds shift ``delta``.
+    The root of ``sum(w * (y - sigma(z + delta))) = 0``, i.e. the
+    ``LogitOffset(target_mean=mean_w(y))`` shift (:func:`_solve_delta`).
+    Shared by :func:`estimate_offset` and
+    ``probcal.monitor._processes.plug_in_delta`` so the two stay
+    bit-identical; callers handle degenerate input.
     """
     return _solve_delta(z, w, float(np.average(y, weights=w)))
 
@@ -494,8 +460,7 @@ def estimate_offset(y: object, p: object, *, sample_weight: object = None) -> Of
     ------
     ValueError
         If ``y`` or ``p`` fail validation (shape, range, finiteness) or if
-        ``y`` contains only one class — the offset MLE does not exist then
-        (``metrics.scores._prep`` performs this check).
+        ``y`` contains only one class — the offset MLE does not exist then.
 
     Examples
     --------

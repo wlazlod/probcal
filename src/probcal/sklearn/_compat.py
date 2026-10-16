@@ -34,19 +34,21 @@ def _validate_data_quietly(estimator, *args, **kwargs):
         return _validate_data(estimator, *args, **kwargs)
 
 
+def _as_2d(X, allow_1d: bool):
+    """``X`` as an array (sparse kept), a 1-D one reshaped to a column when allowed."""
+    X_arr = X if hasattr(X, "toarray") else np.asarray(X)
+    if allow_1d and getattr(X_arr, "ndim", 2) == 1:
+        X_arr = X_arr.reshape(-1, 1)
+    return X_arr
+
+
 def validate_X_y(
     estimator, X, y, *, reset: bool, allow_1d: bool = False
 ) -> tuple[np.ndarray, np.ndarray]:
     """2-D float64 X plus 1-D y, with ``n_features_in_`` bookkeeping."""
-    X_arr = X if hasattr(X, "toarray") else np.asarray(X)
-    if allow_1d and getattr(X_arr, "ndim", 2) == 1:
-        X_arr = X_arr.reshape(-1, 1)
-    return _validate_data_quietly(estimator, X_arr, y, reset=reset, dtype=np.float64)
+    return _validate_data_quietly(estimator, _as_2d(X, allow_1d), y, reset=reset, dtype=np.float64)
 
 
 def validate_X(estimator, X, *, reset: bool = False, allow_1d: bool = False) -> np.ndarray:
     """2-D float64 X for predict-side entry points."""
-    X_arr = X if hasattr(X, "toarray") else np.asarray(X)
-    if allow_1d and getattr(X_arr, "ndim", 2) == 1:
-        X_arr = X_arr.reshape(-1, 1)
-    return _validate_data_quietly(estimator, X_arr, reset=reset, dtype=np.float64)
+    return _validate_data_quietly(estimator, _as_2d(X, allow_1d), reset=reset, dtype=np.float64)

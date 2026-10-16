@@ -60,16 +60,6 @@ def test_enir_tie_aggregation_is_row_order_invariant() -> None:
     np.testing.assert_array_equal(a.predict_proba(GRID), b.predict_proba(GRID))
 
 
-@pytest.mark.parametrize("cls", [BBQCalibrator, ENIRCalibrator])
-def test_weights_alias_is_deprecated(cls: type) -> None:
-    """CAL-23: ``weights_`` (ensemble weights, easily confused with sample
-    weights) is now ``model_weights_``; the old name warns until 0.4.0."""
-    cal = cls().fit(*_sample(300))
-    with pytest.warns(DeprecationWarning, match=r"model_weights_.*0\.4\.0|0\.4\.0.*model_weights_"):
-        old = cal.weights_
-    np.testing.assert_array_equal(old, cal.model_weights_)
-
-
 # ---------------------------------------------------------------- BBQ
 
 

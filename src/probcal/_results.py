@@ -16,7 +16,6 @@ unhashable (``__hash__ = None``), like the arrays themselves.
 """
 
 import dataclasses
-import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -44,6 +43,15 @@ def _aligned_table(headers: tuple[str, ...], rows: Sequence[Sequence[object]]) -
     ]
     lines += ["  ".join(c.ljust(widths[i]) for i, c in enumerate(row)) for row in cells]
     return "\n".join(lines)
+
+
+def _to_frame(rows: list[dict[str, object]]) -> object:
+    """``rows`` as a pandas DataFrame when pandas is importable, else as-is."""
+    try:
+        import pandas as pd
+    except ImportError:
+        return rows
+    return pd.DataFrame(rows)
 
 
 def _values_equal(a: object, b: object) -> bool:
@@ -253,15 +261,12 @@ class GroupedMetricReport(_ResultBase):
         which is therefore reserved — a group of your own named "pooled"
         is indistinguishable from it in this frame.
         """
-        rows = [
-            {"group": group, "metric": n, "value": v, "ci_low": lo, "ci_high": hi}
-            for group, n, v, lo, hi in self._rows()
-        ]
-        try:
-            import pandas as pd
-        except ImportError:
-            return rows
-        return pd.DataFrame(rows)
+        return _to_frame(
+            [
+                {"group": group, "metric": n, "value": v, "ci_low": lo, "ci_high": hi}
+                for group, n, v, lo, hi in self._rows()
+            ]
+        )
 
     def _title(self) -> str:
         return f"GroupedMetricReport ({len(self.groups)} groups)"
@@ -283,17 +288,14 @@ class SelectionReport(_ResultBase):
         Boolean flag marking the selected candidate.
     criterion : str
         Name of the scoring criterion.
-    mcb, dsc : numpy.ndarray or None
+    mcb, dsc : numpy.ndarray
         Per-candidate CORP miscalibration/discrimination terms
         (:func:`probcal._corp.decompose`) on the same out-of-fold
         predictions as ``score_mean``, decomposing Brier when
-        ``criterion == "brier"`` and log loss otherwise. ``None`` for
-        reports loaded from a payload written by probcal < 0.3, which
-        carries no such columns.
-    unc : float or None
+        ``criterion == "brier"`` and log loss otherwise.
+    unc : float
         CORP uncertainty term, identical across candidates (it depends
         only on ``y`` and the sample weights, not on the predictions).
-        ``None`` exactly when ``mcb``/``dsc`` are ``None``.
     """
 
     methods: tuple[str, ...]
@@ -302,28 +304,26 @@ class SelectionReport(_ResultBase):
     guardrails_ok: np.ndarray
     chosen: np.ndarray
     criterion: str
-    mcb: np.ndarray | None = None
-    dsc: np.ndarray | None = None
-    unc: float | None = None
-
-    def _has_corp(self) -> bool:
-        return self.mcb is not None and self.dsc is not None
+    mcb: np.ndarray
+    dsc: np.ndarray
+    unc: float
 
     def _headers(self) -> tuple[str, ...]:
-        base = ("method", self.criterion, "sd", "guardrails", "chosen")
-        return (*base, "mcb", "dsc") if self._has_corp() else base
+        return ("method", self.criterion, "sd", "guardrails", "chosen", "mcb", "dsc")
 
     def _rows(self) -> list[tuple[object, ...]]:
-        cols: list[object] = [
-            self.methods,
-            self.score_mean,
-            self.score_sd,
-            [bool(g) for g in self.guardrails_ok],
-            ["*" if c else "" for c in self.chosen],
-        ]
-        if self._has_corp():
-            cols += [self.mcb, self.dsc]
-        return [tuple(r) for r in zip(*cols, strict=True)]  # type: ignore[call-overload]
+        return list(
+            zip(
+                self.methods,
+                self.score_mean,
+                self.score_sd,
+                [bool(g) for g in self.guardrails_ok],
+                ["*" if c else "" for c in self.chosen],
+                self.mcb,
+                self.dsc,
+                strict=True,
+            )
+        )
 
     def _title(self) -> str:
         return f"SelectionReport (criterion: {self.criterion})"
@@ -373,37 +373,6 @@ class BeltResult(_ResultBase):
                 self.p_value,
             ),
         )
-
-    def _legacy(self, which: int, side: int, name: str) -> np.ndarray:
-        level = self.levels[which]
-        warnings.warn(
-            f"BeltResult.{name} is deprecated and will be removed in 0.4.0; use "
-            f"belt.bands[{level!r}][{side}] (it holds the confidence={level!r} band, "
-            "whatever the attribute name says)",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        return self.bands[level][side]
-
-    @property
-    def lower_80(self) -> np.ndarray:
-        """Deprecated: ``bands[levels[0]][0]``."""
-        return self._legacy(0, 0, "lower_80")
-
-    @property
-    def upper_80(self) -> np.ndarray:
-        """Deprecated: ``bands[levels[0]][1]``."""
-        return self._legacy(0, 1, "upper_80")
-
-    @property
-    def lower_95(self) -> np.ndarray:
-        """Deprecated: ``bands[levels[1]][0]``."""
-        return self._legacy(1, 0, "lower_95")
-
-    @property
-    def upper_95(self) -> np.ndarray:
-        """Deprecated: ``bands[levels[1]][1]``."""
-        return self._legacy(1, 1, "upper_95")
 
     def __repr__(self) -> str:
         return (

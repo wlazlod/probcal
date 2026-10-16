@@ -202,9 +202,9 @@ class CalibratedClassifier(BinaryCalibratedMixin, ClassifierMixin, BaseEstimator
         else:
             base = self.estimator if self.estimator is not None else self._default_estimator()
             splitter = self._splitter(y_arr)
-            inner_sw = sw
+            fit_kw = {} if sw is None else {"sample_weight": sw}
             if sw is not None and not _accepts_sample_weight(base):
-                inner_sw = None
+                fit_kw = {}
                 warnings.warn(
                     f"{type(base).__name__}.fit does not accept sample_weight: the "
                     "cross-validated fits and the full-data refit are unweighted, "
@@ -213,16 +213,12 @@ class CalibratedClassifier(BinaryCalibratedMixin, ClassifierMixin, BaseEstimator
                     UserWarning,
                     stacklevel=2,
                 )
-            fit_params = {} if inner_sw is None else {"params": {"sample_weight": inner_sw}}
             raw = cross_val_predict(
-                clone(base), X, y_arr, cv=splitter, method=self.method, **fit_params
+                clone(base), X, y_arr, cv=splitter, method=self.method, params=fit_kw or None
             )
             oof = self._to_scores(np.asarray(raw))
             refit = clone(base)
-            if inner_sw is None:
-                refit.fit(X, y_arr)
-            else:
-                refit.fit(X, y_arr, sample_weight=inner_sw)
+            refit.fit(X, y_arr, **fit_kw)
             self.estimator_ = refit
 
         for attr in ("n_features_in_", "feature_names_in_"):

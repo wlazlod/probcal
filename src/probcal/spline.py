@@ -12,11 +12,11 @@ import warnings
 
 import numpy as np
 
-from ._math import expit, irls_logistic, logit, natural_cubic_basis
+from ._math import bern_loglik, expit, irls_logistic, logit, natural_cubic_basis
 from ._registry import register
 from ._results import Interpretation
 from ._steps import migrate_state
-from ._validation import EPS, stratified_folds, validate_cv, validate_positive_int
+from ._validation import stratified_folds, validate_cv, validate_positive_int
 from .base import BaseCalibrator
 
 _MONOTONE_RTOL = 1e-12
@@ -31,11 +31,6 @@ def _second_difference_penalty(k: int) -> np.ndarray:
     for i in range(k - 2):
         d[i, i : i + 3] = (1.0, -2.0, 1.0)
     return d.T @ d
-
-
-def _log_loss_sum(y: np.ndarray, w: np.ndarray, eta: np.ndarray) -> float:
-    p = np.clip(expit(eta), EPS, 1.0 - EPS)
-    return float(-np.sum(w * (y * np.log(p) + (1.0 - y) * np.log1p(-p))))
 
 
 @register
@@ -115,7 +110,11 @@ class SplineCalibrator(BaseCalibrator):
         self.random_state = random_state
 
     def _set_state(self, state: dict[str, object]) -> None:
-        super()._set_state(migrate_state(state, {"_knots": "knots_", "_theta": "theta_"}))
+        # Payloads written by probcal < 0.3.4 use ``_knots`` and ``_theta`` and
+        # carry no ``converged_`` flag (read as converged).
+        state = migrate_state(state, {"_knots": "knots_", "_theta": "theta_"})
+        state.setdefault("converged_", True)
+        super()._set_state(state)
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         cv = validate_cv(self.cv, y)
@@ -155,7 +154,7 @@ class SplineCalibrator(BaseCalibrator):
                 for f in range(cv):
                     tr, va = folds != f, folds == f
                     res = irls_logistic(basis[tr], y[tr], w=w[tr], penalty=float(lam) * penalty)
-                    cv_loss[j] += _log_loss_sum(y[va], w[va], basis[va] @ res.beta)
+                    cv_loss[j] -= bern_loglik(y[va], expit(basis[va] @ res.beta), w[va])
         self.lambda_ = float(grid[int(np.argmin(cv_loss))])
 
         res = irls_logistic(basis, y, w=w, penalty=self.lambda_ * penalty)
@@ -232,7 +231,7 @@ class SplineCalibrator(BaseCalibrator):
         ]
         if not self.is_monotone_:
             messages.append("fitted curve is NOT monotone (warned at fit)")
-        if getattr(self, "converged_", True) is False:
+        if not self.converged_:
             messages.append("penalized IRLS did not converge; the curve may be unreliable")
         return Interpretation(
             method=type(self).__name__,

@@ -320,7 +320,7 @@ def test_edge_grids_and_min_history_zero_are_accepted() -> None:
     ("y", "p", "kwargs", "match"),
     [
         ([0.0, 2.0], [0.1, 0.2], {}, "0, 1"),
-        ([], [], {}, "batch is empty"),  # used to surface as an IndexError
+        ([], [], {}, "must not be empty"),  # used to surface as an IndexError
         ([0.0, 1.0], [0.1, 0.2], {"grade": ["A", "Z"]}, "not in the declared grades"),
     ],
 )

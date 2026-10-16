@@ -276,18 +276,6 @@ def test_offset_to_with_x_accepts_sample_weight() -> None:
         m.offset_to(target_mean=0.3, sample_weight=w)
 
 
-def test_offset_to_positional_is_deprecated() -> None:
-    # OFF-14: offset_to(target_mean, delta) vs LogitOffset(delta, target_mean).
-    model, X_cal, y_cal = _trained_model()
-    wrapped = CalibratedModel(model, PlattCalibrator()).fit(X_cal, y_cal)
-    with pytest.warns(DeprecationWarning, match="removed in 0.4.0"):
-        wrapped.offset_to(0.05)
-    assert wrapped.offsets_[-1].target_mean == 0.05
-    with pytest.warns(DeprecationWarning):
-        wrapped.offset_to(None, 0.1)
-    assert wrapped.offsets_[-1].delta == 0.1
-
-
 def test_protocol_delegates_to_chain() -> None:
     # OFF-19: one implementation (Chain) behind the wrapper's inverse maps.
     model, X_cal, y_cal = _trained_model()

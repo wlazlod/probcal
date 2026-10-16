@@ -176,3 +176,31 @@ def test_legacy_csv_fingerprint_payload_still_loads(fitted) -> None:
     d["state"]["scorecard_fingerprint"] = "0" * 64
     with pytest.raises(ValueError, match="fingerprint"):
         CalibratedScorecard.from_dict(d, scorecard=sc)
+
+
+def test_adjust_attributions_reads_a_scorecard_through_its_calibrator(fitted) -> None:
+    from probcal import IsotonicCalibrator, adjust_attributions
+
+    _, sc, X_cal, y_cal = fitted
+    cs = calibrate_scorecard(sc, X_cal, y_cal, calibrator=IsotonicCalibrator())
+    phi = np.random.default_rng(0).normal(size=(6, 3))
+    direct = adjust_attributions(phi, -2.0, cs)
+    via = adjust_attributions(phi, -2.0, cs.calibrator_)
+    assert direct.method_used == via.method_used == "aumann-shapley"
+    np.testing.assert_array_equal(direct.phi_adj, via.phi_adj)
+    np.testing.assert_array_equal(direct.target, via.target)
+
+
+def test_calibrate_scorecard_accepts_a_chain_prototype(fitted) -> None:
+    from probcal import Chain, LogitOffset
+
+    _, sc, X_cal, y_cal = fitted
+    proto = Chain([PlattCalibrator(), LogitOffset(delta=0.2)])
+    cs = calibrate_scorecard(sc, X_cal, y_cal, calibrator=proto)
+    assert isinstance(cs.calibrator_, Chain)
+    assert cs.calibrator_ is not proto and not proto.fitted_
+    p_model = sc.predict_proba(X_cal)[:, 1]
+    np.testing.assert_array_equal(
+        cs.predict_proba(X_cal),
+        expit(logit(PlattCalibrator().fit(p_model, y_cal).predict_proba(p_model)) + 0.2),
+    )

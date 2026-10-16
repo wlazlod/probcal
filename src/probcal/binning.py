@@ -8,15 +8,21 @@ Zadrozny & Elkan (2001); Kumar, Liang & Ma (2019) — full records in the
 documentation.
 """
 
+from collections.abc import Callable
+
 import numpy as np
 
-from ._math import expit1, logit1
 from ._registry import register
 from ._results import Interpretation
 from ._steps import bin_sums, equal_mass_edges, step_inverse_left, step_inverse_right
 from ._validation import validate_positive_int
 from .base import BaseCalibrator
 from .parametric import PlattCalibrator
+
+
+def _bin_starts(edges: np.ndarray) -> np.ndarray:
+    """Left end of every bin: ``0`` followed by the interior edges."""
+    return np.concatenate([[0.0], edges])
 
 
 @register
@@ -94,16 +100,13 @@ class HistogramBinningCalibrator(BaseCalibrator):
     def _output_range(self) -> tuple[float, float]:
         return float(self.bin_rate_[0]), float(self.bin_rate_[-1])
 
-    def _bin_starts(self) -> np.ndarray:
-        return np.concatenate([[0.0], self.edges_])
-
     def _inverse_left(self, t: float) -> float:
-        return step_inverse_left(self.bin_rate_, self._bin_starts(), t)
+        return step_inverse_left(self.bin_rate_, _bin_starts(self.edges_), t)
 
     def _inverse_right(self, t: float) -> float:
         # One float below the next bin's edge: the bound is in the preimage,
         # so closed-bound consumers cannot overshoot a plateau.
-        return step_inverse_right(self.bin_rate_, self._bin_starts(), t)
+        return step_inverse_right(self.bin_rate_, _bin_starts(self.edges_), t)
 
     def interpret(self) -> Interpretation:
         """Read bin rates as local event frequencies and B as the complexity dial."""
@@ -177,12 +180,8 @@ class ScalingBinningCalibrator(BaseCalibrator):
         edges = equal_mass_edges(g, n_bins, w)
         idx = np.searchsorted(edges, g, side="right")
         sums, cnts = bin_sums(idx, g, w, len(edges) + 1)
-        # equal_mass_edges leaves no bin empty (ties at the minimum included);
-        # the guard interpolates between neighbours should one ever occur.
-        filled = cnts > 0
-        means = np.interp(np.arange(len(cnts)), np.flatnonzero(filled), sums[filled] / cnts[filled])
         self.edges_ = edges
-        self.bin_value_ = means
+        self.bin_value_ = sums / cnts  # equal_mass_edges leaves no bin empty
 
     @property  # type: ignore[override]
     def is_monotone_(self) -> bool:  # type: ignore[override]
@@ -204,25 +203,24 @@ class ScalingBinningCalibrator(BaseCalibrator):
     def _output_range(self) -> tuple[float, float]:
         return float(self.bin_value_[0]), float(self.bin_value_[-1])
 
-    def _pullback(self, platt_value: float) -> float:
-        """Raw score whose Platt value is ``platt_value`` (closed form)."""
-        return expit1((logit1(platt_value) - self.platt_.b_) / self.platt_.a_)
-
-    def _platt_forward(self, x: float) -> float:
-        return float(self.platt_.predict_proba(np.array([x]))[0])
-
     def _inverse_left(self, t: float) -> float:
-        starts = np.concatenate([[0.0], self.edges_])
-        return step_inverse_left(
-            self.bin_value_, starts, t, forward=self._platt_forward, pullback=self._pullback
-        )
+        return self._step_inverse(step_inverse_left, t)
 
     def _inverse_right(self, t: float) -> float:
         # The pulled-back edge is nudged below the bin boundary, so the bound
         # is itself in the preimage (closed-bound consumers cannot overshoot).
-        starts = np.concatenate([[0.0], self.edges_])
-        return step_inverse_right(
-            self.bin_value_, starts, t, forward=self._platt_forward, pullback=self._pullback
+        return self._step_inverse(step_inverse_right, t)
+
+    def _step_inverse(self, inverse: Callable[..., float], t: float) -> float:
+        # Bin edges live on the Platt scale; the Platt stage's closed-form
+        # inverse pulls them back to raw scores. Only monotone fits reach here,
+        # so the Platt slope is positive and that inverse exists.
+        return inverse(
+            self.bin_value_,
+            _bin_starts(self.edges_),
+            t,
+            forward=self.platt_._predict_scalar,
+            pullback=self.platt_._affine_inverse,
         )
 
     def interpret(self) -> Interpretation:

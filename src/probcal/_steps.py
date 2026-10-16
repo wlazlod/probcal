@@ -1,6 +1,7 @@
 """Shared helpers for the step-function and binning calibrators.
 
-One implementation each of: tie aggregation, equal-mass edges (weighted),
+One implementation each of: tie aggregation, tie-pooled PAVA blocks,
+equal-mass edges (weighted),
 per-bin weighted sums, right-continuous step evaluation, the generalized
 inverse of a non-decreasing step map, and legacy state-name migration.
 """
@@ -10,7 +11,7 @@ from collections.abc import Callable, Mapping
 
 import numpy as np
 
-from ._math import weighted_quantile
+from ._math import PavaResult, pava, weighted_quantile
 
 
 def aggregate_ties(
@@ -36,12 +37,32 @@ def aggregate_ties(
     return s_unique, wy_sum / w_sum, w_sum
 
 
+def isotonic_blocks(
+    s: np.ndarray, y: np.ndarray, w: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, PavaResult, np.ndarray, np.ndarray]:
+    """PAVA fit of ``y`` on tie-pooled scores, with each block's score range.
+
+    Returns
+    -------
+    s_unique, w_sum : numpy.ndarray
+        Output of :func:`aggregate_ties` (the PAVA input grid and its weights).
+    res : PavaResult
+        The fit on that grid.
+    block_first, block_last : numpy.ndarray
+        Smallest and largest distinct score of each block.
+    """
+    s_u, y_u, w_u = aggregate_ties(s, y, w)
+    res = pava(y_u, w_u)
+    ends = np.append(res.block_start[1:], len(s_u)) - 1
+    return s_u, w_u, res, s_u[res.block_start], s_u[ends]
+
+
 def equal_mass_edges(values: np.ndarray, n_bins: int, w: np.ndarray | None = None) -> np.ndarray:
     """Interior equal-mass edges, deduplicated, with no empty bin.
 
-    With ``w`` given and not constant, the edges are weighted quantiles
+    With ``w`` given, the edges are weighted quantiles
     (:func:`probcal._math.weighted_quantile`), so the bins carry equal
-    *weight*; unit or constant weights keep ``np.quantile`` exactly.
+    *weight*; unit or constant weights give ``np.quantile`` exactly.
 
     Ties can make quantile edges coincide (deduplicated) or leave a bin of
     the ``side="right"`` rule without any value — most commonly bin 0 when
@@ -52,10 +73,7 @@ def equal_mass_edges(values: np.ndarray, n_bins: int, w: np.ndarray | None = Non
     empty the quantile edges are returned unchanged.
     """
     qs = np.linspace(0.0, 1.0, n_bins + 1)[1:-1]
-    if w is None or bool(np.all(w == w[0])):
-        edges = np.unique(np.quantile(values, qs))
-    else:
-        edges = np.unique(weighted_quantile(values, qs, w))
+    edges = np.unique(np.quantile(values, qs) if w is None else weighted_quantile(values, qs, w))
     occupied = np.unique(np.searchsorted(edges, values, side="right"))
     if len(occupied) == len(edges) + 1:
         return edges
@@ -180,7 +198,7 @@ def migrate_state(
     renames: Mapping[str, str],
     drop: tuple[str, ...] = (),
 ) -> dict[str, object]:
-    """Map pre-0.4 private state keys onto their public names (schema-1 reads)."""
+    """Map the private state keys of payloads written by probcal < 0.3.4 onto their public names."""
     out: dict[str, object] = {}
     for key, value in state.items():
         if key in drop:

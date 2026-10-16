@@ -74,6 +74,23 @@ def _h_full(y: np.ndarray, p: np.ndarray, s: np.ndarray, kernel: str, bw: float)
     return 2.0 * _kernel_values(d, kernel, bw) * np.outer(r, r)
 
 
+def _setup(
+    y: object, p: object, scale: str, bandwidth: float | None, min_n: int, caller: str
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """Validated ``(y, p)``, kernel input ``s`` and resolved bandwidth."""
+    y_arr, p_arr, _ = _prep(y, p, None)
+    if len(p_arr) < min_n:
+        raise ValueError(f"{caller} needs at least {min_n} observations, got {len(p_arr)}")
+    s = _kernel_input(p_arr, scale)
+    return y_arr, p_arr, s, _resolve_bandwidth(s, bandwidth)
+
+
+def _uq(h: np.ndarray) -> float:
+    """Unbiased quadratic estimator: mean off-diagonal term of ``h``."""
+    n = h.shape[0]
+    return float((h.sum() - np.trace(h)) / (n * (n - 1)))
+
+
 def _ul_terms(
     y: np.ndarray, p: np.ndarray, s: np.ndarray, kernel: str, bw: float, random_state: int
 ) -> np.ndarray:
@@ -137,18 +154,13 @@ def skce(
     """
     if estimator not in ("uq", "ul", "biased"):
         raise ValueError(f"estimator must be 'uq', 'ul', or 'biased', got {estimator!r}")
-    y_arr, p_arr, _ = _prep(y, p, None)
-    n = len(p_arr)
-    if n < 2:
-        raise ValueError(f"skce needs at least 2 observations, got {n}")
-    s = _kernel_input(p_arr, scale)
-    bw = _resolve_bandwidth(s, bandwidth)
+    y_arr, p_arr, s, bw = _setup(y, p, scale, bandwidth, 2, "skce")
     if estimator == "ul":
         return float(np.mean(_ul_terms(y_arr, p_arr, s, kernel, bw, random_state)))
     h = _h_full(y_arr, p_arr, s, kernel, bw)
     if estimator == "biased":
-        return float(h.sum() / n**2)
-    return float((h.sum() - np.trace(h)) / (n * (n - 1)))
+        return float(h.sum() / len(p_arr) ** 2)
+    return _uq(h)
 
 
 @dataclass(frozen=True)
@@ -243,12 +255,8 @@ def skce_test(
     if method not in ("bootstrap", "asymptotic"):
         raise ValueError(f"method must be 'bootstrap' or 'asymptotic', got {method!r}")
     n_boot = validate_positive_int(n_boot, "n_boot")
-    y_arr, p_arr, _ = _prep(y, p, None)
+    y_arr, p_arr, s, bw = _setup(y, p, scale, bandwidth, 4, "skce_test")
     n = len(p_arr)
-    if n < 4:
-        raise ValueError(f"skce_test needs at least 4 observations, got {n}")
-    s = _kernel_input(p_arr, scale)
-    bw = _resolve_bandwidth(s, bandwidth)
 
     if method == "asymptotic":
         terms = _ul_terms(y_arr, p_arr, s, kernel, bw, random_state)
@@ -270,7 +278,7 @@ def skce_test(
         )
 
     h = _h_full(y_arr, p_arr, s, kernel, bw)
-    stat = float((h.sum() - np.trace(h)) / (n * (n - 1)))
+    stat = _uq(h)
     t_obs = n * stat
     c = h.mean(axis=1)
     h_tilde = h - c[:, None] - c[None, :] + h.mean()

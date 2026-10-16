@@ -163,12 +163,7 @@ type-I control and no confidence set, only an answer to "which batch does the
 accumulated evidence point to". `report()` runs it whenever an alarm has fired and
 exposes the result as `MonitorReport.onset_label`, and appends a line to `reasoning` that
 names the estimated onset batch and repeats that the backward-CUSUM argmax of the plug-in
-log-LR increments is an estimate, not a test. Steps loaded from a pre-0.3 payload carry
-`log_e_increment = None`. That payload records no increments, so a monitor holding any such
-step reports `onset_label = None`, replaces the onset sentence in `reasoning` with "drift
-onset unavailable: steps recorded before 0.3.0 carry no log-e increments (trailing window
-used)", and computes its diagnostics on the `"trailing"` window whatever
-`recommendation_window` says.
+log-LR increments is an estimate, not a test.
 
 By default (`recommendation_window="since_onset"`), `report()`'s trailing-window
 diagnostics (`delta_now`, the Cox slope bootstrap CI, the Cox-vs-offset residual LR)
@@ -259,7 +254,7 @@ if action.kind == "re-offset":
 
 `monitor.moc_offset(mon, *, level=None)` turns that same confidence sequence into an
 actionable, conservative correction: it reads the CS's upper end (`steps[-1].delta_ci[1]` by
-default, or a level recomputed directly from the monitor's running `_cs_grid`/`_cs_max`
+default, or a level recomputed directly from the monitor's running confidence-sequence
 state) and returns a fitted `LogitOffset(delta=hi)`. Shifting by the CS's *upper* end rather
 than the point-estimate plug-in (`delta_hat`) is the conservative choice: the CS covers the
 true offset with `1 - alpha` confidence at every stopping time, so `hi` corrects for at least

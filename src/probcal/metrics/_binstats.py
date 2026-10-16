@@ -32,6 +32,17 @@ class BinStats(NamedTuple):
         """Per-bin effective count ``w_sum**2 / w2_sum`` (``n_obs`` for unit weights)."""
         return self.w_sum * self.w_sum / self.w2_sum
 
+    def debias(self, sq: np.ndarray) -> np.ndarray:
+        """Per-bin squared gaps ``sq`` minus the event rate's within-bin variance.
+
+        The variance is ``rate * (1 - rate) / (n_eff - 1)``, floored at zero
+        after subtraction; bins with ``n_eff <= 1`` are returned unchanged.
+        """
+        n_eff = self.n_eff
+        multi = n_eff > 1.0
+        var = self.rate * (1.0 - self.rate) / np.where(multi, n_eff - 1.0, 1.0)
+        return np.where(multi, np.maximum(sq - var, 0.0), sq)
+
     @property
     def rate(self) -> np.ndarray:
         """Weighted event rate per bin."""

@@ -3,7 +3,6 @@
 Theory: ``docs/concepts/monitoring.md``.
 """
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,10 +11,10 @@ import numpy as np
 from .._math import beta_ppf, expit
 from .._registry import load, register
 from .._serialize import JsonIO, check_payload, envelope
-from ..metrics._common import effective_weights
-from ..metrics.scores import _prep
+from .._validation import validate_level
+from ..metrics._common import _prep
 from ..offset import LogitOffset
-from ._monitor import CalibrationMonitor, MonitorReport, MonitorStep
+from ._monitor import CalibrationMonitor, MonitorReport
 
 
 def moc_offset(
@@ -40,11 +39,12 @@ def moc_offset(
     - ``level=None`` (default): take ``hi`` from ``steps[-1].delta_ci``
       as-is, at the monitor's own ``alpha``.
     - ``level`` given: recompute the surviving grid nulls at that
-      confidence level directly from the monitor's own running state
-      (``mon._cs_grid[mon._cs_max < -log(1 - level)]``) and take their
-      max. This needs the live monitor object (its ``_cs_grid``/``_cs_max``
-      arrays), not a frozen :class:`~probcal.monitor.MonitorReport`
-      snapshot, so it raises ``TypeError`` for a report.
+      confidence level directly from the monitor's own running
+      confidence-sequence state (the nulls whose running maximum log-e
+      stays below ``-log(1 - level)``) and take their max. This needs the
+      live monitor object, not a frozen
+      :class:`~probcal.monitor.MonitorReport` snapshot, so it raises
+      ``TypeError`` for a report.
 
     The returned :class:`~probcal.offset.LogitOffset` is fit on the last
     monitored batch's probabilities (``expit(mon._z[-1])``), which fixes
@@ -96,18 +96,15 @@ def moc_offset(
     >>> off.delta_ >= mon.steps_[-1].delta_hat
     True
     """
-    if not isinstance(monitor_or_report, (CalibrationMonitor, MonitorReport)):
+    if isinstance(monitor_or_report, CalibrationMonitor):
+        mon, steps = monitor_or_report, monitor_or_report.steps_
+    elif isinstance(monitor_or_report, MonitorReport):
+        mon, steps = None, list(monitor_or_report.steps)
+    else:
         raise TypeError(
             "moc_offset requires a CalibrationMonitor or a MonitorReport, got "
             f"{type(monitor_or_report).__name__}"
         )
-    mon = monitor_or_report if isinstance(monitor_or_report, CalibrationMonitor) else None
-
-    steps: Sequence[MonitorStep]
-    if isinstance(monitor_or_report, CalibrationMonitor):
-        steps = monitor_or_report.steps_
-    else:
-        steps = monitor_or_report.steps
     if not steps:
         raise ValueError("moc_offset: no batches have been processed yet")
 
@@ -124,12 +121,11 @@ def moc_offset(
             raise TypeError(
                 "moc_offset: level requires a live CalibrationMonitor -- recomputing "
                 "the surviving grid nulls at a new confidence level reads the "
-                "monitor's running _cs_grid/_cs_max arrays, which a MonitorReport "
+                "monitor's running confidence-sequence state, which a MonitorReport "
                 "(a frozen snapshot) does not retain; pass the monitor itself, or "
                 "omit level to use its last step's delta_ci as-is"
             )
-        if not 0.0 < level < 1.0:
-            raise ValueError("level must lie in (0, 1)")
+        validate_level(level, "level")
         surviving = mon._cs.surviving(-np.log(1.0 - level))
         if surviving.size == 0:
             raise ValueError("moc_offset: no grid nulls survive at this level; widen delta_ci_grid")
@@ -192,10 +188,10 @@ def moc_offset_from_counts(
     True
     """
     y_arr, p_arr, w_arr = _prep(y, p, sample_weight)
-    if not 0.0 < level < 1.0:
-        raise ValueError("level must lie in (0, 1)")
-    # Kish effective counts: events and trials scaled by the same factor.
-    w_eff = effective_weights(w_arr)
+    validate_level(level, "level")
+    # Kish effective counts: events and trials scaled by the same factor
+    # (unit weights come back bit-identical: the factor is exactly 1.0).
+    w_eff = w_arr * (float(w_arr.sum()) / float(np.dot(w_arr, w_arr)))
     k = float(np.sum(w_eff * y_arr))
     n = float(np.sum(w_eff))
     q = beta_ppf(level, k + 0.5, n - k + 0.5)
@@ -241,20 +237,12 @@ def apply_recommendation(mon: CalibrationMonitor, target: object = None) -> "App
     rep = mon.report()
     kind = rep.recommendation
     old_fp = mon.fingerprint()
-    if kind == "none":
-        return AppliedAction(
-            kind=kind,
-            offset=None,
-            composed=None,
-            monitor=None,
-            window=(),
-            audit=_audit(rep, old_fp, old_target_fp),
-        )
-
-    # By index, not label: labels are opaque and may repeat (_onset_index).
-    start = mon._recommendation_window_start(mon._onset_index())
-    labels = tuple(s.label for s in mon.steps_[start:])
-    if kind == "re-fit":
+    labels: tuple[str, ...] = ()
+    if kind != "none":
+        # By index, not label: labels are opaque and may repeat (_onset_index).
+        start = mon._recommendation_window_start(mon._onset_index())
+        labels = tuple(s.label for s in mon.steps_[start:])
+    if kind != "re-offset":
         return AppliedAction(
             kind=kind,
             offset=None,
@@ -264,7 +252,6 @@ def apply_recommendation(mon: CalibrationMonitor, target: object = None) -> "App
             audit=_audit(rep, old_fp, old_target_fp),
         )
 
-    # kind == "re-offset"
     z_w, y_w, w_w = mon._since(start)
     p_w = expit(z_w)
     est = estimate_offset(y_w, p_w, sample_weight=w_w)

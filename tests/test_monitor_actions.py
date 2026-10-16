@@ -73,7 +73,7 @@ def test_moc_offset_level_recomputes_surviving_set(drifted) -> None:
     assert off_level.delta_ == pytest.approx(moc_offset(drifted).delta_)
 
     threshold = -np.log(1.0 - 0.5)
-    surviving = drifted._cs_grid[drifted._cs_max < threshold]
+    surviving = drifted._cs.grid[drifted._cs.max < threshold]
     assert moc_offset(drifted, level=0.5).delta_ == pytest.approx(float(surviving.max()))
 
 

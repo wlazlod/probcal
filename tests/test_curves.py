@@ -306,21 +306,6 @@ def test_bad_confidence_raises() -> None:
         corp_reliability(y, p, n_resamples=-1)
 
 
-def test_level_keyword_deprecated() -> None:
-    from probcal.curves import corp_reliability
-
-    y, p = _calibrated(300)
-    with pytest.warns(DeprecationWarning, match="confidence"):
-        a = reliability_smooth(y, p, level=0.8, n_boot=5)
-    b = reliability_smooth(y, p, confidence=0.8, n_boot=5)
-    np.testing.assert_array_equal(a.ci_low, b.ci_low)
-    with pytest.warns(DeprecationWarning, match="confidence"):
-        old = corp_reliability(y, p, level=0.8, n_resamples=10)
-    new = corp_reliability(y, p, confidence=0.8, n_resamples=10)
-    assert old.level == new.level == 0.8
-    np.testing.assert_array_equal(old.band_low, new.band_low)
-
-
 def test_calibration_belt_weights_scale_invariant() -> None:
     y, p = _calibrated(4000)
     w = np.where(p < 0.2, 5.0, 1.0)

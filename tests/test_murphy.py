@@ -45,7 +45,7 @@ def test_murphy_curve_exact_midpoint_identity():
 def test_murphy_curve_dominance_after_pav_recalibration():
     from probcal._corp import corp_fit
     from probcal.metrics import murphy_curve
-    from probcal.metrics.scores import _prep
+    from probcal.metrics._common import _prep
 
     y, p = _data(n=400, seed=2)
     y_arr, p_arr, w = _prep(y, p, None)

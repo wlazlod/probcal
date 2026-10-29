@@ -12,6 +12,8 @@ from typing import Any
 
 import numpy as np
 
+from ._corp import corp_fit, decompose
+from ._math import bootstrap_indices, percentile_band
 from ._plots_common import (
     _BLUE,
     _GREEN,
@@ -26,9 +28,10 @@ from ._plots_common import (
     _tr,
 )
 from ._results import CorpResult, SelectionReport
-from .curves import corp_reliability, reliability_binned
+from ._validation import validate_positive_int
+from .metrics._binstats import bin_stats
 from .metrics._common import _prep
-from .metrics.scores import MurphyCurve, murphy_curve
+from .metrics.scores import MurphyCurve, _murphy_score, _murphy_thresholds
 
 
 def plot_corp(
@@ -207,10 +210,8 @@ def plot_mcb_dsc(
                     "candidates must share the same weighted mean y "
                     "(UNC would differ across candidates)"
                 )
-            r = corp_reliability(y_arr, p_arr, sample_weight=w_arr, bands=None)
-            mcb[i] = getattr(r, f"{score}_mcb")
-            dsc[i] = getattr(r, f"{score}_dsc")
-            unc = getattr(r, f"{score}_unc")
+            pav = corp_fit(y_arr, p_arr, w_arr)[4]
+            _, mcb[i], dsc[i], unc = decompose(y_arr, p_arr, pav, w_arr, score)
 
     mean_score = mcb - dsc + unc
 
@@ -342,20 +343,19 @@ def plot_attributes(
         y_lower = np.clip(grid - half_width, 0.0, 1.0)
         ax.fill_between(_t(grid), _t(y_lower), _t(y_upper), color=_GREEN, alpha=0.08)
 
-        if method == "binned":
-            curve = reliability_binned(y_arr, p_arr, n_bins=n_bins, sample_weight=w)
-            sizes = 15.0 + 200.0 * curve.count / curve.count.max()
+        if method == "binned":  # reliability_binned's points, on the validated arrays
+            bs = bin_stats(y_arr, p_arr, w, n_bins, "mass")
+            sizes = 15.0 + 200.0 * bs.n_obs / bs.n_obs.max()
             ax.scatter(
-                _t(curve.pred_mean),
-                _t(curve.event_rate),
+                _t(bs.p_mean),
+                _t(bs.rate),
                 s=sizes,
                 color=_BLUE,
                 zorder=5,
                 label="binned",
             )
         else:
-            result = corp_reliability(y_arr, p_arr, sample_weight=w, bands=None)
-            x_edges, y_levels = _pav_step_xy(result.block_lo, result.block_hi, result.block_level)
+            x_edges, y_levels = _pav_step_xy(*corp_fit(y_arr, p_arr, w)[:3])
             ax.step(_t(x_edges), _t(y_levels), where="post", color=_BLUE, lw=2, label="PAV fit")
 
         _scale_axis_labels(ax, scale, "predicted probability", "observed event rate")
@@ -393,7 +393,8 @@ def plot_murphy(
         If ``True``, draw the paired difference of the two named curves'
         elementary scores instead of the curves themselves.
     n_boot : int, keyword-only
-        Bootstrap resamples for the difference band (``diff=True`` only).
+        Bootstrap resamples for the difference band (``diff=True`` only);
+        must be positive.
     random_state : int, keyword-only
         Seed for ``numpy.random.default_rng``, used by the bootstrap band.
     ax : matplotlib.axes.Axes or None, keyword-only
@@ -408,7 +409,8 @@ def plot_murphy(
     ------
     ValueError
         If ``diff=True`` and ``curves`` is not a mapping of exactly two
-        raw ``(y, p)`` pairs of equal length.
+        raw ``(y, p)`` pairs of equal length, or ``n_boot`` is not a
+        positive integer.
 
     Examples
     --------
@@ -431,24 +433,23 @@ def plot_murphy(
         (name_a, pair_a), (name_b, pair_b) = items
         if not all(isinstance(pr, tuple) and len(pr) == 2 for pr in (pair_a, pair_b)):
             raise ValueError(msg)
-        y_a, p_a, _w_a = _prep(pair_a[0], pair_a[1], None)
-        y_b, p_b, _w_b = _prep(pair_b[0], pair_b[1], None)
+        n_boot = validate_positive_int(n_boot, "n_boot")
+        y_a, p_a, w = _prep(pair_a[0], pair_a[1], None)
+        y_b, p_b, _ = _prep(pair_b[0], pair_b[1], None)
         if len(y_a) != len(y_b):
             raise ValueError("diff=True needs paired (y, p) of equal length")
 
-        curve_a = murphy_curve(y_a, p_a)
-        theta = curve_a.thresholds
-        delta = curve_a.score - murphy_curve(y_b, p_b, thresholds=theta).score
-        rng = np.random.default_rng(random_state)
-        n = len(y_a)
+        theta = _murphy_thresholds(513)
+        delta = _murphy_score(y_a, p_a, w, theta) - _murphy_score(y_b, p_b, w, theta)
+        # Validated once above: a resample may hold a single class (the
+        # elementary score is defined for it), so no per-resample checks.
         boot = np.empty((n_boot, len(theta)))
-        for b in range(n_boot):
-            idx = rng.integers(0, n, n)
-            ca = murphy_curve(y_a[idx], p_a[idx], thresholds=theta)
-            cb = murphy_curve(y_b[idx], p_b[idx], thresholds=theta)
-            boot[b] = ca.score - cb.score
-        band_lo = np.percentile(boot, 5, axis=0)
-        band_hi = np.percentile(boot, 95, axis=0)
+        draws = bootstrap_indices(np.random.default_rng(random_state), len(y_a), n_boot)
+        for b, idx in enumerate(draws):
+            boot[b] = _murphy_score(y_a[idx], p_a[idx], w, theta) - _murphy_score(
+                y_b[idx], p_b[idx], w, theta
+            )
+        band_lo, band_hi = percentile_band(boot, 0.05)
     elif not isinstance(curves, MurphyCurve):
         for curve in curves.values():
             if not isinstance(curve, MurphyCurve):

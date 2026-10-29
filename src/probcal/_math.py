@@ -7,7 +7,7 @@ Pure numpy + stdlib. Special functions are hand-rolled (continued fractions, ser
 
 import math
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
 from typing import NamedTuple
 
 import numpy as np
@@ -1006,3 +1006,50 @@ def bern_log_lr_rows(
 def shifted_expit(z: np.ndarray, shifts: np.ndarray) -> np.ndarray:
     """``expit(z + d)`` for every shift ``d``: a ``(len(shifts), len(z))`` array."""
     return expit(z[None, :] + np.asarray(shifts, dtype=np.float64)[:, None])
+
+
+def quantile_grid(p: np.ndarray, size: int) -> np.ndarray:
+    """``size`` equally spaced points from the 0.5th to the 99.5th percentile of ``p``."""
+    return np.linspace(float(np.quantile(p, 0.005)), float(np.quantile(p, 0.995)), size)
+
+
+def bootstrap_indices(
+    rng: np.random.Generator,
+    n: int,
+    n_boot: int,
+    *,
+    strata: Sequence[np.ndarray] | None = None,
+    accept: Callable[[np.ndarray], bool] | None = None,
+    reject_msg: str = "100 consecutive bootstrap draws rejected",
+) -> Iterator[np.ndarray]:
+    """Case-resampling bootstrap: one with-replacement index array per replicate.
+
+    Each replicate is ``rng.integers(0, n, n)``; with ``strata`` it is the
+    concatenation, in the given order, of an independent draw of
+    ``len(s)`` indices from each stratum ``s``. The draw order is fixed, so a
+    seeded ``rng`` reproduces the same replicates every time.
+
+    A resample may hold a single outcome class. Callers choose one of four
+    explicit policies: *keep* it (the default here; the statistic is defined
+    on every resample: kernel rates, PAV fits, Murphy scores); *avoid* it by
+    stratifying on the class (``strata``, ``metrics.evaluate``'s default);
+    *redraw* it (``accept`` returns ``False``; up to 100 consecutive draws,
+    then ``RuntimeError(reject_msg)``; ``evaluate(stratify=False)``); or
+    *skip* it in the caller's own loop (the monitor's slope CI).
+    """
+    for _ in range(n_boot):
+        for _attempt in range(100):
+            if strata is None:
+                idx = rng.integers(0, n, n)
+            else:
+                idx = np.concatenate([s[rng.integers(0, len(s), len(s))] for s in strata])
+            if accept is None or accept(idx):
+                break
+        else:
+            raise RuntimeError(reject_msg)
+        yield idx
+
+
+def percentile_band(samples: object, a: float) -> tuple[np.ndarray, np.ndarray]:
+    """Pointwise ``(a, 1 - a)`` quantiles of bootstrap ``samples`` along axis 0."""
+    return np.quantile(samples, a, axis=0), np.quantile(samples, 1.0 - a, axis=0)

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ._math import bootstrap_indices, percentile_band, quantile_grid
 from ._steps import eval_step, isotonic_blocks
 from .metrics.scores import _mean_brier, _mean_log_loss
 
@@ -135,15 +136,12 @@ def corp_bands(
         empty = np.array([], dtype=np.float64)
         return empty, empty, empty
     rng = np.random.default_rng(random_state)
-    grid = np.linspace(np.quantile(p, 0.005), np.quantile(p, 0.995), 201)
+    grid = quantile_grid(p, 201)
+    if bands == "consistency":
+        fits = (corp_fit((rng.random(p.size) < p).astype(float), p, w) for _ in range(n_resamples))
+    else:  # "confidence"
+        fits = (corp_fit(y[i], p[i], w[i]) for i in bootstrap_indices(rng, p.size, n_resamples))
     sims = np.empty((n_resamples, grid.size))
-    for b in range(n_resamples):
-        if bands == "consistency":
-            y_b = (rng.random(p.size) < p).astype(float)
-            lo, _, lev, _, _ = corp_fit(y_b, p, w)
-        else:  # "confidence"
-            idx = rng.integers(0, p.size, p.size)
-            lo, _, lev, _, _ = corp_fit(y[idx], p[idx], w[idx])
+    for b, (lo, _, lev, _, _) in enumerate(fits):
         sims[b] = eval_step(lo, lev, grid)
-    a = (1.0 - level) / 2.0
-    return grid, np.quantile(sims, a, axis=0), np.quantile(sims, 1.0 - a, axis=0)
+    return grid, *percentile_band(sims, (1.0 - level) / 2.0)

@@ -18,7 +18,17 @@ from dataclasses import dataclass
 import numpy as np
 
 from ._corp import corp_bands, corp_fit, decompose
-from ._math import bern_loglik, chi2_ppf, chi2_sf, expit, irls_logistic, loess, logit
+from ._math import (
+    bern_loglik,
+    bootstrap_indices,
+    chi2_ppf,
+    chi2_sf,
+    expit,
+    irls_logistic,
+    loess,
+    logit,
+    quantile_grid,
+)
 from ._results import (
     BeltResult,
     CorpResult,
@@ -96,10 +106,6 @@ def reliability_binned(
     )
 
 
-def _grid(p: np.ndarray, grid_size: int) -> np.ndarray:
-    return np.linspace(float(np.quantile(p, 0.005)), float(np.quantile(p, 0.995)), grid_size)
-
-
 def reliability_loess(
     y: object,
     p: object,
@@ -133,7 +139,7 @@ def reliability_loess(
         event rate at each point.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    grid = _grid(p_arr, grid_size)
+    grid = quantile_grid(p_arr, grid_size)
     fitted = loess(p_arr, y_arr, frac=frac, xeval=grid, w=None if is_uniform(w) else w)
     rate = np.clip(fitted, 0.0, 1.0)
     return SmoothReliabilityCurve(grid_p=grid, grid_logit=logit(grid), event_rate=rate)
@@ -171,7 +177,7 @@ def reliability_spline(
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     cal = SplineCalibrator()
     cal.fit(p_arr, y_arr, sample_weight=w)
-    grid = _grid(p_arr, grid_size)
+    grid = quantile_grid(p_arr, grid_size)
     return SmoothReliabilityCurve(
         grid_p=grid, grid_logit=logit(grid), event_rate=cal.predict_proba(grid)
     )
@@ -278,7 +284,7 @@ def reliability_smooth(
         Optional positive weights, same length as ``y``.
     grid_size : int, keyword-only
         Number of evaluation points, spanning the 0.5th to 99.5th percentile
-        of ``p`` (``curves._grid``).
+        of ``p`` (``_math.quantile_grid``).
     n_boot : int, keyword-only
         Number of bootstrap resamples for the confidence ribbon; ``0``
         disables it.
@@ -317,7 +323,7 @@ def reliability_smooth(
     conf = validate_level(confidence, "confidence")
     n_boot = validate_nonneg_int(n_boot, "n_boot")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    grid_p = _grid(p_arr, grid_size)
+    grid_p = quantile_grid(p_arr, grid_size)
     grid_logit = logit(grid_p)
     t = logit(p_arr)
     mass = (w / w.sum()) * (y_arr - p_arr)
@@ -326,11 +332,9 @@ def reliability_smooth(
     event_rate, density = _kernel_rate_density(t, y_arr, w, sigma_star, grid_logit, lattice)
 
     if n_boot > 0:
-        rng = np.random.default_rng(random_state)
-        n = len(y_arr)
         boot_rate = np.empty((n_boot, grid_size))
-        for i in range(n_boot):
-            idx_b = rng.integers(0, n, n)
+        draws = bootstrap_indices(np.random.default_rng(random_state), len(y_arr), n_boot)
+        for i, idx_b in enumerate(draws):
             # `lattice` is the point estimate's fixed (width, t_lo, b) — never
             # rederived here. The ribbon is meant to reflect uncertainty in the
             # rate given sigma_star, not uncertainty in sigma_star or its
@@ -670,7 +674,7 @@ def calibration_belt(
     # Bands from the (sandwich) covariance ellipsoid.
     mu = expit(np.clip(X @ fit.beta, -30.0, 30.0))
     info_inv = covariance(X, mu)
-    grid_p = _grid(p_arr, grid_size)
+    grid_p = quantile_grid(p_arr, grid_size)
     grid_z = logit(grid_p)
     Xg = design(degree, grid_z)
     eta = Xg @ fit.beta

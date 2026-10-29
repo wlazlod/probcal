@@ -10,9 +10,10 @@ import math
 
 import numpy as np
 
-from .._math import bern_loglik, expit
+from .._math import bern_loglik, bootstrap_indices, expit, percentile_band
+from .._validation import EPS
 from ..metrics._common import rao_scott
-from ..metrics.regression import calibration_slope
+from ..metrics.regression import _slope_fit
 from ._processes import plug_in_delta, plug_in_shape
 
 CHI2_1_95 = 3.841
@@ -46,21 +47,20 @@ def slope_ci(z: np.ndarray, y: np.ndarray, w: np.ndarray, n_boot: int = 200) -> 
     """Percentile bootstrap CI of the Cox slope on the trailing window (seeded)."""
     if z.size < 10 or np.unique(y).size < 2:
         return -np.inf, np.inf
-    rng = np.random.default_rng(0)
-    p = expit(z)
+    p = np.clip(expit(z), EPS, 1.0 - EPS)  # the validated p calibration_slope would fit
     slopes = []
-    for _ in range(n_boot):
-        idx = rng.integers(0, len(z), len(z))
+    for idx in bootstrap_indices(np.random.default_rng(0), len(z), n_boot):
         # One-class or constant-logit resamples identify no slope: skip them
-        # (calibration_slope would return nan and warn).
+        # (the fit would return nan and warn).
         if np.unique(y[idx]).size < 2 or np.unique(z[idx]).size < 2:
             continue
-        slope = calibration_slope(y[idx], p[idx], sample_weight=w[idx])
+        slope = float(_slope_fit(y[idx], p[idx], w[idx])[1][1])
         if np.isfinite(slope):
             slopes.append(slope)
     if len(slopes) < 20:
         return -np.inf, np.inf
-    return float(np.quantile(slopes, 0.025)), float(np.quantile(slopes, 0.975))
+    lo, hi = percentile_band(slopes, 0.025)
+    return float(lo), float(hi)
 
 
 def recommend(

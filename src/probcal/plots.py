@@ -32,6 +32,7 @@ from ._plots_common import (
     _RED,
     _check_scale,
     _get_axes,
+    _identity,
     _plot_context,
     _plt,
     _require_mpl,
@@ -55,6 +56,7 @@ from .curves import EcceCurve, reliability_binned
 from .metrics import brier_score, reliability_summary, smooth_ece
 from .metrics._evaluate import _group_rows
 from .metrics.grade import JeffreysGradeResult
+from .vennabers import _scalarize
 
 # Names shown, in order, by `stats=<MetricReport>` when present in the report.
 _STATS_REPORT_NAMES = ("intercept", "slope", "ici", "smooth_ece", "brier")
@@ -426,7 +428,7 @@ def _draw_reliability(
     yv = _tr(curve.event_rate[keep], scale)
     ylo = _tr(curve.ci_low[keep], scale, _CI_CLIP_EPS)
     yhi = _tr(curve.ci_high[keep], scale, _CI_CLIP_EPS)
-    ax.plot(diag, diag, ls="--", c=_GREY, lw=1, label="identity")
+    _identity(ax, diag)
     ax.errorbar(
         x,
         yv,
@@ -576,7 +578,7 @@ def plot_belt(belt: BeltResult, *, scale: str = "probability", ax: Any = None) -
     with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
         x = belt.grid_logit if scale == "logit" else belt.grid_p
-        ax.plot(x, x, ls="--", c=_GREY, lw=1)
+        _identity(ax, x, label=None)
         # Widest level first so the narrower band sits on top of it.
         for level, alpha in zip(sorted(belt.levels, reverse=True), (0.2, 0.35), strict=True):
             lo, hi = belt.bands[level]
@@ -654,7 +656,7 @@ def plot_interval(intervals: np.ndarray, s: np.ndarray, *, ax: Any = None) -> An
         p0 = np.asarray(intervals, dtype=np.float64)[order, 0]
         p1 = np.asarray(intervals, dtype=np.float64)[order, 1]
         ax.fill_between(s_arr, p0, p1, color=_BLUE, alpha=0.3, label="Venn–Abers interval")
-        ax.plot(s_arr, p1 / (1.0 - p0 + p1), lw=1.2, c=_ORANGE, label="scalarized")
+        ax.plot(s_arr, _scalarize(p0, p1), lw=1.2, c=_ORANGE, label="scalarized")
         ax.set_xlabel("score")
         ax.set_ylabel("calibrated probability")
         ax.legend(loc="upper left")
@@ -868,7 +870,7 @@ def plot_offset_audit(offset: Any, *, ax: Any = None) -> Any:
     lq = logit1(offset.post_mean_)
     with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
-        ax.plot(t, t, ls="--", c=_GREY, lw=1, label="identity")
+        _identity(ax, t)
         ax.plot(t, t + offset.delta_, c=_BLUE, lw=1.6, label="offset map")
         if offset.target_mean is not None:
             ax.axhline(logit1(offset.target_mean), c=_GREY, lw=0.8, alpha=0.7)

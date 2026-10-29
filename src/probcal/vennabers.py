@@ -88,6 +88,11 @@ def _csd_sweep(c: np.ndarray, z: np.ndarray, dy: float) -> np.ndarray:
     return out
 
 
+def _scalarize(p0: np.ndarray, p1: np.ndarray) -> np.ndarray:
+    """Log-loss-minimax merge ``p1 / (1 - p0 + p1)`` of a Venn-Abers interval."""
+    return p1 / (1.0 - p0 + p1)
+
+
 @register
 class VennAbersCalibrator(BaseCalibrator):
     """Inductive Venn–Abers predictor (IVAP).
@@ -169,8 +174,7 @@ class VennAbersCalibrator(BaseCalibrator):
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         intervals = self._interval(s)
-        p0, p1 = intervals[:, 0], intervals[:, 1]
-        return p1 / (1.0 - p0 + p1)
+        return _scalarize(intervals[:, 0], intervals[:, 1])
 
     def interpret(self) -> Interpretation:
         """Report interval widths over the calibration scores — where to trust the map."""

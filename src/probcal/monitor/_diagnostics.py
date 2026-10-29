@@ -10,14 +10,14 @@ import math
 
 import numpy as np
 
-from .._math import bern_loglik, bootstrap_indices, expit, percentile_band
+from .._math import bern_loglik, bootstrap_indices, chi2_ppf, expit, percentile_band
 from .._validation import EPS
 from ..metrics._common import rao_scott
 from ..metrics.regression import _slope_fit
 from ._processes import plug_in_delta, plug_in_shape
 
-CHI2_1_95 = 3.841
-"""chi-square(1) upper 5% point, the residual-LR bound."""
+CHI2_1_95 = chi2_ppf(0.95, 1.0)
+"""chi-square(1) upper 5% point (3.8415), the residual-LR bound."""
 
 
 def residual_shape_lr(z: np.ndarray, y: np.ndarray, w: np.ndarray, delta: float) -> float:

@@ -84,8 +84,9 @@ def _solve_delta(z: np.ndarray, w: np.ndarray, target: float) -> float:
     """The ``delta`` with ``mean_w(sigma(z + delta)) == target``, by bisection.
 
     The weighted mean is strictly increasing in ``delta``, so the root is
-    unique. Shared by :meth:`LogitOffset.fit` (mode B) and
-    :func:`_offset_mle`, so the two stay bit-identical.
+    unique. Shared by :meth:`LogitOffset.fit` (mode B), :func:`_offset_mle`
+    and ``probcal.monitor._processes.plug_in_delta``, so they stay
+    bit-identical.
 
     Raises
     ------
@@ -417,10 +418,9 @@ def _offset_mle(z: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
     """Offset-only logistic MLE on already-valid inputs (logits ``z``, 0/1 ``y``, weights ``w``).
 
     The root of ``sum(w * (y - sigma(z + delta))) = 0``, i.e. the
-    ``LogitOffset(target_mean=mean_w(y))`` shift (:func:`_solve_delta`).
-    Shared by :func:`estimate_offset` and
-    ``probcal.monitor._processes.plug_in_delta`` so the two stay
-    bit-identical; callers handle degenerate input.
+    ``LogitOffset(target_mean=mean_w(y))`` shift (:func:`_solve_delta`,
+    which ``probcal.monitor._processes.plug_in_delta`` solves the same way).
+    Callers handle degenerate input.
     """
     return _solve_delta(z, w, float(np.average(y, weights=w)))
 
@@ -432,7 +432,7 @@ def estimate_offset(y: object, p: object, *, sample_weight: object = None) -> Of
     by maximum likelihood. The score equation
     ``sum(w * (y - sigma(logit(p) + delta))) = 0`` is exactly the mean-matching
     condition solved by ``LogitOffset(target_mean=mean_w(y))``, so ``delta`` is
-    found by the same bisection root-finder (:func:`_offset_mle`, shared with
+    found by the same bisection root-finder (:func:`_solve_delta`, also behind
     ``probcal.monitor._processes.plug_in_delta``). Weights are relative
     frequency weights (:mod:`probcal.metrics._common`): ``delta`` and ``se``
     do not change when every weight is multiplied by a constant. With

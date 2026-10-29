@@ -20,6 +20,7 @@ from ._plots_common import (
     _GREY,
     _check_scale,
     _get_axes,
+    _identity,
     _pav_step_xy,
     _plot_context,
     _require_mpl,
@@ -89,7 +90,7 @@ def plot_corp(
             result.block_weight,
         )
         domain = _tr([lo[0], hi[-1]], scale)
-        ax.plot(domain, domain, ls="--", c=_GREY, lw=1, label="identity")
+        _identity(ax, domain)
 
         if len(result.band_grid) > 0:
             ax.fill_between(
@@ -332,7 +333,7 @@ def plot_attributes(
 
         grid = np.linspace(0.0, 1.0, 400)
         ybar_t = float(_t([ybar])[0])
-        ax.plot(_t(grid), _t(grid), ls="--", color=_GREY, lw=1, label="identity")
+        _identity(ax, _t(grid))
         ax.axhline(ybar_t, color=_GREY, ls=":", lw=1, label="climatology / no resolution")
         ax.axvline(ybar_t, color=_GREY, ls=":", lw=1, label="climatology")
         no_skill = (grid + ybar) / 2.0

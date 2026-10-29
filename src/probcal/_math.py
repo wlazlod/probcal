@@ -1052,4 +1052,20 @@ def bootstrap_indices(
 
 def percentile_band(samples: object, a: float) -> tuple[np.ndarray, np.ndarray]:
     """Pointwise ``(a, 1 - a)`` quantiles of bootstrap ``samples`` along axis 0."""
-    return np.quantile(samples, a, axis=0), np.quantile(samples, 1.0 - a, axis=0)
+    arr = np.asarray(samples, dtype=np.float64)
+    return np.quantile(arr, a, axis=0), np.quantile(arr, 1.0 - a, axis=0)
+
+
+def jeffreys_ppf(q: float, k: float, n: float) -> float:
+    """Quantile ``q`` of the Jeffreys posterior ``Beta(k + 1/2, n - k + 1/2)``."""
+    return beta_ppf(q, k + 0.5, n - k + 0.5)
+
+
+def clopper_pearson_lower(q: float, k: float, n: float) -> float:
+    """Clopper-Pearson bound ``Beta(k, n - k + 1)`` quantile ``q``; 0 when ``k == 0``."""
+    return 0.0 if k == 0 else beta_ppf(q, float(k), n - k + 1.0)
+
+
+def clopper_pearson_upper(q: float, k: float, n: float) -> float:
+    """Clopper-Pearson bound ``Beta(k + 1, n - k)`` quantile ``q``; 1 when ``k == n``."""
+    return 1.0 if k == n else beta_ppf(q, k + 1.0, float(n - k))

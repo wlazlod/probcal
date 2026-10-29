@@ -150,6 +150,11 @@ def _pav_step_xy(
     return x_edges, np.repeat(level, 2)
 
 
+def _identity(ax: Any, x: Any, *, label: str | None = "identity") -> None:
+    """Dashed grey identity line ``y = x`` through the points ``x``."""
+    ax.plot(x, x, ls="--", c=_GREY, lw=1, label=label)
+
+
 def _text_box(ax: Any, txt: str) -> None:
     """The top-left annotation box shared by every plot that prints numbers."""
     ax.text(0.03, 0.97, txt, transform=ax.transAxes, va="top", fontsize=9, bbox=_BOX)

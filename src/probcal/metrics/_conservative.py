@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import beta_ppf
+from .._math import clopper_pearson_upper, jeffreys_ppf
 from .._results import Interpretation, _ResultBase
 from .._validation import validate_binary_y, validate_level, validate_scores, validate_weights
 from ._grades import aggregate, grade_labels, is_masterscale, resolve_order
@@ -195,7 +195,7 @@ def pluto_tasche(
     # d <= n per grade implies d* <= n*, so the second shape is > 0 unless d* == n*.
     pd_upper = np.array(
         [
-            1.0 if ds == ns else beta_ppf(confidence, ds + 1.0, ns - ds)
+            clopper_pearson_upper(confidence, ds, ns)
             for ns, ds in zip(n_pooled, d_pooled, strict=True)
         ]
     )
@@ -405,7 +405,7 @@ def jeffreys_upper_bands(
         perm = np.argsort(mean_p, kind="stable")
         order_t, n, k = tuple(order_t[i] for i in perm), n[perm], k[perm]
 
-    hi_raw = np.array([beta_ppf(conf, k[i] + 0.5, n[i] - k[i] + 0.5) for i in range(len(order_t))])
+    hi_raw = np.array([jeffreys_ppf(conf, k[i], n[i]) for i in range(len(order_t))])
     # Running maximum, merging every grade it would leave with a zero-width
     # band into the preceding band.
     blocks: list[tuple[list[str], float]] = []

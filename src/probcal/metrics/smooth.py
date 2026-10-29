@@ -15,11 +15,16 @@ from .._math import loess, logit, norm_sf, weighted_quantile
 from ._common import _prep, is_uniform
 
 
+def _gauss_pdf(u: np.ndarray, sigma: float) -> np.ndarray:
+    """Gaussian kernel ``phi(u) / sigma`` at standardized offsets ``u = d / sigma``."""
+    return np.exp(-0.5 * u**2) / (sigma * math.sqrt(2.0 * math.pi))
+
+
 def _smece_at_sigma(loc: np.ndarray, mass: np.ndarray, sigma: float) -> float:
     """smECE at bandwidth sigma: integral of |kernel-smoothed signed residual measure|."""
     grid = np.linspace(loc.min() - 5.0 * sigma, loc.max() + 5.0 * sigma, 257)
     diff = (grid[:, None] - loc[None, :]) / sigma
-    kern = np.exp(-0.5 * diff**2) / (sigma * math.sqrt(2.0 * math.pi))
+    kern = _gauss_pdf(diff, sigma)
     f = np.abs(kern @ mass)
     # Trapezoid rule, written out: np.trapezoid needs numpy >= 2.0.
     return float((np.diff(grid) * (f[1:] + f[:-1]) / 2.0).sum())
@@ -72,7 +77,7 @@ def _gauss_taps(sigma: float, w2: float) -> np.ndarray:
     """Gaussian kernel taps on a ``w2``-spaced lattice, truncated at +-5 sigma."""
     k = int(math.ceil(5.0 * sigma / w2))
     offs = np.arange(-k, k + 1) * w2
-    return np.exp(-0.5 * (offs / sigma) ** 2) / (sigma * math.sqrt(2.0 * math.pi))
+    return _gauss_pdf(offs / sigma, sigma)
 
 
 def _smece_at_sigma_lattice(m: np.ndarray, width: float, sigma: float) -> float:

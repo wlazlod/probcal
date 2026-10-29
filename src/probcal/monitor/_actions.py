@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from .._math import beta_ppf, expit
+from .._math import expit, jeffreys_ppf
 from .._registry import load, register
 from .._serialize import JsonIO, check_payload, envelope
 from .._validation import validate_level
@@ -194,7 +194,7 @@ def moc_offset_from_counts(
     w_eff = w_arr * (float(w_arr.sum()) / float(np.dot(w_arr, w_arr)))
     k = float(np.sum(w_eff * y_arr))
     n = float(np.sum(w_eff))
-    q = beta_ppf(level, k + 0.5, n - k + 0.5)
+    q = jeffreys_ppf(level, k, n)
     return LogitOffset(target_mean=q).fit(p_arr, sample_weight=w_arr)
 
 

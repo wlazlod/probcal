@@ -11,7 +11,6 @@ Lemeshow, Phillips, Finazzi & Bertolini (2017) — full records in the
 documentation. The belt is reimplemented from the papers; no GPL code is used.
 """
 
-import math
 import warnings
 from dataclasses import dataclass
 
@@ -44,6 +43,7 @@ from .metrics._common import _prep, gram, is_uniform, rao_scott
 from .metrics.smooth import (
     Lattice,
     _ecce_walk,
+    _gauss_pdf,
     _lattice_index,
     _lattice_kernel_smooth,
     _smece_solve,
@@ -215,7 +215,7 @@ def _kernel_rate_density(
         density = np.interp(grid_logit, centers, den_s)
     else:
         diff = (grid_logit[:, None] - t[None, :]) / sigma
-        taps = np.exp(-0.5 * diff**2) / (sigma * math.sqrt(2.0 * math.pi))
+        taps = _gauss_pdf(diff, sigma)
         num = taps @ (w * y)
         den = taps @ w
         # Same gap rule as the lattice path: no observation within 5 sigma.

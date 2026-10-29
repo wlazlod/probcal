@@ -544,3 +544,25 @@ class OffsetEstimate(_ResultBase):
             f"OffsetEstimate(delta={self.delta:+.4f} +/- {self.se:.4f}, "
             f"n={self.n}, events={self.events:.1f})"
         )
+
+
+# ---------------------------------------------------------------- interpretation merging
+
+
+def merge_interpretations(
+    method: str, parts: Sequence[Interpretation], *, qualify: bool = False
+) -> Interpretation:
+    """One :class:`Interpretation` from several, parameters and messages in order.
+
+    ``qualify=True`` prefixes each parameter name with its part's method.
+    """
+    return Interpretation(
+        method=method,
+        param_names=tuple(
+            f"{part.method}.{name}" if qualify else name
+            for part in parts
+            for name in part.param_names
+        ),
+        param_values=tuple(v for part in parts for v in part.param_values),
+        messages=tuple(m for part in parts for m in part.messages),
+    )

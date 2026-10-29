@@ -2,13 +2,13 @@
 
 import inspect
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from typing import TYPE_CHECKING, Any, Self
 
 import numpy as np
 
 from ._math import _LOGIT_CLIP, expit, expit1, logit, logit1
-from ._results import Interpretation
+from ._results import Interpretation, merge_interpretations
 from ._serialize import (
     JsonIO,
     check_payload,
@@ -327,6 +327,26 @@ class _FittedObject(FittedStateMixin, JsonIO):
             )
         a, b = coeffs
         return (logit(p) - b) / a
+
+    def _interpretation(
+        self,
+        params: Mapping[str, float],
+        messages: Iterable[str],
+        *,
+        extends: Interpretation | None = None,
+    ) -> Interpretation:
+        """An :class:`Interpretation` under this class's name.
+
+        ``extends`` (a first stage's or parent class's reading) comes first:
+        its parameters and messages are prepended to ``params``/``messages``.
+        """
+        own = Interpretation(
+            method=type(self).__name__,
+            param_names=tuple(params),
+            param_values=tuple(params.values()),
+            messages=tuple(messages),
+        )
+        return own if extends is None else merge_interpretations(own.method, [extends, own])
 
     # ------------------------------------------------------------- parameters
 

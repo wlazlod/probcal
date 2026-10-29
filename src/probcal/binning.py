@@ -125,12 +125,7 @@ class HistogramBinningCalibrator(BaseCalibrator):
                 "fitted bin rates are not monotone: binning does not enforce ranking "
                 "preservation — read inversions as noise, not signal"
             )
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("n_bins",),
-            param_values=(float(len(self.bin_rate_)),),
-            messages=tuple(messages),
-        )
+        return self._interpretation({"n_bins": float(len(self.bin_rate_))}, messages)
 
 
 @register
@@ -226,18 +221,13 @@ class ScalingBinningCalibrator(BaseCalibrator):
     def interpret(self) -> Interpretation:
         """Two-stage reading: Platt map, then the error-measurability discretization."""
         self._check_fitted()
-        platt_interp = self.platt_.interpret()
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=platt_interp.param_names + ("n_bins",),
-            param_values=platt_interp.param_values + (float(len(self.bin_value_)),),
-            messages=platt_interp.messages
-            + (
-                (
-                    f"binning stage: {len(self.bin_value_)} equal-mass bins of the fitted "
-                    "Platt values; outputs are bin means, which makes the residual "
-                    "calibration error estimable with O(1/eps^2 + B) samples "
-                    "(vs O(B/eps^2) for histogram binning)"
-                ),
-            ),
+        return self._interpretation(
+            {"n_bins": float(len(self.bin_value_))},
+            [
+                f"binning stage: {len(self.bin_value_)} equal-mass bins of the fitted "
+                "Platt values; outputs are bin means, which makes the residual "
+                "calibration error estimable with O(1/eps^2 + B) samples "
+                "(vs O(B/eps^2) for histogram binning)"
+            ],
+            extends=self.platt_.interpret(),
         )

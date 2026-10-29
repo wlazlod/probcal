@@ -178,17 +178,15 @@ class VennAbersCalibrator(BaseCalibrator):
         intervals = self._interval(self.scores_)
         widths = intervals[:, 1] - intervals[:, 0]
         mean_w, max_w = float(widths.mean()), float(widths.max())
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("mean_width", "max_width"),
-            param_values=(mean_w, max_w),
-            messages=(
+        return self._interpretation(
+            {"mean_width": mean_w, "max_width": max_w},
+            [
                 f"mean Venn–Abers interval width {mean_w:.4f}, maximum {max_w:.4f} over the "
                 "distinct calibration scores: width is per-score calibration uncertainty",
                 "the validity guarantee holds for the interval [p0, p1] from "
                 "predict_interval(); the scalar from predict_proba() is the log-loss-minimax "
                 "merger p1/(1-p0+p1) and is not itself covered by the guarantee",
-            ),
+            ],
         )
 
 
@@ -274,14 +272,12 @@ class CrossVennAbersCalibrator(BaseCalibrator):
         probe = np.linspace(0.01, 0.99, 99)
         env = self.predict_interval(probe)
         widths = env[:, 1] - env[:, 0]
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("cv", "mean_envelope_width"),
-            param_values=(float(self.cv), float(widths.mean())),
-            messages=(
+        return self._interpretation(
+            {"cv": float(self.cv), "mean_envelope_width": float(widths.mean())},
+            [
                 f"{self.cv} stratified folds, one IVAP per fold; scalar output is the "
                 "geometric-mean merge GM(p1)/(GM(1-p0)+GM(p1))",
                 "predict_interval() returns the conservative fold envelope "
                 "[min p0, max p1]; per-fold IVAP intervals carry the validity guarantee",
-            ),
+            ],
         )

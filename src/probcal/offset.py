@@ -207,11 +207,9 @@ class LogitOffset(_FittedObject):
     def interpret(self) -> Interpretation:
         """Read delta in log-odds, odds-factor, and central-tendency terms."""
         self._check_fitted()
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("delta",),
-            param_values=(self.delta_,),
-            messages=(
+        return self._interpretation(
+            {"delta": self.delta_},
+            (
                 f"delta = {self.delta_:+.4f} log-odds: every observation's odds are "
                 f"multiplied by exp(delta) = {np.exp(self.delta_):.4f} uniformly",
                 f"portfolio mean re-anchored from {self.pre_mean_:.5f} to "

@@ -17,11 +17,11 @@ import numpy as np
 from ._math import expit
 from ._protocol import CalibratorProtocolMixin
 from ._registry import load, register
-from ._results import Interpretation
+from ._results import Interpretation, merge_interpretations
 from ._serialize import JsonIO, check_payload, decode_value, encode_value, envelope, fit_meta
 from ._validation import stratified_folds, validate_binary_y, validate_cv, validate_weights
 from .base import BaseCalibrator, FittedStateMixin, clone_unfitted
-from .chain import Chain, _concat_interpretations
+from .chain import Chain, _staged_method
 from .offset import LogitOffset
 
 
@@ -475,7 +475,7 @@ class CalibratedModel(CalibratorProtocolMixin, FittedStateMixin, JsonIO):
         """
         stages: list[BaseCalibrator | LogitOffset] = [*self._calibrators(), *self.offsets_]
         parts = [stage.interpret() for stage in stages]
-        return _concat_interpretations("CalibratedModel", parts, qualify=False)
+        return merge_interpretations(_staged_method("CalibratedModel", parts), parts)
 
     @property
     def chain_(self) -> Chain:

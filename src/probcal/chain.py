@@ -12,7 +12,7 @@ import numpy as np
 
 from ._math import expit, expit1, logit, logit1
 from ._registry import load, register
-from ._results import Interpretation
+from ._results import Interpretation, merge_interpretations
 from ._serialize import JsonIO, check_payload, envelope
 from ._validation import validate_space
 from .base import (
@@ -25,28 +25,9 @@ from .base import (
 from .offset import LogitOffset
 
 
-def _concat_interpretations(
-    method: str, parts: "list[Interpretation]", *, qualify: bool
-) -> Interpretation:
-    """One :class:`Interpretation` from several stages, in application order.
-
-    ``qualify=True`` prefixes each parameter name with its stage's method.
-    """
-    names: tuple[str, ...] = ()
-    values: tuple[float, ...] = ()
-    messages: tuple[str, ...] = ()
-    for part in parts:
-        names += (
-            tuple(f"{part.method}.{n}" for n in part.param_names) if qualify else part.param_names
-        )
-        values += part.param_values
-        messages += part.messages
-    return Interpretation(
-        method=f"{method}[{', '.join(p.method for p in parts)}]",
-        param_names=names,
-        param_values=values,
-        messages=messages,
-    )
+def _staged_method(name: str, parts: "list[Interpretation]") -> str:
+    """``name[stage, stage, ...]``: the method of a staged interpretation."""
+    return f"{name}[{', '.join(p.method for p in parts)}]"
 
 
 @register
@@ -292,7 +273,7 @@ class Chain(FittedStateMixin, JsonIO):
         """Concatenated interpretation of every stage."""
         self._check_fitted()
         parts = [self.calibrator_.interpret()] + [off.interpret() for off in self.offsets_]
-        return _concat_interpretations("Chain", parts, qualify=True)
+        return merge_interpretations(_staged_method("Chain", parts), parts, qualify=True)
 
     # ------------------------------------------------------------------ serialization
 

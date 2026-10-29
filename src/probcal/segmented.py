@@ -409,8 +409,10 @@ class SegmentedCalibrator(BaseCalibrator):
     def interpret(self) -> Interpretation:
         """Per-segment shrinkage table plus the fitted heterogeneity variance."""
         self._check_fitted()
-        param_names = ("tau2", *(f"delta.{g}" for g in self.segments_))
-        param_values = (self.tau2_, *(float(d) for d in self.delta_tilde_))
+        params = {"tau2": self.tau2_}
+        params.update(
+            (f"delta.{g}", float(d)) for g, d in zip(self.segments_, self.delta_tilde_, strict=True)
+        )
         messages = [
             f"tau2 = {self.tau2_:.4f}: between-segment heterogeneity variance "
             "(DerSimonian-Laird method of moments on the per-segment offset MLEs); "
@@ -434,12 +436,7 @@ class SegmentedCalibrator(BaseCalibrator):
         messages.append(
             f"unseen segments at predict/inverse time {policy} (unseen={self.unseen!r})"
         )
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=param_names,
-            param_values=param_values,
-            messages=tuple(messages),
-        )
+        return self._interpretation(params, messages)
 
     # ------------------------------------------------------------- serialization
 

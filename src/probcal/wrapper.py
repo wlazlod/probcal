@@ -10,7 +10,6 @@ import json
 import sys
 import warnings
 from collections.abc import Callable
-from datetime import UTC, datetime
 from typing import Any, Self
 
 import numpy as np
@@ -18,11 +17,11 @@ import numpy as np
 from ._math import expit
 from ._protocol import CalibratorProtocolMixin
 from ._registry import load, register
-from ._results import Interpretation
-from ._serialize import JsonIO, check_payload, data_fingerprint, encode_value, envelope
+from ._results import Interpretation, merge_interpretations
+from ._serialize import JsonIO, check_payload, decode_value, encode_value, envelope, fit_meta
 from ._validation import cv_splits, validate_binary_y, validate_choice, validate_weights
-from .base import BaseCalibrator, clone_unfitted
-from .chain import Chain, _concat_interpretations
+from .base import BaseCalibrator, _FittedState, clone_unfitted
+from .chain import Chain, _staged_method
 from .offset import LogitOffset
 
 
@@ -154,7 +153,7 @@ def _clone(model: Any) -> Any:
 
 
 @register
-class CalibratedModel(CalibratorProtocolMixin, JsonIO):
+class CalibratedModel(CalibratorProtocolMixin, _FittedState, JsonIO):
     """Wrap any scoring model with a probcal calibrator (and optional offsets).
 
     Parameters
@@ -284,13 +283,7 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
             s = self._fit_cv(X, y_arr, w_arr, splits, weighted=weighted)
         self._cal_scores = s
         self._cal_weights = w_arr if weighted else None
-        self.fit_meta_ = {
-            "n_obs": int(len(y_arr)),
-            "n_events": float(np.sum(w_arr * y_arr)),
-            "weight_sum": float(w_arr.sum()),
-            "fitted_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "data_fingerprint": data_fingerprint(s, y_arr, w_arr),
-        }
+        self.fit_meta_ = fit_meta(s, w_arr, y_arr)
         self.fitted_ = True
         return self
 
@@ -341,14 +334,6 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
         return oof_scores
 
     # ------------------------------------------------------------------ prediction
-
-    def _check_fitted(self) -> None:
-        if not getattr(self, "fitted_", False):
-            raise RuntimeError("CalibratedModel is not fitted; call fit() first")
-
-    def __sklearn_is_fitted__(self) -> bool:
-        """Fitted state for sklearn >= 1.6 (model and calibrator both fitted)."""
-        return bool(getattr(self, "fitted_", False))
 
     def _pipeline(self, scores: "Callable[[Any], np.ndarray]") -> np.ndarray:
         """Calibrated, offset output; ``scores(model)`` gives each calibrator's input."""
@@ -506,7 +491,7 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
         """
         stages: list[BaseCalibrator | LogitOffset] = [*self._calibrators(), *self.offsets_]
         parts = [stage.interpret() for stage in stages]
-        return _concat_interpretations("CalibratedModel", parts, qualify=False)
+        return merge_interpretations(_staged_method("CalibratedModel", parts), parts)
 
     @property
     def chain_(self) -> Chain:
@@ -628,7 +613,7 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
         obj.ensemble_ = []
         obj.model_ = model
         obj._model_ref = dict(state["model_ref"])
-        obj.fit_meta_ = dict(d["fit_meta"])
+        obj.fit_meta_ = dict(decode_value(d["fit_meta"], arrays=False))  # type: ignore[call-overload]
         obj.fitted_ = True
         return obj
 

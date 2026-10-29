@@ -303,16 +303,12 @@ class SegmentedCalibrator(BaseCalibrator):
         A per-segment logit shift is increasing, so it cannot break
         monotonicity; the base map alone decides.
         """
-        base = self.__dict__.get("base_")
-        return True if base is None else bool(base.is_monotone_)
+        return self._stage_monotone("base_")
 
     @property
     def complexity_rank(self) -> float:
         """The base map's parsimony rank (fitted ``base_``, else the prototype)."""
-        base = self.__dict__.get("base_")
-        if base is None:
-            base = self.base if self.base is not None else BetaCalibrator()
-        return float(getattr(base, "complexity_rank", 100.0))
+        return self._stage_rank("base_", self.base if self.base is not None else BetaCalibrator())
 
     @property
     def affine_logit_coeffs_(self) -> tuple[float, float] | None:
@@ -376,6 +372,11 @@ class SegmentedCalibrator(BaseCalibrator):
         target = self._segment_chain_or_base(segment)
         return target.interval_inverse(lo, hi, space=space, buffer_logit=buffer_logit)
 
+    def _invert_interval(self, lo_b: float, hi_b: float, space: str) -> tuple[float, float]:
+        """The global map's (``segment=None``) preimage of a prepared interval."""
+        self._check_fitted()
+        return self.base_._invert_interval(lo_b, hi_b, space)
+
     def point_inverse(
         self, p: object, *, space: str = "probability", segment: object = None
     ) -> np.ndarray:
@@ -410,8 +411,10 @@ class SegmentedCalibrator(BaseCalibrator):
     def interpret(self) -> Interpretation:
         """Per-segment shrinkage table plus the fitted heterogeneity variance."""
         self._check_fitted()
-        param_names = ("tau2", *(f"delta.{g}" for g in self.segments_))
-        param_values = (self.tau2_, *(float(d) for d in self.delta_tilde_))
+        params = {"tau2": self.tau2_}
+        params.update(
+            (f"delta.{g}", float(d)) for g, d in zip(self.segments_, self.delta_tilde_, strict=True)
+        )
         messages = [
             f"tau2 = {self.tau2_:.4f}: between-segment heterogeneity variance "
             "(DerSimonian-Laird method of moments on the per-segment offset MLEs); "
@@ -435,12 +438,7 @@ class SegmentedCalibrator(BaseCalibrator):
         messages.append(
             f"unseen segments at predict/inverse time {policy} (unseen={self.unseen!r})"
         )
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=param_names,
-            param_values=param_values,
-            messages=tuple(messages),
-        )
+        return self._interpretation(params, messages)
 
     # ------------------------------------------------------------- serialization
 

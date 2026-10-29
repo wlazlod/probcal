@@ -6,11 +6,19 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
 
 from ..base import BaseCalibrator
-from ._base import BinaryCalibratedMixin, check_sample_weight, drop_zero_weight, score_column
+from ._base import (
+    BinaryCalibratedMixin,
+    ScoreColumnMixin,
+    check_sample_weight,
+    drop_zero_weight,
+    score_column,
+)
 from ._compat import validate_X, validate_X_y
 
 
-class SklearnCalibrator(BinaryCalibratedMixin, ClassifierMixin, TransformerMixin, BaseEstimator):
+class SklearnCalibrator(
+    ScoreColumnMixin, BinaryCalibratedMixin, ClassifierMixin, TransformerMixin, BaseEstimator
+):
     """Probability calibration over a single score column, sklearn-style.
 
     Wraps any probcal calibrator as a scikit-learn classifier/transformer
@@ -111,8 +119,7 @@ class SklearnCalibrator(BinaryCalibratedMixin, ClassifierMixin, TransformerMixin
         """
         if self.input not in ("probability", "logit"):
             raise ValueError(f"input must be 'probability' or 'logit', got {self.input!r}")
-        if self.positive_column not in (0, 1):
-            raise ValueError(f"positive_column must be 0 or 1, got {self.positive_column!r}")
+        self._check_positive_column()
         X_arr, y_arr = validate_X_y(self, X, y, reset=True, allow_1d=True)
         sw = check_sample_weight(sample_weight, X_arr)
         y_bin = self._binary_target(y_arr)
@@ -134,7 +141,3 @@ class SklearnCalibrator(BinaryCalibratedMixin, ClassifierMixin, TransformerMixin
     def _positive_proba(self, X: object) -> np.ndarray:
         X_arr = validate_X(self, X, allow_1d=True)
         return self.calibrator_.predict_proba(self._scores(X_arr))
-
-    def transform(self, X: object) -> np.ndarray:
-        """Calibrated-probability column ``(n, 1)`` — lets the adapter end a Pipeline."""
-        return self.predict_proba(X)[:, [1]]

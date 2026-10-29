@@ -14,6 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .._math import chi2_sf
+from .._results import _ResultBase
 from .._validation import validate_choice, validate_nonneg_int, validate_positive_int
 from ._binstats import BinStats, bin_stats
 from ._common import _prep
@@ -200,7 +201,7 @@ def ece_sweep(
 
 
 @dataclass(frozen=True)
-class HosmerLemeshowResult:
+class HosmerLemeshowResult(_ResultBase):
     """Hosmer–Lemeshow chi-square test (report-only; never a selection criterion).
 
     Attributes

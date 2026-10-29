@@ -1,6 +1,8 @@
 # API: tools
 
 ::: probcal.offset
+    options:
+      inherited_members: [point_inverse, get_params, set_params, to_dict, from_dict]
 
 ::: probcal.offset.OffsetEstimate
 

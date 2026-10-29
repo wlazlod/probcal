@@ -218,7 +218,7 @@ action, returning an `AppliedAction(kind, offset, composed, monitor, window, aud
   model loaded from JSON). `target` itself is never mutated either way; `None`
   leaves `composed=None`.
   A **fresh** `CalibrationMonitor` is returned too, built with the same
-  constructor parameters (`CalibrationMonitor(**mon._ctor_params())`): fresh,
+  constructor parameters as `mon`: fresh,
   not continued, because the e-process is a martingale under the null "the
   CURRENTLY DEPLOYED forecast is calibrated"; once the pipeline changes, the
   old accumulated evidence describes a forecast that no longer exists, and

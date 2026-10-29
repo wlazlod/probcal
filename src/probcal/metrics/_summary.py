@@ -2,13 +2,14 @@
 
 from dataclasses import dataclass
 
+from .._results import _ResultBase
 from ._common import _prep
 from .regression import _intercept, _slope_fit
 from .smooth import _ici_family, _spiegelhalter
 
 
 @dataclass(frozen=True)
-class ReliabilitySummary:
+class ReliabilitySummary(_ResultBase):
     """Stats-box aggregate for the annotated reliability diagram.
 
     Attributes

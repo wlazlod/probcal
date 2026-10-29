@@ -12,45 +12,26 @@ import numpy as np
 
 from ._math import expit, expit1, logit, logit1
 from ._registry import load, register
-from ._results import Interpretation
+from ._results import Interpretation, merge_interpretations
 from ._serialize import JsonIO, check_payload, envelope
 from ._validation import validate_space
 from .base import (
     BaseCalibrator,
     _check_representable,
+    _FittedState,
     _validate_point_targets,
-    shrink_interval,
-    validate_interval,
+    prepare_interval,
 )
 from .offset import LogitOffset
 
 
-def _concat_interpretations(
-    method: str, parts: "list[Interpretation]", *, qualify: bool
-) -> Interpretation:
-    """One :class:`Interpretation` from several stages, in application order.
-
-    ``qualify=True`` prefixes each parameter name with its stage's method.
-    """
-    names: tuple[str, ...] = ()
-    values: tuple[float, ...] = ()
-    messages: tuple[str, ...] = ()
-    for part in parts:
-        names += (
-            tuple(f"{part.method}.{n}" for n in part.param_names) if qualify else part.param_names
-        )
-        values += part.param_values
-        messages += part.messages
-    return Interpretation(
-        method=f"{method}[{', '.join(p.method for p in parts)}]",
-        param_names=names,
-        param_values=values,
-        messages=messages,
-    )
+def _staged_method(name: str, parts: "list[Interpretation]") -> str:
+    """``name[stage, stage, ...]``: the method of a staged interpretation."""
+    return f"{name}[{', '.join(p.method for p in parts)}]"
 
 
 @register
-class Chain(JsonIO):
+class Chain(_FittedState, JsonIO):
     """A calibrator followed by zero or more ``LogitOffset`` stages.
 
     Exposes the full calibrator protocol — forward map, exact inverse maps,
@@ -110,10 +91,6 @@ class Chain(JsonIO):
     def offsets_(self) -> "tuple[LogitOffset, ...]":
         """Read-only view of the offset stages, in application order."""
         return tuple(self.stages[1:])  # type: ignore[arg-type]
-
-    def _check_fitted(self) -> None:
-        if not self.fitted_:
-            raise RuntimeError("Chain is not fitted; call fit() first")
 
     def fit(self, s: object, y: object, sample_weight: object = None) -> "Chain":
         """Fit every stage sequentially on the same calibration data.
@@ -206,10 +183,6 @@ class Chain(JsonIO):
             p = off.transform(p)
         return p
 
-    def __sklearn_is_fitted__(self) -> bool:
-        """Fitted state for sklearn >= 1.6 (``True`` iff every stage is fitted)."""
-        return bool(self.fitted_)
-
     # ------------------------------------------------------------------ protocol
 
     @property
@@ -267,12 +240,10 @@ class Chain(JsonIO):
             chain's output range.
         """
         self._check_fitted()
-        validate_interval(lo, hi)
-        validate_space(space)
-        lo_b, hi_b = shrink_interval(lo, hi, buffer_logit)
+        lo_b, hi_b = prepare_interval(lo, hi, space, buffer_logit)
         lo_c = self._shift_bound(lo_b, is_lower=True)
         hi_c = self._shift_bound(hi_b, is_lower=False)
-        return self.calibrator_.interval_inverse(lo_c, hi_c, space=space, buffer_logit=0.0)
+        return self.calibrator_._invert_interval(lo_c, hi_c, space)
 
     def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
         """Exact preimage of composed calibrated probabilities.
@@ -302,7 +273,7 @@ class Chain(JsonIO):
         """Concatenated interpretation of every stage."""
         self._check_fitted()
         parts = [self.calibrator_.interpret()] + [off.interpret() for off in self.offsets_]
-        return _concat_interpretations("Chain", parts, qualify=True)
+        return merge_interpretations(_staged_method("Chain", parts), parts, qualify=True)
 
     # ------------------------------------------------------------------ serialization
 
@@ -311,11 +282,9 @@ class Chain(JsonIO):
         self._check_fitted()
         return envelope(
             self,
-            params={},
             state={
                 "stages": [self.calibrator_.to_dict()] + [off.to_dict() for off in self.offsets_],
             },
-            fit_meta={},
         )
 
     @classmethod

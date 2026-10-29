@@ -2,21 +2,20 @@
 
 import inspect
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Self
+from collections.abc import Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Self
 
 import numpy as np
 
 from ._math import _LOGIT_CLIP, expit, expit1, logit, logit1
-from ._results import Interpretation
+from ._results import Interpretation, merge_interpretations
 from ._serialize import (
     JsonIO,
     check_payload,
-    data_fingerprint,
     decode_value,
     encode_value,
     envelope,
+    fit_meta,
 )
 from ._steps import refine_lower, refine_upper
 from ._validation import (
@@ -120,6 +119,39 @@ def validate_interval(lo: float, hi: float) -> None:
         raise ValueError(f"need 0 <= lo <= hi <= 1, got lo={lo}, hi={hi}")
 
 
+def prepare_interval(lo: float, hi: float, space: str, buffer_logit: float) -> tuple[float, float]:
+    """The shared ``interval_inverse`` preamble: validate, then buffer ``[lo, hi]``.
+
+    Raises
+    ------
+    ValueError
+        If ``lo``, ``hi`` are not ordered in ``[0, 1]``, ``space`` is unknown,
+        or ``buffer_logit`` is negative or not finite.
+    UnattainableTargetError
+        If the buffer empties the interval.
+    """
+    validate_interval(lo, hi)
+    validate_space(space)
+    return shrink_interval(lo, hi, buffer_logit)
+
+
+def check_intersects(
+    lo: float, hi: float, gmin: float, gmax: float, *, what: str = "calibrator's output range"
+) -> None:
+    """Refuse a (buffered) target ``[lo, hi]`` disjoint from the output range ``[gmin, gmax]``.
+
+    Raises
+    ------
+    UnattainableTargetError
+        If the two intervals do not intersect — never silently clamped.
+    """
+    if lo > gmax or hi < gmin:
+        raise UnattainableTargetError(
+            f"calibrated target [{lo:.6g}, {hi:.6g}] does not intersect the "
+            f"{what} [{gmin:.6g}, {gmax:.6g}]"
+        )
+
+
 def _clone_param(value: object) -> object:
     """Recursively clone estimator-like parameter values (lists, tuples, dicts too)."""
     if hasattr(value, "get_params") and not isinstance(value, type):
@@ -129,6 +161,20 @@ def _clone_param(value: object) -> object:
     if isinstance(value, dict):
         return {k: _clone_param(v) for k, v in value.items()}
     return value
+
+
+def constructor_params(obj: object) -> dict[str, Any]:
+    """``obj``'s constructor parameters, read from its ``__init__`` signature.
+
+    The manual sklearn convention without an sklearn import: every
+    ``__init__`` parameter is stored under its own name.
+    """
+    sig = inspect.signature(type(obj).__init__)
+    return {
+        name: getattr(obj, name)
+        for name in sig.parameters
+        if name not in ("self", "args", "kwargs")
+    }
 
 
 def clone_unfitted(obj: object) -> object:
@@ -168,90 +214,14 @@ _NOT_MONOTONE = (
 )
 
 
-class BaseCalibrator(JsonIO, ABC):
-    """Common contract for all probcal calibrators.
+class _FittedState:
+    """The ``fitted_`` flag, its not-fitted refusal, and sklearn's fitted hook."""
 
-    Subclasses implement ``_fit`` (estimation on validated arrays),
-    ``_predict`` (the fitted map on clipped scores), and ``interpret``.
-    Everything else — validation, sklearn-style parameter handling without an
-    sklearn import, the 2-D probability helper — lives here.
-
-    Attributes
-    ----------
-    is_monotone_ : bool
-        Whether the fitted map is guaranteed non-decreasing. Class-level
-        default ``True``; non-monotone calibrators (e.g. ENIR) override it.
-    fitted_ : bool
-        Set by :meth:`fit`.
-    """
-
-    is_monotone_: bool = True
     fitted_: bool = False
-
-    # ------------------------------------------------------------- fitting
-
-    def fit(self, s: object, y: object, sample_weight: object = None) -> Self:
-        """Fit the calibration map on scores and binary outcomes.
-
-        Parameters
-        ----------
-        s : array_like
-            Raw scores/probabilities in ``[0, 1]`` (clipped to
-            ``[1e-12, 1 - 1e-12]``). Users holding raw logits convert with
-            :func:`probcal.expit` first.
-        y : array_like
-            Binary outcomes in ``{0, 1}``; both classes must be present.
-        sample_weight : array_like or None
-            Positive observation weights.
-
-        Returns
-        -------
-        Self
-            The fitted calibrator.
-        """
-        y_arr, s_arr, w_arr = validate_ypw(y, s, sample_weight, name="s")
-        self._fit(s_arr, y_arr, w_arr)
-        self.fit_meta_ = {
-            "n_obs": int(s_arr.shape[0]),
-            "n_events": float(np.sum(w_arr * y_arr)),
-            "weight_sum": float(w_arr.sum()),
-            "fitted_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "data_fingerprint": data_fingerprint(s_arr, y_arr, w_arr),
-        }
-        self.fitted_ = True
-        return self
-
-    @abstractmethod
-    def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        """Estimate parameters from validated arrays."""
-
-    # ------------------------------------------------------------- prediction
-
-    def predict_proba(self, s: object) -> np.ndarray:
-        """Calibrated probabilities ``P(y = 1)`` for new scores.
-
-        Parameters
-        ----------
-        s : array_like
-            Raw scores/probabilities in ``[0, 1]``.
-
-        Returns
-        -------
-        numpy.ndarray of shape (n,)
-            Calibrated probabilities.
-        """
-        self._check_fitted()
-        return self._predict(validate_scores(s))
-
-    @abstractmethod
-    def _predict(self, s: np.ndarray) -> np.ndarray:
-        """Apply the fitted map to validated scores."""
 
     def _check_fitted(self) -> None:
         if not self.fitted_:
             raise RuntimeError(f"{type(self).__name__} is not fitted; call fit() first")
-
-    # ------------------------------------------------------------- sklearn duck hooks
 
     def __sklearn_is_fitted__(self) -> bool:
         """Fitted state for sklearn's ``check_is_fitted`` (sklearn >= 1.6).
@@ -263,40 +233,19 @@ class BaseCalibrator(JsonIO, ABC):
         """
         return bool(self.fitted_)
 
-    def __sklearn_tags__(self) -> "Tags":
-        """Estimator tags for sklearn >= 1.6, built from the public constructors.
 
-        sklearn is imported inside the body, never at module or class level:
-        ``import probcal`` stays numpy-only and this hook costs nothing until
-        sklearn itself calls it. Only the fields that are actually true of a
-        calibrator are set — it takes 1-D scores, not a 2-D feature matrix,
-        it is neither a classifier nor a regressor, and it must be fitted.
+class _FittedObject(_FittedState, JsonIO):
+    """Object surface shared by every fitted calibration map (calibrators, ``LogitOffset``).
 
-        Returns
-        -------
-        sklearn.utils.Tags
-            The tag object sklearn's ``get_tags`` expects.
+    The fitted-state protocol, sklearn-style constructor parameters (read
+    from the ``__init__`` signature, no sklearn import), the exact point
+    inverse of affine-logit maps, and the generic versioned payload
+    ``{"params", "state", "fit_meta"}`` with fitted state read from
+    ``_STATE_ATTRS``.
+    """
 
-        Raises
-        ------
-        ImportError
-            If sklearn is not installed (only reachable by calling the hook
-            by hand).
-        """
-        from sklearn.utils import InputTags, Tags, TargetTags
-
-        return Tags(
-            estimator_type=None,
-            target_tags=TargetTags(required=True),
-            requires_fit=True,
-            input_tags=InputTags(two_d_array=False),
-        )
-
-    # ------------------------------------------------------------- introspection
-
-    @abstractmethod
-    def interpret(self) -> Interpretation:
-        """Fitted parameters with a plain-language, domain-aware reading."""
+    is_monotone_: bool = True
+    fit_meta_: dict[str, object]
 
     @property
     def affine_logit_coeffs_(self) -> tuple[float, float] | None:
@@ -306,77 +255,6 @@ class BaseCalibrator(JsonIO, ABC):
         Consumed by the attribution adjustment.
         """
         return None
-
-    @property
-    def complexity_rank(self) -> float:
-        """Parsimony rank for selector tie-breaks; lower wins a tie.
-
-        Default 100.0 means "unknown — override in subclasses". Custom calibrators
-        declare their place in the tie-break by overriding this property.
-        """
-        return 100.0
-
-    def interval_inverse(
-        self,
-        lo: float,
-        hi: float,
-        *,
-        space: str = "probability",
-        buffer_logit: float = 0.0,
-    ) -> tuple[float, float]:
-        """Generalized-inverse preimage ``(raw_lo, raw_hi)`` of a calibrated interval.
-
-        For a non-decreasing fitted map ``g``:
-        ``raw_lo = inf{s : g(s) >= lo}`` and ``raw_hi = sup{s : g(s) <= hi}``.
-
-        Parameters
-        ----------
-        lo, hi : float
-            Calibrated-probability bounds; ``lo=0``/``hi=1`` map to the full
-            raw range (−inf/+inf on the logit scale).
-        space : {"probability", "logit"}
-            Scale of the returned raw bounds. ``"logit"`` is what a
-            SIGMOID-link raw-margin consumer (e.g. a counterfactual engine's
-            ``Target.raw``) expects.
-        buffer_logit : float
-            Shrink the calibrated interval by this margin in logit space
-            *before* inverting — robustness against future recalibration
-            drift (a central-tendency update of magnitude <= buffer cannot
-            invalidate the result).
-
-        Returns
-        -------
-        tuple of float
-            ``(raw_lo, raw_hi)`` preimage bounds, on the scale requested by
-            ``space``.
-
-        Raises
-        ------
-        UnattainableTargetError
-            If the (buffered) interval does not intersect the output range —
-            never silently clamped.
-        NotImplementedError
-            For non-monotone calibrators (``is_monotone_ = False``), whose
-            preimage may be a union of intervals.
-        """
-        self._check_fitted()
-        self._check_monotone()
-        validate_interval(lo, hi)
-        validate_space(space)
-        lo_b, hi_b = shrink_interval(lo, hi, buffer_logit)
-        gmin, gmax = self._output_range()
-        if lo_b > gmax or hi_b < gmin:
-            raise UnattainableTargetError(
-                f"calibrated target [{lo_b:.6g}, {hi_b:.6g}] does not intersect the "
-                f"calibrator's output range [{gmin:.6g}, {gmax:.6g}]"
-            )
-        raw_lo = 0.0 if lo_b <= gmin else float(self._inverse_left(lo_b))
-        raw_hi = 1.0 if hi_b >= gmax else float(self._inverse_right(hi_b))
-        if space == "logit":
-            lo_out = -np.inf if raw_lo <= 0.0 else logit1(raw_lo)
-            hi_out = np.inf if raw_hi >= 1.0 else logit1(raw_hi)
-            return lo_out, hi_out
-        return raw_lo, raw_hi
 
     def _check_monotone(self) -> None:
         if not self.is_monotone_:
@@ -449,6 +327,332 @@ class BaseCalibrator(JsonIO, ABC):
         a, b = coeffs
         return (logit(p) - b) / a
 
+    def _interpretation(
+        self,
+        params: Mapping[str, float],
+        messages: Iterable[str],
+        *,
+        extends: Interpretation | None = None,
+    ) -> Interpretation:
+        """An :class:`Interpretation` under this class's name.
+
+        ``extends`` (a first stage's or parent class's reading) comes first:
+        its parameters and messages are prepended to ``params``/``messages``.
+        """
+        own = Interpretation(
+            method=type(self).__name__,
+            param_names=tuple(params),
+            param_values=tuple(params.values()),
+            messages=tuple(messages),
+        )
+        return own if extends is None else merge_interpretations(own.method, [extends, own])
+
+    # ------------------------------------------------------------- parameters
+
+    def get_params(self, deep: bool = True) -> dict[str, object]:
+        """Constructor parameters as a dict (manual sklearn-compatible clone info)."""
+        return constructor_params(self)
+
+    def set_params(self, **params: object) -> Self:
+        """Set constructor parameters; unknown names raise ``ValueError``."""
+        valid = self.get_params()
+        for key, value in params.items():
+            if key not in valid:
+                raise ValueError(
+                    f"unknown parameter {key!r} for {type(self).__name__}; valid: {sorted(valid)}"
+                )
+            setattr(self, key, value)
+        return self
+
+    # ------------------------------------------------------------- serialization
+
+    _STATE_ATTRS: tuple[str, ...] = ()
+
+    def _state(self) -> dict[str, object]:
+        """Fitted state as JSON-native values (generic: reads ``_STATE_ATTRS``)."""
+        return {a: encode_value(getattr(self, a)) for a in type(self)._STATE_ATTRS}
+
+    def _set_state(self, state: dict[str, object]) -> None:
+        """Inverse of :meth:`_state`."""
+        for a, v in state.items():
+            setattr(self, a, decode_value(v))
+
+    def _params_for_dict(self) -> dict[str, object]:
+        """Constructor parameters as stored in :meth:`to_dict` (hook for
+        classes whose params are not JSON-native, e.g. the selector)."""
+        return self.get_params()
+
+    @classmethod
+    def _params_from_dict(cls, params: dict[str, object]) -> dict[str, object]:
+        """Inverse of :meth:`_params_for_dict`."""
+        return params
+
+    def to_dict(self) -> dict[str, object]:
+        """Versioned JSON-native snapshot of the fitted object.
+
+        Returns
+        -------
+        dict
+            ``{"probcal_schema", "probcal_version", "class", "params",
+            "state", "fit_meta"}``. ``fit_meta`` records ``n_obs``,
+            ``n_events`` (calibrators only), ``weight_sum``,
+            ``fitted_at_utc`` (ISO 8601), the ``data_fingerprint`` (SHA-256
+            of the sorted training data: ``(s, y, w)`` for a calibrator,
+            ``(p, w)`` for a :class:`~probcal.offset.LogitOffset`), and
+            convergence flags where they exist.
+
+        Raises
+        ------
+        RuntimeError
+            If not yet fitted.
+        """
+        self._check_fitted()
+        fit_meta = dict(getattr(self, "fit_meta_", {}))
+        for flag in ("converged_", "separation_fallback_"):
+            if hasattr(self, flag):
+                fit_meta[flag] = bool(getattr(self, flag))
+        return envelope(
+            self,
+            params=encode_value(self._params_for_dict()),
+            state=self._state(),
+            fit_meta=encode_value(fit_meta),
+        )
+
+    @classmethod
+    def from_dict(cls, d: dict) -> Self:
+        """Rebuild a fitted object from :meth:`to_dict` output.
+
+        Called on :class:`BaseCalibrator` itself, dispatches through the
+        class registry to whatever class wrote ``d``; called on a concrete
+        class, requires ``d["class"]`` to match it.
+
+        Parameters
+        ----------
+        d : dict
+            Output of :meth:`to_dict` (parsed JSON).
+
+        Returns
+        -------
+        Self
+            A fitted instance.
+
+        Raises
+        ------
+        ValueError
+            If the schema version is unknown (naming the writing version),
+            the class is not registered, or ``d["class"]`` does not match
+            the class this was called on.
+        """
+        if cls is BaseCalibrator:
+            from ._registry import load
+
+            return load(d)  # type: ignore[return-value]
+        check_payload(cls, d)
+        params = cls._params_from_dict(
+            decode_value(d.get("params", {}), arrays=False)  # type: ignore[arg-type]
+        )
+        obj = cls(**params)
+        obj._set_state(dict(d.get("state", {})))
+        obj.fit_meta_ = dict(decode_value(d.get("fit_meta", {}), arrays=False))  # type: ignore[call-overload]
+        obj.fitted_ = True
+        return obj
+
+
+class BaseCalibrator(_FittedObject, ABC):
+    """Common contract for all probcal calibrators.
+
+    Subclasses implement ``_fit`` (estimation on validated arrays),
+    ``_predict`` (the fitted map on clipped scores), and ``interpret``.
+    Everything else — validation, sklearn-style parameter handling without an
+    sklearn import, the 2-D probability helper — lives here.
+
+    Attributes
+    ----------
+    is_monotone_ : bool
+        Whether the fitted map is guaranteed non-decreasing. Class-level
+        default ``True``; non-monotone calibrators (e.g. ENIR) override it.
+    fitted_ : bool
+        Set by :meth:`fit`.
+    """
+
+    # ------------------------------------------------------------- fitting
+
+    def fit(self, s: object, y: object, sample_weight: object = None) -> Self:
+        """Fit the calibration map on scores and binary outcomes.
+
+        Parameters
+        ----------
+        s : array_like
+            Raw scores/probabilities in ``[0, 1]`` (clipped to
+            ``[1e-12, 1 - 1e-12]``). Users holding raw logits convert with
+            :func:`probcal.expit` first.
+        y : array_like
+            Binary outcomes in ``{0, 1}``; both classes must be present.
+        sample_weight : array_like or None
+            Positive observation weights.
+
+        Returns
+        -------
+        Self
+            The fitted calibrator.
+        """
+        y_arr, s_arr, w_arr = validate_ypw(y, s, sample_weight, name="s")
+        self._fit(s_arr, y_arr, w_arr)
+        self.fit_meta_ = fit_meta(s_arr, w_arr, y_arr)
+        self.fitted_ = True
+        return self
+
+    @abstractmethod
+    def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
+        """Estimate parameters from validated arrays."""
+
+    # ------------------------------------------------------------- prediction
+
+    def predict_proba(self, s: object) -> np.ndarray:
+        """Calibrated probabilities ``P(y = 1)`` for new scores.
+
+        Parameters
+        ----------
+        s : array_like
+            Raw scores/probabilities in ``[0, 1]``.
+
+        Returns
+        -------
+        numpy.ndarray of shape (n,)
+            Calibrated probabilities.
+        """
+        self._check_fitted()
+        return self._predict(validate_scores(s))
+
+    @abstractmethod
+    def _predict(self, s: np.ndarray) -> np.ndarray:
+        """Apply the fitted map to validated scores."""
+
+    # ------------------------------------------------------------- sklearn duck hooks
+
+    def __sklearn_tags__(self) -> "Tags":
+        """Estimator tags for sklearn >= 1.6, built from the public constructors.
+
+        sklearn is imported inside the body, never at module or class level:
+        ``import probcal`` stays numpy-only and this hook costs nothing until
+        sklearn itself calls it. Only the fields that are actually true of a
+        calibrator are set — it takes 1-D scores, not a 2-D feature matrix,
+        it is neither a classifier nor a regressor, and it must be fitted.
+
+        Returns
+        -------
+        sklearn.utils.Tags
+            The tag object sklearn's ``get_tags`` expects.
+
+        Raises
+        ------
+        ImportError
+            If sklearn is not installed (only reachable by calling the hook
+            by hand).
+        """
+        from sklearn.utils import InputTags, Tags, TargetTags
+
+        return Tags(
+            estimator_type=None,
+            target_tags=TargetTags(required=True),
+            requires_fit=True,
+            input_tags=InputTags(two_d_array=False),
+        )
+
+    # ------------------------------------------------------------- introspection
+
+    @abstractmethod
+    def interpret(self) -> Interpretation:
+        """Fitted parameters with a plain-language, domain-aware reading."""
+
+    @property
+    def complexity_rank(self) -> float:
+        """Parsimony rank for selector tie-breaks; lower wins a tie.
+
+        Default 100.0 means "unknown — override in subclasses". Custom calibrators
+        declare their place in the tie-break by overriding this property.
+        """
+        return 100.0
+
+    def _stage_monotone(self, attr: str) -> bool:
+        """``is_monotone_`` read through the fitted stage ``attr``; ``True`` before fitting."""
+        stage = self.__dict__.get(attr)
+        return True if stage is None else bool(stage.is_monotone_)
+
+    def _stage_rank(self, attr: str, prefit: object = None) -> float:
+        """``complexity_rank`` read through the fitted stage ``attr``.
+
+        Before fitting, read through ``prefit`` instead (100.0 when ``None``).
+        """
+        stage = self.__dict__.get(attr, prefit)
+        return 100.0 if stage is None else float(getattr(stage, "complexity_rank", 100.0))
+
+    def interval_inverse(
+        self,
+        lo: float,
+        hi: float,
+        *,
+        space: str = "probability",
+        buffer_logit: float = 0.0,
+    ) -> tuple[float, float]:
+        """Generalized-inverse preimage ``(raw_lo, raw_hi)`` of a calibrated interval.
+
+        For a non-decreasing fitted map ``g``:
+        ``raw_lo = inf{s : g(s) >= lo}`` and ``raw_hi = sup{s : g(s) <= hi}``.
+
+        Parameters
+        ----------
+        lo, hi : float
+            Calibrated-probability bounds; ``lo=0``/``hi=1`` map to the full
+            raw range (−inf/+inf on the logit scale).
+        space : {"probability", "logit"}
+            Scale of the returned raw bounds. ``"logit"`` is what a
+            SIGMOID-link raw-margin consumer (e.g. a counterfactual engine's
+            ``Target.raw``) expects.
+        buffer_logit : float
+            Shrink the calibrated interval by this margin in logit space
+            *before* inverting — robustness against future recalibration
+            drift (a central-tendency update of magnitude <= buffer cannot
+            invalidate the result).
+
+        Returns
+        -------
+        tuple of float
+            ``(raw_lo, raw_hi)`` preimage bounds, on the scale requested by
+            ``space``.
+
+        Raises
+        ------
+        UnattainableTargetError
+            If the (buffered) interval does not intersect the output range —
+            never silently clamped.
+        NotImplementedError
+            For non-monotone calibrators (``is_monotone_ = False``), whose
+            preimage may be a union of intervals.
+        """
+        self._check_fitted()
+        self._check_monotone()  # refused before the interval is even validated
+        lo_b, hi_b = prepare_interval(lo, hi, space, buffer_logit)
+        return self._invert_interval(lo_b, hi_b, space)
+
+    def _invert_interval(self, lo_b: float, hi_b: float, space: str) -> tuple[float, float]:
+        """:meth:`interval_inverse` of an already validated and buffered interval.
+
+        The entry point for composites (:class:`probcal.Chain`) that prepare
+        the interval on their own output scale and map it back first; they
+        arrive here without :meth:`interval_inverse`'s monotonicity check.
+        """
+        self._check_monotone()
+        gmin, gmax = self._output_range()
+        check_intersects(lo_b, hi_b, gmin, gmax)
+        raw_lo = 0.0 if lo_b <= gmin else float(self._inverse_left(lo_b))
+        raw_hi = 1.0 if hi_b >= gmax else float(self._inverse_right(hi_b))
+        if space == "logit":
+            lo_out = -np.inf if raw_lo <= 0.0 else logit1(raw_lo)
+            hi_out = np.inf if raw_hi >= 1.0 else logit1(raw_hi)
+            return lo_out, hi_out
+        return raw_lo, raw_hi
+
     # Hooks for interval_inverse — overridden by closed-form / block calibrators.
 
     def _predict_scalar(self, x: float) -> float:
@@ -500,116 +704,3 @@ class BaseCalibrator(JsonIO, ABC):
         if within(1.0 - EPS):
             return 1.0 - EPS
         return refine_upper(_bisect(lambda v: not within(v))[0], within)
-
-    # ------------------------------------------------------------- parameters
-
-    def get_params(self, deep: bool = True) -> dict[str, object]:
-        """Constructor parameters as a dict (manual sklearn-compatible clone info)."""
-        sig = inspect.signature(type(self).__init__)
-        return {
-            name: getattr(self, name)
-            for name in sig.parameters
-            if name not in ("self", "args", "kwargs")
-        }
-
-    def set_params(self, **params: object) -> Self:
-        """Set constructor parameters; unknown names raise ``ValueError``."""
-        valid = self.get_params()
-        for key, value in params.items():
-            if key not in valid:
-                raise ValueError(
-                    f"unknown parameter {key!r} for {type(self).__name__}; valid: {sorted(valid)}"
-                )
-            setattr(self, key, value)
-        return self
-
-    # ------------------------------------------------------------- serialization
-
-    _STATE_ATTRS: tuple[str, ...] = ()
-
-    def _state(self) -> dict[str, object]:
-        """Fitted state as JSON-native values (generic: reads ``_STATE_ATTRS``)."""
-        return {a: encode_value(getattr(self, a)) for a in type(self)._STATE_ATTRS}
-
-    def _set_state(self, state: dict[str, object]) -> None:
-        """Inverse of :meth:`_state`."""
-        for a, v in state.items():
-            setattr(self, a, decode_value(v))
-
-    def _params_for_dict(self) -> dict[str, object]:
-        """Constructor parameters as stored in :meth:`to_dict` (hook for
-        classes whose params are not JSON-native, e.g. the selector)."""
-        return self.get_params()
-
-    @classmethod
-    def _params_from_dict(cls, params: dict[str, object]) -> dict[str, object]:
-        """Inverse of :meth:`_params_for_dict`."""
-        return params
-
-    def to_dict(self) -> dict[str, object]:
-        """Versioned JSON-native snapshot of the fitted object.
-
-        Returns
-        -------
-        dict
-            ``{"probcal_schema", "probcal_version", "class", "params",
-            "state", "fit_meta"}``. ``fit_meta`` records ``n_obs``,
-            ``n_events``, ``weight_sum``, ``fitted_at_utc`` (ISO 8601), the
-            ``data_fingerprint`` (SHA-256 of the sorted ``(s, y, w)``
-            triple), and convergence flags where they exist.
-
-        Raises
-        ------
-        RuntimeError
-            If not yet fitted.
-        """
-        self._check_fitted()
-        fit_meta = dict(getattr(self, "fit_meta_", {}))
-        for flag in ("converged_", "separation_fallback_"):
-            if hasattr(self, flag):
-                fit_meta[flag] = bool(getattr(self, flag))
-        return envelope(
-            self,
-            params=encode_value(self._params_for_dict()),
-            state=self._state(),
-            fit_meta=encode_value(fit_meta),
-        )
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "BaseCalibrator":
-        """Rebuild a fitted object from :meth:`to_dict` output.
-
-        Called on :class:`BaseCalibrator` itself, dispatches through the
-        class registry to whatever class wrote ``d``; called on a subclass,
-        requires ``d["class"]`` to match that subclass.
-
-        Parameters
-        ----------
-        d : dict
-            Output of :meth:`to_dict` (parsed JSON).
-
-        Returns
-        -------
-        BaseCalibrator
-            A fitted instance.
-
-        Raises
-        ------
-        ValueError
-            If the schema version is unknown (naming the writing version),
-            the class is not registered, or ``d["class"]`` does not match
-            the subclass this was called on.
-        """
-        if cls is BaseCalibrator:
-            from ._registry import load
-
-            return load(d)  # type: ignore[return-value]
-        check_payload(cls, d)
-        params = cls._params_from_dict(
-            decode_value(d.get("params", {}), arrays=False)  # type: ignore[arg-type]
-        )
-        obj = cls(**params)
-        obj._set_state(dict(d.get("state", {})))
-        obj.fit_meta_ = dict(decode_value(d.get("fit_meta", {}), arrays=False))  # type: ignore[call-overload]
-        obj.fitted_ = True
-        return obj

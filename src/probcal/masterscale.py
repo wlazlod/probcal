@@ -365,7 +365,6 @@ class Masterscale(JsonIO):
             self,
             params={"bands": {n: [lo, hi] for n, (lo, hi) in self._bands}},
             state={"provenance": encode_value(self.provenance)},
-            fit_meta={},
         )
 
     @classmethod

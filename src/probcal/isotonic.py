@@ -132,12 +132,7 @@ class IsotonicCalibrator(BaseCalibrator):
             "output range is limited to the span of block levels; targets outside it are "
             "unattainable (relevant for interval_inverse)"
         )
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("n_blocks",),
-            param_values=(float(self.n_blocks_),),
-            messages=tuple(messages),
-        )
+        return self._interpretation({"n_blocks": float(self.n_blocks_)}, messages)
 
 
 @register
@@ -177,14 +172,11 @@ class CenteredIsotonicCalibrator(IsotonicCalibrator):
 
     def interpret(self) -> Interpretation:
         """Isotonic reading plus the strictness property CIR adds."""
-        base = super().interpret()
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=base.param_names,
-            param_values=base.param_values,
-            messages=base.messages
-            + (
+        return self._interpretation(
+            {},
+            [
                 "centered isotonic interpolation is strictly increasing wherever block "
-                "levels differ: distinct scores keep distinct predictions (no ties)",
-            ),
+                "levels differ: distinct scores keep distinct predictions (no ties)"
+            ],
+            extends=super().interpret(),
         )

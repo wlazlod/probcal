@@ -5,11 +5,19 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.validation import check_is_fitted
 
 from ..offset import LogitOffset
-from ._base import check_sample_weight, drop_zero_weight, score_column, xfail_tags
+from ._base import (
+    DelegatedJsonMixin,
+    ScoreColumnMixin,
+    check_sample_weight,
+    drop_zero_weight,
+    proba_matrix,
+    score_column,
+    xfail_tags,
+)
 from ._compat import validate_X
 
 
-class SklearnOffset(TransformerMixin, BaseEstimator):
+class SklearnOffset(ScoreColumnMixin, DelegatedJsonMixin, TransformerMixin, BaseEstimator):
     """A logit offset over a probability column, sklearn-style.
 
     Wraps :class:`~probcal.offset.LogitOffset` as an sklearn transformer
@@ -22,7 +30,9 @@ class SklearnOffset(TransformerMixin, BaseEstimator):
     :class:`~probcal.chain.Chain` keeps it a separate stage. No ``y`` is
     consumed (``LogitOffset`` ignores it), so there is no orientation
     check to run — the column-1 convention for two-column input is
-    documented (``guide/sklearn.md``), not checked.
+    documented (``guide/sklearn.md``), not checked. The JSON surface
+    (``to_dict``, ``to_json``, ``fingerprint``) is delegated to ``offset_``
+    and loads back as a :class:`~probcal.offset.LogitOffset`.
 
     Parameters
     ----------
@@ -96,29 +106,22 @@ class SklearnOffset(TransformerMixin, BaseEstimator):
             If ``X``'s column count is unsupported, ``positive_column``
             is invalid, or a weight is negative.
         """
-        if self.positive_column not in (0, 1):
-            raise ValueError(f"positive_column must be 0 or 1, got {self.positive_column!r}")
+        self._check_positive_column()
         X_arr = validate_X(self, X, reset=True, allow_1d=True)
         sw, (p,) = drop_zero_weight(check_sample_weight(sample_weight, X_arr), self._probs(X_arr))
         self.offset_ = LogitOffset(delta=self.delta, target_mean=self.target_mean)
         self.offset_.fit(p, sample_weight=sw, y=y)
         return self
 
-    def transform(self, X: object) -> np.ndarray:
-        """Shifted probability column ``(n, 1)`` — lets the adapter end a Pipeline."""
-        return self.predict_proba(X)[:, [1]]
-
     def predict_proba(self, X: object) -> np.ndarray:
         """``(n, 2)`` matrix ``[1 - p_shifted, p_shifted]``."""
         check_is_fitted(self, "offset_")
         X_arr = validate_X(self, X, allow_1d=True)
-        p = self.offset_.transform(self._probs(X_arr))
-        return np.column_stack([1.0 - p, p])
+        return proba_matrix(self.offset_.transform(self._probs(X_arr)))
 
-    def to_dict(self) -> dict[str, object]:
-        """The fitted inner offset's own envelope (loads back as a LogitOffset)."""
+    def _fitted_inner(self) -> LogitOffset:
         check_is_fitted(self, "offset_")
-        return self.offset_.to_dict()
+        return self.offset_
 
     # ------------------------------------------------------------------ tags
 

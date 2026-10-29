@@ -223,9 +223,7 @@ class SplineCalibrator(BaseCalibrator):
             messages.append("fitted curve is NOT monotone (warned at fit)")
         if not self.converged_:
             messages.append("penalized IRLS did not converge; the curve may be unreliable")
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("edof", "lambda", "n_knots"),
-            param_values=(self.edof_, self.lambda_, float(self.n_knots_)),
-            messages=tuple(messages),
+        return self._interpretation(
+            {"edof": self.edof_, "lambda": self.lambda_, "n_knots": float(self.n_knots_)},
+            messages,
         )

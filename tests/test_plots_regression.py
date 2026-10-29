@@ -296,20 +296,13 @@ def test_plot_grade_backtest_default_is_stable(baseline):
 
 
 def test_plot_offset_audit_default_is_stable(baseline, monkeypatch):
-    from datetime import UTC, datetime
-
     import probcal.offset as _offset_module
     from probcal.offset import LogitOffset
     from probcal.plots import plot_offset_audit
 
     # plot_offset_audit prints offset.timestamp_ (wall-clock fit time) on the chart;
     # freeze probcal.offset's clock so the rendered output is reproducible.
-    class _FrozenDatetime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return datetime(2026, 1, 1, tzinfo=UTC)
-
-    monkeypatch.setattr(_offset_module, "datetime", _FrozenDatetime)
+    monkeypatch.setattr(_offset_module, "utc_now", lambda: "2026-01-01T00:00:00+00:00")
 
     y, p = _data()
     _check(

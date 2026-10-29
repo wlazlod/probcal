@@ -139,6 +139,23 @@ def bin_sums(
     )
 
 
+def equal_width_edges(n_bins: int) -> np.ndarray:
+    """Interior edges of ``n_bins`` equal-width bins over ``[0, 1]``."""
+    return np.linspace(0.0, 1.0, n_bins + 1)[1:-1]
+
+
+def bin_lookup(edges: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """Bin index of each ``x`` under interior ``edges``; a value on an edge goes up."""
+    return np.searchsorted(edges, x, side="right")
+
+
+def edge_bin_sums(
+    edges: np.ndarray, x: np.ndarray, y: np.ndarray, w: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """:func:`bin_sums` over the ``len(edges) + 1`` bins of :func:`bin_lookup`."""
+    return bin_sums(bin_lookup(edges, x), y, w, len(edges) + 1)
+
+
 def eval_step(starts: np.ndarray, levels: np.ndarray, x: np.ndarray) -> np.ndarray:
     """Right-continuous step function: ``levels[j]`` on ``[starts[j], starts[j+1])``.
 

@@ -14,7 +14,14 @@ import numpy as np
 
 from ._registry import register
 from ._results import Interpretation
-from ._steps import bin_sums, equal_mass_edges, step_inverse_left, step_inverse_right
+from ._steps import (
+    bin_lookup,
+    edge_bin_sums,
+    equal_mass_edges,
+    equal_width_edges,
+    step_inverse_left,
+    step_inverse_right,
+)
 from ._validation import validate_choice, validate_positive_int
 from .base import BaseCalibrator
 from .parametric import PlattCalibrator
@@ -71,9 +78,8 @@ class HistogramBinningCalibrator(BaseCalibrator):
         if self.strategy == "mass":
             edges = equal_mass_edges(s, n_bins, w)
         else:
-            edges = np.linspace(0.0, 1.0, n_bins + 1)[1:-1]
-        idx = np.searchsorted(edges, s, side="right")
-        k, n = bin_sums(idx, y, w, len(edges) + 1)
+            edges = equal_width_edges(n_bins)
+        k, n = edge_bin_sums(edges, s, y, w)
         prior = 0.5 if self.shrinkage == "jeffreys" else 0.0
         # Equal-mass edges leave no bin empty. Under "width" a bin can be
         # empty; it takes its neighbours' rate (interpolated by bin index, the
@@ -88,7 +94,7 @@ class HistogramBinningCalibrator(BaseCalibrator):
         self.is_monotone_ = bool(np.all(np.diff(rate) >= 0.0))
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
-        return self.bin_rate_[np.searchsorted(self.edges_, s, side="right")]
+        return self.bin_rate_[bin_lookup(self.edges_, s)]
 
     @property
     def complexity_rank(self) -> float:
@@ -176,8 +182,7 @@ class ScalingBinningCalibrator(BaseCalibrator):
         self.platt_.fit(s, y, sample_weight=w)
         g = self.platt_.predict_proba(s)
         edges = equal_mass_edges(g, n_bins, w)
-        idx = np.searchsorted(edges, g, side="right")
-        sums, cnts = bin_sums(idx, g, w, len(edges) + 1)
+        sums, cnts = edge_bin_sums(edges, g, g, w)
         self.edges_ = edges
         self.bin_value_ = sums / cnts  # equal_mass_edges leaves no bin empty
 
@@ -191,7 +196,7 @@ class ScalingBinningCalibrator(BaseCalibrator):
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         g = self.platt_.predict_proba(s)
-        return self.bin_value_[np.searchsorted(self.edges_, g, side="right")]
+        return self.bin_value_[bin_lookup(self.edges_, g)]
 
     @property
     def complexity_rank(self) -> float:

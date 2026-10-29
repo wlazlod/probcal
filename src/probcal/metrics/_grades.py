@@ -7,6 +7,7 @@ explicit best-to-worst ``order``, and aggregates per-grade counts.
 import numpy as np
 
 from .._labels import grade_key, grade_keys, is_masterscale
+from .._steps import bin_sums
 
 
 def _resolve_grades(grades: object, p_arr: np.ndarray) -> tuple[np.ndarray, tuple[str, ...] | None]:
@@ -78,8 +79,7 @@ def aggregate(
         n = np.bincount(idx, minlength=m).astype(np.int64)
         k = np.bincount(idx, weights=y, minlength=m).round().astype(np.int64)
     else:
-        n = np.bincount(idx, weights=w, minlength=m)
-        k = np.bincount(idx, weights=w * y, minlength=m)
+        k, n = bin_sums(idx, y, w, m)
     pd = None
     if p is not None:
         pd = np.bincount(idx, weights=p, minlength=m) / np.bincount(idx, minlength=m)

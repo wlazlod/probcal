@@ -6,6 +6,7 @@ from typing import overload
 import numpy as np
 
 from .._labels import grade_keys
+from .._math import bootstrap_indices, percentile_band
 from .._results import GroupedMetricReport, MetricReport
 from .._validation import validate_nonneg_int
 from ._common import _prep
@@ -261,38 +262,24 @@ def _evaluate(
         nan = np.full(len(names), np.nan)
         return MetricReport(names=names, values=values, ci_low=nan, ci_high=nan.copy())
 
-    rng = np.random.default_rng(random_state)
-    n = len(y_arr)
     # _prep -> validate_binary_y already rejects single-class y unconditionally
-    # (both idx0 and idx1 are therefore guaranteed non-empty here).
-    idx0 = np.flatnonzero(y_arr == 0)
-    idx1 = np.flatnonzero(y_arr == 1)
-
+    # (both strata are therefore guaranteed non-empty here).
+    draws = bootstrap_indices(
+        np.random.default_rng(random_state),
+        len(y_arr),
+        n_boot,
+        strata=(np.flatnonzero(y_arr == 0), np.flatnonzero(y_arr == 1)) if stratify else None,
+        accept=None if stratify else lambda idx: bool(y_arr[idx].min() != y_arr[idx].max()),
+        reject_msg="100 consecutive degenerate (single-class) bootstrap draws; "
+        "pass stratify=True or supply more data",
+    )
     boot = np.empty((n_boot, len(names)))
-    for b in range(n_boot):
-        if stratify:
-            idx = np.concatenate(
-                [
-                    idx0[rng.integers(0, len(idx0), len(idx0))],
-                    idx1[rng.integers(0, len(idx1), len(idx1))],
-                ]
-            )
-        else:
-            for _attempt in range(100):
-                idx = rng.integers(0, n, n)
-                if y_arr[idx].min() != y_arr[idx].max():
-                    break
-            else:
-                raise RuntimeError(
-                    "100 consecutive degenerate (single-class) bootstrap draws; "
-                    "pass stratify=True or supply more data"
-                )
+    for b, idx in enumerate(draws):
         # One stable sort per replicate, shared by the LOESS fit and the ECCE walk.
         idx = idx[np.argsort(p_arr[idx], kind="stable")]
         pm = _point_metrics(y_arr[idx], p_arr[idx], w_arr[idx], names, presorted=True)
         boot[b] = [pm[k] for k in names]
-    ci_low = np.percentile(boot, 2.5, axis=0)
-    ci_high = np.percentile(boot, 97.5, axis=0)
+    ci_low, ci_high = percentile_band(boot, 0.025)
     return MetricReport(names=names, values=values, ci_low=ci_low, ci_high=ci_high)
 
 

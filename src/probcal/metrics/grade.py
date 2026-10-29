@@ -10,7 +10,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import beta_ppf, betainc, norm_sf
+from .._math import (
+    betainc,
+    clopper_pearson_lower,
+    clopper_pearson_upper,
+    jeffreys_ppf,
+    norm_sf,
+)
 from .._results import _ResultBase
 from .._validation import validate_weights
 from ._common import _prep, is_uniform
@@ -147,8 +153,8 @@ def binomial_grade_test(
         p_exact[i] = 1.0 if ki == 0 else float(betainc(float(ki), float(ni - ki + 1), pd[i]))
         se = np.sqrt(n[i] * pd[i] * (1.0 - pd[i]))
         p_normal[i] = norm_sf((k[i] - n[i] * pd[i]) / se if se > 0 else 0.0)
-        ci_low[i] = 0.0 if ki == 0 else beta_ppf(0.05, float(ki), float(ni - ki + 1))
-        ci_high[i] = 1.0 if ki == ni else beta_ppf(0.95, float(ki + 1), float(ni - ki))
+        ci_low[i] = clopper_pearson_lower(0.05, ki, ni)
+        ci_high[i] = clopper_pearson_upper(0.95, ki, ni)
     light = tuple(_traffic_light(v) for v in p_exact)
     return BinomialGradeResult(
         grades=labels,
@@ -240,8 +246,8 @@ def jeffreys_grade_test(
     for i in range(len(labels)):
         a, b = k[i] + 0.5, n[i] - k[i] + 0.5
         p_value[i] = float(betainc(a, b, pd[i]))
-        ci_low[i] = beta_ppf(0.05, a, b)
-        ci_high[i] = beta_ppf(0.95, a, b)
+        ci_low[i] = jeffreys_ppf(0.05, k[i], n[i])
+        ci_high[i] = jeffreys_ppf(0.95, k[i], n[i])
     light = tuple(_traffic_light(v) for v in p_value)
     return JeffreysGradeResult(
         grades=labels,

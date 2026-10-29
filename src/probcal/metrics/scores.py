@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import loess
+from .._math import bern_loglik, loess
 from .._results import _ResultBase
 from .._validation import EPS
 from ._binstats import bin_stats
@@ -33,9 +33,17 @@ def log_loss(y: object, p: object, *, sample_weight: object = None) -> float:
     float
         Weighted mean negative log-likelihood.
     """
-    y_arr, p_arr, w = _prep(y, p, sample_weight)
-    ll = y_arr * np.log(p_arr) + (1.0 - y_arr) * np.log1p(-p_arr)
-    return float(-np.average(ll, weights=w))
+    return _mean_log_loss(*_prep(y, p, sample_weight))
+
+
+def _mean_log_loss(y: np.ndarray, q: np.ndarray, w: np.ndarray) -> float:
+    """Weighted mean negative log-likelihood on validated arrays (``q`` clipped)."""
+    return -bern_loglik(y, q, w) / float(np.sum(w))
+
+
+def _mean_brier(y: np.ndarray, q: np.ndarray, w: np.ndarray) -> float:
+    """Weighted mean squared error on validated arrays."""
+    return float(np.average((q - y) ** 2, weights=w))
 
 
 def brier_score(y: object, p: object, *, sample_weight: object = None) -> float:
@@ -55,8 +63,7 @@ def brier_score(y: object, p: object, *, sample_weight: object = None) -> float:
     float
         Weighted mean squared error.
     """
-    y_arr, p_arr, w = _prep(y, p, sample_weight)
-    return float(np.average((p_arr - y_arr) ** 2, weights=w))
+    return _mean_brier(*_prep(y, p, sample_weight))
 
 
 def brier_skill_score(y: object, p: object, *, sample_weight: object = None) -> float:
@@ -246,15 +253,29 @@ def murphy_curve(
     (101,)
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    if isinstance(thresholds, (int, np.integer)):
-        theta = np.linspace(0.0, 1.0, int(thresholds))
-    else:
-        theta = np.sort(np.asarray(thresholds, dtype=np.float64))
-        if theta.ndim != 1:
-            raise ValueError(f"thresholds must be a 1-D array, got shape {theta.shape}")
-        if np.any(theta < 0.0) or np.any(theta > 1.0):
-            raise ValueError("thresholds must lie in [0, 1]")
+    theta = _murphy_thresholds(thresholds)
+    return MurphyCurve(thresholds=theta, score=_murphy_score(y_arr, p_arr, w, theta), n=len(y_arr))
 
+
+def _murphy_thresholds(thresholds: object) -> np.ndarray:
+    """Validated, sorted threshold grid of :func:`murphy_curve`."""
+    if isinstance(thresholds, (int, np.integer)):
+        return np.linspace(0.0, 1.0, int(thresholds))
+    theta = np.sort(np.asarray(thresholds, dtype=np.float64))
+    if theta.ndim != 1:
+        raise ValueError(f"thresholds must be a 1-D array, got shape {theta.shape}")
+    if np.any(theta < 0.0) or np.any(theta > 1.0):
+        raise ValueError("thresholds must lie in [0, 1]")
+    return theta
+
+
+def _murphy_score(
+    y_arr: np.ndarray, p_arr: np.ndarray, w: np.ndarray, theta: np.ndarray
+) -> np.ndarray:
+    """Weighted mean elementary score at sorted ``theta`` on validated arrays.
+
+    Defined for any resample, including a single-class one.
+    """
     # Sort p once; cumulative weighted sums over the y==0/y==1 subsets let
     # searchsorted read off, for every threshold at once, how much weight
     # lies on each side — avoids an O(n * T) mask per threshold.
@@ -269,8 +290,7 @@ def murphy_curve(
     w0_above = cum_w0[-1] - cum_w0[idx]  # y=0, p > theta
     w1_at_or_below = cum_w1[idx]  # y=1, p <= theta
 
-    score = (theta * w0_above + (1.0 - theta) * w1_at_or_below) / w.sum()
-    return MurphyCurve(thresholds=theta, score=score, n=len(y_arr))
+    return (theta * w0_above + (1.0 - theta) * w1_at_or_below) / w.sum()
 
 
 @dataclass(frozen=True)

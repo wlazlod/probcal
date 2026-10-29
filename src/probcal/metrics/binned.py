@@ -15,7 +15,7 @@ import numpy as np
 
 from .._math import chi2_sf
 from .._validation import validate_choice, validate_nonneg_int, validate_positive_int
-from ._binstats import BinStats, bin_index, bin_stats
+from ._binstats import BinStats, bin_stats
 from ._common import _prep
 
 
@@ -275,16 +275,12 @@ def hosmer_lemeshow(
     """
     ddof = validate_nonneg_int(ddof, "ddof")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    idx, m = bin_index(p_arr, n_bins, "mass")
-    keep = np.bincount(idx, minlength=m) > 0
-    w2 = w * w
-    obs = np.bincount(idx, weights=w * y_arr, minlength=m)[keep]
-    exp = np.bincount(idx, weights=w * p_arr, minlength=m)[keep]
-    s2 = np.bincount(idx, weights=w2, minlength=m)[keep]
-    s2p = np.bincount(idx, weights=w2 * p_arr, minlength=m)[keep]
+    bs = bin_stats(y_arr, p_arr, w, n_bins, "mass", w2p=True)
+    s2, s2p = bs.w2_sum, bs.w2p_sum
+    assert s2p is not None
     denom = s2p * (1.0 - s2p / s2)
     ok = denom > 0
-    stat = float(np.sum((obs[ok] - exp[ok]) ** 2 / denom[ok]))
+    stat = float(np.sum((bs.wy_sum[ok] - bs.wp_sum[ok]) ** 2 / denom[ok]))
     df = max(len(s2) - ddof, 0)
     p_value = chi2_sf(stat, df) if df > 0 else math.nan
     return HosmerLemeshowResult(statistic=stat, df=df, p_value=p_value)

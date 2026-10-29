@@ -22,8 +22,15 @@ weights therefore cost power, never validity.
 
 import numpy as np
 
-from .._math import bern_log_lr, expit, exponent_weights, irls_logistic, logsumexp
-from .._validation import EPS
+from .._math import (
+    bern_log_lr,
+    bern_log_lr_rows,
+    expit,
+    exponent_weights,
+    irls_logistic,
+    logsumexp,
+    shifted_expit,
+)
 from ..offset import _solve_delta
 
 
@@ -95,8 +102,7 @@ class OffsetProcess:
         if delta_hat != 0.0:
             inc = bern_log_lr(y, p, expit(z + delta_hat), u)
             self.log_plug += inc
-        for j, d in enumerate(self.grid):
-            self.log_mix[j] += bern_log_lr(y, p, expit(z + d), u)
+        self.log_mix += bern_log_lr_rows(y, p, shifted_expit(z, self.grid), u)
         return inc
 
     def log_e(self) -> float:
@@ -132,13 +138,9 @@ class ConfidenceSequence:
         self, z: np.ndarray, p: np.ndarray, y: np.ndarray, w: np.ndarray, delta_hat: float
     ) -> None:
         """Advance every shifted-null e-process by one batch."""
-        q_alt = np.clip(p if delta_hat == 0.0 else expit(z + delta_hat), EPS, 1.0 - EPS)
-        log_q = np.log(q_alt)
-        log_1mq = np.log1p(-q_alt)
-        p0 = np.clip(expit(z[None, :] + self.grid[:, None]), EPS, 1.0 - EPS)
-        terms = y * (log_q[None, :] - np.log(p0)) + (1.0 - y) * (log_1mq[None, :] - np.log1p(-p0))
+        q_alt = p if delta_hat == 0.0 else expit(z + delta_hat)
         u = exponent_weights(w)
-        self.log = self.log + (u[None, :] * terms).sum(axis=1)
+        self.log = self.log + bern_log_lr_rows(y, shifted_expit(z, self.grid), q_alt, u)
         self.max = np.maximum(self.max, self.log)
 
     def surviving(self, threshold: float) -> np.ndarray:

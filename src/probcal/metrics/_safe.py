@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import bern_log_lr, expit, exponent_weights, logit, logsumexp
+from .._math import bern_log_lr_rows, exponent_weights, logit, logsumexp, shifted_expit
 from .._results import Interpretation, _ResultBase
 from ._common import _prep
 from ._grades import grade_labels, resolve_order
@@ -217,7 +217,7 @@ def hl_e_test(
         mask = g_arr == label
         y_g, p_g, z_g = y_arr[mask], p_arr[mask], z_arr[mask]
         w_g = exponent_weights(w_arr[mask])
-        log_terms = np.array([bern_log_lr(y_g, p_g, expit(z_g + delta), w_g) for delta in offsets])
+        log_terms = bern_log_lr_rows(y_g, p_g, shifted_expit(z_g, offsets), w_g)
         log_e_grade[i] = logsumexp(log_terms) - log_norm
 
     log_e = float(np.sum(log_e_grade))

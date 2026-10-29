@@ -17,7 +17,7 @@ import numpy as np
 
 from ._math import _LOGIT_CLIP, bisect, expit, expit1, logit, logit1
 from ._registry import register
-from ._results import Interpretation, OffsetEstimate
+from ._results import Interpretation, OffsetEstimate, _ResultBase
 from ._serialize import fit_meta, utc_now
 from ._validation import validate_scores, validate_weights
 from .base import (
@@ -33,7 +33,7 @@ _DELTA_BRACKET = 40.0
 
 
 @dataclass(frozen=True)
-class AuditReport:
+class AuditReport(_ResultBase):
     """Pre/post record of a logit-offset application, for validators.
 
     Attributes

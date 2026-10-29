@@ -86,7 +86,7 @@ def brier_skill_score(y: object, p: object, *, sample_weight: object = None) -> 
 
 
 @dataclass(frozen=True)
-class MurphyDecomposition:
+class MurphyDecomposition(_ResultBase):
     """Binned Murphy (1973) partition of the Brier score.
 
     ``reliability - resolution + uncertainty`` equals the Brier score exactly
@@ -274,7 +274,7 @@ def murphy_curve(
 
 
 @dataclass(frozen=True)
-class LogLossDecomposition:
+class LogLossDecomposition(_ResultBase):
     """Calibration/refinement split of the log loss via a plug-in
     recalibration curve (LOESS).
 

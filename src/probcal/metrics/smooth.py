@@ -12,6 +12,7 @@ from typing import NamedTuple
 import numpy as np
 
 from .._math import loess, logit, norm_sf, weighted_quantile
+from .._results import _ResultBase
 from ._common import _prep, is_uniform
 
 
@@ -209,7 +210,7 @@ def smooth_ece(
 
 
 @dataclass(frozen=True)
-class EcceResult:
+class EcceResult(_ResultBase):
     """Empirical cumulative calibration error: Kolmogorov-style max and mean
     of the cumulative deviation over sorted predictions.
 
@@ -493,7 +494,7 @@ def emax(
 
 
 @dataclass(frozen=True)
-class SpiegelhalterResult:
+class SpiegelhalterResult(_ResultBase):
     """Spiegelhalter's z test of forecast unbiasedness (two-sided).
 
     Attributes

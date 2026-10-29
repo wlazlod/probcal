@@ -12,7 +12,7 @@ import numpy as np
 
 from .._math import bern_log_lr, expit, logit, logsumexp
 from .._registry import register
-from .._results import _to_frame
+from .._results import _ResultBase, _to_frame
 from .._serialize import JsonIO, check_payload, decode_value, encode_value, envelope
 from .._validation import (
     validate_binary_y,
@@ -111,7 +111,7 @@ def _validate_delta_ci_grid(grid: object) -> None:
 
 
 @dataclass(frozen=True)
-class MonitorStep:
+class MonitorStep(_ResultBase):
     """One matured batch's monitoring record (all e-values are running values).
 
     Attributes
@@ -170,7 +170,7 @@ class MonitorStep:
 
 
 @dataclass(frozen=True)
-class MonitorReport:
+class MonitorReport(_ResultBase):
     """Full monitoring trajectory with the diagnostic recommendation.
 
     Attributes

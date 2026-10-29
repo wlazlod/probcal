@@ -67,6 +67,22 @@ def test_table_results_share_one_row_mechanism() -> None:
     assert "brier" in repr(sel)
 
 
+def test_every_result_has_as_dict_and_table_results_to_frame() -> None:
+    from probcal.metrics.regression import GuardrailReport
+
+    g = GuardrailReport(0.9, 0.1, 0.5, True, True, True, True)
+    assert g.as_dict()["slope"] == 0.9 and hash(g) == hash(copy.copy(g))
+    rows = _metric_report().to_frame()
+    assert list(rows.columns if hasattr(rows, "columns") else rows[0]) == [
+        "metric",
+        "value",
+        "ci_low",
+        "ci_high",
+    ]
+    with pytest.raises(TypeError, match="no table"):
+        g.to_frame()
+
+
 def test_array_results_compare_by_value_and_are_unhashable() -> None:
     # OFF-3: the generated __eq__ raised "truth value of an array is ambiguous".
     assert _metric_report() == _metric_report()  # nan == nan field-wise

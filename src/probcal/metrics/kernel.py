@@ -25,6 +25,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .._math import logit, norm_sf
+from .._results import _ResultBase
 from .._validation import validate_positive_int
 from ._common import _prep
 
@@ -164,7 +165,7 @@ def skce(
 
 
 @dataclass(frozen=True)
-class SkceTestResult:
+class SkceTestResult(_ResultBase):
     """One-sided SKCE calibration test (H0: calibrated; large positive rejects).
 
     Attributes

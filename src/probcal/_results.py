@@ -1,7 +1,8 @@
 """Frozen result dataclasses returned by probcal APIs.
 
 All results are immutable dataclasses of numpy arrays (no pandas), each with an
-``as_dict()`` accessor and a readable aligned-table ``__repr__``. Field sets here
+``as_dict()`` accessor and a readable ``__repr__``; results whose ``__repr__``
+is an aligned table also return that table from ``to_frame()``. Field sets here
 are the initial minimum and may be extended by later releases.
 
 Results are *reports*, not serializable artifacts: ``as_dict()`` returns the
@@ -111,6 +112,21 @@ class _ResultBase:
     def as_dict(self) -> dict[str, object]:
         """Return the result's fields as a plain dict (arrays as-is; not JSON)."""
         return {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}  # type: ignore[arg-type]
+
+    def to_frame(self) -> object:
+        """The table the ``repr`` renders, as a pandas DataFrame (a list of dicts without pandas).
+
+        One row per table row, keyed by the column headers.
+
+        Raises
+        ------
+        TypeError
+            If the result has no table; read its fields with :meth:`as_dict`.
+        """
+        headers = self._headers()
+        if not headers:
+            raise TypeError(f"{type(self).__name__} has no table; read it with as_dict()")
+        return _to_frame([dict(zip(headers, row, strict=True)) for row in self._rows()])
 
     def _rows(self) -> list[tuple[object, ...]]:
         """One tuple per table row, aligned with ``_TABLE``."""
@@ -240,6 +256,13 @@ class GroupedMetricReport(_ResultBase):
         reproducible independent of the label values themselves.
     counts : numpy.ndarray
         Observation count per group, aligned with ``groups``.
+
+    Notes
+    -----
+    :meth:`to_frame` rows are ``{"group", "metric", "value", "ci_low",
+    "ci_high"}``; the pooled report is included under the group label
+    ``"pooled"``, which is therefore reserved — a group of your own named
+    "pooled" is indistinguishable from it in that frame.
     """
 
     pooled: MetricReport
@@ -252,21 +275,6 @@ class GroupedMetricReport(_ResultBase):
     def _rows(self) -> list[tuple[object, ...]]:
         panels = (("pooled", self.pooled), *zip(self.groups, self.reports, strict=True))
         return [(group, *row) for group, rep in panels for row in rep._rows()]
-
-    def to_frame(self) -> object:
-        """Rows as a list of dicts, or a pandas DataFrame when pandas is importable.
-
-        Each row is ``{"group", "metric", "value", "ci_low", "ci_high"}``;
-        the pooled report is included under the group label ``"pooled"``,
-        which is therefore reserved — a group of your own named "pooled"
-        is indistinguishable from it in this frame.
-        """
-        return _to_frame(
-            [
-                {"group": group, "metric": n, "value": v, "ci_low": lo, "ci_high": hi}
-                for group, n, v, lo, hi in self._rows()
-            ]
-        )
 
     def _title(self) -> str:
         return f"GroupedMetricReport ({len(self.groups)} groups)"

@@ -215,7 +215,7 @@ _NOT_MONOTONE = (
 )
 
 
-class FittedStateMixin:
+class _FittedState:
     """The ``fitted_`` flag, its not-fitted refusal, and sklearn's fitted hook."""
 
     fitted_: bool = False
@@ -235,7 +235,7 @@ class FittedStateMixin:
         return bool(self.fitted_)
 
 
-class _FittedObject(FittedStateMixin, JsonIO):
+class _FittedObject(_FittedState, JsonIO):
     """Object surface shared by every fitted calibration map (calibrators, ``LogitOffset``).
 
     The fitted-state protocol, sklearn-style constructor parameters (read
@@ -423,6 +423,10 @@ class _FittedObject(FittedStateMixin, JsonIO):
     def from_dict(cls, d: dict) -> Self:
         """Rebuild a fitted object from :meth:`to_dict` output.
 
+        Called on :class:`BaseCalibrator` itself, dispatches through the
+        class registry to whatever class wrote ``d``; called on a concrete
+        class, requires ``d["class"]`` to match it.
+
         Parameters
         ----------
         d : dict
@@ -436,9 +440,14 @@ class _FittedObject(FittedStateMixin, JsonIO):
         Raises
         ------
         ValueError
-            If the schema version is unknown (naming the writing version)
-            or ``d["class"]`` is not this class.
+            If the schema version is unknown (naming the writing version),
+            the class is not registered, or ``d["class"]`` does not match
+            the class this was called on.
         """
+        if cls is BaseCalibrator:
+            from ._registry import load
+
+            return load(d)  # type: ignore[return-value]
         check_payload(cls, d)
         params = cls._params_from_dict(
             decode_value(d.get("params", {}), arrays=False)  # type: ignore[arg-type]
@@ -702,36 +711,3 @@ class BaseCalibrator(_FittedObject, ABC):
         if within(1.0 - EPS):
             return 1.0 - EPS
         return refine_upper(_bisect(lambda v: not within(v))[0], within)
-
-    # ------------------------------------------------------------- serialization
-
-    @classmethod
-    def from_dict(cls, d: dict) -> Self:
-        """Rebuild a fitted calibrator from :meth:`to_dict` output.
-
-        Called on :class:`BaseCalibrator` itself, dispatches through the
-        class registry to whatever class wrote ``d``; called on a subclass,
-        requires ``d["class"]`` to match that subclass.
-
-        Parameters
-        ----------
-        d : dict
-            Output of :meth:`to_dict` (parsed JSON).
-
-        Returns
-        -------
-        BaseCalibrator
-            A fitted instance.
-
-        Raises
-        ------
-        ValueError
-            If the schema version is unknown (naming the writing version),
-            the class is not registered, or ``d["class"]`` does not match
-            the subclass this was called on.
-        """
-        if cls is BaseCalibrator:
-            from ._registry import load
-
-            return load(d)  # type: ignore[return-value]
-        return super().from_dict(d)

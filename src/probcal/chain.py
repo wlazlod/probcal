@@ -17,8 +17,8 @@ from ._serialize import JsonIO, check_payload, envelope
 from ._validation import validate_space
 from .base import (
     BaseCalibrator,
-    FittedStateMixin,
     _check_representable,
+    _FittedState,
     _validate_point_targets,
     prepare_interval,
 )
@@ -31,7 +31,7 @@ def _staged_method(name: str, parts: "list[Interpretation]") -> str:
 
 
 @register
-class Chain(FittedStateMixin, JsonIO):
+class Chain(_FittedState, JsonIO):
     """A calibrator followed by zero or more ``LogitOffset`` stages.
 
     Exposes the full calibrator protocol — forward map, exact inverse maps,

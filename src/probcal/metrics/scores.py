@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import loess
+from .._math import bern_loglik, loess
 from .._results import _ResultBase
 from .._validation import EPS
 from ._binstats import bin_stats
@@ -33,9 +33,17 @@ def log_loss(y: object, p: object, *, sample_weight: object = None) -> float:
     float
         Weighted mean negative log-likelihood.
     """
-    y_arr, p_arr, w = _prep(y, p, sample_weight)
-    ll = y_arr * np.log(p_arr) + (1.0 - y_arr) * np.log1p(-p_arr)
-    return float(-np.average(ll, weights=w))
+    return _mean_log_loss(*_prep(y, p, sample_weight))
+
+
+def _mean_log_loss(y: np.ndarray, q: np.ndarray, w: np.ndarray) -> float:
+    """Weighted mean negative log-likelihood on validated arrays (``q`` clipped)."""
+    return -bern_loglik(y, q, w) / float(np.sum(w))
+
+
+def _mean_brier(y: np.ndarray, q: np.ndarray, w: np.ndarray) -> float:
+    """Weighted mean squared error on validated arrays."""
+    return float(np.average((q - y) ** 2, weights=w))
 
 
 def brier_score(y: object, p: object, *, sample_weight: object = None) -> float:
@@ -55,8 +63,7 @@ def brier_score(y: object, p: object, *, sample_weight: object = None) -> float:
     float
         Weighted mean squared error.
     """
-    y_arr, p_arr, w = _prep(y, p, sample_weight)
-    return float(np.average((p_arr - y_arr) ** 2, weights=w))
+    return _mean_brier(*_prep(y, p, sample_weight))
 
 
 def brier_skill_score(y: object, p: object, *, sample_weight: object = None) -> float:

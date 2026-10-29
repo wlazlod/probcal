@@ -110,10 +110,7 @@ def bern_loglik(y: np.ndarray, q: np.ndarray, w: np.ndarray) -> float:
 
 def bern_log_lr(y: np.ndarray, p_null: np.ndarray, q_alt: np.ndarray, w: np.ndarray) -> float:
     """Weighted log Bernoulli likelihood ratio of ``q_alt`` against ``p_null``."""
-    q = np.clip(q_alt, EPS, 1.0 - EPS)
-    p = np.clip(p_null, EPS, 1.0 - EPS)
-    terms = y * (np.log(q) - np.log(p)) + (1.0 - y) * (np.log1p(-q) - np.log1p(-p))
-    return float(np.sum(w * terms))
+    return float(bern_log_lr_rows(y, p_null, q_alt, w))
 
 
 def logsumexp(values: np.ndarray) -> float:
@@ -987,3 +984,25 @@ def weighted_quantile(x: object, q: object, w: object) -> np.ndarray:
     mid = np.cumsum(ws) - 0.5 * ws
     pos = (mid - mid[0]) / (mid[-1] - mid[0])
     return np.asarray(np.interp(q_arr, pos, xs))
+
+
+# ------------------------------------------------------------------ shared numerics helpers
+
+
+def bern_log_lr_rows(
+    y: np.ndarray, p_null: np.ndarray, q_alt: np.ndarray, w: np.ndarray
+) -> np.ndarray:
+    """:func:`bern_log_lr` of every row when ``p_null`` or ``q_alt`` is 2-D.
+
+    One row per shift of a grid (see :func:`shifted_expit`), each reduced
+    exactly as the 1-D :func:`bern_log_lr` reduces it.
+    """
+    q = np.clip(q_alt, EPS, 1.0 - EPS)
+    p = np.clip(p_null, EPS, 1.0 - EPS)
+    terms = y * (np.log(q) - np.log(p)) + (1.0 - y) * (np.log1p(-q) - np.log1p(-p))
+    return np.asarray(np.sum(w * terms, axis=-1))
+
+
+def shifted_expit(z: np.ndarray, shifts: np.ndarray) -> np.ndarray:
+    """``expit(z + d)`` for every shift ``d``: a ``(len(shifts), len(z))`` array."""
+    return expit(z[None, :] + np.asarray(shifts, dtype=np.float64)[:, None])

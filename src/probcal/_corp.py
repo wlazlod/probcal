@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from ._math import bern_loglik
 from ._steps import eval_step, isotonic_blocks
+from .metrics.scores import _mean_brier, _mean_log_loss
 
 
 def corp_fit(
@@ -47,9 +47,7 @@ def corp_fit(
 
 
 def _mean_score(y: np.ndarray, q: np.ndarray, w: np.ndarray, score: str) -> float:
-    if score == "brier":
-        return float(np.sum(w * (y - q) ** 2) / np.sum(w))
-    return -bern_loglik(y, q, w) / float(np.sum(w))
+    return (_mean_brier if score == "brier" else _mean_log_loss)(y, q, w)
 
 
 def decompose(

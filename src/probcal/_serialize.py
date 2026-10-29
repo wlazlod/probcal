@@ -162,15 +162,22 @@ def check_payload(cls: type, d: dict) -> None:
         raise ValueError(f"payload was written by {d.get('class')!r}, not {cls.__name__}")
 
 
-def envelope(obj: object, **body: object) -> dict[str, object]:
-    """The versioned payload header every ``to_dict`` starts with, plus ``body``."""
+def envelope(
+    obj: object, *, params: object = None, state: object, fit_meta: object = None
+) -> dict[str, object]:
+    """The versioned payload every ``to_dict`` returns: header, ``params``, ``state``, ``fit_meta``.
+
+    ``params`` and ``fit_meta`` default to ``{}`` (objects without either).
+    """
     from . import __version__
 
     return {
         "probcal_schema": SCHEMA_VERSION,
         "probcal_version": __version__,
         "class": type(obj).__name__,
-        **body,
+        "params": {} if params is None else params,
+        "state": state,
+        "fit_meta": {} if fit_meta is None else fit_meta,
     }
 
 

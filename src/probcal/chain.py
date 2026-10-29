@@ -282,11 +282,9 @@ class Chain(FittedStateMixin, JsonIO):
         self._check_fitted()
         return envelope(
             self,
-            params={},
             state={
                 "stages": [self.calibrator_.to_dict()] + [off.to_dict() for off in self.offsets_],
             },
-            fit_meta={},
         )
 
     @classmethod

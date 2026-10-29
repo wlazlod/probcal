@@ -9,6 +9,7 @@ from sklearn.utils.validation import _check_sample_weight, check_is_fitted
 
 from .._math import expit
 from .._protocol import CalibratorProtocolMixin
+from .._serialize import JsonIO
 from ..base import BaseCalibrator
 from ..parametric import BetaCalibrator
 
@@ -60,6 +61,11 @@ def drop_zero_weight(
     return sw[keep], tuple(a[keep] for a in arrays)
 
 
+def proba_matrix(p: np.ndarray) -> np.ndarray:
+    """The ``(n, 2)`` ``predict_proba`` matrix ``[1 - p, p]`` of a positive-class column."""
+    return np.column_stack([1.0 - p, p])
+
+
 def xfail_tags(estimator: object) -> dict[str, object]:
     """``_more_tags()["_xfail_checks"]`` for sklearn < 1.6 (lazy table import)."""
     from ._xfail import XFAIL_CHECKS
@@ -70,7 +76,45 @@ def xfail_tags(estimator: object) -> dict[str, object]:
     return {}
 
 
-class BinaryCalibratedMixin(CalibratorProtocolMixin):
+class DelegatedJsonMixin:
+    """``to_dict``/``to_json``/``fingerprint`` of the fitted inner probcal object.
+
+    The sklearn wrapper itself follows sklearn's pickle conventions and is
+    outside the JSON's scope: the envelope loads back as the inner object
+    (calibrator, chain, or ``LogitOffset``), never as the wrapper.
+    """
+
+    def _fitted_inner(self) -> JsonIO:  # pragma: no cover - abstract
+        raise NotImplementedError
+
+    def fingerprint(self) -> str:
+        """The fitted inner object's provenance fingerprint (delegated)."""
+        return self._fitted_inner().fingerprint()
+
+    def to_dict(self) -> dict[str, object]:
+        """The fitted inner object's versioned JSON envelope (delegated)."""
+        return self._fitted_inner().to_dict()
+
+    def to_json(
+        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
+    ) -> "str | None":
+        """The fitted inner object's JSON serialization (delegated), never pickle."""
+        return self._fitted_inner().to_json(path, indent=indent)
+
+
+class ScoreColumnMixin:
+    """``positive_column`` and ``transform`` of the score-column adapters."""
+
+    def _check_positive_column(self) -> None:
+        if self.positive_column not in (0, 1):  # type: ignore[attr-defined]
+            raise ValueError(f"positive_column must be 0 or 1, got {self.positive_column!r}")  # type: ignore[attr-defined]
+
+    def transform(self, X: object) -> np.ndarray:
+        """Positive-class probability column ``(n, 1)`` — lets the adapter end a Pipeline."""
+        return self.predict_proba(X)[:, [1]]  # type: ignore[attr-defined]
+
+
+class BinaryCalibratedMixin(CalibratorProtocolMixin, DelegatedJsonMixin):
     """Binary-target sklearn classifier around a fitted probcal calibrator.
 
     Subclasses implement :meth:`_positive_proba` (calibrated ``P(classes_[1])``,
@@ -82,6 +126,9 @@ class BinaryCalibratedMixin(CalibratorProtocolMixin):
     def _fitted_calibrator(self) -> BaseCalibrator:
         check_is_fitted(self, "calibrator_")
         return self.calibrator_
+
+    def _fitted_inner(self) -> BaseCalibrator:
+        return self._fitted_calibrator()
 
     def _binary_target(self, y: np.ndarray) -> np.ndarray:
         """Set ``classes_`` and return ``y == classes_[1]`` as float64.
@@ -117,34 +164,12 @@ class BinaryCalibratedMixin(CalibratorProtocolMixin):
     def predict_proba(self, X: object) -> np.ndarray:
         """Calibrated ``(n, 2)`` probabilities ``[P(classes_[0]), P(classes_[1])]``."""
         check_is_fitted(self, "calibrator_")
-        p = self._positive_proba(X)
-        return np.column_stack([1.0 - p, p])
+        return proba_matrix(self._positive_proba(X))
 
     def predict(self, X: object) -> np.ndarray:
         """Class labels at the 0.5 calibrated-probability threshold."""
         proba = self.predict_proba(X)
         return self.classes_[(proba[:, 1] >= 0.5).astype(int)]
-
-    # ------------------------------------------------------------------ JSON surface
-
-    def fingerprint(self) -> str:
-        """The fitted calibrator's provenance fingerprint (delegated)."""
-        return self._fitted_calibrator().fingerprint()
-
-    def to_dict(self) -> dict[str, object]:
-        """The fitted calibrator's versioned JSON envelope (delegated).
-
-        The sklearn wrapper itself follows sklearn's pickle conventions and
-        is outside the JSON's scope — the envelope loads back as the inner
-        probcal calibrator.
-        """
-        return self._fitted_calibrator().to_dict()
-
-    def to_json(
-        self, path: "str | os.PathLike[str] | None" = None, *, indent: int = 2
-    ) -> "str | None":
-        """The fitted calibrator's JSON serialization (delegated), never pickle."""
-        return self._fitted_calibrator().to_json(path, indent=indent)
 
     # ------------------------------------------------------------------ tags
 

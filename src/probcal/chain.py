@@ -17,10 +17,10 @@ from ._serialize import JsonIO, check_payload, envelope
 from ._validation import validate_space
 from .base import (
     BaseCalibrator,
+    FittedStateMixin,
     _check_representable,
     _validate_point_targets,
-    shrink_interval,
-    validate_interval,
+    prepare_interval,
 )
 from .offset import LogitOffset
 
@@ -50,7 +50,7 @@ def _concat_interpretations(
 
 
 @register
-class Chain(JsonIO):
+class Chain(FittedStateMixin, JsonIO):
     """A calibrator followed by zero or more ``LogitOffset`` stages.
 
     Exposes the full calibrator protocol — forward map, exact inverse maps,
@@ -110,10 +110,6 @@ class Chain(JsonIO):
     def offsets_(self) -> "tuple[LogitOffset, ...]":
         """Read-only view of the offset stages, in application order."""
         return tuple(self.stages[1:])  # type: ignore[arg-type]
-
-    def _check_fitted(self) -> None:
-        if not self.fitted_:
-            raise RuntimeError("Chain is not fitted; call fit() first")
 
     def fit(self, s: object, y: object, sample_weight: object = None) -> "Chain":
         """Fit every stage sequentially on the same calibration data.
@@ -206,10 +202,6 @@ class Chain(JsonIO):
             p = off.transform(p)
         return p
 
-    def __sklearn_is_fitted__(self) -> bool:
-        """Fitted state for sklearn >= 1.6 (``True`` iff every stage is fitted)."""
-        return bool(self.fitted_)
-
     # ------------------------------------------------------------------ protocol
 
     @property
@@ -267,12 +259,10 @@ class Chain(JsonIO):
             chain's output range.
         """
         self._check_fitted()
-        validate_interval(lo, hi)
-        validate_space(space)
-        lo_b, hi_b = shrink_interval(lo, hi, buffer_logit)
+        lo_b, hi_b = prepare_interval(lo, hi, space, buffer_logit)
         lo_c = self._shift_bound(lo_b, is_lower=True)
         hi_c = self._shift_bound(hi_b, is_lower=False)
-        return self.calibrator_.interval_inverse(lo_c, hi_c, space=space, buffer_logit=0.0)
+        return self.calibrator_._invert_interval(lo_c, hi_c, space)
 
     def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
         """Exact preimage of composed calibrated probabilities.

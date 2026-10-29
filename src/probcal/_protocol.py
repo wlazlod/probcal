@@ -44,6 +44,10 @@ class CalibratorProtocolMixin:
             lo, hi, space=space, buffer_logit=buffer_logit
         )
 
+    def _invert_interval(self, lo_b: float, hi_b: float, space: str) -> tuple[float, float]:
+        """Preimage of an already validated and buffered interval (delegated)."""
+        return self._fitted_calibrator()._invert_interval(lo_b, hi_b, space)
+
     def point_inverse(self, p: object, *, space: str = "probability") -> np.ndarray:
         """Exact preimage of calibrated probabilities (delegated)."""
         return self._fitted_calibrator().point_inverse(p, space=space)

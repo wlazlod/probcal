@@ -849,8 +849,7 @@ def plot_offset_audit(offset: Any, *, ax: Any = None) -> Any:
         The axes the audit chart was drawn on.
     """
     _require_mpl()
-    if not getattr(offset, "fitted_", False):
-        raise RuntimeError("LogitOffset is not fitted; call fit() first")
+    offset._check_fitted()
     t = np.linspace(*_DEFAULT_LOGIT_SPAN, 200)
     lp = logit1(offset.pre_mean_)
     lq = logit1(offset.post_mean_)

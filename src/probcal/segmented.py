@@ -370,6 +370,11 @@ class SegmentedCalibrator(BaseCalibrator):
         target = self._segment_chain_or_base(segment)
         return target.interval_inverse(lo, hi, space=space, buffer_logit=buffer_logit)
 
+    def _invert_interval(self, lo_b: float, hi_b: float, space: str) -> tuple[float, float]:
+        """The global map's (``segment=None``) preimage of a prepared interval."""
+        self._check_fitted()
+        return self.base_._invert_interval(lo_b, hi_b, space)
+
     def point_inverse(
         self, p: object, *, space: str = "probability", segment: object = None
     ) -> np.ndarray:

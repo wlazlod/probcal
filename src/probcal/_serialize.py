@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import os
+from datetime import UTC, datetime
 from typing import Any, Self
 
 import numpy as np
@@ -243,3 +244,29 @@ class JsonIO:
             Hex digest.
         """
         return fingerprint_of_dict(self.to_dict())
+
+
+# ---------------------------------------------------------------- fit provenance
+
+
+def utc_now() -> str:
+    """The current UTC time, ISO 8601 to the second (the ``fitted_at_utc`` stamp)."""
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def fit_meta(
+    s: np.ndarray, w: np.ndarray, y: np.ndarray | None = None, *, fitted_at_utc: str | None = None
+) -> dict[str, object]:
+    """The ``fit_meta_`` provenance record of a fit on validated arrays.
+
+    ``n_obs``, ``n_events`` (only when outcomes ``y`` are given),
+    ``weight_sum``, ``fitted_at_utc`` (now, unless given) and the
+    :func:`data_fingerprint` of ``(s, y, w)`` — or of ``(s, w)`` without ``y``.
+    """
+    meta: dict[str, object] = {"n_obs": int(s.shape[0])}
+    if y is not None:
+        meta["n_events"] = float(np.sum(w * y))
+    meta["weight_sum"] = float(w.sum())
+    meta["fitted_at_utc"] = utc_now() if fitted_at_utc is None else fitted_at_utc
+    meta["data_fingerprint"] = data_fingerprint(s, w) if y is None else data_fingerprint(s, y, w)
+    return meta

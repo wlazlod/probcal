@@ -6,6 +6,8 @@ explicit best-to-worst ``order``, and aggregates per-grade counts.
 
 import numpy as np
 
+from .._steps import bin_sums
+
 
 def is_masterscale(obj: object) -> bool:
     """Duck test for :class:`probcal.Masterscale` (``assign`` + ``names``)."""
@@ -79,8 +81,7 @@ def aggregate(
         n = np.bincount(idx, minlength=m).astype(np.int64)
         k = np.bincount(idx, weights=y, minlength=m).round().astype(np.int64)
     else:
-        n = np.bincount(idx, weights=w, minlength=m)
-        k = np.bincount(idx, weights=w * y, minlength=m)
+        k, n = bin_sums(idx, y, w, m)
     pd = None
     if p is not None:
         pd = np.bincount(idx, weights=p, minlength=m) / np.bincount(idx, minlength=m)

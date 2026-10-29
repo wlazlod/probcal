@@ -26,6 +26,7 @@ import numpy as np
 from ._registry import register
 from ._results import Interpretation, _ResultBase
 from ._serialize import JsonIO, canonical_json, check_payload, decode_value, encode_value, envelope
+from ._steps import bin_sums
 from ._validation import validate_binary_y, validate_scores, validate_weights
 
 
@@ -331,8 +332,7 @@ class Masterscale(JsonIO):
         w_arr = validate_weights(sample_weight, len(p_arr))
         idx = self.index(p_arr)
         k = self.n_grades
-        n = np.bincount(idx, weights=w_arr, minlength=k).astype(np.float64)
-        events = np.bincount(idx, weights=w_arr * y_arr, minlength=k).astype(np.float64)
+        events, n = bin_sums(idx, y_arr, w_arr, k)
         wp = np.bincount(idx, weights=w_arr * p_arr, minlength=k).astype(np.float64)
         with np.errstate(divide="ignore", invalid="ignore"):
             mean_pd = np.where(n > 0, wp / n, np.nan)

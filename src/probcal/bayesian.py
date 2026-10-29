@@ -17,7 +17,7 @@ import numpy as np
 from ._math import lgamma_vec, pava
 from ._registry import register
 from ._results import Interpretation
-from ._steps import aggregate_ties, bin_sums, equal_mass_edges, eval_step
+from ._steps import aggregate_ties, bin_lookup, edge_bin_sums, equal_mass_edges, eval_step
 from ._validation import EPS, validate_positive_int
 from .base import BaseCalibrator
 
@@ -115,7 +115,7 @@ class BBQCalibrator(BaseCalibrator):
         log_marg = np.empty(len(self.bins_grid_))
         for i, b in enumerate(self.bins_grid_):
             edges = equal_mass_edges(s, int(b), w)
-            k, tot = bin_sums(np.searchsorted(edges, s, side="right"), y, w, len(edges) + 1)
+            k, tot = edge_bin_sums(edges, s, y, w)
             # Beta-Binomial log marginal likelihood, Jeffreys prior per bin.
             a0 = b0 = _JEFFREYS
             log_marg[i] = float(
@@ -157,7 +157,7 @@ class BBQCalibrator(BaseCalibrator):
         for weight, edges, rate in zip(
             self.model_weights_, self.model_edges_, self.model_rates_, strict=True
         ):
-            out += weight * rate[np.searchsorted(edges, s, side="right")]
+            out += weight * rate[bin_lookup(edges, s)]
         return out
 
     def interpret(self) -> Interpretation:

@@ -11,6 +11,7 @@ it designs the bands from data.
 
 import numpy as np
 
+from ._steps import bin_sums
 from ._validation import (
     validate_binary_y,
     validate_positive_int,
@@ -150,8 +151,7 @@ def _prebin(
     cuts = cuts[cuts < 1.0]
     idx = np.searchsorted(cuts, ps, side="right")
     k = len(cuts) + 1
-    W = np.bincount(idx, weights=ws, minlength=k).astype(np.float64)
-    E = np.bincount(idx, weights=ws * ys, minlength=k).astype(np.float64)
+    E, W = bin_sums(idx, ys, ws, k)
     return W, E, cuts
 
 

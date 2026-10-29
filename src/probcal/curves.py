@@ -27,6 +27,7 @@ from ._results import (
     SmoothReliabilityCurve,
     _ResultBase,
 )
+from ._steps import bin_sums
 from ._validation import validate_level, validate_nonneg_int, validate_positive_int
 from .metrics._binstats import bin_stats
 from .metrics._common import _prep, gram, is_uniform, rao_scott
@@ -196,8 +197,7 @@ def _kernel_rate_density(
     if lattice is not None:
         width, t_lo, b = lattice
         idx = _lattice_index(t, t_lo, width, b)
-        num = np.bincount(idx, weights=w * y, minlength=b)
-        den = np.bincount(idx, weights=w, minlength=b)
+        num, den = bin_sums(idx, y, w, b)
         centers, num_s = _lattice_kernel_smooth(num, width, sigma, t_lo)
         _, den_s = _lattice_kernel_smooth(den, width, sigma, t_lo)
         # Cells farther than the kernel's +-5 sigma truncation from every

@@ -672,7 +672,12 @@ def _loess_window_starts(xs: np.ndarray, evs: np.ndarray, r: int) -> np.ndarray:
 
 
 def _loess_fit_sorted_vec(
-    xs: np.ndarray, ys: np.ndarray, evs: np.ndarray, r: int, degree: int
+    xs: np.ndarray,
+    ys: np.ndarray,
+    evs: np.ndarray,
+    r: int,
+    degree: int,
+    ws: np.ndarray | None = None,
 ) -> np.ndarray:
     """LOESS at sorted eval points: tricube-weighted local fits on r-windows.
 
@@ -680,6 +685,10 @@ def _loess_fit_sorted_vec(
     ``_LOESS_BLOCK // r`` so the gathered (block x r) window matrix stays
     cache-resident; every window has exactly ``r`` points, so the gather is
     rectangular. ``xs`` and ``evs`` must already be sorted ascending.
+    ``ws`` (sample weights aligned with ``xs``) multiplies the tricube
+    weights; the windows, the bandwidth and the singular-design guard are
+    the unweighted ones, and a window collapsed to one distinct ``x`` returns
+    the weighted mean. ``None`` is the unweighted fit.
 
     Against the per-point reference loop in ``tests/test_math.py`` the only
     intended difference is the tricube cube, taken by multiplication
@@ -691,18 +700,19 @@ def _loess_fit_sorted_vec(
     On a *rank-deficient* window — every non-zero tricube weight on one
     distinct ``x``, which happens when the far half of the window lies at
     exactly the bandwidth ``h`` — ``det`` is pure cancellation (~1e-23 rather
-    than 0), and the ulp-level weight difference can put the two
-    implementations on opposite sides of the ``abs(det) < _FPMIN`` guard. Such
-    a window's local *linear* fit is undefined; the ``swy / sw`` branch (the
-    weighted mean, what it degenerates to) is the well-defined answer, whereas
-    the alternative divides by cancellation noise. See
-    ``tests/test_math.py::test_loess_vectorized_rank_deficient_window``.
+    than 0) and can land on either side of the ``abs(det) < _FPMIN`` guard.
+    Such a window's local *linear* fit is undefined, so rows whose ``det`` is
+    within ``1e-9`` of ``sw * swxx`` are checked for it exactly (one distinct
+    ``x`` among the positive weights) and take the ``swy / sw`` branch (the
+    weighted mean, what the fit degenerates to) rather than dividing by
+    cancellation noise.
     """
     m = evs.shape[0]
     start = _loess_window_starts(xs, evs, r)
     out = np.empty(m, dtype=np.float64)
     windows_x = sliding_window_view(xs, r)
     windows_y = sliding_window_view(ys, r)
+    windows_w = None if ws is None else sliding_window_view(ws, r)
     block = max(1, _LOESS_BLOCK // max(r, 1))
     for lo in range(0, m, block):
         hi = min(lo + block, m)
@@ -717,6 +727,8 @@ def _loess_fit_sorted_vec(
         cube = u * u * u
         tri = np.clip(1.0 - cube, 0.0, None)
         wts = tri * tri * tri
+        if windows_w is not None:
+            wts = wts * windows_w[s]
         if degree == 0:
             ww = np.maximum(wts, _FPMIN)
             vals = (ww * yw).sum(axis=1) / ww.sum(axis=1)
@@ -729,6 +741,16 @@ def _loess_fit_sorted_vec(
             swxy = (wxc * yw).sum(axis=1)
             det = sw * swxx - swx * swx
             singular = np.abs(det) < _FPMIN
+            # A rank-deficient window (every non-zero weight on one distinct
+            # x) has det == 0 only up to cancellation noise, which can escape
+            # the guard; near-zero det rows are checked for it exactly.
+            suspect = ~singular & (np.abs(det) <= 1e-9 * sw * swxx)
+            if suspect.any():
+                rows = np.flatnonzero(suspect)
+                pos = wts[rows] > 0.0
+                xr = xw[rows]
+                lo_x = np.where(pos, xr, np.inf).min(axis=1)
+                singular[rows[lo_x == np.where(pos, xr, -np.inf).max(axis=1)]] = True
             vals = np.where(
                 singular,
                 swy / np.maximum(sw, _FPMIN),
@@ -737,12 +759,19 @@ def _loess_fit_sorted_vec(
         # ``yw.mean(axis=1)`` is another full pass over the block; only pay it
         # when some window actually collapsed to a single distinct x.
         if degenerate.any():
-            vals = np.where(degenerate, yw.mean(axis=1), vals)
+            if windows_w is None:
+                flat = yw.mean(axis=1)
+            else:
+                sw_win = windows_w[s]
+                flat = (sw_win * yw).sum(axis=1) / sw_win.sum(axis=1)
+            vals = np.where(degenerate, flat, vals)
         out[lo:hi] = vals
     return out
 
 
-def _tie_means(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
+def _tie_means(
+    xs: np.ndarray, ys: np.ndarray, ws: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray | None]:
     """Replace each ``y`` by the mean ``y`` of its block of tied (sorted) ``x``.
 
     The r-nearest-neighbour window can cut through a block of tied ``x``,
@@ -751,19 +780,31 @@ def _tie_means(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
     ``x``, so fitting on block means is exactly the average of the fit over
     every ordering of the tied rows; a block entirely inside the window
     contributes the same sum either way. Blocks are summed in ``y`` order,
-    so the means do not depend on row order either. Without ties ``ys`` is
-    returned unchanged (the same array).
+    so the means do not depend on row order either.
+
+    With sample weights ``ws`` each tied row becomes ``(mean w, weighted
+    mean y)`` of its block: a block entirely inside the window contributes
+    the same weighted sums, and a cut block contributes the same amount
+    whichever of its rows the window keeps, so the weighted fit is
+    tie-order invariant too. Without ties ``ys`` and ``ws`` are returned
+    unchanged (the same arrays).
     """
     n = xs.shape[0]
     if n < 2:
-        return ys
+        return ys, ws
     brk = xs[1:] != xs[:-1]
     if bool(brk.all()):
-        return ys
+        return ys, ws
     starts = np.flatnonzero(np.concatenate(([True], brk)))
     counts = np.diff(np.append(starts, n))
-    ys_canon = ys[np.lexsort((ys, xs))]
-    return np.repeat(np.add.reduceat(ys_canon, starts) / counts, counts)
+    if ws is None:
+        ys_canon = ys[np.lexsort((ys, xs))]
+        return np.repeat(np.add.reduceat(ys_canon, starts) / counts, counts), None
+    canon = np.lexsort((ws, ys, xs))
+    w_canon = ws[canon]
+    w_sum = np.add.reduceat(w_canon, starts)
+    wy_sum = np.add.reduceat(w_canon * ys[canon], starts)
+    return np.repeat(wy_sum / w_sum, counts), np.repeat(w_sum / counts, counts)
 
 
 def loess(
@@ -775,6 +816,7 @@ def loess(
     *,
     grid_size: int | None = None,
     presorted: bool = False,
+    w: object = None,
 ) -> np.ndarray:
     """Tricube-weighted local polynomial regression (LOESS).
 
@@ -809,6 +851,14 @@ def loess(
         sorted copy — ``evaluate``'s bootstrap sorts each replicate once and
         shares that order across metrics. Output is unchanged when the
         declaration holds and meaningless when it does not; nothing checks it.
+    w : array_like or None, keyword-only
+        Positive sample weights, same length as ``x``, multiplying the
+        tricube weight of each observation in every local fit. Windows,
+        bandwidths and the singular-design fallback are those of the
+        unweighted fit; tied ``x`` are fitted on their block's mean weight
+        and weighted mean ``y``, so the result is again independent of the
+        order of tied rows. ``None`` (default) is the unweighted fit; unit
+        weights reproduce it exactly.
 
     Returns
     -------
@@ -822,16 +872,20 @@ def loess(
     r = min(max(int(math.ceil(frac * n)), degree + 1), n)
     order = None if presorted else np.argsort(x_arr, kind="stable")
     xs, ys = (x_arr, y_arr) if order is None else (x_arr[order], y_arr[order])
-    ys = _tie_means(xs, ys)
+    ws = None
+    if w is not None:
+        w_arr = np.asarray(w, dtype=np.float64)
+        ws = w_arr if order is None else w_arr[order]
+    ys, ws = _tie_means(xs, ys, ws)
     if grid_size is not None and ev.shape[0] > grid_size:
         anchors = np.unique(np.quantile(ev, np.linspace(0.0, 1.0, grid_size)))
-        return np.interp(ev, anchors, _loess_fit_sorted_vec(xs, ys, anchors, r, degree))
+        return np.interp(ev, anchors, _loess_fit_sorted_vec(xs, ys, anchors, r, degree, ws))
     if xeval is None:
         ev_order, evs = order, xs
     else:
         ev_order = np.argsort(ev, kind="stable")
         evs = ev[ev_order]
-    fit = _loess_fit_sorted_vec(xs, ys, evs, r, degree)
+    fit = _loess_fit_sorted_vec(xs, ys, evs, r, degree, ws)
     if ev_order is None:
         return fit
     out = np.empty_like(fit)

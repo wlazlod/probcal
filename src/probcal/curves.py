@@ -121,8 +121,9 @@ def reliability_loess(
     sample_weight : array_like or None, keyword-only
         Optional positive weights. Non-uniform weights multiply the tricube
         kernel weights of each local-linear fit (same nearest-neighbour
-        windows); ``None`` or all-equal weights give the unweighted LOESS
-        curve unchanged.
+        windows, tie handling and singular-window fallback as the unweighted
+        fit; see :func:`probcal._math.loess`); ``None`` or all-equal weights
+        give the unweighted LOESS curve unchanged.
 
     Returns
     -------
@@ -132,42 +133,9 @@ def reliability_loess(
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     grid = _grid(p_arr, grid_size)
-    if is_uniform(w):
-        fitted = loess(p_arr, y_arr, frac=frac, xeval=grid)
-    else:
-        fitted = _weighted_local_linear(p_arr, y_arr, w, grid, frac)
+    fitted = loess(p_arr, y_arr, frac=frac, xeval=grid, w=None if is_uniform(w) else w)
     rate = np.clip(fitted, 0.0, 1.0)
     return SmoothReliabilityCurve(grid_p=grid, grid_logit=logit(grid), event_rate=rate)
-
-
-def _weighted_local_linear(
-    x: np.ndarray, y: np.ndarray, w: np.ndarray, xeval: np.ndarray, frac: float
-) -> np.ndarray:
-    """Sample-weighted LOESS (degree 1) at ``xeval``.
-
-    Each fit uses the ``r = ceil(frac * n)`` nearest observations, tricube
-    kernel weights over the window radius times the sample weights, and a
-    weighted least-squares line; a window whose points share one ``x`` (or
-    whose design is singular) returns the weighted mean.
-    """
-    n = x.shape[0]
-    r = min(max(int(math.ceil(frac * n)), 2), n)
-    out = np.empty(xeval.shape[0])
-    for i, x0 in enumerate(xeval):
-        dist = np.abs(x - x0)
-        win = np.argpartition(dist, r - 1)[:r]
-        h = float(dist[win].max())
-        u = dist[win] / h if h > 0.0 else np.zeros(r)
-        k = np.clip(1.0 - u**3, 0.0, None) ** 3 * w[win]
-        xc = x[win] - x0
-        sw, swx, swxx = k.sum(), (k * xc).sum(), (k * xc * xc).sum()
-        swy, swxy = (k * y[win]).sum(), (k * xc * y[win]).sum()
-        det = sw * swxx - swx * swx
-        if h == 0.0 or abs(det) <= 1e-12 * max(sw * swxx, 1e-300):
-            out[i] = swy / sw if sw > 0.0 else float(np.average(y[win], weights=w[win]))
-        else:
-            out[i] = (swxx * swy - swx * swxy) / det
-    return out
 
 
 def reliability_spline(

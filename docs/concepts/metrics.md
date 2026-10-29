@@ -513,15 +513,12 @@ and is tested against it). Reported **point estimates** come off the unsorted pa
 bootstrap replicates' reordered sums move percentile CI bounds only in their last bits.
 
 The vectorized anchor fit differs from a scalar loop by ≤ 2.3×10⁻¹⁶ relative **on
-well-conditioned windows only**. If a window is rank-deficient (every non-zero tricube weight
-sitting on one distinct `p`, which needs the far half of the window to lie at exactly the
-bandwidth), the local-linear determinant is pure cancellation (~10⁻²³ rather than 0), and an
-ulp-level weight difference can put two evaluation orders on opposite sides of the
-`abs(det) < _FPMIN` guard, giving values that differ by O(1). On such a window the `swy / sw`
-branch (the weighted mean, what a rank-deficient local *linear* fit degenerates to) is the
-well-defined answer; the other branch divides by cancellation noise. Since anchors are data
-quantiles, this has not been observed to reach a reported value, and the corner is pinned by
-`tests/test_math.py`.
+well-conditioned windows**. A rank-deficient window (every non-zero tricube weight sitting on
+one distinct `p`, which needs the far half of the window to lie at exactly the bandwidth — it
+happens on tied scores) has a local-linear determinant that is pure cancellation (~10⁻²³
+rather than 0); such windows are detected exactly and take the `swy / sw` branch (the
+weighted mean, what a rank-deficient local *linear* fit degenerates to) instead of dividing by
+cancellation noise.
 
 Measured on the dev host at n=10⁴, one full-catalog replicate costs about 28 ms;
 `ece_sweep` with its early stop costs 1.8 ms per replicate (about 8.9 ms without it), and the binned ECE family costs 0.34 ms. `evaluate(n=10⁴, n_boot=1000)` takes about

@@ -148,11 +148,17 @@ def _draw_split_risk_dist(ax: Any, y_arr: np.ndarray, p_arr: np.ndarray, scale: 
 
 
 def _stats_box_text(
-    stats: bool | MetricReport, annotate: bool, y_arr: np.ndarray, p_arr: np.ndarray
+    stats: bool | MetricReport,
+    annotate: bool,
+    y_arr: np.ndarray,
+    p_arr: np.ndarray,
+    *,
+    smece_shown: bool = False,
 ) -> str | None:
     """Text of the top-left box, or ``None`` for no box.
 
-    ``stats=True``: fixed n/events/intercept/slope/ICI/smECE/Brier.
+    ``stats=True``: fixed n/events/intercept/slope/ICI/smECE/Brier (smECE
+    left out when ``smece_shown``: a kernel curve's readout already shows it).
     ``stats=<MetricReport>``: ``name = value [ci_low, ci_high]`` for the
     ``_STATS_REPORT_NAMES`` present in the report (plus n/events from ``y``).
     Otherwise, with ``annotate=True``: the classic
@@ -178,9 +184,8 @@ def _stats_box_text(
         f"slope = {s.slope:.3f}\n"
     )
     if stats:
-        sece = smooth_ece(y_arr, p_arr)
-        brier = brier_score(y_arr, p_arr)
-        return head + f"ICI = {s.ici:.3f}\nsmECE = {sece:.3f}\nBrier = {brier:.3f}"
+        sece = "" if smece_shown else f"smECE = {smooth_ece(y_arr, p_arr):.3f}\n"
+        return head + f"ICI = {s.ici:.3f}\n{sece}Brier = {brier_score(y_arr, p_arr):.3f}"
     return head + (
         f"ICI = {s.ici:.4f}\nE90 = {s.e90:.4f}\nSpiegelhalter p = {s.spiegelhalter_p:.3f}"
     )
@@ -228,7 +233,8 @@ def plot_reliability(
     ``annotate=True`` (default) draws the classic stats box, computed by
     :func:`probcal.metrics.reliability_summary`. ``stats=True`` replaces it
     with a box reporting ``n, events, intercept, slope, ICI, smECE, Brier``
-    instead (``annotate`` is then ignored); ``stats=<MetricReport>`` instead
+    instead (``annotate`` is then ignored; smECE is left out of the box when
+    a kernel curve's own readout already shows it); ``stats=<MetricReport>`` instead
     reports ``name = value [ci_low, ci_high]`` for whichever of
     ``{"intercept", "slope", "ici", "smooth_ece", "brier"}`` the report
     carries, plus ``n``/``events`` computed from ``y``.
@@ -455,7 +461,13 @@ def _draw_reliability(
             )  # fmt: skip
         elif show_density and risk_dist == "split":
             _draw_split_risk_dist(ax, y_arr, p_arr, scale)
-        txt = _stats_box_text(stats, annotate, y_arr, p_arr)
+        txt = _stats_box_text(
+            stats,
+            annotate,
+            y_arr,
+            p_arr,
+            smece_shown=isinstance(smooth, KernelReliabilityCurve),
+        )
         if txt is not None:
             _text_box(ax, txt)
             boxed = True

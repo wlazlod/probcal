@@ -26,6 +26,7 @@ the one ``Generated ... UTC`` timestamp line.
 """
 
 import base64
+import html
 import io
 import os
 from collections.abc import Sequence
@@ -132,7 +133,7 @@ class _FigureSink:
 
 
 def _escape_html(text: str) -> str:
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return html.escape(text, quote=False)
 
 
 def _escape_md_cell(text: str) -> str:
@@ -236,10 +237,7 @@ def _section_reliability(
     return _section(fmt, "Reliability", body)
 
 
-def _section_evaluate(
-    fmt: str, y_arr: np.ndarray, p_arr: np.ndarray, *, n_boot: int, seed: int
-) -> str:
-    report = evaluate(y_arr, p_arr, n_boot=n_boot, random_state=seed)
+def _section_evaluate(fmt: str, report: Any) -> str:
     return _section(fmt, "Metric report", _result_table(fmt, report))
 
 
@@ -335,13 +333,10 @@ def _section_groups(
     y_arr: np.ndarray,
     p_arr: np.ndarray,
     by: object,
+    grouped: Any,
     *,
-    n_boot: int,
-    seed: int,
     sink: _FigureSink,
 ) -> str:
-    grouped = evaluate(y_arr, p_arr, n_boot=n_boot, random_state=seed, by=by)
-
     def draw() -> Any:
         from .plots import plot_reliability
 
@@ -510,18 +505,26 @@ def validation_report(
     fingerprints = _kv(format, fp_pairs)
 
     corp = corp_reliability(y_arr, p_arr, n_resamples=n_boot, random_state=seed)
+    # With by=, the grouped run's pooled report *is* the plain report (same
+    # data and seed), so the pooled bootstrap runs once.
+    grouped = None
+    if by is not None:
+        grouped = evaluate(y_arr, p_arr, n_boot=n_boot, random_state=seed, by=by)
     sections = [
         _section_header(format, y_arr, p_arr),
         _section_reliability(format, y_arr, p_arr, corp, n_boot=n_boot, seed=seed, sink=sink),
-        _section_evaluate(format, y_arr, p_arr, n_boot=n_boot, seed=seed),
+        _section_evaluate(
+            format,
+            grouped.pooled
+            if grouped is not None
+            else evaluate(y_arr, p_arr, n_boot=n_boot, random_state=seed),
+        ),
         _section_corp_decomposition(format, corp),
     ]
     if grades is not None:
         sections.append(_section_grades(format, y_arr, p_arr, grades, sink=sink))
-    if by is not None:
-        sections.append(
-            _section_groups(format, y_arr, p_arr, by, n_boot=n_boot, seed=seed, sink=sink)
-        )
+    if grouped is not None:
+        sections.append(_section_groups(format, y_arr, p_arr, by, grouped, sink=sink))
     if monitor is not None:
         sections.append(_section_monitor(format, monitor, sink=sink))
     if calibrator is not None:

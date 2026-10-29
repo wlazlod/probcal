@@ -16,7 +16,7 @@ from probcal.curves import reliability_binned
 segment = np.where(s_cal < 0.01, "retail", "corporate")
 
 report = evaluate(y_cal, s_cal, n_boot=100, random_state=42, by=segment)   # 100: fast for the docs harness
-report.groups          # display names, sorted, e.g. ("corporate", "retail")
+report.groups          # group keys, sorted, e.g. ("corporate", "retail")
 report.pooled          # MetricReport on the full data (random_state unchanged)
 report.reports         # one MetricReport per group, aligned with .groups
 report.counts          # observation count per group
@@ -37,12 +37,14 @@ seen it.
 
 Each group's report is the same call you would make by hand on that
 group's slice: `evaluate(y[mask], scores[mask], random_state=42 + 1000 * i, ...)`,
-where `i` is the group's position in sorted display-name order. Results are
+where `i` is the group's position in sorted key order. Results are
 identical whether you group with `by=` or slice manually, and deterministic
 regardless of how many groups exist or what the labels are. Groups are
-formed from the raw label values and displayed as `str(value)`: `1` and
-`"1"` are different values, and since they would share the display name
-`"1"`, passing both raises `ValueError` instead of silently merging them. A group with
+formed by label key, the same key the grade and segment inputs use: `1` and
+`1.0` are one group `"1"`, other floats keep their shortest repr, and other
+values are named by `str(value)`. A string label sharing its key with a
+non-string one (`"1"` next to `1`) raises `ValueError` instead of silently
+merging the two. A group with
 only one outcome class raises the same `ValueError` a direct call on that
 slice would, naming the offending group. `plot_reliability(by=...)` draws
 the same panels: a pooled panel plus one per group, laid out on shared axes

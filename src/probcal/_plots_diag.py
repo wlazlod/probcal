@@ -26,6 +26,7 @@ from ._plots_common import (
     _tr,
 )
 from ._results import CorpResult, SelectionReport
+from ._validation import validate_choice
 from .curves import corp_reliability, reliability_binned
 from .metrics._common import _prep
 from .metrics.scores import MurphyCurve, murphy_curve
@@ -182,8 +183,7 @@ def plot_mcb_dsc(
     >>> ax = plot_mcb_dsc({"a": (y, p_a), "b": (y, p_b)})  # doctest: +SKIP
     """
     _require_mpl()
-    if score not in ("brier", "log_loss"):
-        raise ValueError('score must be "brier" or "log_loss"')
+    validate_choice("score", score, ("brier", "log_loss"))
 
     if isinstance(candidates, SelectionReport):
         names = list(candidates.methods)
@@ -285,7 +285,7 @@ def plot_attributes(
     scale : {"probability", "logit"}, keyword-only
         Axis scale; ``"logit"`` stretches the low-probability region.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
     ax : matplotlib.axes.Axes or None, keyword-only
         Axes to draw on; a new figure and axes are created if ``None``.
 
@@ -318,8 +318,7 @@ def plot_attributes(
     """
     _require_mpl()
     _check_scale(scale)
-    if method not in ("binned", "corp"):
-        raise ValueError('method must be "binned" or "corp"')
+    validate_choice("method", method, ("binned", "corp"))
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     ybar = float(np.average(y_arr, weights=w))
 

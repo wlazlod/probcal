@@ -21,10 +21,9 @@ from ._serialize import (
 from ._steps import refine_lower, refine_upper
 from ._validation import (
     EPS,
-    validate_binary_y,
     validate_scores,
     validate_space,
-    validate_weights,
+    validate_ypw,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
@@ -210,13 +209,7 @@ class BaseCalibrator(JsonIO, ABC):
         Self
             The fitted calibrator.
         """
-        s_arr = validate_scores(s)
-        y_arr = validate_binary_y(y)
-        if s_arr.shape[0] != y_arr.shape[0]:
-            raise ValueError(
-                f"s and y must have equal length, got {s_arr.shape[0]} and {y_arr.shape[0]}"
-            )
-        w_arr = validate_weights(sample_weight, s_arr.shape[0])
+        y_arr, s_arr, w_arr = validate_ypw(y, s, sample_weight, name="s")
         self._fit(s_arr, y_arr, w_arr)
         self.fit_meta_ = {
             "n_obs": int(s_arr.shape[0]),

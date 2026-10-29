@@ -15,7 +15,7 @@ from ._protocol import CalibratorProtocolMixin
 from ._registry import decode_prototype, encode_prototype, register
 from ._results import SelectionReport
 from ._serialize import decode_value, encode_value
-from ._validation import stratified_folds, validate_cv
+from ._validation import cv_splits
 from .base import BaseCalibrator, clone_unfitted
 from .binning import HistogramBinningCalibrator, ScalingBinningCalibrator
 from .isotonic import CenteredIsotonicCalibrator, IsotonicCalibrator
@@ -150,14 +150,13 @@ class CalibratorSelector(CalibratorProtocolMixin, BaseCalibrator):
                 "Hosmer-Lemeshow are not selection criteria"
             )
         scorer = _SCORERS[self.scoring]
-        cv = validate_cv(self.cv, y_arr, held_out_both_classes=True)
+        splits = cv_splits(self.cv, y_arr, self.random_state, held_out_both_classes=True)
+        cv = len(splits)
         menu = self.candidates if self.candidates is not None else _default_candidates()
         # CORP decomposition to attach to the report: Brier when the selection
         # criterion itself is Brier, log loss otherwise (matches the scorer
         # actually driving the ranking as closely as the two-way CORP split allows).
         corp_score = "brier" if self.scoring == "brier" else "log_loss"
-
-        folds = stratified_folds(y_arr, cv, self.random_state)
 
         names = list(menu)
         means = np.empty(len(names))
@@ -170,8 +169,7 @@ class CalibratorSelector(CalibratorProtocolMixin, BaseCalibrator):
             proto = menu[name]
             fold_scores = np.empty(cv)
             oof = np.empty(len(y_arr))
-            for k in range(cv):
-                train, held = folds != k, folds == k
+            for k, (train, held) in enumerate(splits):
                 cal = cast(BaseCalibrator, clone_unfitted(proto))
                 cal.fit(s_arr[train], y_arr[train], sample_weight=w_arr[train])
                 pred_held = cal.predict_proba(s_arr[held])

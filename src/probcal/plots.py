@@ -51,6 +51,7 @@ from ._results import (
     SelectionReport,
     SmoothReliabilityCurve,
 )
+from ._validation import validate_choice
 from .curves import EcceCurve, reliability_binned
 from .metrics import brier_score, reliability_summary, smooth_ece
 from .metrics._evaluate import _group_rows
@@ -342,8 +343,7 @@ def plot_reliability(
     _check_scale(scale)
     if (y is None) != (p is None):
         raise ValueError("y and p must be given together")
-    if risk_dist not in ("rug", "split", None):
-        raise ValueError('risk_dist must be one of "rug", "split", None')
+    validate_choice("risk_dist", risk_dist, ("rug", "split", None))
     if by is not None:
         if y is None or p is None:
             raise ValueError("by requires y and p")
@@ -488,8 +488,7 @@ def _plot_reliability_faceted(
     (``curve`` is not used here — see the docstring above)."""
     y_arr = np.asarray(y, dtype=np.float64)
     p_arr = np.asarray(p, dtype=np.float64)
-    # Same grouping (and the same error for labels such as 1 and "1" that
-    # display alike) as metrics.evaluate(by=...).
+    # Same grouping (and the same error for "1" next to 1) as metrics.evaluate(by=...).
     groups, rows = _group_rows(by, len(y_arr))
     panel_stats: list[bool | MetricReport]
     if isinstance(stats, GroupedMetricReport):

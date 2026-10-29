@@ -15,6 +15,7 @@ import numpy as np
 from ._math import bisect, expit, expit1, irls_logistic, logit, logit1
 from ._registry import register
 from ._results import Interpretation
+from ._validation import validate_choice
 from .base import BaseCalibrator, UnattainableTargetError
 
 _U_LO = 1e-6
@@ -351,8 +352,7 @@ class BetaCalibrator(BaseCalibrator):
         self.variant = variant
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        if self.variant not in ("abm", "ab", "a"):
-            raise ValueError(f"variant must be 'abm', 'ab', or 'a', got {self.variant!r}")
+        validate_choice("variant", self.variant, ("abm", "ab", "a"))
         ln_s = np.log(s)
         ln_1ms = -np.log1p(-s)  # -ln(1 - s), non-negative
         self.constraint_active_ = False

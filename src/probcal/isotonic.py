@@ -20,6 +20,7 @@ from ._steps import (
     step_inverse_left,
     step_inverse_right,
 )
+from ._validation import validate_choice
 from .base import BaseCalibrator
 
 
@@ -69,10 +70,7 @@ class IsotonicCalibrator(BaseCalibrator):
         self.interpolation = interpolation
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        if self.interpolation not in ("none", "linear"):
-            raise ValueError(
-                f"interpolation must be 'none' or 'linear', got {self.interpolation!r}"
-            )
+        validate_choice("interpolation", self.interpolation, ("none", "linear"))
         s_u, w_u, res, self.block_first_s_, self.block_last_s_ = isotonic_blocks(s, y, w)
         starts = res.block_start
         self.block_mean_ = res.block_mean

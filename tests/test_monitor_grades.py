@@ -152,6 +152,8 @@ def test_mixed_and_float32_declared_grades_accept_their_own_labels() -> None:
 
 
 class _Scale:
+    names = ("G1", "G2")
+
     def __init__(self, fp: str) -> None:
         self._fp = fp
 

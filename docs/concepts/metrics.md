@@ -375,9 +375,9 @@ marker and a fixed default seed, per the package's reproducibility conventions.
 
 **Grouping (`by=`).** `evaluate(..., by=labels)` runs the exact same pooled call above on the
 full data plus one independent call per group, returning a `GroupedMetricReport`
-instead of a plain `MetricReport`. Groups are formed from the raw label values (so `1` and
-`"1"` are different groups) and displayed as `str(value)`, ordered by display name; two
-distinct values that print the same raise `ValueError`. Group `i` (in that order) uses
+instead of a plain `MetricReport`. Groups are formed by label key (`1` and `1.0` are one group
+`"1"`, the key grade and segment labels use too), ordered by key; a string label sharing its key
+with a non-string one (`"1"` next to `1`) raises `ValueError`. Group `i` (in that order) uses
 `random_state + 1000 * i` rather than reusing `random_state` for every group. The offset is fixed and label-independent, so
 reproducibility does not depend on how many groups exist or what they are named, and no two
 groups' bootstrap draws can coincide by construction. This is side-by-side reporting, not a

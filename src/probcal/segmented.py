@@ -13,10 +13,11 @@ import warnings
 
 import numpy as np
 
+from ._labels import grade_keys
 from ._math import expit, logit
 from ._registry import decode_prototype, encode_prototype, register
 from ._results import Interpretation
-from ._validation import validate_scores
+from ._validation import validate_choice, validate_scores
 from .base import BaseCalibrator, clone_unfitted
 from .chain import Chain
 from .offset import LogitOffset, estimate_offset
@@ -24,13 +25,17 @@ from .parametric import BetaCalibrator
 
 
 def _coerce_segments(raw: object, n: int) -> np.ndarray:
-    """1-D string array of segment labels, length-checked against ``n``."""
-    arr = np.asarray(raw)
-    if arr.ndim != 1:
-        raise ValueError(f"segments must be a 1-D array, got shape {arr.shape}")
-    if arr.shape[0] != n:
-        raise ValueError(f"segments must have length {n}, got {arr.shape[0]}")
-    return arr.astype(str)
+    """1-D array of segment keys (:func:`~probcal._labels.grade_key`), length-checked."""
+    keys = grade_keys(raw, name="segments")
+    if keys.shape[0] != n:
+        raise ValueError(f"segments must have length {n}, got {keys.shape[0]}")
+    return keys
+
+
+def _positions(segs: np.ndarray, labels: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Index into the sorted ``segs`` per label, and whether the label is there."""
+    pos = np.searchsorted(segs, labels).clip(max=len(segs) - 1)
+    return pos, segs[pos] == labels
 
 
 @register
@@ -67,17 +72,16 @@ class SegmentedCalibrator(BaseCalibrator):
     shift is not baked into a ``Chain``; use ``SegmentedCalibrator`` directly
     (with ``segments=``) when the per-segment offset must apply.
 
-    Segment labels are compared as strings (``_coerce_segments`` calls
-    ``.astype(str)``): fit-time labels ``0``, ``1`` (int) become ``"0"``,
-    ``"1"``, but predict-time labels ``0.0``, ``1.0`` (float) become
-    ``"0.0"``, ``"1.0"`` — a mismatch that never raises (every label
-    looks "unseen") and, under ``unseen="global"``, silently falls back
-    to the base map for every row. Pass ``segments`` with the *same*
-    representation (e.g. cast to ``str`` yourself) at fit and predict
-    time. When every row of a ``predict_proba``/inverse call is unseen
-    and ``unseen="global"``, a ``UserWarning`` is raised naming the
-    fitted ``segments_`` — a partial overlap (some rows match, some are
-    genuinely new segments) stays silent.
+    Segment labels are compared by key
+    (:func:`~probcal._labels.grade_key`): ``0``, ``1`` (int) and ``0.0``,
+    ``1.0`` (float) are the segments ``"0"``, ``"1"`` at fit and predict
+    time alike. A predict-time label whose key is not in ``segments_`` is
+    also looked up as ``str`` of its value (``"1.0"`` for the float
+    ``1.0``), the key payloads written by probcal 0.3.4 to 0.4.0 store.
+    When every row of a ``predict_proba``/inverse call is unseen and
+    ``unseen="global"``, a ``UserWarning`` is raised naming the fitted
+    ``segments_`` — a partial overlap (some rows match, some are genuinely
+    new segments) stays silent.
 
     Parameters
     ----------
@@ -184,8 +188,7 @@ class SegmentedCalibrator(BaseCalibrator):
             self.__dict__.pop("_segments_arg", None)
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        if self.unseen not in ("global", "raise"):
-            raise ValueError(f"unseen must be 'global' or 'raise', got {self.unseen!r}")
+        validate_choice("unseen", self.unseen, ("global", "raise"))
         raw_segments = self.__dict__.get("_segments_arg")
         if raw_segments is None:
             seg_arr = np.full(s.shape[0], "__all__")
@@ -239,10 +242,13 @@ class SegmentedCalibrator(BaseCalibrator):
 
     # ------------------------------------------------------------- prediction
 
-    def _lookup_deltas(self, labels: np.ndarray, *, stacklevel: int = 3) -> np.ndarray:
+    def _lookup_deltas(self, raw: object, n: int, *, stacklevel: int = 3) -> np.ndarray:
+        labels = _coerce_segments(raw, n)
         segs = np.asarray(self.segments_)  # sorted at fit time
-        pos = np.searchsorted(segs, labels).clip(max=len(segs) - 1)
-        seen = segs[pos] == labels
+        pos, seen = _positions(segs, labels)
+        if not seen.all():  # payloads from 0.3.4-0.4.0 store .astype(str) keys ("1.0")
+            pos_str, seen_str = _positions(segs, np.asarray(raw).astype(str))
+            pos, seen = np.where(seen, pos, pos_str), seen | seen_str
         if self.unseen == "raise" and not seen.all():
             raise ValueError(
                 f"unseen segment(s) {sorted(set(labels[~seen].tolist()))!r} not in fitted "
@@ -282,7 +288,7 @@ class SegmentedCalibrator(BaseCalibrator):
         p0 = self.base_.predict_proba(s_arr)
         if segments is None:
             return p0
-        deltas = self._lookup_deltas(_coerce_segments(segments, s_arr.shape[0]))
+        deltas = self._lookup_deltas(segments, s_arr.shape[0])
         return expit(logit(p0) + deltas)
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
@@ -329,7 +335,7 @@ class SegmentedCalibrator(BaseCalibrator):
     def _segment_chain_or_base(self, segment: object) -> BaseCalibrator | Chain:
         if segment is None:
             return self.base_
-        delta = float(self._lookup_deltas(_coerce_segments([segment], 1), stacklevel=4)[0])
+        delta = float(self._lookup_deltas([segment], 1, stacklevel=4)[0])
         if delta == 0.0:
             return self.base_
         return Chain([self.base_, LogitOffset(delta=delta).fit(np.array([0.5]))])

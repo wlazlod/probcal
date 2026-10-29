@@ -23,10 +23,11 @@ from typing import ClassVar
 
 import numpy as np
 
+from ._labels import grade_key
 from ._registry import register
 from ._results import Interpretation, _ResultBase
 from ._serialize import JsonIO, canonical_json, check_payload, decode_value, encode_value, envelope
-from ._validation import validate_binary_y, validate_scores, validate_weights
+from ._validation import validate_scores, validate_ypw
 
 
 def _freeze(v: object) -> object:
@@ -49,22 +50,6 @@ def _thaw(v: object) -> object:
     if isinstance(v, tuple):
         return [_thaw(x) for x in v]
     return v
-
-
-def _validate_probabilities(p: object, *, name: str = "p") -> np.ndarray:
-    """Validate ``p`` like :func:`~probcal._validation.validate_scores`, without clipping.
-
-    Shape, finiteness and the ``[0, 1]`` range are checked exactly as there
-    (a two-column ``predict_proba`` matrix is accepted), but the values are
-    returned as given: grade assignment compares ``p`` against band edges,
-    and clipping to ``[EPS, 1 - EPS]`` would move ``0`` and ``1`` across an
-    edge closer than ``EPS`` to them.
-    """
-    validate_scores(p, name=name)
-    arr = np.asarray(p, dtype=np.float64)
-    if arr.ndim == 2 and arr.shape[1] == 2:
-        return arr[:, 1].copy()
-    return arr.reshape(-1).copy()
 
 
 def _masterscale_from_state(
@@ -138,7 +123,8 @@ class Masterscale(JsonIO):
         given in any order; they are stored sorted by ``lo``. Every bound must
         lie in ``[0, 1]``, each band needs ``lo < hi``, consecutive bands must
         share their edge exactly (gaps and overlaps both raise), and names must
-        be unique.
+        be unique. Names are stored as grade keys (``1.0`` and ``1`` both
+        become ``"1"``), the form every grade-label input is keyed by.
     provenance : dict or None, keyword-only
         Optional record of how the scale was built (set by
         :func:`probcal.thresholds.build_masterscale`); ``None`` for a
@@ -199,7 +185,7 @@ class Masterscale(JsonIO):
                 raise ValueError(f"band {name!r}: bounds must lie in [0, 1], got ({lo}, {hi})")
             if not lo < hi:
                 raise ValueError(f"band {name!r}: lo must be < hi, got ({lo}, {hi})")
-            items.append((lo, hi, str(name)))
+            items.append((lo, hi, grade_key(name)))
         items.sort(key=lambda t: t[0])
         names = tuple(t[2] for t in items)
         if len(set(names)) != len(names):
@@ -255,7 +241,7 @@ class Masterscale(JsonIO):
         if names is None:
             labels = [f"G{i + 1}" for i in range(n)]
         else:
-            labels = [str(x) for x in list(names)]  # type: ignore[call-overload]
+            labels = [grade_key(x) for x in list(names)]  # type: ignore[call-overload]
         if len(labels) != n:
             raise ValueError(f"{n} grades from {len(inner)} edges, but {len(labels)} names given")
         if len(set(labels)) != n:
@@ -301,7 +287,7 @@ class Masterscale(JsonIO):
         ValueError
             If any ``p`` lies outside ``[edges[0], edges[-1]]``.
         """
-        p_arr = _validate_probabilities(p, name="p")
+        p_arr = validate_scores(p, name="p", clip=False)
         lo, hi = self._edges[0], self._edges[-1]
         bad = (p_arr < lo) | (p_arr > hi)
         if np.any(bad):
@@ -324,11 +310,7 @@ class Masterscale(JsonIO):
         Every grade is listed, including empty ones (``n == 0``, rates ``nan``);
         weights, when given, turn counts into weighted sums.
         """
-        y_arr = validate_binary_y(y)
-        p_arr = _validate_probabilities(p, name="p")
-        if len(y_arr) != len(p_arr):
-            raise ValueError("y and p must have equal length")
-        w_arr = validate_weights(sample_weight, len(p_arr))
+        y_arr, p_arr, w_arr = validate_ypw(y, p, sample_weight, clip=False)
         idx = self.index(p_arr)
         k = self.n_grades
         n = np.bincount(idx, weights=w_arr, minlength=k).astype(np.float64)

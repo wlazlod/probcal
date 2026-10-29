@@ -37,18 +37,18 @@ from typing import Any
 import numpy as np
 
 from . import __version__
+from ._labels import is_masterscale
 from ._results import _format_cell, _ResultBase
 from ._serialize import data_fingerprint
-from ._validation import validate_binary_y, validate_scores
+from ._validation import validate_choice, validate_ypw
 from .curves import corp_reliability, reliability_binned, reliability_smooth
-from .masterscale import Masterscale
 from .metrics import (
     evaluate,
     jeffreys_grade_test,
     jeffreys_upper_bands,
     pluto_tasche_from_arrays,
 )
-from .metrics._grades import _resolve_grades
+from .metrics._grades import _resolve_grades, order_by_mean_p
 
 __all__ = ["validation_report"]
 
@@ -256,14 +256,10 @@ def _section_corp_decomposition(fmt: str, corp: Any) -> str:
 def _section_grades(
     fmt: str, y_arr: np.ndarray, p_arr: np.ndarray, grades: object, *, sink: _FigureSink
 ) -> str:
-    is_scale = isinstance(grades, Masterscale)
     labels, scale_order = _resolve_grades(grades, p_arr)
-    if scale_order is not None:
-        order = scale_order
-    else:  # best to worst by mean predicted probability; ties by label
-        present = sorted(set(labels.tolist()))
-        mean_p = {lab: float(np.mean(p_arr[labels == lab])) for lab in present}
-        order = tuple(sorted(present, key=lambda lab: mean_p[lab]))
+    is_scale = scale_order is not None
+    # Best to worst by the masterscale, else by mean predicted probability (ties by label).
+    order = scale_order if scale_order is not None else order_by_mean_p(labels, p_arr)
     # One order for every table: the backtest must not fall back to sorting
     # the labels lexicographically ("10" before "2").
     backtest = jeffreys_grade_test(y_arr, p_arr, grades, order=order)
@@ -311,8 +307,8 @@ def _section_grades(
     order_note = _para(fmt, f"Grades ordered best to worst {how}: {', '.join(order)}.")
 
     table_block = ""
-    if isinstance(grades, Masterscale):
-        tab = grades.table(y_arr, p_arr)
+    if is_scale:
+        tab = grades.table(y_arr, p_arr)  # type: ignore[attr-defined]
         table_block = _subheading(fmt, "Grade table") + _result_table(fmt, tab)
 
     body = (
@@ -483,15 +479,11 @@ def validation_report(
     >>> "Generated" in html  # doctest: +SKIP
     True
     """
-    if format not in ("html", "markdown"):
-        raise ValueError(f'format must be "html" or "markdown", got {format!r}')
+    validate_choice("format", format, ("html", "markdown"))
     if format == "markdown" and path is None:
         raise ValueError('format="markdown" requires path (figures are written next to it)')
 
-    y_arr = validate_binary_y(y)
-    p_arr = validate_scores(p, name="p")
-    if len(y_arr) != len(p_arr):
-        raise ValueError(f"y and p must have equal length, got {len(y_arr)} and {len(p_arr)}")
+    y_arr, p_arr, _ = validate_ypw(y, p)
     sink = _FigureSink(format, path)
 
     page_title = title if title is not None else "probcal validation report"
@@ -505,8 +497,8 @@ def validation_report(
         fp_pairs.append(("calibrator", calibrator.fingerprint()))
     if monitor is not None:
         fp_pairs.append(("monitor", monitor.fingerprint()))
-    if isinstance(grades, Masterscale):
-        fp_pairs.append(("masterscale", grades.fingerprint()))
+    if is_masterscale(grades):
+        fp_pairs.append(("masterscale", grades.fingerprint()))  # type: ignore[attr-defined]
     fingerprints = _kv(format, fp_pairs)
 
     corp = corp_reliability(y_arr, p_arr, n_resamples=n_boot, random_state=seed)

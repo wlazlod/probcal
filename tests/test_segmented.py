@@ -84,15 +84,19 @@ def test_single_class_segment_is_fully_shrunk() -> None:
 
 
 def test_unseen_labels_global_warns_only_when_nothing_matches_and_raise_raises() -> None:
-    # Regression: int labels at fit ("0", "1" after str()) vs. float labels at
-    # predict ("0.0", "1.0") never match, so every row falls back to the
-    # global map under unseen="global" -- this must warn rather than fail silently.
+    # Int labels at fit and float labels at predict share keys ("0", "1"), so
+    # they match; labels that match nothing fall back to the global map under
+    # unseen="global" -- this must warn rather than fail silently.
     s, y = _pd_data(600, seed=10)
     int_segments = np.array([0, 1])[np.arange(600) % 2]
     cal = SegmentedCalibrator().fit(s, y, segments=int_segments)
     float_segments = np.array([0.0, 1.0])[np.arange(5) % 2]
+    np.testing.assert_array_equal(
+        cal.predict_proba(s[:5], segments=float_segments),
+        cal.predict_proba(s[:5], segments=float_segments.astype(int)),
+    )
     with pytest.warns(UserWarning, match="none of the 5 segment labels"):
-        p_mismatch = cal.predict_proba(s[:5], segments=float_segments)
+        p_mismatch = cal.predict_proba(s[:5], segments=float_segments + 2.0)
     np.testing.assert_allclose(p_mismatch, cal.base_.predict_proba(s[:5]))
     with warnings.catch_warnings():
         warnings.simplefilter("error")
@@ -101,6 +105,20 @@ def test_unseen_labels_global_warns_only_when_nothing_matches_and_raise_raises()
     strict = SegmentedCalibrator(unseen="raise").fit(s, y, segments=int_segments)
     with pytest.raises(ValueError, match="unseen"):
         strict.predict_proba(s[:5], segments=np.array(["z"] * 5))
+
+
+def test_payload_with_str_keyed_float_segments_still_matches() -> None:
+    # 0.3.4-0.4.0 stored float segment labels as .astype(str) keys ("1.0").
+    s, y = _pd_data(600, seed=11)
+    seg = np.array([1.0, 2.0])[np.arange(600) % 2]
+    cal = SegmentedCalibrator().fit(s, y, segments=seg)
+    d = cal.to_dict()
+    assert d["state"]["segments_"] == ["1", "2"]
+    d["state"]["segments_"] = ["1.0", "2.0"]
+    old = SegmentedCalibrator.from_dict(d)
+    np.testing.assert_array_equal(
+        old.predict_proba(s[:6], segments=seg[:6]), cal.predict_proba(s[:6], segments=seg[:6])
+    )
 
 
 def test_fit_validation() -> None:

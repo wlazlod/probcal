@@ -93,7 +93,7 @@ def exponent_weights(w: np.ndarray) -> np.ndarray:
     positive weights (by Jensen, ``E[LR**u] <= E[LR]**u = 1``). Constant weights,
     including unit weights, return exactly ones.
     """
-    if w.size == 0 or np.all(w == w[0]):
+    if w.size == 0 or is_uniform(w):
         return np.ones_like(w)
     return np.minimum(1.0, w / np.mean(w))
 
@@ -926,10 +926,18 @@ def weighted_quantile(x: object, q: object, w: object) -> np.ndarray:
     x_arr = np.asarray(x, dtype=np.float64)
     w_arr = np.asarray(w, dtype=np.float64)
     q_arr = np.asarray(q, dtype=np.float64)
-    if x_arr.shape[0] < 2 or bool(np.all(w_arr == w_arr[0])):
+    if x_arr.shape[0] < 2 or is_uniform(w_arr):
         return np.asarray(np.quantile(x_arr, q_arr))
     order = np.argsort(x_arr, kind="stable")
     xs, ws = x_arr[order], w_arr[order]
     mid = np.cumsum(ws) - 0.5 * ws
     pos = (mid - mid[0]) / (mid[-1] - mid[0])
     return np.asarray(np.interp(q_arr, pos, xs))
+
+
+# ------------------------------------------------------------- weight checks
+
+
+def is_uniform(w: np.ndarray) -> bool:
+    """``True`` for all-equal weights (``w`` non-empty)."""
+    return bool(np.all(w == w[0]))

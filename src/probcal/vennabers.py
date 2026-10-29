@@ -16,7 +16,7 @@ import numpy as np
 from ._registry import register
 from ._results import Interpretation
 from ._steps import aggregate_ties
-from ._validation import stratified_folds, validate_cv, validate_scores
+from ._validation import cv_splits, validate_scores
 from .base import BaseCalibrator
 
 
@@ -227,12 +227,10 @@ class CrossVennAbersCalibrator(BaseCalibrator):
         self.random_state = random_state
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        cv = validate_cv(self.cv, y)
-        folds = stratified_folds(y, cv, self.random_state)
-        self.ivaps_: list[VennAbersCalibrator] = []
-        for k in range(cv):
-            mask = folds != k
-            self.ivaps_.append(VennAbersCalibrator().fit(s[mask], y[mask], sample_weight=w[mask]))
+        self.ivaps_: list[VennAbersCalibrator] = [
+            VennAbersCalibrator().fit(s[tr], y[tr], sample_weight=w[tr])
+            for tr, _ in cv_splits(self.cv, y, self.random_state)
+        ]
 
     def _fold_pairs(self, s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         pairs = np.stack([ivap._interval(s) for ivap in self.ivaps_])  # (K, n, 2)

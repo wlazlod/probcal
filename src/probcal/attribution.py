@@ -24,6 +24,7 @@ import numpy as np
 from ._math import expit, logit
 from ._protocol import CalibratorProtocolMixin
 from ._results import _ResultBase
+from ._validation import validate_choice
 
 _DEGENERATE_EPS = 1e-8
 _CENTRAL_DIFF_H = 1e-4
@@ -121,8 +122,7 @@ def adjust_attributions(
         on the logit scale (or on the probability scale, where no calibrator
         is affine).
     """
-    if scale not in ("logit", "probability"):
-        raise ValueError(f"scale must be 'logit' or 'probability', got {scale!r}")
+    validate_choice("scale", scale, ("logit", "probability"))
     if method not in ("auto", "affine", "aumann-shapley"):
         raise ValueError(f"unknown method {method!r}")
     if isinstance(calibrator, CalibratorProtocolMixin):

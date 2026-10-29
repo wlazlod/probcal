@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 
 from ._math import logit, logit1
+from ._validation import validate_choice
 
 try:
     import matplotlib.pyplot as _plt
@@ -64,8 +65,7 @@ _SCALES = ("probability", "logit")
 
 def _check_scale(scale: object) -> None:
     """Reject anything but the two supported axis scales (a typo would draw linear)."""
-    if scale not in _SCALES:
-        raise ValueError(f'scale must be "probability" or "logit", got {scale!r}')
+    validate_choice("scale", scale, _SCALES)
 
 
 @contextlib.contextmanager

@@ -34,7 +34,8 @@ per-grade binomial/Jeffreys tests use raw integer counts and ignore weights.
 
 import numpy as np
 
-from .._validation import validate_binary_y, validate_scores, validate_weights
+from .._math import is_uniform
+from .._validation import validate_ypw
 
 
 def _prep(y: object, p: object, sample_weight: object) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -42,12 +43,7 @@ def _prep(y: object, p: object, sample_weight: object) -> tuple[np.ndarray, np.n
 
     ``w`` is all ones for ``sample_weight=None``.
     """
-    y_arr = validate_binary_y(y)
-    p_arr = validate_scores(p, name="p")
-    if len(y_arr) != len(p_arr):
-        raise ValueError("y and p must have equal length")
-    w_arr = validate_weights(sample_weight, len(p_arr))
-    return y_arr, p_arr, w_arr
+    return validate_ypw(y, p, sample_weight)
 
 
 def gram(X: np.ndarray, d: np.ndarray) -> np.ndarray:
@@ -87,8 +83,3 @@ def rao_scott(lr: float, X: np.ndarray, mu: np.ndarray, w: np.ndarray) -> tuple[
         return lr, float(k)
     a2 = float(np.mean((lam - lbar) ** 2)) / lbar**2
     return lr / (lbar * (1.0 + a2)), k / (1.0 + a2)
-
-
-def is_uniform(w: np.ndarray) -> bool:
-    """``True`` for all-equal weights."""
-    return bool(np.all(w == w[0]))

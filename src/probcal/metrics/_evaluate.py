@@ -5,6 +5,7 @@ from typing import overload
 
 import numpy as np
 
+from .._labels import grade_keys
 from .._results import GroupedMetricReport, MetricReport
 from .._validation import validate_nonneg_int
 from ._common import _prep
@@ -160,9 +161,10 @@ def evaluate(
     by : array_like or None, keyword-only
         Optional group labels, one per observation (same length as ``y``).
         ``None`` (default) is the plain report above, unchanged. Otherwise
-        rows are grouped by their *raw* label values (``1`` and ``"1"`` are
-        different groups) and a separate report is computed per group, in
-        the order of the groups' display names ``str(label)`` — group ``i``
+        rows are grouped by label key (:func:`~probcal._labels.grade_key`:
+        ``1`` and ``1.0`` are one group ``"1"``; a string ``"1"`` mixed with
+        them raises) and a separate report is computed per group, in the
+        order of the keys — group ``i``
         in that order is evaluated with ``random_state + 1000 * i``, a fixed
         offset so results are reproducible independent of the label values
         or how many groups exist — plus a pooled report on the full data
@@ -186,7 +188,7 @@ def evaluate(
     ValueError
         If ``metrics`` contains names outside the metric catalog; if
         ``n_boot`` is negative; if ``by`` is given with a length that does
-        not match ``y``, or two distinct ``by`` values share a display name;
+        not match ``y``, or a string ``by`` label shares its key with a non-string one;
         or if a group has only one outcome class (the underlying
         ``"y must contain both classes"`` error, re-raised naming the
         group).
@@ -295,40 +297,26 @@ def _evaluate(
 
 
 def _group_rows(by: object, n: int) -> tuple[tuple[str, ...], list[np.ndarray]]:
-    """Display names and row indices per group, grouped by raw label value.
+    """Group names and row indices per group, keyed by :func:`~probcal._labels.grade_key`.
 
-    Groups are ordered by display name ``str(label)``; two distinct raw values
-    with the same display name (``1`` and ``"1"``) raise.
+    Groups are ordered by key; ``1``, ``1.0`` and ``np.int64(1)`` are one group
+    ``"1"``. A string label sharing its key with a non-string one (``"1"`` and
+    ``1``) raises rather than silently merging the two.
     """
-    if isinstance(by, np.ndarray) and by.dtype != object:
-        by_arr = by
-    else:
-        seq = list(by)  # type: ignore[call-overload]
-        by_arr = np.empty(len(seq), dtype=object)
-        by_arr[:] = seq
-    if by_arr.ndim != 1 or len(by_arr) != n:
-        raise ValueError(f"by must have the same length as y ({n}), got {len(by_arr)}")
-    if by_arr.dtype != object:
-        uniq, inv = np.unique(by_arr, return_inverse=True)
-        values = list(uniq)
-    else:
-        first: dict[object, int] = {}
-        inv = np.empty(n, dtype=np.intp)
-        for i, v in enumerate(by_arr):
-            inv[i] = first.setdefault(v, len(first))
-        values = list(first)
-    names = [str(v) for v in values]
-    seen: dict[str, object] = {}
-    for v, name in zip(values, names, strict=True):
-        if name in seen:
+    keys = grade_keys(by, name="by")
+    if len(keys) != n:
+        raise ValueError(f"by must have the same length as y ({n}), got {len(keys)}")
+    names, inv = np.unique(keys, return_inverse=True)
+    if not (isinstance(by, np.ndarray) and by.dtype != object):  # only these can mix types
+        is_str = [isinstance(v, str) for v in by]  # type: ignore[attr-defined]
+        n_str = np.bincount(inv, weights=is_str, minlength=len(names))
+        mixed = (n_str > 0) & (n_str < np.bincount(inv, minlength=len(names)))
+        if mixed.any():
             raise ValueError(
-                f"by: distinct group values {seen[name]!r} and {v!r} both display as "
-                f"{name!r}; convert the labels to one type first"
+                f"by: group {str(names[mixed][0])!r} mixes string and non-string labels; "
+                "convert the labels to one type first"
             )
-        seen[name] = v
-    order = sorted(range(len(values)), key=names.__getitem__)
-    rows = [np.flatnonzero(inv == j) for j in order]
-    return tuple(names[j] for j in order), rows
+    return tuple(names.tolist()), [np.flatnonzero(inv == j) for j in range(len(names))]
 
 
 def _evaluate_grouped(

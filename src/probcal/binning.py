@@ -15,7 +15,7 @@ import numpy as np
 from ._registry import register
 from ._results import Interpretation
 from ._steps import bin_sums, equal_mass_edges, step_inverse_left, step_inverse_right
-from ._validation import validate_positive_int
+from ._validation import validate_choice, validate_positive_int
 from .base import BaseCalibrator
 from .parametric import PlattCalibrator
 
@@ -66,10 +66,8 @@ class HistogramBinningCalibrator(BaseCalibrator):
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         n_bins = validate_positive_int(self.n_bins, "n_bins")
-        if self.strategy not in ("mass", "width"):
-            raise ValueError(f"strategy must be 'mass' or 'width', got {self.strategy!r}")
-        if self.shrinkage not in ("jeffreys", None):
-            raise ValueError(f"shrinkage must be 'jeffreys' or None, got {self.shrinkage!r}")
+        validate_choice("strategy", self.strategy, ("mass", "width"))
+        validate_choice("shrinkage", self.shrinkage, ("jeffreys", None))
         if self.strategy == "mass":
             edges = equal_mass_edges(s, n_bins, w)
         else:

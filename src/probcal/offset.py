@@ -27,7 +27,7 @@ from ._serialize import (
     encode_value,
     envelope,
 )
-from ._validation import validate_scores, validate_space, validate_weights
+from ._validation import validate_level, validate_scores, validate_space, validate_weights
 from .base import (
     BaseCalibrator,
     UnattainableTargetError,
@@ -188,10 +188,7 @@ class LogitOffset(JsonIO):
         if self.delta is not None:
             self.delta_ = float(self.delta)
         else:
-            target = float(self.target_mean)  # type: ignore[arg-type]
-            if not 0.0 < target < 1.0:
-                raise ValueError("target_mean must lie in (0, 1)")
-            self.delta_ = _solve_delta(z, w, target)
+            self.delta_ = _solve_delta(z, w, validate_level(self.target_mean, "target_mean"))
         self.post_mean_ = float(np.average(expit(z + self.delta_), weights=w))
         self.timestamp_ = datetime.now(UTC).isoformat(timespec="seconds")
         self.fit_meta_ = {
@@ -448,7 +445,7 @@ def estimate_offset(y: object, p: object, *, sample_weight: object = None) -> Of
     p : array_like
         Predicted probabilities in ``[0, 1]``.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------

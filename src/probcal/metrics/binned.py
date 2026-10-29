@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .._math import chi2_sf
-from .._validation import validate_nonneg_int, validate_positive_int
+from .._validation import validate_choice, validate_nonneg_int, validate_positive_int
 from ._binstats import BinStats, bin_index, bin_stats
 from ._common import _prep
 
@@ -192,8 +192,7 @@ def ece_sweep(
     float
         Calibration error at the selected bin count.
     """
-    if rule not in _SWEEP_RULES:
-        raise ValueError(f"rule must be one of {_SWEEP_RULES}, got {rule!r}")
+    validate_choice("rule", rule, _SWEEP_RULES)
     cap = validate_positive_int(max_bins, "max_bins")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     bs = bin_stats(y_arr, p_arr, w, _sweep_best_b(y_arr, p_arr, w, cap, rule), "mass")

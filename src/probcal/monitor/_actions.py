@@ -11,8 +11,7 @@ import numpy as np
 from .._math import beta_ppf, expit
 from .._registry import load, register
 from .._serialize import JsonIO, check_payload, envelope
-from .._validation import validate_level
-from ..metrics._common import _prep
+from .._validation import validate_level, validate_ypw
 from ..offset import LogitOffset
 from ._monitor import CalibrationMonitor, MonitorReport
 
@@ -158,13 +157,14 @@ def moc_offset_from_counts(
     Parameters
     ----------
     y : array_like
-        Binary outcomes in ``{0, 1}``.
+        Binary outcomes in ``{0, 1}``; a single class (e.g. no events) is
+        allowed.
     p : array_like
         Predicted probabilities in ``[0, 1]`` to be re-anchored.
     level : float, keyword-only
         Confidence level in ``(0, 1)`` for the Jeffreys upper quantile.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
@@ -187,7 +187,8 @@ def moc_offset_from_counts(
     >>> off.post_mean_ > 0.03
     True
     """
-    y_arr, p_arr, w_arr = _prep(y, p, sample_weight)
+    # Zero-event (or all-event) portfolios are the use case: one class is fine.
+    y_arr, p_arr, w_arr = validate_ypw(y, p, sample_weight, require_both_classes=False)
     validate_level(level, "level")
     # Kish effective counts: events and trials scaled by the same factor
     # (unit weights come back bit-identical: the factor is exactly 1.0).

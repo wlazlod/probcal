@@ -227,7 +227,7 @@ def test_faceted_groups_by_raw_value(portfolio) -> None:
     assert [ax.get_title() for ax in fig.axes] == ["pooled", "0", "1", "2"]
     alike = np.empty(len(portfolio.y), dtype=object)
     alike[:] = [1 if i % 2 else "1" for i in range(len(portfolio.y))]
-    with pytest.raises(ValueError, match="both display as"):
+    with pytest.raises(ValueError, match="mixes string and non-string"):
         evaluate(portfolio.y, portfolio.scores, n_boot=0, by=alike)
 
 
@@ -426,7 +426,11 @@ def _validation_cases():
             lambda: plot_reliability(curve, y=y, p=p, stats=evaluate(y, p, n_boot=0, by=seg)),
             "by=",
         ),
-        ("by_alike", lambda: plot_reliability(None, y=y, p=p, by=alike), "both display as"),
+        (
+            "by_alike",
+            lambda: plot_reliability(None, y=y, p=p, by=alike),
+            "mixes string and non-string",
+        ),
         ("scale", lambda: plot_reliability(curve, scale="logits"), "scale must be"),
         (
             "by_scale",

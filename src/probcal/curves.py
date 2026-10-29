@@ -27,7 +27,7 @@ from ._results import (
     SmoothReliabilityCurve,
     _ResultBase,
 )
-from ._validation import validate_level, validate_nonneg_int, validate_positive_int
+from ._validation import validate_choice, validate_level, validate_nonneg_int, validate_positive_int
 from .metrics._binstats import bin_stats
 from .metrics._common import _prep, gram, is_uniform, rao_scott
 from .metrics.smooth import (
@@ -352,8 +352,7 @@ def reliability_smooth(
     grid_p = _grid(p_arr, grid_size)
     grid_logit = logit(grid_p)
     t = logit(p_arr)
-    mass = (w / w.sum()) * (y_arr - p_arr)
-    smooth_ece_value, sigma_star, lattice = _smece_solve(t, mass, bins)
+    smooth_ece_value, sigma_star, lattice = _smece_solve(t, y_arr, p_arr, w, bins)
 
     event_rate, density = _kernel_rate_density(t, y_arr, w, sigma_star, grid_logit, lattice)
 
@@ -473,8 +472,7 @@ def corp_reliability(
     >>> abs(r.brier - (r.brier_mcb - r.brier_dsc + r.brier_unc)) < 1e-12
     True
     """
-    if bands not in _BANDS:
-        raise ValueError('bands must be "consistency", "confidence", or None')
+    validate_choice("bands", bands, _BANDS)
     conf = validate_level(confidence, "confidence")
     n_resamples = validate_nonneg_int(n_resamples, "n_resamples")
     if n_resamples == 0:
@@ -638,9 +636,9 @@ def calibration_belt(
         each of the two ``levels``, the selected polynomial degree, and the
         associated calibration-test p-value.
     """
-    levels = tuple(float(c) for c in confidence)
-    if len(levels) != 2 or not all(0.0 < c < 1.0 for c in levels):
-        raise ValueError("confidence must be two levels in (0, 1)")
+    levels = tuple(validate_level(c, "confidence") for c in confidence)
+    if len(levels) != 2:
+        raise ValueError(f"confidence must be two levels, got {confidence!r}")
     grid_size = validate_positive_int(grid_size, "grid_size")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     # Mean-one weights (unit weights unchanged) keep the ridge and the fit

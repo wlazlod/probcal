@@ -20,7 +20,7 @@ from ._protocol import CalibratorProtocolMixin
 from ._registry import load, register
 from ._results import Interpretation
 from ._serialize import JsonIO, check_payload, data_fingerprint, encode_value, envelope
-from ._validation import stratified_folds, validate_binary_y, validate_cv, validate_weights
+from ._validation import cv_splits, validate_binary_y, validate_choice, validate_weights
 from .base import BaseCalibrator, clone_unfitted
 from .chain import Chain, _concat_interpretations
 from .offset import LogitOffset
@@ -122,6 +122,24 @@ def _accepts_sample_weight(estimator: Any) -> bool:
 
     if get_config().get("enable_metadata_routing", False):
         return isinstance(get_routing_for_object(estimator), MetadataRouter)
+    return False
+
+
+def _model_takes_weights(model: Any, weighted: bool, *, stacklevel: int) -> bool:
+    """Whether ``model``'s fits get the weights; warns when weights are given but not accepted.
+
+    ``stacklevel`` is the caller's own: the warning points where the caller's would.
+    """
+    if not weighted:
+        return False
+    if _accepts_sample_weight(model):
+        return True
+    warnings.warn(
+        f"{type(model).__name__}.fit does not accept sample_weight; the model is trained "
+        "unweighted (the calibrator still uses the weights)",
+        UserWarning,
+        stacklevel=stacklevel + 1,
+    )
     return False
 
 
@@ -247,8 +265,7 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
         TypeError
             If ``flow="cv"`` and the model has no ``fit(X, y)`` method.
         """
-        if self.flow not in ("prefit", "cv"):
-            raise ValueError(f"flow must be 'prefit' or 'cv', got {self.flow!r}")
+        validate_choice("flow", self.flow, ("prefit", "cv"))
         y_arr = validate_binary_y(y)
         if _n_rows(X) != len(y_arr):
             raise ValueError(f"X has {_n_rows(X)} rows but y has {len(y_arr)}")
@@ -261,8 +278,10 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
             s = _model_scores(self.model_, X)
             self.calibrator_ = self._fresh_calibrator().fit(s, y_arr, sample_weight=w_arr)
         else:
-            cv = validate_cv(self.cv, y_arr, held_out_both_classes=self.ensemble)
-            s = self._fit_cv(X, y_arr, w_arr, cv, weighted=weighted)
+            splits = cv_splits(
+                self.cv, y_arr, self.random_state, held_out_both_classes=self.ensemble
+            )
+            s = self._fit_cv(X, y_arr, w_arr, splits, weighted=weighted)
         self._cal_scores = s
         self._cal_weights = w_arr if weighted else None
         self.fit_meta_ = {
@@ -279,20 +298,19 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
         return clone_unfitted(self.calibrator)  # type: ignore[return-value]
 
     def _fit_cv(
-        self, X: object, y: np.ndarray, w: np.ndarray, cv: int, *, weighted: bool
+        self,
+        X: object,
+        y: np.ndarray,
+        w: np.ndarray,
+        splits: list[tuple[np.ndarray, np.ndarray]],
+        *,
+        weighted: bool,
     ) -> np.ndarray:
         """Cross-fitted flow; returns the pooled out-of-fold scores."""
         if not hasattr(self.model, "fit"):
             raise TypeError("flow='cv' requires a model with fit(X, y)")
         # Whether the model fits take the weights is decided once, up front.
-        model_weighted = weighted and _accepts_sample_weight(self.model)
-        if weighted and not model_weighted:
-            warnings.warn(
-                f"{type(self.model).__name__}.fit does not accept sample_weight; the model is "
-                "trained unweighted (the calibrator still uses the weights)",
-                UserWarning,
-                stacklevel=3,
-            )
+        model_weighted = _model_takes_weights(self.model, weighted, stacklevel=3)
 
         def fit_clone(rows: np.ndarray | None) -> Any:
             model = _clone(self.model)
@@ -305,11 +323,9 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
                 model.fit(X_fit, y_fit)
             return model
 
-        folds = stratified_folds(y, cv, self.random_state)
         oof_scores = np.empty(len(y))
-        for k in range(cv):
-            fold_model = fit_clone(folds != k)
-            held = folds == k
+        for train, held in splits:
+            fold_model = fit_clone(train)
             s_held = _model_scores(fold_model, _take_rows(X, held))
             oof_scores[held] = s_held
             if self.ensemble:

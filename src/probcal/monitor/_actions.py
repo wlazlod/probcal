@@ -12,6 +12,7 @@ from .._math import beta_ppf, expit
 from .._registry import load, register
 from .._serialize import JsonIO, check_payload, envelope
 from .._validation import validate_level
+from ..base import constructor_params
 from ..metrics._common import _prep
 from ..offset import LogitOffset
 from ._monitor import CalibrationMonitor, MonitorReport
@@ -261,7 +262,7 @@ def apply_recommendation(mon: CalibrationMonitor, target: object = None) -> "App
         composed = Chain([target.calibrator_, *target.offsets_, offset])
     elif isinstance(target, CalibratedModel):
         composed = target.with_offset(offset)
-    fresh = type(mon)(**mon._ctor_params())
+    fresh = type(mon)(**constructor_params(mon))
     return AppliedAction(
         kind=kind,
         offset=offset,

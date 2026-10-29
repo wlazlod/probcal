@@ -3,7 +3,7 @@
 import inspect
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
 
 import numpy as np
 
@@ -164,6 +164,20 @@ def _clone_param(value: object) -> object:
     return value
 
 
+def constructor_params(obj: object) -> dict[str, Any]:
+    """``obj``'s constructor parameters, read from its ``__init__`` signature.
+
+    The manual sklearn convention without an sklearn import: every
+    ``__init__`` parameter is stored under its own name.
+    """
+    sig = inspect.signature(type(obj).__init__)
+    return {
+        name: getattr(obj, name)
+        for name in sig.parameters
+        if name not in ("self", "args", "kwargs")
+    }
+
+
 def clone_unfitted(obj: object) -> object:
     """A fresh, unfitted copy built from ``obj.get_params(deep=False)``.
 
@@ -318,12 +332,7 @@ class _FittedObject(FittedStateMixin, JsonIO):
 
     def get_params(self, deep: bool = True) -> dict[str, object]:
         """Constructor parameters as a dict (manual sklearn-compatible clone info)."""
-        sig = inspect.signature(type(self).__init__)
-        return {
-            name: getattr(self, name)
-            for name in sig.parameters
-            if name not in ("self", "args", "kwargs")
-        }
+        return constructor_params(self)
 
     def set_params(self, **params: object) -> Self:
         """Set constructor parameters; unknown names raise ``ValueError``."""

@@ -22,6 +22,7 @@ from .._validation import (
     validate_scores,
     validate_weights,
 )
+from ..base import constructor_params
 from ._diagnostics import recommend
 from ._onset import estimate_onset
 from ._processes import (
@@ -706,7 +707,7 @@ class CalibrationMonitor(JsonIO):
         recommendation window (the same window :meth:`report` uses for its
         trailing-window diagnostics), composes the fitted offset onto ``target`` (see
         below), and returns a **fresh** monitor with the same constructor
-        parameters (:meth:`_ctor_params`) to watch the corrected pipeline.
+        parameters to watch the corrected pipeline.
         The monitor is fresh, not continued: its e-process is a martingale
         under the null "the CURRENTLY DEPLOYED forecast is calibrated";
         once ``target`` changes, the accumulated evidence describes a
@@ -780,34 +781,12 @@ class CalibrationMonitor(JsonIO):
 
     # ------------------------------------------------------------------ serialization
 
-    def _ctor_params(self) -> dict[str, Any]:
-        """Constructor parameters as a plain dict.
-
-        Shared by :meth:`to_dict`'s ``params`` section and
-        :meth:`apply_recommendation`'s fresh monitor (``CalibrationMonitor
-        (**self._ctor_params())``), so the two can never drift apart.
-        """
-        return {
-            "alpha": self.alpha,
-            "components": self.components,
-            "grades": self.grades,
-            "mixture_grid": self.mixture_grid,
-            "delta_ci_grid": self.delta_ci_grid,
-            "min_history": self.min_history,
-            "plug_in_window": self.plug_in_window,
-            "recommendation_window": self.recommendation_window,
-        }
-
     def to_dict(self) -> dict[str, object]:
         """Versioned snapshot; the state includes every past batch — that is
         what makes each decision reproducible (spec invariant)."""
-        params = self._ctor_params()
-        for k in _SEQUENCE_PARAMS:
-            if params[k] is not None:
-                params[k] = list(params[k])
         return envelope(
             self,
-            params=params,
+            params=encode_value(constructor_params(self)),
             state=encode_value(self._state_dict()),
             fit_meta={
                 "n_batches": len(self._z),
@@ -833,22 +812,13 @@ class CalibrationMonitor(JsonIO):
             # Constant: weights never warn (the guarantee is exact), but
             # earlier schema-1 readers require the key.
             "warned_weights": False,
-            "steps": [self._step_to_dict(s) for s in self.steps_],
+            "steps": [asdict(s) for s in self.steps_],
         }
         if self._warned_grades:  # written only when set: payloads without the flag keep their bytes
             state["warned_grades"] = True
         if self.masterscale_fingerprint_ is not None:
             state["masterscale_fingerprint"] = self.masterscale_fingerprint_
         return state
-
-    @staticmethod
-    def _step_to_dict(s: MonitorStep) -> dict[str, object]:
-        d = asdict(s)
-        d["delta_ci"] = list(s.delta_ci) if s.delta_ci is not None else None
-        d["grade_delta_ci"] = {
-            g: (list(v) if v is not None else None) for g, v in s.grade_delta_ci.items()
-        }
-        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "CalibrationMonitor":

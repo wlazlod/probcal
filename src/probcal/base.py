@@ -572,6 +572,19 @@ class BaseCalibrator(_FittedObject, ABC):
         """
         return 100.0
 
+    def _stage_monotone(self, attr: str) -> bool:
+        """``is_monotone_`` read through the fitted stage ``attr``; ``True`` before fitting."""
+        stage = self.__dict__.get(attr)
+        return True if stage is None else bool(stage.is_monotone_)
+
+    def _stage_rank(self, attr: str, prefit: object = None) -> float:
+        """``complexity_rank`` read through the fitted stage ``attr``.
+
+        Before fitting, read through ``prefit`` instead (100.0 when ``None``).
+        """
+        stage = self.__dict__.get(attr, prefit)
+        return 100.0 if stage is None else float(getattr(stage, "complexity_rank", 100.0))
+
     def interval_inverse(
         self,
         lo: float,

@@ -297,16 +297,12 @@ class SegmentedCalibrator(BaseCalibrator):
         A per-segment logit shift is increasing, so it cannot break
         monotonicity; the base map alone decides.
         """
-        base = self.__dict__.get("base_")
-        return True if base is None else bool(base.is_monotone_)
+        return self._stage_monotone("base_")
 
     @property
     def complexity_rank(self) -> float:
         """The base map's parsimony rank (fitted ``base_``, else the prototype)."""
-        base = self.__dict__.get("base_")
-        if base is None:
-            base = self.base if self.base is not None else BetaCalibrator()
-        return float(getattr(base, "complexity_rank", 100.0))
+        return self._stage_rank("base_", self.base if self.base is not None else BetaCalibrator())
 
     @property
     def affine_logit_coeffs_(self) -> tuple[float, float] | None:

@@ -227,11 +227,9 @@ class CalibratorSelector(CalibratorProtocolMixin, BaseCalibrator):
     @property
     def is_monotone_(self) -> bool:  # type: ignore[override]
         """The winner's ``is_monotone_`` (``True`` before fitting)."""
-        best = self.__dict__.get("best_calibrator_")
-        return True if best is None else bool(best.is_monotone_)
+        return self._stage_monotone("best_calibrator_")
 
     @property
     def complexity_rank(self) -> float:
         """The winner's parsimony rank once fitted; 100.0 before."""
-        best = self.__dict__.get("best_calibrator_")
-        return 100.0 if best is None else float(getattr(best, "complexity_rank", 100.0))
+        return self._stage_rank("best_calibrator_")

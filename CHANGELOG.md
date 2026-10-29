@@ -7,6 +7,78 @@ Each release opens with a short summary; the itemized entries sit under *Details
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-29
+
+A consolidation release. Repeated validation, bootstrap, binning, serialization and
+interpretation code now goes through shared helpers, and every input that takes grade or
+segment labels keys them the same way. Three bugs are fixed: weighted `reliability_loess` on
+tied scores, `plot_murphy(diff=True)` on rare-event data, and `moc_offset_from_counts` on
+zero-event portfolios. Payloads written by 0.3.4–0.4.0 load and predict unchanged; apart from
+the items below, numerical results are bit-identical to 0.4.0.
+
+<details markdown="1">
+<summary>Details</summary>
+
+### Fixed
+
+- `reliability_loess(..., sample_weight=...)` with non-uniform weights runs through the
+  package's single LOESS engine: weighted tie means, the same nearest-neighbour window rule
+  and singular-window fallback as the unweighted curve. The separate weighted implementation
+  lacked tie handling, so on tied scores a 1e-9 weight perturbation could move the curve by up
+  to 0.76. Weighted curves change accordingly; unit and equal weights are unchanged.
+- LOESS windows that are rank-deficient (all non-zero tricube weight on one distinct score,
+  which happens on tied scores) return the window's weighted mean instead of dividing by
+  cancellation noise. This affected `reliability_loess` grid points on tied scores; fits on
+  well-conditioned windows are unchanged bit for bit.
+- `plot_murphy(diff=True)` no longer raises when a bootstrap resample holds a single outcome
+  class (e.g. 1 event in 40 rows). `n_boot` must be a positive integer; `n_boot=0` raises a
+  `ValueError` instead of an `IndexError`.
+- `monitor.moc_offset_from_counts` accepts a single-class `y` (zero-event portfolios).
+- `CalibratedModel.from_dict` decodes `fit_meta` like every other loader.
+- Docstrings of `offset.estimate_offset`, `moc_offset_from_counts` and `plot_attributes` state
+  that weights must be positive (zeros were always rejected).
+
+### Changed
+
+- **One label key everywhere.** Grade labels (per-grade tests, Pluto-Tasche, Jeffreys bands,
+  validation report), `evaluate(by=...)` / `plot_reliability(by=...)` groups,
+  `SegmentedCalibrator` segments and `Masterscale` names are keyed like the monitor's grades:
+  integers and integer-valued floats share a key (`1`, `1.0` and `np.int64(1)` are all `"1"`;
+  float labels used to key as `"1.0"` outside the monitor). Fitting `SegmentedCalibrator` with
+  int segments and predicting with float ones now matches. In `evaluate(by=...)`, `1` and `1.0`
+  are one group; a string label next to a numeric one with the same key (`"1"` and `1`) still
+  raises. A masterscale is recognised by one rule package-wide (`assign` + `names`).
+- Input-validation errors share one wording: length mismatches read "y and p must have equal
+  length, got n and m" (calibrator `fit`: "y and s ..."), option errors "<name> must be 'a' or
+  'b', got ...", level errors (`target_mean`, `event_rate`, `calibration_belt(confidence=...)`)
+  "<name> must satisfy 0 < <name> < 1, got ...". `CalibratedModel` and
+  `sklearn.CalibratedClassifier` emit one sample_weight-not-accepted warning.
+- `plot_reliability(stats=True)` with a kernel curve no longer repeats smECE in the stats box;
+  the curve's own readout shows it.
+- The monitor recommendation's residual-LR bound is the exact χ²(1) 95% point (3.8415)
+  instead of 3.841.
+
+### Added
+
+- `as_dict()` on every result dataclass, as the results documentation states:
+  `ReliabilitySummary`, `HosmerLemeshowResult`, `SkceTestResult`, `CalibrationTestResult`,
+  `GuardrailReport`, `MurphyDecomposition`, `LogLossDecomposition`, `EcceResult`,
+  `SpiegelhalterResult`, `MonitorStep`, `MonitorReport` and `AuditReport` join the shared
+  result base (equality, hashing and `repr` unchanged).
+- `to_frame()` on every result whose `repr` is a table (`MetricReport`, `ReliabilityCurve`,
+  `SelectionReport`, `CorpResult`, `GradeTable`, ...); other results raise `TypeError`
+  pointing to `as_dict()`.
+- `SklearnOffset.to_json()` and `fingerprint()`, like the other sklearn adapters.
+
+### Performance
+
+- `validation_report(..., by=...)` runs the pooled bootstrap once instead of twice (about 40%
+  less time).
+- The monitor's Cox-slope bootstrap CI, `plot_murphy(diff=True)`, `plot_attributes` and
+  `plot_mcb_dsc` validate their inputs once instead of per resample or per call.
+
+</details>
+
 ## [0.4.0] - 2026-10-17
 
 A cleanup release. The aliases deprecated in 0.3.4 are gone, payloads written before 0.3.4 no
@@ -689,7 +761,8 @@ First public release on PyPI: thirteen binary calibrators from Platt to Venn–A
 
 </details>
 
-[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/wlazlod/probcal/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/wlazlod/probcal/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/wlazlod/probcal/compare/v0.3.5...v0.4.0
 [0.3.5]: https://github.com/wlazlod/probcal/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/wlazlod/probcal/compare/v0.3.3...v0.3.4

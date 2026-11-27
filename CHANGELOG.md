@@ -7,7 +7,7 @@ Each release opens with a short summary; the itemized entries sit under *Details
 
 ## [Unreleased]
 
-## [0.4.1] - 2026-10-29
+## [0.4.1] - 2026-11-27
 
 A consolidation release. Repeated validation, bootstrap, binning, serialization and
 interpretation code now goes through shared helpers, and every input that takes grade or
@@ -79,7 +79,7 @@ the items below, numerical results are bit-identical to 0.4.0.
 
 </details>
 
-## [0.4.0] - 2026-10-17
+## [0.4.0] - 2026-10-20
 
 A cleanup release. The aliases deprecated in 0.3.4 are gone, payloads written before 0.3.4 no
 longer load, and the code is about 850 lines shorter. Numerical results are bit-identical to

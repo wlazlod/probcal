@@ -12,14 +12,20 @@ from typing import NamedTuple
 import numpy as np
 
 from .._math import loess, logit, norm_sf, weighted_quantile
-from ._common import _prep, is_uniform
+from .._results import _ResultBase
+from ._common import _prep
+
+
+def _gauss_pdf(u: np.ndarray, sigma: float) -> np.ndarray:
+    """Gaussian kernel ``phi(u) / sigma`` at standardized offsets ``u = d / sigma``."""
+    return np.exp(-0.5 * u**2) / (sigma * math.sqrt(2.0 * math.pi))
 
 
 def _smece_at_sigma(loc: np.ndarray, mass: np.ndarray, sigma: float) -> float:
     """smECE at bandwidth sigma: integral of |kernel-smoothed signed residual measure|."""
     grid = np.linspace(loc.min() - 5.0 * sigma, loc.max() + 5.0 * sigma, 257)
     diff = (grid[:, None] - loc[None, :]) / sigma
-    kern = np.exp(-0.5 * diff**2) / (sigma * math.sqrt(2.0 * math.pi))
+    kern = _gauss_pdf(diff, sigma)
     f = np.abs(kern @ mass)
     # Trapezoid rule, written out: np.trapezoid needs numpy >= 2.0.
     return float((np.diff(grid) * (f[1:] + f[:-1]) / 2.0).sum())
@@ -72,7 +78,7 @@ def _gauss_taps(sigma: float, w2: float) -> np.ndarray:
     """Gaussian kernel taps on a ``w2``-spaced lattice, truncated at +-5 sigma."""
     k = int(math.ceil(5.0 * sigma / w2))
     offs = np.arange(-k, k + 1) * w2
-    return np.exp(-0.5 * (offs / sigma) ** 2) / (sigma * math.sqrt(2.0 * math.pi))
+    return _gauss_pdf(offs / sigma, sigma)
 
 
 def _smece_at_sigma_lattice(m: np.ndarray, width: float, sigma: float) -> float:
@@ -113,9 +119,9 @@ Lattice = tuple[float, float, int]
 
 
 def _smece_solve(
-    t: np.ndarray, mass: np.ndarray, bins: int | None
+    t: np.ndarray, y: np.ndarray, p: np.ndarray, w: np.ndarray, bins: int | None
 ) -> tuple[float, float, Lattice | None]:
-    """``smooth_ece``'s path selection and fixed-point solve.
+    """``smooth_ece``'s path selection and fixed-point solve at ``t = logit(p)``.
 
     Returns ``(value, sigma, lattice)``; ``lattice`` is ``None`` when the
     exact O(n) path ran (``bins=None``, a degenerate logit range, or an
@@ -123,6 +129,7 @@ def _smece_solve(
     shares this solve, so its ``sigma_star`` is ``smooth_ece``'s by
     construction.
     """
+    mass = (w / w.sum()) * (y - p)
     t_lo, t_hi = float(t.min()), float(t.max())
     if bins is None or t_hi == t_lo:
         return (*_smece_fixed_point(t, mass), None)
@@ -203,13 +210,11 @@ def smooth_ece(
         smECE: the fixed point ``sigma`` solving ``smECE(sigma) = sigma``.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    t = logit(p_arr)
-    mass = (w / w.sum()) * (y_arr - p_arr)
-    return _smece_solve(t, mass, bins)[0]
+    return _smece_solve(logit(p_arr), y_arr, p_arr, w, bins)[0]
 
 
 @dataclass(frozen=True)
-class EcceResult:
+class EcceResult(_ResultBase):
     """Empirical cumulative calibration error: Kolmogorov-style max and mean
     of the cumulative deviation over sorted predictions.
 
@@ -323,20 +328,18 @@ def _ici_family(
     """The ICI family off one shared LOESS fit.
 
     ``ici`` is the ``w``-weighted mean distance; ``e50``/``e90`` are the
-    distance quantiles — ``np.quantile`` for all-equal weights (bit-identical
-    to the unweighted values), otherwise
-    :func:`~probcal._math.weighted_quantile`; ``emax`` is the maximum, which
+    distance quantiles (:func:`~probcal._math.weighted_quantile`, which is
+    ``np.quantile`` bit for bit for all-equal weights); ``emax`` is the maximum, which
     positive weights cannot move.
     """
     sel = set(names)
     d = _ici_distances(y, p, frac, grid_size, presorted=presorted)
-    uniform = is_uniform(w)
     out: dict[str, float] = {}
     if "ici" in sel:
         out["ici"] = float(np.average(d, weights=w))
     for name, q in (("e50", 0.5), ("e90", 0.9)):
         if name in sel:
-            out[name] = float(np.quantile(d, q)) if uniform else float(weighted_quantile(d, q, w))
+            out[name] = float(weighted_quantile(d, q, w))
     if "emax" in sel:
         out["emax"] = float(np.max(d))
     return out
@@ -493,7 +496,7 @@ def emax(
 
 
 @dataclass(frozen=True)
-class SpiegelhalterResult:
+class SpiegelhalterResult(_ResultBase):
     """Spiegelhalter's z test of forecast unbiasedness (two-sided).
 
     Attributes

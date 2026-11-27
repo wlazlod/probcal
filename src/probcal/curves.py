@@ -11,14 +11,23 @@ Lemeshow, Phillips, Finazzi & Bertolini (2017) — full records in the
 documentation. The belt is reimplemented from the papers; no GPL code is used.
 """
 
-import math
 import warnings
 from dataclasses import dataclass
 
 import numpy as np
 
 from ._corp import corp_bands, corp_fit, decompose
-from ._math import bern_loglik, chi2_ppf, chi2_sf, expit, irls_logistic, loess, logit
+from ._math import (
+    bern_loglik,
+    bootstrap_indices,
+    chi2_ppf,
+    chi2_sf,
+    expit,
+    irls_logistic,
+    loess,
+    logit,
+    quantile_grid,
+)
 from ._results import (
     BeltResult,
     CorpResult,
@@ -27,12 +36,14 @@ from ._results import (
     SmoothReliabilityCurve,
     _ResultBase,
 )
-from ._validation import validate_level, validate_nonneg_int, validate_positive_int
+from ._steps import bin_sums
+from ._validation import validate_choice, validate_level, validate_nonneg_int, validate_positive_int
 from .metrics._binstats import bin_stats
 from .metrics._common import _prep, gram, is_uniform, rao_scott
 from .metrics.smooth import (
     Lattice,
     _ecce_walk,
+    _gauss_pdf,
     _lattice_index,
     _lattice_kernel_smooth,
     _smece_solve,
@@ -95,10 +106,6 @@ def reliability_binned(
     )
 
 
-def _grid(p: np.ndarray, grid_size: int) -> np.ndarray:
-    return np.linspace(float(np.quantile(p, 0.005)), float(np.quantile(p, 0.995)), grid_size)
-
-
 def reliability_loess(
     y: object,
     p: object,
@@ -121,8 +128,9 @@ def reliability_loess(
     sample_weight : array_like or None, keyword-only
         Optional positive weights. Non-uniform weights multiply the tricube
         kernel weights of each local-linear fit (same nearest-neighbour
-        windows); ``None`` or all-equal weights give the unweighted LOESS
-        curve unchanged.
+        windows, tie handling and singular-window fallback as the unweighted
+        fit; see :func:`probcal._math.loess`); ``None`` or all-equal weights
+        give the unweighted LOESS curve unchanged.
 
     Returns
     -------
@@ -131,43 +139,10 @@ def reliability_loess(
         event rate at each point.
     """
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    grid = _grid(p_arr, grid_size)
-    if is_uniform(w):
-        fitted = loess(p_arr, y_arr, frac=frac, xeval=grid)
-    else:
-        fitted = _weighted_local_linear(p_arr, y_arr, w, grid, frac)
+    grid = quantile_grid(p_arr, grid_size)
+    fitted = loess(p_arr, y_arr, frac=frac, xeval=grid, w=None if is_uniform(w) else w)
     rate = np.clip(fitted, 0.0, 1.0)
     return SmoothReliabilityCurve(grid_p=grid, grid_logit=logit(grid), event_rate=rate)
-
-
-def _weighted_local_linear(
-    x: np.ndarray, y: np.ndarray, w: np.ndarray, xeval: np.ndarray, frac: float
-) -> np.ndarray:
-    """Sample-weighted LOESS (degree 1) at ``xeval``.
-
-    Each fit uses the ``r = ceil(frac * n)`` nearest observations, tricube
-    kernel weights over the window radius times the sample weights, and a
-    weighted least-squares line; a window whose points share one ``x`` (or
-    whose design is singular) returns the weighted mean.
-    """
-    n = x.shape[0]
-    r = min(max(int(math.ceil(frac * n)), 2), n)
-    out = np.empty(xeval.shape[0])
-    for i, x0 in enumerate(xeval):
-        dist = np.abs(x - x0)
-        win = np.argpartition(dist, r - 1)[:r]
-        h = float(dist[win].max())
-        u = dist[win] / h if h > 0.0 else np.zeros(r)
-        k = np.clip(1.0 - u**3, 0.0, None) ** 3 * w[win]
-        xc = x[win] - x0
-        sw, swx, swxx = k.sum(), (k * xc).sum(), (k * xc * xc).sum()
-        swy, swxy = (k * y[win]).sum(), (k * xc * y[win]).sum()
-        det = sw * swxx - swx * swx
-        if h == 0.0 or abs(det) <= 1e-12 * max(sw * swxx, 1e-300):
-            out[i] = swy / sw if sw > 0.0 else float(np.average(y[win], weights=w[win]))
-        else:
-            out[i] = (swxx * swy - swx * swxy) / det
-    return out
 
 
 def reliability_spline(
@@ -202,7 +177,7 @@ def reliability_spline(
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     cal = SplineCalibrator()
     cal.fit(p_arr, y_arr, sample_weight=w)
-    grid = _grid(p_arr, grid_size)
+    grid = quantile_grid(p_arr, grid_size)
     return SmoothReliabilityCurve(
         grid_p=grid, grid_logit=logit(grid), event_rate=cal.predict_proba(grid)
     )
@@ -228,8 +203,7 @@ def _kernel_rate_density(
     if lattice is not None:
         width, t_lo, b = lattice
         idx = _lattice_index(t, t_lo, width, b)
-        num = np.bincount(idx, weights=w * y, minlength=b)
-        den = np.bincount(idx, weights=w, minlength=b)
+        num, den = bin_sums(idx, y, w, b)
         centers, num_s = _lattice_kernel_smooth(num, width, sigma, t_lo)
         _, den_s = _lattice_kernel_smooth(den, width, sigma, t_lo)
         # Cells farther than the kernel's +-5 sigma truncation from every
@@ -241,7 +215,7 @@ def _kernel_rate_density(
         density = np.interp(grid_logit, centers, den_s)
     else:
         diff = (grid_logit[:, None] - t[None, :]) / sigma
-        taps = np.exp(-0.5 * diff**2) / (sigma * math.sqrt(2.0 * math.pi))
+        taps = _gauss_pdf(diff, sigma)
         num = taps @ (w * y)
         den = taps @ w
         # Same gap rule as the lattice path: no observation within 5 sigma.
@@ -310,7 +284,7 @@ def reliability_smooth(
         Optional positive weights, same length as ``y``.
     grid_size : int, keyword-only
         Number of evaluation points, spanning the 0.5th to 99.5th percentile
-        of ``p`` (``curves._grid``).
+        of ``p`` (``_math.quantile_grid``).
     n_boot : int, keyword-only
         Number of bootstrap resamples for the confidence ribbon; ``0``
         disables it.
@@ -349,20 +323,17 @@ def reliability_smooth(
     conf = validate_level(confidence, "confidence")
     n_boot = validate_nonneg_int(n_boot, "n_boot")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
-    grid_p = _grid(p_arr, grid_size)
+    grid_p = quantile_grid(p_arr, grid_size)
     grid_logit = logit(grid_p)
     t = logit(p_arr)
-    mass = (w / w.sum()) * (y_arr - p_arr)
-    smooth_ece_value, sigma_star, lattice = _smece_solve(t, mass, bins)
+    smooth_ece_value, sigma_star, lattice = _smece_solve(t, y_arr, p_arr, w, bins)
 
     event_rate, density = _kernel_rate_density(t, y_arr, w, sigma_star, grid_logit, lattice)
 
     if n_boot > 0:
-        rng = np.random.default_rng(random_state)
-        n = len(y_arr)
         boot_rate = np.empty((n_boot, grid_size))
-        for i in range(n_boot):
-            idx_b = rng.integers(0, n, n)
+        draws = bootstrap_indices(np.random.default_rng(random_state), len(y_arr), n_boot)
+        for i, idx_b in enumerate(draws):
             # `lattice` is the point estimate's fixed (width, t_lo, b) — never
             # rederived here. The ribbon is meant to reflect uncertainty in the
             # rate given sigma_star, not uncertainty in sigma_star or its
@@ -473,8 +444,7 @@ def corp_reliability(
     >>> abs(r.brier - (r.brier_mcb - r.brier_dsc + r.brier_unc)) < 1e-12
     True
     """
-    if bands not in _BANDS:
-        raise ValueError('bands must be "consistency", "confidence", or None')
+    validate_choice("bands", bands, _BANDS)
     conf = validate_level(confidence, "confidence")
     n_resamples = validate_nonneg_int(n_resamples, "n_resamples")
     if n_resamples == 0:
@@ -638,9 +608,9 @@ def calibration_belt(
         each of the two ``levels``, the selected polynomial degree, and the
         associated calibration-test p-value.
     """
-    levels = tuple(float(c) for c in confidence)
-    if len(levels) != 2 or not all(0.0 < c < 1.0 for c in levels):
-        raise ValueError("confidence must be two levels in (0, 1)")
+    levels = tuple(validate_level(c, "confidence") for c in confidence)
+    if len(levels) != 2:
+        raise ValueError(f"confidence must be two levels, got {confidence!r}")
     grid_size = validate_positive_int(grid_size, "grid_size")
     y_arr, p_arr, w = _prep(y, p, sample_weight)
     # Mean-one weights (unit weights unchanged) keep the ridge and the fit
@@ -702,7 +672,7 @@ def calibration_belt(
     # Bands from the (sandwich) covariance ellipsoid.
     mu = expit(np.clip(X @ fit.beta, -30.0, 30.0))
     info_inv = covariance(X, mu)
-    grid_p = _grid(p_arr, grid_size)
+    grid_p = quantile_grid(p_arr, grid_size)
     grid_z = logit(grid_p)
     Xg = design(degree, grid_z)
     eta = Xg @ fit.beta

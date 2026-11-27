@@ -14,8 +14,15 @@ import numpy as np
 
 from ._registry import register
 from ._results import Interpretation
-from ._steps import bin_sums, equal_mass_edges, step_inverse_left, step_inverse_right
-from ._validation import validate_positive_int
+from ._steps import (
+    bin_lookup,
+    edge_bin_sums,
+    equal_mass_edges,
+    equal_width_edges,
+    step_inverse_left,
+    step_inverse_right,
+)
+from ._validation import validate_choice, validate_positive_int
 from .base import BaseCalibrator
 from .parametric import PlattCalibrator
 
@@ -66,16 +73,13 @@ class HistogramBinningCalibrator(BaseCalibrator):
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
         n_bins = validate_positive_int(self.n_bins, "n_bins")
-        if self.strategy not in ("mass", "width"):
-            raise ValueError(f"strategy must be 'mass' or 'width', got {self.strategy!r}")
-        if self.shrinkage not in ("jeffreys", None):
-            raise ValueError(f"shrinkage must be 'jeffreys' or None, got {self.shrinkage!r}")
+        validate_choice("strategy", self.strategy, ("mass", "width"))
+        validate_choice("shrinkage", self.shrinkage, ("jeffreys", None))
         if self.strategy == "mass":
             edges = equal_mass_edges(s, n_bins, w)
         else:
-            edges = np.linspace(0.0, 1.0, n_bins + 1)[1:-1]
-        idx = np.searchsorted(edges, s, side="right")
-        k, n = bin_sums(idx, y, w, len(edges) + 1)
+            edges = equal_width_edges(n_bins)
+        k, n = edge_bin_sums(edges, s, y, w)
         prior = 0.5 if self.shrinkage == "jeffreys" else 0.0
         # Equal-mass edges leave no bin empty. Under "width" a bin can be
         # empty; it takes its neighbours' rate (interpolated by bin index, the
@@ -90,7 +94,7 @@ class HistogramBinningCalibrator(BaseCalibrator):
         self.is_monotone_ = bool(np.all(np.diff(rate) >= 0.0))
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
-        return self.bin_rate_[np.searchsorted(self.edges_, s, side="right")]
+        return self.bin_rate_[bin_lookup(self.edges_, s)]
 
     @property
     def complexity_rank(self) -> float:
@@ -125,12 +129,7 @@ class HistogramBinningCalibrator(BaseCalibrator):
                 "fitted bin rates are not monotone: binning does not enforce ranking "
                 "preservation — read inversions as noise, not signal"
             )
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("n_bins",),
-            param_values=(float(len(self.bin_rate_)),),
-            messages=tuple(messages),
-        )
+        return self._interpretation({"n_bins": float(len(self.bin_rate_))}, messages)
 
 
 @register
@@ -178,8 +177,7 @@ class ScalingBinningCalibrator(BaseCalibrator):
         self.platt_.fit(s, y, sample_weight=w)
         g = self.platt_.predict_proba(s)
         edges = equal_mass_edges(g, n_bins, w)
-        idx = np.searchsorted(edges, g, side="right")
-        sums, cnts = bin_sums(idx, g, w, len(edges) + 1)
+        sums, cnts = edge_bin_sums(edges, g, g, w)
         self.edges_ = edges
         self.bin_value_ = sums / cnts  # equal_mass_edges leaves no bin empty
 
@@ -193,7 +191,7 @@ class ScalingBinningCalibrator(BaseCalibrator):
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
         g = self.platt_.predict_proba(s)
-        return self.bin_value_[np.searchsorted(self.edges_, g, side="right")]
+        return self.bin_value_[bin_lookup(self.edges_, g)]
 
     @property
     def complexity_rank(self) -> float:
@@ -226,18 +224,13 @@ class ScalingBinningCalibrator(BaseCalibrator):
     def interpret(self) -> Interpretation:
         """Two-stage reading: Platt map, then the error-measurability discretization."""
         self._check_fitted()
-        platt_interp = self.platt_.interpret()
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=platt_interp.param_names + ("n_bins",),
-            param_values=platt_interp.param_values + (float(len(self.bin_value_)),),
-            messages=platt_interp.messages
-            + (
-                (
-                    f"binning stage: {len(self.bin_value_)} equal-mass bins of the fitted "
-                    "Platt values; outputs are bin means, which makes the residual "
-                    "calibration error estimable with O(1/eps^2 + B) samples "
-                    "(vs O(B/eps^2) for histogram binning)"
-                ),
-            ),
+        return self._interpretation(
+            {"n_bins": float(len(self.bin_value_))},
+            [
+                f"binning stage: {len(self.bin_value_)} equal-mass bins of the fitted "
+                "Platt values; outputs are bin means, which makes the residual "
+                "calibration error estimable with O(1/eps^2 + B) samples "
+                "(vs O(B/eps^2) for histogram binning)"
+            ],
+            extends=self.platt_.interpret(),
         )

@@ -15,7 +15,7 @@ import numpy as np
 from ._math import bern_loglik, expit, irls_logistic, logit, natural_cubic_basis
 from ._registry import register
 from ._results import Interpretation
-from ._validation import stratified_folds, validate_cv, validate_positive_int
+from ._validation import cv_splits, validate_positive_int
 from .base import BaseCalibrator
 
 _MONOTONE_RTOL = 1e-12
@@ -109,7 +109,7 @@ class SplineCalibrator(BaseCalibrator):
         self.random_state = random_state
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        cv = validate_cv(self.cv, y)
+        splits = cv_splits(self.cv, y, self.random_state)
         n = len(s)
         z = logit(s)
         if self.n_knots is None:
@@ -136,15 +136,13 @@ class SplineCalibrator(BaseCalibrator):
         basis = natural_cubic_basis(z, knots)
         penalty = _second_difference_penalty(basis.shape[1])
 
-        folds = stratified_folds(y, cv, self.random_state)
         cv_loss = np.zeros(len(grid))
         with warnings.catch_warnings():
             # A separating training fold falls back to its ridge refit; the
             # warning belongs to the final fit, not to the inner search.
             warnings.simplefilter("ignore", UserWarning)
             for j, lam in enumerate(grid):
-                for f in range(cv):
-                    tr, va = folds != f, folds == f
+                for tr, va in splits:
                     res = irls_logistic(basis[tr], y[tr], w=w[tr], penalty=float(lam) * penalty)
                     cv_loss[j] -= bern_loglik(y[va], expit(basis[va] @ res.beta), w[va])
         self.lambda_ = float(grid[int(np.argmin(cv_loss))])
@@ -225,9 +223,7 @@ class SplineCalibrator(BaseCalibrator):
             messages.append("fitted curve is NOT monotone (warned at fit)")
         if not self.converged_:
             messages.append("penalized IRLS did not converge; the curve may be unreliable")
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("edof", "lambda", "n_knots"),
-            param_values=(self.edof_, self.lambda_, float(self.n_knots_)),
-            messages=tuple(messages),
+        return self._interpretation(
+            {"edof": self.edof_, "lambda": self.lambda_, "n_knots": float(self.n_knots_)},
+            messages,
         )

@@ -24,6 +24,8 @@ def test_fit_transform_matches_the_core_offset():
     d = step.to_dict()  # serialization delegates to the inner offset
     assert d["class"] == "LogitOffset"
     assert probcal._registry.load(d).delta_ == step.offset_.delta_
+    assert step.fingerprint() == core.fingerprint()
+    assert LogitOffset.from_json(step.to_json()).delta_ == step.offset_.delta_
 
 
 def test_two_column_input_and_positive_column():

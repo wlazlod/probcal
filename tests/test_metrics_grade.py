@@ -129,3 +129,19 @@ def test_grade_and_ecce_results_compare_by_value() -> None:
     assert ecce_curve(y, p) != ecce_curve(y, 0.99 * p)
     with pytest.raises(TypeError):
         hash(ecce_curve(y, p))
+
+
+def test_float_grade_labels_key_like_the_monitor() -> None:
+    # Regression: float labels keyed "1.0" here but "1" in the monitor and Masterscale.
+    from probcal.metrics import evaluate
+    from probcal.monitor._monitor import grade_keys
+
+    rng = np.random.default_rng(3)
+    p = rng.uniform(0.05, 0.3, 400)
+    y = (rng.random(400) < p).astype(float)
+    g = np.where(p < 0.15, 1.0, 2.0)
+    expected = tuple(np.unique(grade_keys(g)).tolist())
+    assert expected == ("1", "2")
+    assert jeffreys_grade_test(y, p, g).grades == expected
+    assert jeffreys_grade_test(y, p, g, order=[1, 2]).grades == expected
+    assert evaluate(y, p, n_boot=0, metrics=("brier",), by=g).groups == expected

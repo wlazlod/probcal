@@ -109,12 +109,12 @@ def test_evaluate_by_to_frame_shape() -> None:
         assert frame.iloc[0]["group"] == "pooled"
 
 
-def test_evaluate_by_groups_raw_values_and_rejects_display_clash() -> None:
+def test_evaluate_by_groups_by_key_and_rejects_string_clash() -> None:
     # Regression (MET-29): labels were stringified before grouping, so the
     # integer 1 and the string "1" were silently merged into one group.
     y, p = _calibrated(400)
     mixed = [1 if i % 2 else "1" for i in range(400)]
-    with pytest.raises(ValueError, match="both display as '1'"):
+    with pytest.raises(ValueError, match="group '1' mixes string and non-string"):
         evaluate(y, p, n_boot=5, metrics=("brier",), by=mixed)
     ints = np.where(p < 0.3, 10, 2)
     rep = evaluate(y, p, n_boot=5, metrics=("brier",), by=ints)

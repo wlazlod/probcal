@@ -106,14 +106,15 @@ A label present in `segments` at predict time but never seen at fit time is hand
 constructor's `unseen` policy: `"global"` (default) applies `delta=0`; `"raise"` raises
 `ValueError`, for deployments where an unrecognized segment must not silently fall back.
 
-Labels are compared as strings (`_coerce_segments` calls `.astype(str)`): fitting with
-integer labels `0`, `1` stores them as `"0"`, `"1"`, but predicting with float labels `0.0`,
-`1.0` looks up `"0.0"`, `"1.0"`. That is a silent mismatch, since every row then looks
-"unseen" and, under the default `unseen="global"`, falls back to the base map without
-raising. Pass `segments` with the *same* representation at fit and predict time (cast to
-`str` yourself if the label type is not guaranteed to match). As a backstop, `predict_proba` and the
-`segment=` inverse paths raise a `UserWarning` whenever *every* row of one call is unseen and
-`unseen="global"`, the exact failure mode this int/float mismatch produces, and it names the
+Labels are compared by key, the same key every grade-label input uses: integers and
+integer-valued floats share one (`1`, `1.0` and `np.int64(1)` are all segment `"1"`), other
+values are compared as strings, and strings are opaque (`"1.0"` stays `"1.0"`). Fitting with
+`0`, `1` and predicting with `0.0`, `1.0` therefore hits the same segments. A label whose key
+is not among the fitted segments is also looked up as `str` of its value (`"1.0"` for the
+float `1.0`), so segments stored under that key still match. A representation
+that does change the key (fitting with strings `"1"`, predicting with `"01"`) makes every row
+look "unseen"; as a backstop, `predict_proba` and the `segment=` inverse paths raise a
+`UserWarning` whenever *every* row of one call is unseen and `unseen="global"`, naming the
 fitted `segments_` so the mismatch is easy to spot; a partial overlap (some rows match,
 others are genuinely new segments) stays silent, since that is a legitimate use case.
 

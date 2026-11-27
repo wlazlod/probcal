@@ -16,10 +16,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .._math import beta_ppf
+from .._labels import is_masterscale
+from .._math import clopper_pearson_upper, jeffreys_ppf
 from .._results import Interpretation, _ResultBase
-from .._validation import validate_binary_y, validate_level, validate_scores, validate_weights
-from ._grades import aggregate, grade_labels, is_masterscale, resolve_order
+from .._validation import validate_binary_y, validate_level, validate_weights, validate_ypw
+from ._grades import aggregate, grade_labels, order_by_mean_p, resolve_order
 
 
 @dataclass(frozen=True, eq=False)
@@ -195,7 +196,7 @@ def pluto_tasche(
     # d <= n per grade implies d* <= n*, so the second shape is > 0 unless d* == n*.
     pd_upper = np.array(
         [
-            1.0 if ds == ns else beta_ppf(confidence, ds + 1.0, ns - ds)
+            clopper_pearson_upper(confidence, ds, ns)
             for ns, ds in zip(n_pooled, d_pooled, strict=True)
         ]
     )
@@ -278,21 +279,18 @@ def pluto_tasche_from_arrays(
     >>> res.n
     array([100., 400., 300.])
     """
-    y_arr = validate_binary_y(y, require_both_classes=False)
     if is_masterscale(grades):
         if p is None:
             raise ValueError(
                 "p is required when grades is a Masterscale (labels are assigned from p)"
             )
-        p_arr = validate_scores(p, name="p")
-        if len(p_arr) != len(y_arr):
-            raise ValueError("y and p must have equal length")
+        y_arr, p_arr, w_arr = validate_ypw(y, p, sample_weight, require_both_classes=False)
     else:
         if order is None:
             raise ValueError("order is required when grades is a label array")
-        p_arr = np.empty(0)
+        y_arr = validate_binary_y(y, require_both_classes=False)
+        p_arr, w_arr = np.empty(0), validate_weights(sample_weight, len(y_arr))
     g_str, default_order = grade_labels(grades, p_arr, len(y_arr))
-    w_arr = validate_weights(sample_weight, len(y_arr))
     order_t = resolve_order(g_str, order, default_order)
     n, d, _, _ = aggregate(g_str, order_t, y_arr, w=w_arr)
 
@@ -391,21 +389,17 @@ def jeffreys_upper_bands(
     >>> bands["A"][1] < bands["B"][1]
     True
     """
-    y_arr = validate_binary_y(y, require_both_classes=False)
-    p_arr = validate_scores(p, name="p")
-    if len(p_arr) != len(y_arr):
-        raise ValueError("y and p must have equal length")
+    y_arr, p_arr, _ = validate_ypw(y, p, require_both_classes=False)
     g_arr, default_order = grade_labels(grades, p_arr, len(y_arr))
     conf = validate_level(confidence, "confidence")
 
-    order_t = resolve_order(g_arr, order, default_order)
-    n, k, mean_p, _ = aggregate(g_arr, order_t, y_arr, p=p_arr)
     if order is None and default_order is None:  # label array: order by mean p
-        assert mean_p is not None
-        perm = np.argsort(mean_p, kind="stable")
-        order_t, n, k = tuple(order_t[i] for i in perm), n[perm], k[perm]
+        order_t = order_by_mean_p(g_arr, p_arr)
+    else:
+        order_t = resolve_order(g_arr, order, default_order)
+    n, k, _, _ = aggregate(g_arr, order_t, y_arr)
 
-    hi_raw = np.array([beta_ppf(conf, k[i] + 0.5, n[i] - k[i] + 0.5) for i in range(len(order_t))])
+    hi_raw = np.array([jeffreys_ppf(conf, k[i], n[i]) for i in range(len(order_t))])
     # Running maximum, merging every grade it would leave with a zero-width
     # band into the preceding band.
     blocks: list[tuple[list[str], float]] = []

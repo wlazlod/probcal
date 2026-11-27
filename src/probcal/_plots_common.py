@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 
 from ._math import logit, logit1
+from ._validation import validate_choice
 
 try:
     import matplotlib.pyplot as _plt
@@ -64,8 +65,7 @@ _SCALES = ("probability", "logit")
 
 def _check_scale(scale: object) -> None:
     """Reject anything but the two supported axis scales (a typo would draw linear)."""
-    if scale not in _SCALES:
-        raise ValueError(f'scale must be "probability" or "logit", got {scale!r}')
+    validate_choice("scale", scale, _SCALES)
 
 
 @contextlib.contextmanager
@@ -148,6 +148,11 @@ def _pav_step_xy(
     x_edges[0::2] = lo
     x_edges[1::2] = hi
     return x_edges, np.repeat(level, 2)
+
+
+def _identity(ax: Any, x: Any, *, label: str | None = "identity") -> None:
+    """Dashed grey identity line ``y = x`` through the points ``x``."""
+    ax.plot(x, x, ls="--", c=_GREY, lw=1, label=label)
 
 
 def _text_box(ax: Any, txt: str) -> None:

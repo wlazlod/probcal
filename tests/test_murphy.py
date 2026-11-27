@@ -120,3 +120,25 @@ def test_plot_murphy_diff_rejects_non_pair_mapping():
     curves = {"a": murphy_curve(y, p), "b": murphy_curve(y, p)}
     with pytest.raises(ValueError, match="raw"):
         plot_murphy(curves, diff=True)
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+def test_plot_murphy_diff_rare_event_and_n_boot():
+    # Regression: single-class resamples (1 event in 40 rows) crashed the
+    # band, and n_boot=0 surfaced as an IndexError.
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from probcal.plots import plot_murphy
+
+    y = np.zeros(40)
+    y[7] = 1.0
+    p = np.linspace(0.01, 0.4, 40)
+    pairs = {"a": (y, p), "b": (y, p[::-1])}
+    ax = plot_murphy(pairs, diff=True, n_boot=50)
+    assert len(ax.collections) >= 1
+    with pytest.raises(ValueError, match="n_boot"):
+        plot_murphy(pairs, diff=True, n_boot=0)
+    plt.close("all")

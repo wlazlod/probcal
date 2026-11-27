@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .._math import bern_loglik, chi2_sf, expit, irls_logistic, logit
+from .._results import _ResultBase
 from ._common import _prep, rao_scott
 from .smooth import _spiegelhalter
 
@@ -100,7 +101,7 @@ def calibration_slope(y: object, p: object, *, sample_weight: object = None) -> 
 
 
 @dataclass(frozen=True)
-class CalibrationTestResult:
+class CalibrationTestResult(_ResultBase):
     """Likelihood-ratio test of (intercept, slope) = (0, 1) — the
     Cox-framed weak calibration test.
 
@@ -187,7 +188,7 @@ def calibration_test(
 
 
 @dataclass(frozen=True)
-class GuardrailReport:
+class GuardrailReport(_ResultBase):
     """Three-flag calibration health summary used across the package.
 
     Thresholds are conventions, not theorems: slope within [0.9, 1.1],

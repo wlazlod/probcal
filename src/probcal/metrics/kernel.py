@@ -25,7 +25,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from .._math import logit, norm_sf
-from .._validation import validate_positive_int
+from .._results import _ResultBase
+from .._validation import validate_choice, validate_positive_int
 from ._common import _prep
 
 _MAX_MEDIAN_POINTS = 4096
@@ -152,8 +153,7 @@ def skce(
         If ``estimator`` is not one of ``"uq"``, ``"ul"``, ``"biased"``, or if
         fewer than 2 observations are given.
     """
-    if estimator not in ("uq", "ul", "biased"):
-        raise ValueError(f"estimator must be 'uq', 'ul', or 'biased', got {estimator!r}")
+    validate_choice("estimator", estimator, ("uq", "ul", "biased"))
     y_arr, p_arr, s, bw = _setup(y, p, scale, bandwidth, 2, "skce")
     if estimator == "ul":
         return float(np.mean(_ul_terms(y_arr, p_arr, s, kernel, bw, random_state)))
@@ -164,7 +164,7 @@ def skce(
 
 
 @dataclass(frozen=True)
-class SkceTestResult:
+class SkceTestResult(_ResultBase):
     """One-sided SKCE calibration test (H0: calibrated; large positive rejects).
 
     Attributes
@@ -252,8 +252,7 @@ def skce_test(
     SkceTestResult
         Test statistic, method, p-value, and worst-case bound.
     """
-    if method not in ("bootstrap", "asymptotic"):
-        raise ValueError(f"method must be 'bootstrap' or 'asymptotic', got {method!r}")
+    validate_choice("method", method, ("bootstrap", "asymptotic"))
     n_boot = validate_positive_int(n_boot, "n_boot")
     y_arr, p_arr, s, bw = _setup(y, p, scale, bandwidth, 4, "skce_test")
     n = len(p_arr)

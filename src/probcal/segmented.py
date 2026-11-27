@@ -13,10 +13,11 @@ import warnings
 
 import numpy as np
 
+from ._labels import grade_keys
 from ._math import expit, logit
 from ._registry import decode_prototype, encode_prototype, register
 from ._results import Interpretation
-from ._validation import validate_scores
+from ._validation import validate_choice, validate_scores
 from .base import BaseCalibrator, clone_unfitted
 from .chain import Chain
 from .offset import LogitOffset, estimate_offset
@@ -24,13 +25,17 @@ from .parametric import BetaCalibrator
 
 
 def _coerce_segments(raw: object, n: int) -> np.ndarray:
-    """1-D string array of segment labels, length-checked against ``n``."""
-    arr = np.asarray(raw)
-    if arr.ndim != 1:
-        raise ValueError(f"segments must be a 1-D array, got shape {arr.shape}")
-    if arr.shape[0] != n:
-        raise ValueError(f"segments must have length {n}, got {arr.shape[0]}")
-    return arr.astype(str)
+    """1-D array of segment keys (:func:`~probcal._labels.grade_key`), length-checked."""
+    keys = grade_keys(raw, name="segments")
+    if keys.shape[0] != n:
+        raise ValueError(f"segments must have length {n}, got {keys.shape[0]}")
+    return keys
+
+
+def _positions(segs: np.ndarray, labels: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Index into the sorted ``segs`` per label, and whether the label is there."""
+    pos = np.searchsorted(segs, labels).clip(max=len(segs) - 1)
+    return pos, segs[pos] == labels
 
 
 @register
@@ -67,17 +72,16 @@ class SegmentedCalibrator(BaseCalibrator):
     shift is not baked into a ``Chain``; use ``SegmentedCalibrator`` directly
     (with ``segments=``) when the per-segment offset must apply.
 
-    Segment labels are compared as strings (``_coerce_segments`` calls
-    ``.astype(str)``): fit-time labels ``0``, ``1`` (int) become ``"0"``,
-    ``"1"``, but predict-time labels ``0.0``, ``1.0`` (float) become
-    ``"0.0"``, ``"1.0"`` — a mismatch that never raises (every label
-    looks "unseen") and, under ``unseen="global"``, silently falls back
-    to the base map for every row. Pass ``segments`` with the *same*
-    representation (e.g. cast to ``str`` yourself) at fit and predict
-    time. When every row of a ``predict_proba``/inverse call is unseen
-    and ``unseen="global"``, a ``UserWarning`` is raised naming the
-    fitted ``segments_`` — a partial overlap (some rows match, some are
-    genuinely new segments) stays silent.
+    Segment labels are compared by key
+    (:func:`~probcal._labels.grade_key`): ``0``, ``1`` (int) and ``0.0``,
+    ``1.0`` (float) are the segments ``"0"``, ``"1"`` at fit and predict
+    time alike. A predict-time label whose key is not in ``segments_`` is
+    also looked up as ``str`` of its value (``"1.0"`` for the float
+    ``1.0``), the key payloads written by probcal 0.3.4 to 0.4.0 store.
+    When every row of a ``predict_proba``/inverse call is unseen and
+    ``unseen="global"``, a ``UserWarning`` is raised naming the fitted
+    ``segments_`` — a partial overlap (some rows match, some are genuinely
+    new segments) stays silent.
 
     Parameters
     ----------
@@ -184,8 +188,7 @@ class SegmentedCalibrator(BaseCalibrator):
             self.__dict__.pop("_segments_arg", None)
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        if self.unseen not in ("global", "raise"):
-            raise ValueError(f"unseen must be 'global' or 'raise', got {self.unseen!r}")
+        validate_choice("unseen", self.unseen, ("global", "raise"))
         raw_segments = self.__dict__.get("_segments_arg")
         if raw_segments is None:
             seg_arr = np.full(s.shape[0], "__all__")
@@ -239,10 +242,13 @@ class SegmentedCalibrator(BaseCalibrator):
 
     # ------------------------------------------------------------- prediction
 
-    def _lookup_deltas(self, labels: np.ndarray, *, stacklevel: int = 3) -> np.ndarray:
+    def _lookup_deltas(self, raw: object, n: int, *, stacklevel: int = 3) -> np.ndarray:
+        labels = _coerce_segments(raw, n)
         segs = np.asarray(self.segments_)  # sorted at fit time
-        pos = np.searchsorted(segs, labels).clip(max=len(segs) - 1)
-        seen = segs[pos] == labels
+        pos, seen = _positions(segs, labels)
+        if not seen.all():  # payloads from 0.3.4-0.4.0 store .astype(str) keys ("1.0")
+            pos_str, seen_str = _positions(segs, np.asarray(raw).astype(str))
+            pos, seen = np.where(seen, pos, pos_str), seen | seen_str
         if self.unseen == "raise" and not seen.all():
             raise ValueError(
                 f"unseen segment(s) {sorted(set(labels[~seen].tolist()))!r} not in fitted "
@@ -282,7 +288,7 @@ class SegmentedCalibrator(BaseCalibrator):
         p0 = self.base_.predict_proba(s_arr)
         if segments is None:
             return p0
-        deltas = self._lookup_deltas(_coerce_segments(segments, s_arr.shape[0]))
+        deltas = self._lookup_deltas(segments, s_arr.shape[0])
         return expit(logit(p0) + deltas)
 
     def _predict(self, s: np.ndarray) -> np.ndarray:
@@ -297,16 +303,12 @@ class SegmentedCalibrator(BaseCalibrator):
         A per-segment logit shift is increasing, so it cannot break
         monotonicity; the base map alone decides.
         """
-        base = self.__dict__.get("base_")
-        return True if base is None else bool(base.is_monotone_)
+        return self._stage_monotone("base_")
 
     @property
     def complexity_rank(self) -> float:
         """The base map's parsimony rank (fitted ``base_``, else the prototype)."""
-        base = self.__dict__.get("base_")
-        if base is None:
-            base = self.base if self.base is not None else BetaCalibrator()
-        return float(getattr(base, "complexity_rank", 100.0))
+        return self._stage_rank("base_", self.base if self.base is not None else BetaCalibrator())
 
     @property
     def affine_logit_coeffs_(self) -> tuple[float, float] | None:
@@ -329,7 +331,7 @@ class SegmentedCalibrator(BaseCalibrator):
     def _segment_chain_or_base(self, segment: object) -> BaseCalibrator | Chain:
         if segment is None:
             return self.base_
-        delta = float(self._lookup_deltas(_coerce_segments([segment], 1), stacklevel=4)[0])
+        delta = float(self._lookup_deltas([segment], 1, stacklevel=4)[0])
         if delta == 0.0:
             return self.base_
         return Chain([self.base_, LogitOffset(delta=delta).fit(np.array([0.5]))])
@@ -370,6 +372,11 @@ class SegmentedCalibrator(BaseCalibrator):
         target = self._segment_chain_or_base(segment)
         return target.interval_inverse(lo, hi, space=space, buffer_logit=buffer_logit)
 
+    def _invert_interval(self, lo_b: float, hi_b: float, space: str) -> tuple[float, float]:
+        """The global map's (``segment=None``) preimage of a prepared interval."""
+        self._check_fitted()
+        return self.base_._invert_interval(lo_b, hi_b, space)
+
     def point_inverse(
         self, p: object, *, space: str = "probability", segment: object = None
     ) -> np.ndarray:
@@ -404,8 +411,10 @@ class SegmentedCalibrator(BaseCalibrator):
     def interpret(self) -> Interpretation:
         """Per-segment shrinkage table plus the fitted heterogeneity variance."""
         self._check_fitted()
-        param_names = ("tau2", *(f"delta.{g}" for g in self.segments_))
-        param_values = (self.tau2_, *(float(d) for d in self.delta_tilde_))
+        params = {"tau2": self.tau2_}
+        params.update(
+            (f"delta.{g}", float(d)) for g, d in zip(self.segments_, self.delta_tilde_, strict=True)
+        )
         messages = [
             f"tau2 = {self.tau2_:.4f}: between-segment heterogeneity variance "
             "(DerSimonian-Laird method of moments on the per-segment offset MLEs); "
@@ -429,12 +438,7 @@ class SegmentedCalibrator(BaseCalibrator):
         messages.append(
             f"unseen segments at predict/inverse time {policy} (unseen={self.unseen!r})"
         )
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=param_names,
-            param_values=param_values,
-            messages=tuple(messages),
-        )
+        return self._interpretation(params, messages)
 
     # ------------------------------------------------------------- serialization
 

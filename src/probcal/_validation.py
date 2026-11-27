@@ -6,7 +6,7 @@ EPS = 1e-12
 """Clipping bound: probabilities are confined to ``[EPS, 1 - EPS]``."""
 
 
-def validate_scores(s: object, *, name: str = "s") -> np.ndarray:
+def validate_scores(s: object, *, name: str = "s", clip: bool = True) -> np.ndarray:
     """Coerce scores/probabilities to a clipped 1-D float64 array.
 
     A single-column 2-D input of shape ``(n, 1)`` — what an sklearn
@@ -33,11 +33,17 @@ def validate_scores(s: object, *, name: str = "s") -> np.ndarray:
         finite.
     name : str
         Argument name used in error messages.
+    clip : bool, keyword-only
+        Clip to ``[EPS, 1 - EPS]`` (the default). ``False`` returns the
+        values as given, for callers that compare ``p`` against band edges,
+        where clipping would move ``0`` and ``1`` across an edge closer than
+        ``EPS`` to them.
 
     Returns
     -------
     numpy.ndarray
-        1-D float64 array clipped to ``[EPS, 1 - EPS]``.
+        1-D float64 array, clipped to ``[EPS, 1 - EPS]`` unless ``clip=False``
+        (then always a fresh copy).
 
     Raises
     ------
@@ -68,7 +74,7 @@ def validate_scores(s: object, *, name: str = "s") -> np.ndarray:
         raise ValueError(f"{name} must contain only finite values")
     if np.any(arr < 0.0) or np.any(arr > 1.0):
         raise ValueError(f"{name} must lie in [0, 1]")
-    return np.clip(arr, EPS, 1.0 - EPS)
+    return np.clip(arr, EPS, 1.0 - EPS) if clip else arr.copy()
 
 
 def validate_binary_y(y: object, *, require_both_classes: bool = True) -> np.ndarray:
@@ -197,8 +203,7 @@ def stratified_folds(y: np.ndarray, cv: int, random_state: object) -> np.ndarray
 
 def validate_space(space: str) -> None:
     """``space`` must be ``"probability"`` or ``"logit"``."""
-    if space not in ("probability", "logit"):
-        raise ValueError(f"space must be 'probability' or 'logit', got {space!r}")
+    validate_choice("space", space, ("probability", "logit"))
 
 
 def validate_positive_int(value: object, name: str) -> int:
@@ -221,3 +226,49 @@ def validate_level(value: object, name: str) -> float:
     if not 0.0 < level < 1.0:
         raise ValueError(f"{name} must satisfy 0 < {name} < 1, got {value!r}")
     return level
+
+
+# ----------------------------------------------------------------- composites
+
+
+def validate_ypw(
+    y: object,
+    p: object,
+    w: object = None,
+    *,
+    require_both_classes: bool = True,
+    clip: bool = True,
+    name: str = "p",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Validated ``(y, p, w)``: binary ``y``, scores ``p``, positive weights ``w``.
+
+    :func:`validate_binary_y`, :func:`validate_scores` (named ``name``, clipped
+    unless ``clip=False``), an equal-length check, and :func:`validate_weights`
+    (all ones for ``w=None``).
+    """
+    y_arr = validate_binary_y(y, require_both_classes=require_both_classes)
+    p_arr = validate_scores(p, name=name, clip=clip)
+    if len(y_arr) != len(p_arr):
+        raise ValueError(f"y and {name} must have equal length, got {len(y_arr)} and {len(p_arr)}")
+    return y_arr, p_arr, validate_weights(w, len(p_arr))
+
+
+def cv_splits(
+    cv: object, y: np.ndarray, random_state: object, *, held_out_both_classes: bool = False
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Validated stratified folds as ``(train, held_out)`` boolean masks, one pair per fold.
+
+    ``cv`` is checked by :func:`validate_cv`; the folds are
+    :func:`stratified_folds`.
+    """
+    k = validate_cv(cv, y, held_out_both_classes=held_out_both_classes)
+    folds = stratified_folds(y, k, random_state)
+    return [(folds != f, folds == f) for f in range(k)]
+
+
+def validate_choice(name: str, value: object, choices: tuple[object, ...]) -> None:
+    """``value`` must be one of ``choices`` (the message lists them in order)."""
+    if value not in choices:
+        opts = [repr(c) for c in choices]
+        listed = " or ".join(opts) if len(opts) <= 2 else ", ".join(opts[:-1]) + f", or {opts[-1]}"
+        raise ValueError(f"{name} must be {listed}, got {value!r}")

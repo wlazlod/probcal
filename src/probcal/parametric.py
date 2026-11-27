@@ -15,15 +15,14 @@ import numpy as np
 from ._math import bisect, expit, expit1, irls_logistic, logit, logit1
 from ._registry import register
 from ._results import Interpretation
+from ._validation import validate_choice
 from .base import BaseCalibrator, UnattainableTargetError
 
 _U_LO = 1e-6
 _U_HI = 1e6
 
-_IRLS_NOT_CONVERGED = (
-    "IRLS did not converge; coefficients may be unreliable — inspect interpret() "
-    "and consider a nonparametric calibrator"
-)
+_IRLS_NOTE = "IRLS did not converge; coefficients may be unreliable"
+_IRLS_NOT_CONVERGED = f"{_IRLS_NOTE} — inspect interpret() and consider a nonparametric calibrator"
 
 _BETA_INVERSE_KAPPA = 1.524  # minimax hyperbola parameter (max deviation 0.076)
 _BETA_INVERSE_MAX_STEPS = 4  # Halley iteration cap
@@ -209,13 +208,8 @@ class PlattCalibrator(BaseCalibrator):
         )
         messages = [slope_msg, int_msg, "identity map corresponds to (a, b) = (1, 0)"]
         if not self.converged_:
-            messages.append("IRLS did not converge; coefficients may be unreliable")
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("a", "b"),
-            param_values=(self.a_, self.b_),
-            messages=tuple(messages),
-        )
+            messages.append(_IRLS_NOTE)
+        return self._interpretation({"a": self.a_, "b": self.b_}, messages)
 
 
 @register
@@ -280,15 +274,13 @@ class TemperatureCalibrator(BaseCalibrator):
                 f"T = {self.T_:.3f} <= 1: the model was underconfident; logits are divided "
                 "by T (sharpening away from 1/2)"
             )
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("T",),
-            param_values=(self.T_,),
-            messages=(
+        return self._interpretation(
+            {"T": self.T_},
+            [
                 msg,
                 "temperature cannot fix base-rate error: s = 0.5 maps to 0.5 for every T "
                 "(use PlattCalibrator or LogitOffset for level shifts)",
-            ),
+            ],
         )
 
 
@@ -351,8 +343,7 @@ class BetaCalibrator(BaseCalibrator):
         self.variant = variant
 
     def _fit(self, s: np.ndarray, y: np.ndarray, w: np.ndarray) -> None:
-        if self.variant not in ("abm", "ab", "a"):
-            raise ValueError(f"variant must be 'abm', 'ab', or 'a', got {self.variant!r}")
+        validate_choice("variant", self.variant, ("abm", "ab", "a"))
         ln_s = np.log(s)
         ln_1ms = -np.log1p(-s)  # -ln(1 - s), non-negative
         self.constraint_active_ = False
@@ -523,15 +514,10 @@ class BetaCalibrator(BaseCalibrator):
                 "dropped and the model refitted (betacal strategy)"
             )
         if not self.converged_:
-            messages.append("IRLS did not converge; coefficients may be unreliable")
+            messages.append(_IRLS_NOTE)
         if self.separation_fallback_:
             messages.append(
                 "separation was detected during fitting; at least one fit fell back to "
                 "the ridge-regularized solution (ridge=1e-6)"
             )
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("a", "b", "c"),
-            param_values=(self.a_, self.b_, self.c_),
-            messages=tuple(messages),
-        )
+        return self._interpretation({"a": self.a_, "b": self.b_, "c": self.c_}, messages)

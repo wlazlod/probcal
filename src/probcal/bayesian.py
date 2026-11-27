@@ -11,19 +11,26 @@ Hoefling & Tibshirani (2011) — full records in the documentation.
 import heapq
 import math
 import warnings
+from collections.abc import Callable
 
 import numpy as np
 
 from ._math import lgamma_vec, pava
 from ._registry import register
 from ._results import Interpretation
-from ._steps import aggregate_ties, bin_sums, equal_mass_edges, eval_step
+from ._steps import aggregate_ties, bin_lookup, edge_bin_sums, equal_mass_edges, eval_step
 from ._validation import EPS, validate_positive_int
 from .base import BaseCalibrator
 
 _JEFFREYS = 0.5
 # Per-bin log normalizer of the Beta(1/2, 1/2) prior, ln B(a0, b0).
 _LOG_BETA_PRIOR = 2.0 * math.lgamma(_JEFFREYS) - math.lgamma(2.0 * _JEFFREYS)
+
+
+def _top3(weights: np.ndarray, label: Callable[[int], str]) -> str:
+    """The three heaviest models as ``"<label> (weight w)"``, heaviest first."""
+    top = np.argsort(weights)[::-1][:3]
+    return ", ".join(f"{label(i)} (weight {weights[i]:.3f})" for i in top)
 
 
 @register
@@ -115,7 +122,7 @@ class BBQCalibrator(BaseCalibrator):
         log_marg = np.empty(len(self.bins_grid_))
         for i, b in enumerate(self.bins_grid_):
             edges = equal_mass_edges(s, int(b), w)
-            k, tot = bin_sums(np.searchsorted(edges, s, side="right"), y, w, len(edges) + 1)
+            k, tot = edge_bin_sums(edges, s, y, w)
             # Beta-Binomial log marginal likelihood, Jeffreys prior per bin.
             a0 = b0 = _JEFFREYS
             log_marg[i] = float(
@@ -157,24 +164,20 @@ class BBQCalibrator(BaseCalibrator):
         for weight, edges, rate in zip(
             self.model_weights_, self.model_edges_, self.model_rates_, strict=True
         ):
-            out += weight * rate[np.searchsorted(edges, s, side="right")]
+            out += weight * rate[bin_lookup(edges, s)]
         return out
 
     def interpret(self) -> Interpretation:
         """Read the posterior weights as uncertainty about the data's resolution."""
         self._check_fitted()
-        wts = self.model_weights_
-        top = np.argsort(wts)[::-1][:3]
-        top_txt = ", ".join(f"B={int(self.bins_grid_[i])} (weight {wts[i]:.3f})" for i in top)
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("n_models",),
-            param_values=(float(len(self.bins_grid_)),),
-            messages=(
+        top_txt = _top3(self.model_weights_, lambda i: f"B={int(self.bins_grid_[i])}")
+        return self._interpretation(
+            {"n_models": float(len(self.bins_grid_))},
+            [
                 f"top-3 binning models by posterior weight: {top_txt}",
                 "concentrated weight = the data speak clearly about their own resolution; "
                 "diffuse weight = the averaging is doing real work",
-            ),
+            ],
         )
 
 
@@ -423,21 +426,17 @@ class ENIRCalibrator(BaseCalibrator):
     def interpret(self) -> Interpretation:
         """Read the path length and BIC weights; warn about non-monotonicity."""
         self._check_fitted()
-        wts = self.model_weights_
-        top = np.argsort(wts)[::-1][:3]
-        top_txt = ", ".join(
-            f"lambda={self.path_lambdas_[self.kept_breakpoints_[i]]:.4g} (weight {wts[i]:.3f})"
-            for i in top
+        top_txt = _top3(
+            self.model_weights_,
+            lambda i: f"lambda={self.path_lambdas_[self.kept_breakpoints_[i]]:.4g}",
         )
-        return Interpretation(
-            method=type(self).__name__,
-            param_names=("n_path_solutions",),
-            param_values=(float(len(self.path_lambdas_)),),
-            messages=(
+        return self._interpretation(
+            {"n_path_solutions": float(len(self.path_lambdas_))},
+            [
                 f"top-3 path solutions by BIC weight: {top_txt}",
                 "lambda trades monotonicity strictness against fit; BIC weights are model "
                 "plausibility along the path",
                 "the ensemble output may be non-monotone (is_monotone_ = False): consumers "
                 "requiring order preservation should use a monotone calibrator",
-            ),
+            ],
         )

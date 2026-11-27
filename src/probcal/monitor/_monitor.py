@@ -10,18 +10,18 @@ from typing import Any
 
 import numpy as np
 
+from .._labels import grade_key, grade_keys, is_masterscale
 from .._math import bern_log_lr, expit, logit, logsumexp
 from .._registry import register
-from .._results import _to_frame
+from .._results import _ResultBase, _to_frame
 from .._serialize import JsonIO, check_payload, decode_value, encode_value, envelope
 from .._validation import (
-    validate_binary_y,
     validate_level,
     validate_nonneg_int,
     validate_positive_int,
-    validate_scores,
-    validate_weights,
+    validate_ypw,
 )
+from ..base import constructor_params
 from ._diagnostics import recommend
 from ._onset import estimate_onset
 from ._processes import (
@@ -38,52 +38,6 @@ _COMPONENTS = ("offset", "shape")
 
 # Constructor parameters held as tuples (JSON lists in the payload).
 _SEQUENCE_PARAMS = ("components", "grades", "mixture_grid", "delta_ci_grid")
-
-
-def grade_key(v: object) -> str:
-    """Canonical string key for one grade label.
-
-    Integers and integer-valued floats share a key (``1``, ``1.0``,
-    ``np.int64(1)`` all map to ``"1"``), other floats use their shortest
-    repr (of the value as a Python ``float``, so a ``float32`` label keys
-    as the exact double it holds), bytes are decoded as ASCII, and
-    everything else is ``str(v)`` as a plain ``str`` (never ``numpy.str_``).
-    Strings are opaque labels: ``"1.0"`` stays ``"1.0"``.
-    """
-    if isinstance(v, (bytes, np.bytes_)):
-        return bytes(v).decode("ascii")
-    if isinstance(v, (bool, np.bool_)):
-        return str(bool(v))
-    if isinstance(v, (int, np.integer)):
-        return str(int(v))
-    if isinstance(v, (float, np.floating)):
-        f = float(v)
-        return str(int(f)) if f.is_integer() else repr(f)
-    return str(v)
-
-
-def grade_keys(grade: object) -> np.ndarray:
-    """:func:`grade_key` applied element-wise to a 1-D label array (unicode array out).
-
-    Element-wise exactly: ``grade_keys(g)[i] == grade_key(g[i])``. A plain
-    list or tuple is read as an object array, so a mixed list such as
-    ``[1.0, "A"]`` keys as ``["1", "A"]`` rather than being coerced to
-    strings first; typed arrays key each distinct value once.
-    """
-    if isinstance(grade, (list, tuple)):
-        arr = np.empty(len(grade), dtype=object)
-        arr[:] = list(grade)
-    else:
-        arr = np.asarray(grade)
-    if arr.ndim != 1:
-        raise ValueError(f"grade must be a 1-D array, got shape {arr.shape}")
-    if arr.dtype.kind == "U":
-        return arr.astype(str)
-    if arr.dtype.kind == "O":
-        return np.array([grade_key(x) for x in arr.tolist()], dtype=str)
-    uniq, inverse = np.unique(arr, return_inverse=True)
-    keys = np.array([grade_key(x) for x in uniq.tolist()], dtype=str)
-    return keys[inverse.reshape(-1)]
 
 
 def _validate_delta_ci_grid(grid: object) -> None:
@@ -110,7 +64,7 @@ def _validate_delta_ci_grid(grid: object) -> None:
 
 
 @dataclass(frozen=True)
-class MonitorStep:
+class MonitorStep(_ResultBase):
     """One matured batch's monitoring record (all e-values are running values).
 
     Attributes
@@ -169,7 +123,7 @@ class MonitorStep:
 
 
 @dataclass(frozen=True)
-class MonitorReport:
+class MonitorReport(_ResultBase):
     """Full monitoring trajectory with the diagnostic recommendation.
 
     Attributes
@@ -465,15 +419,15 @@ class CalibrationMonitor(JsonIO):
 
     def _grade_array(self, grade: object, p_arr: np.ndarray) -> np.ndarray:
         """Normalized grade keys for this batch (masterscale-assigned or given)."""
-        if hasattr(grade, "assign") and hasattr(grade, "fingerprint"):
-            fp = grade.fingerprint()
+        if is_masterscale(grade):
+            fp = grade.fingerprint()  # type: ignore[attr-defined]
             if self.masterscale_fingerprint_ is not None and fp != self.masterscale_fingerprint_:
                 raise ValueError(
                     "this monitor was started with masterscale "
                     f"{self.masterscale_fingerprint_[:12]}...; a different masterscale "
                     f"({fp[:12]}...) changes the grade universe. Start a new monitor."
                 )
-            g_arr = grade_keys(grade.assign(p_arr))
+            g_arr = grade_keys(grade.assign(p_arr))  # type: ignore[attr-defined]
             self._pending_fingerprint = fp
         else:
             g_arr = grade_keys(grade)
@@ -551,11 +505,7 @@ class CalibrationMonitor(JsonIO):
             grade label outside the declared ``grades``.
         """
         # One-class batches are legal: a quiet month can mature with zero events.
-        y_arr = validate_binary_y(y, require_both_classes=False)
-        p_arr = validate_scores(p, name="p")
-        if len(y_arr) != len(p_arr):
-            raise ValueError("y and p must have equal length")
-        w_arr = validate_weights(sample_weight, len(p_arr))
+        y_arr, p_arr, w_arr = validate_ypw(y, p, sample_weight, require_both_classes=False)
         self._pending_fingerprint = None
         g_arr = self._grade_array(grade, p_arr) if grade is not None else None
         z = logit(p_arr)
@@ -706,7 +656,7 @@ class CalibrationMonitor(JsonIO):
         recommendation window (the same window :meth:`report` uses for its
         trailing-window diagnostics), composes the fitted offset onto ``target`` (see
         below), and returns a **fresh** monitor with the same constructor
-        parameters (:meth:`_ctor_params`) to watch the corrected pipeline.
+        parameters to watch the corrected pipeline.
         The monitor is fresh, not continued: its e-process is a martingale
         under the null "the CURRENTLY DEPLOYED forecast is calibrated";
         once ``target`` changes, the accumulated evidence describes a
@@ -780,34 +730,12 @@ class CalibrationMonitor(JsonIO):
 
     # ------------------------------------------------------------------ serialization
 
-    def _ctor_params(self) -> dict[str, Any]:
-        """Constructor parameters as a plain dict.
-
-        Shared by :meth:`to_dict`'s ``params`` section and
-        :meth:`apply_recommendation`'s fresh monitor (``CalibrationMonitor
-        (**self._ctor_params())``), so the two can never drift apart.
-        """
-        return {
-            "alpha": self.alpha,
-            "components": self.components,
-            "grades": self.grades,
-            "mixture_grid": self.mixture_grid,
-            "delta_ci_grid": self.delta_ci_grid,
-            "min_history": self.min_history,
-            "plug_in_window": self.plug_in_window,
-            "recommendation_window": self.recommendation_window,
-        }
-
     def to_dict(self) -> dict[str, object]:
         """Versioned snapshot; the state includes every past batch — that is
         what makes each decision reproducible (spec invariant)."""
-        params = self._ctor_params()
-        for k in _SEQUENCE_PARAMS:
-            if params[k] is not None:
-                params[k] = list(params[k])
         return envelope(
             self,
-            params=params,
+            params=encode_value(constructor_params(self)),
             state=encode_value(self._state_dict()),
             fit_meta={
                 "n_batches": len(self._z),
@@ -833,22 +761,13 @@ class CalibrationMonitor(JsonIO):
             # Constant: weights never warn (the guarantee is exact), but
             # earlier schema-1 readers require the key.
             "warned_weights": False,
-            "steps": [self._step_to_dict(s) for s in self.steps_],
+            "steps": [asdict(s) for s in self.steps_],
         }
         if self._warned_grades:  # written only when set: payloads without the flag keep their bytes
             state["warned_grades"] = True
         if self.masterscale_fingerprint_ is not None:
             state["masterscale_fingerprint"] = self.masterscale_fingerprint_
         return state
-
-    @staticmethod
-    def _step_to_dict(s: MonitorStep) -> dict[str, object]:
-        d = asdict(s)
-        d["delta_ci"] = list(s.delta_ci) if s.delta_ci is not None else None
-        d["grade_delta_ci"] = {
-            g: (list(v) if v is not None else None) for g, v in s.grade_delta_ci.items()
-        }
-        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "CalibrationMonitor":

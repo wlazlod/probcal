@@ -6,6 +6,7 @@ import numpy as np
 
 from ._math import bisect, expit, logit
 from ._results import _ResultBase
+from ._validation import validate_level
 
 
 @dataclass(frozen=True, eq=False)
@@ -88,8 +89,7 @@ def make_pd_portfolio(
     -------
     PdPortfolio
     """
-    if not 0.0 < event_rate < 1.0:
-        raise ValueError("event_rate must lie in (0, 1)")
+    event_rate = validate_level(event_rate, "event_rate")
     rng = np.random.default_rng(random_state)
     s = expit(rng.normal(score_location, score_scale, n))
     a_lo = slope * (1.0 + asymmetry)

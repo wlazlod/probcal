@@ -188,7 +188,6 @@ class CalibratedScorecard(JsonIO, CalibratorProtocolMixin):
         """
         return envelope(
             self,
-            params={},
             state={
                 "calibrator": self.calibrator_.to_dict(),
                 "points_affine_coeffs": (
@@ -198,7 +197,6 @@ class CalibratedScorecard(JsonIO, CalibratorProtocolMixin):
                 ),
                 "scorecard_fingerprint": self.scorecard_fingerprint(),
             },
-            fit_meta={},
         )
 
     @classmethod

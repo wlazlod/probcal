@@ -6,10 +6,8 @@ explicit best-to-worst ``order``, and aggregates per-grade counts.
 
 import numpy as np
 
-
-def is_masterscale(obj: object) -> bool:
-    """Duck test for :class:`probcal.Masterscale` (``assign`` + ``names``)."""
-    return hasattr(obj, "assign") and hasattr(obj, "names")
+from .._labels import grade_key, grade_keys, is_masterscale
+from .._steps import bin_sums
 
 
 def _resolve_grades(grades: object, p_arr: np.ndarray) -> tuple[np.ndarray, tuple[str, ...] | None]:
@@ -18,14 +16,16 @@ def _resolve_grades(grades: object, p_arr: np.ndarray) -> tuple[np.ndarray, tupl
     An object exposing ``assign`` and ``names`` (a :class:`probcal.Masterscale`)
     assigns the labels from ``p_arr`` and supplies its best-to-worst order,
     restricted to the grades actually present; a plain array is returned as
-    strings with ``order=None`` (callers keep their current ordering rule).
+    keys with ``order=None`` (callers keep their current ordering rule).
+    Labels are keyed by :func:`~probcal._labels.grade_key` (``1.0`` and ``1``
+    are the same grade ``"1"``).
     """
     if is_masterscale(grades):
-        labels = np.asarray(grades.assign(p_arr)).astype(str)  # type: ignore[attr-defined]
+        labels = grade_keys(grades.assign(p_arr), name="grades")  # type: ignore[attr-defined]
         present = set(labels.tolist())
-        order = tuple(str(g) for g in grades.names if str(g) in present)  # type: ignore[attr-defined]
-        return labels, order
-    return np.asarray(grades).astype(str), None
+        names = (grade_key(g) for g in grades.names)  # type: ignore[attr-defined]
+        return labels, tuple(g for g in names if g in present)
+    return grade_keys(grades, name="grades"), None
 
 
 def grade_labels(
@@ -33,7 +33,7 @@ def grade_labels(
 ) -> tuple[np.ndarray, tuple[str, ...] | None]:
     """:func:`_resolve_grades` plus the 1-D / length-``n`` check."""
     labels, order = _resolve_grades(grades, p_arr)
-    if labels.ndim != 1 or len(labels) != n:
+    if len(labels) != n:
         raise ValueError(
             f"grades must be a 1-D array with one label per observation ({n}), "
             f"got shape {labels.shape}"
@@ -48,7 +48,7 @@ def resolve_order(
     unique_labels = tuple(sorted(np.unique(labels).tolist()))
     if order is None:
         return unique_labels if default_order is None else default_order
-    order_t = tuple(str(g) for g in np.asarray(order).reshape(-1))
+    order_t = tuple(grade_keys(np.asarray(order, dtype=object).reshape(-1)).tolist())
     if len(set(order_t)) != len(order_t) or tuple(sorted(order_t)) != unique_labels:
         raise ValueError(f"order {order_t} does not match the unique grade labels {unique_labels}")
     return order_t
@@ -79,9 +79,15 @@ def aggregate(
         n = np.bincount(idx, minlength=m).astype(np.int64)
         k = np.bincount(idx, weights=y, minlength=m).round().astype(np.int64)
     else:
-        n = np.bincount(idx, weights=w, minlength=m)
-        k = np.bincount(idx, weights=w * y, minlength=m)
+        k, n = bin_sums(idx, y, w, m)
     pd = None
     if p is not None:
         pd = np.bincount(idx, weights=p, minlength=m) / np.bincount(idx, minlength=m)
     return n, k, pd, idx
+
+
+def order_by_mean_p(labels: np.ndarray, p: np.ndarray) -> tuple[str, ...]:
+    """Unique ``labels`` best to worst by mean ``p``; ties keep the sorted-label order."""
+    uniq, inv = np.unique(labels, return_inverse=True)
+    mean_p = np.bincount(inv, weights=p) / np.bincount(inv)
+    return tuple(uniq[np.argsort(mean_p, kind="stable")].tolist())

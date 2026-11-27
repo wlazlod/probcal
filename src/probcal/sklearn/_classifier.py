@@ -1,7 +1,6 @@
 """CalibratedClassifier: CalibratedClassifierCV(ensemble=False) on probcal calibrators."""
 
 import numbers
-import warnings
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
@@ -15,8 +14,9 @@ from sklearn.utils.validation import (
 )
 
 from .._math import expit
+from .._validation import validate_choice
 from ..base import BaseCalibrator
-from ..wrapper import _accepts_sample_weight
+from ..wrapper import _model_takes_weights
 from ._base import BinaryCalibratedMixin, check_sample_weight
 
 
@@ -174,10 +174,7 @@ class CalibratedClassifier(BinaryCalibratedMixin, ClassifierMixin, BaseEstimator
             If ``sample_weight`` is given and the estimator's ``fit`` cannot
             consume it — see ``guide/sklearn.md``.
         """
-        if self.method not in ("predict_proba", "decision_function"):
-            raise ValueError(
-                f"method must be 'predict_proba' or 'decision_function', got {self.method!r}"
-            )
+        validate_choice("method", self.method, ("predict_proba", "decision_function"))
         X, y = indexable(X, y)
         y_arr = column_or_1d(y, warn=True)
         check_consistent_length(X, y_arr)
@@ -202,17 +199,8 @@ class CalibratedClassifier(BinaryCalibratedMixin, ClassifierMixin, BaseEstimator
         else:
             base = self.estimator if self.estimator is not None else self._default_estimator()
             splitter = self._splitter(y_arr)
-            fit_kw = {} if sw is None else {"sample_weight": sw}
-            if sw is not None and not _accepts_sample_weight(base):
-                fit_kw = {}
-                warnings.warn(
-                    f"{type(base).__name__}.fit does not accept sample_weight: the "
-                    "cross-validated fits and the full-data refit are unweighted, "
-                    "while the calibrator is fitted with the weights. The calibration "
-                    "map is still weighted, but the scores it calibrates are not.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+            weighted = _model_takes_weights(base, sw is not None, stacklevel=2)
+            fit_kw = {"sample_weight": sw} if weighted else {}
             raw = cross_val_predict(
                 clone(base), X, y_arr, cv=splitter, method=self.method, params=fit_kw or None
             )

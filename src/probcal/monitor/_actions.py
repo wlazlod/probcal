@@ -3,16 +3,17 @@
 Theory: ``docs/concepts/monitoring.md``.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 import numpy as np
 
-from .._math import beta_ppf, expit
+from .._math import expit, jeffreys_ppf
 from .._registry import load, register
 from .._serialize import JsonIO, check_payload, envelope
-from .._validation import validate_level
-from ..metrics._common import _prep
+from .._validation import validate_level, validate_ypw
+from ..base import constructor_params
 from ..offset import LogitOffset
 from ._monitor import CalibrationMonitor, MonitorReport
 
@@ -158,13 +159,14 @@ def moc_offset_from_counts(
     Parameters
     ----------
     y : array_like
-        Binary outcomes in ``{0, 1}``.
+        Binary outcomes in ``{0, 1}``; a single class (e.g. no events) is
+        allowed.
     p : array_like
         Predicted probabilities in ``[0, 1]`` to be re-anchored.
     level : float, keyword-only
         Confidence level in ``(0, 1)`` for the Jeffreys upper quantile.
     sample_weight : array_like or None, keyword-only
-        Optional non-negative weights, same length as ``y``.
+        Optional positive weights, same length as ``y``.
 
     Returns
     -------
@@ -187,14 +189,15 @@ def moc_offset_from_counts(
     >>> off.post_mean_ > 0.03
     True
     """
-    y_arr, p_arr, w_arr = _prep(y, p, sample_weight)
+    # Zero-event (or all-event) portfolios are the use case: one class is fine.
+    y_arr, p_arr, w_arr = validate_ypw(y, p, sample_weight, require_both_classes=False)
     validate_level(level, "level")
     # Kish effective counts: events and trials scaled by the same factor
     # (unit weights come back bit-identical: the factor is exactly 1.0).
     w_eff = w_arr * (float(w_arr.sum()) / float(np.dot(w_arr, w_arr)))
     k = float(np.sum(w_eff * y_arr))
     n = float(np.sum(w_eff))
-    q = beta_ppf(level, k + 0.5, n - k + 0.5)
+    q = jeffreys_ppf(level, k, n)
     return LogitOffset(target_mean=q).fit(p_arr, sample_weight=w_arr)
 
 
@@ -261,7 +264,7 @@ def apply_recommendation(mon: CalibrationMonitor, target: object = None) -> "App
         composed = Chain([target.calibrator_, *target.offsets_, offset])
     elif isinstance(target, CalibratedModel):
         composed = target.with_offset(offset)
-    fresh = type(mon)(**mon._ctor_params())
+    fresh = type(mon)(**constructor_params(mon))
     return AppliedAction(
         kind=kind,
         offset=offset,
@@ -279,6 +282,17 @@ def apply_recommendation(mon: CalibrationMonitor, target: object = None) -> "App
             se=float(est.se),
         ),
     )
+
+
+T = TypeVar("T")
+
+
+def _to_dict_or_none(obj: object) -> dict[str, object] | None:
+    return None if obj is None else obj.to_dict()  # type: ignore[attr-defined]
+
+
+def _load_or_none(loader: Callable[[dict], T], d: dict | None) -> T | None:
+    return None if d is None else loader(d)
 
 
 @register
@@ -348,20 +362,14 @@ class AppliedAction(JsonIO):
         """
         return envelope(
             self,
-            params={},
             state={
                 "kind": self.kind,
-                "offset": self.offset.to_dict() if self.offset is not None else None,
-                "composed": (
-                    self.composed.to_dict()  # type: ignore[attr-defined]
-                    if self.composed is not None
-                    else None
-                ),
-                "monitor": self.monitor.to_dict() if self.monitor is not None else None,
+                "offset": _to_dict_or_none(self.offset),
+                "composed": _to_dict_or_none(self.composed),
+                "monitor": _to_dict_or_none(self.monitor),
                 "window": list(self.window),
                 "audit": dict(self.audit),
             },
-            fit_meta={},
         )
 
     @classmethod
@@ -384,21 +392,19 @@ class AppliedAction(JsonIO):
         """
         check_payload(cls, d)
         st = d["state"]
-        offset = LogitOffset.from_dict(st["offset"]) if st["offset"] is not None else None
-        composed: object | None = None
-        if st["composed"] is not None:
-            if st["composed"].get("class") == "CalibratedModel":
+
+        def load_composed(cd: dict) -> object:
+            if cd.get("class") == "CalibratedModel":
                 from ..wrapper import CalibratedModel
 
-                composed = CalibratedModel.from_dict(st["composed"], model=model)
-            else:
-                composed = load(st["composed"])
-        monitor = CalibrationMonitor.from_dict(st["monitor"]) if st["monitor"] is not None else None
+                return CalibratedModel.from_dict(cd, model=model)
+            return load(cd)
+
         return cls(
             kind=st["kind"],
-            offset=offset,
-            composed=composed,
-            monitor=monitor,
+            offset=_load_or_none(LogitOffset.from_dict, st["offset"]),
+            composed=_load_or_none(load_composed, st["composed"]),
+            monitor=_load_or_none(CalibrationMonitor.from_dict, st["monitor"]),
             window=tuple(st["window"]),
             audit=dict(st["audit"]),
         )

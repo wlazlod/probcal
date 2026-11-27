@@ -32,6 +32,7 @@ from ._plots_common import (
     _RED,
     _check_scale,
     _get_axes,
+    _identity,
     _plot_context,
     _plt,
     _require_mpl,
@@ -51,10 +52,12 @@ from ._results import (
     SelectionReport,
     SmoothReliabilityCurve,
 )
+from ._validation import validate_choice
 from .curves import EcceCurve, reliability_binned
 from .metrics import brier_score, reliability_summary, smooth_ece
 from .metrics._evaluate import _group_rows
 from .metrics.grade import JeffreysGradeResult
+from .vennabers import _scalarize
 
 # Names shown, in order, by `stats=<MetricReport>` when present in the report.
 _STATS_REPORT_NAMES = ("intercept", "slope", "ici", "smooth_ece", "brier")
@@ -148,11 +151,17 @@ def _draw_split_risk_dist(ax: Any, y_arr: np.ndarray, p_arr: np.ndarray, scale: 
 
 
 def _stats_box_text(
-    stats: bool | MetricReport, annotate: bool, y_arr: np.ndarray, p_arr: np.ndarray
+    stats: bool | MetricReport,
+    annotate: bool,
+    y_arr: np.ndarray,
+    p_arr: np.ndarray,
+    *,
+    smece_shown: bool = False,
 ) -> str | None:
     """Text of the top-left box, or ``None`` for no box.
 
-    ``stats=True``: fixed n/events/intercept/slope/ICI/smECE/Brier.
+    ``stats=True``: fixed n/events/intercept/slope/ICI/smECE/Brier (smECE
+    left out when ``smece_shown``: a kernel curve's readout already shows it).
     ``stats=<MetricReport>``: ``name = value [ci_low, ci_high]`` for the
     ``_STATS_REPORT_NAMES`` present in the report (plus n/events from ``y``).
     Otherwise, with ``annotate=True``: the classic
@@ -178,9 +187,8 @@ def _stats_box_text(
         f"slope = {s.slope:.3f}\n"
     )
     if stats:
-        sece = smooth_ece(y_arr, p_arr)
-        brier = brier_score(y_arr, p_arr)
-        return head + f"ICI = {s.ici:.3f}\nsmECE = {sece:.3f}\nBrier = {brier:.3f}"
+        sece = "" if smece_shown else f"smECE = {smooth_ece(y_arr, p_arr):.3f}\n"
+        return head + f"ICI = {s.ici:.3f}\n{sece}Brier = {brier_score(y_arr, p_arr):.3f}"
     return head + (
         f"ICI = {s.ici:.4f}\nE90 = {s.e90:.4f}\nSpiegelhalter p = {s.spiegelhalter_p:.3f}"
     )
@@ -228,7 +236,8 @@ def plot_reliability(
     ``annotate=True`` (default) draws the classic stats box, computed by
     :func:`probcal.metrics.reliability_summary`. ``stats=True`` replaces it
     with a box reporting ``n, events, intercept, slope, ICI, smECE, Brier``
-    instead (``annotate`` is then ignored); ``stats=<MetricReport>`` instead
+    instead (``annotate`` is then ignored; smECE is left out of the box when
+    a kernel curve's own readout already shows it); ``stats=<MetricReport>`` instead
     reports ``name = value [ci_low, ci_high]`` for whichever of
     ``{"intercept", "slope", "ici", "smooth_ece", "brier"}`` the report
     carries, plus ``n``/``events`` computed from ``y``.
@@ -342,8 +351,7 @@ def plot_reliability(
     _check_scale(scale)
     if (y is None) != (p is None):
         raise ValueError("y and p must be given together")
-    if risk_dist not in ("rug", "split", None):
-        raise ValueError('risk_dist must be one of "rug", "split", None')
+    validate_choice("risk_dist", risk_dist, ("rug", "split", None))
     if by is not None:
         if y is None or p is None:
             raise ValueError("by requires y and p")
@@ -420,7 +428,7 @@ def _draw_reliability(
     yv = _tr(curve.event_rate[keep], scale)
     ylo = _tr(curve.ci_low[keep], scale, _CI_CLIP_EPS)
     yhi = _tr(curve.ci_high[keep], scale, _CI_CLIP_EPS)
-    ax.plot(diag, diag, ls="--", c=_GREY, lw=1, label="identity")
+    _identity(ax, diag)
     ax.errorbar(
         x,
         yv,
@@ -455,7 +463,13 @@ def _draw_reliability(
             )  # fmt: skip
         elif show_density and risk_dist == "split":
             _draw_split_risk_dist(ax, y_arr, p_arr, scale)
-        txt = _stats_box_text(stats, annotate, y_arr, p_arr)
+        txt = _stats_box_text(
+            stats,
+            annotate,
+            y_arr,
+            p_arr,
+            smece_shown=isinstance(smooth, KernelReliabilityCurve),
+        )
         if txt is not None:
             _text_box(ax, txt)
             boxed = True
@@ -488,8 +502,7 @@ def _plot_reliability_faceted(
     (``curve`` is not used here — see the docstring above)."""
     y_arr = np.asarray(y, dtype=np.float64)
     p_arr = np.asarray(p, dtype=np.float64)
-    # Same grouping (and the same error for labels such as 1 and "1" that
-    # display alike) as metrics.evaluate(by=...).
+    # Same grouping (and the same error for "1" next to 1) as metrics.evaluate(by=...).
     groups, rows = _group_rows(by, len(y_arr))
     panel_stats: list[bool | MetricReport]
     if isinstance(stats, GroupedMetricReport):
@@ -564,7 +577,7 @@ def plot_belt(belt: BeltResult, *, scale: str = "probability", ax: Any = None) -
     with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
         x = belt.grid_logit if scale == "logit" else belt.grid_p
-        ax.plot(x, x, ls="--", c=_GREY, lw=1)
+        _identity(ax, x, label=None)
         # Widest level first so the narrower band sits on top of it.
         for level, alpha in zip(sorted(belt.levels, reverse=True), (0.2, 0.35), strict=True):
             lo, hi = belt.bands[level]
@@ -642,7 +655,7 @@ def plot_interval(intervals: np.ndarray, s: np.ndarray, *, ax: Any = None) -> An
         p0 = np.asarray(intervals, dtype=np.float64)[order, 0]
         p1 = np.asarray(intervals, dtype=np.float64)[order, 1]
         ax.fill_between(s_arr, p0, p1, color=_BLUE, alpha=0.3, label="Venn–Abers interval")
-        ax.plot(s_arr, p1 / (1.0 - p0 + p1), lw=1.2, c=_ORANGE, label="scalarized")
+        ax.plot(s_arr, _scalarize(p0, p1), lw=1.2, c=_ORANGE, label="scalarized")
         ax.set_xlabel("score")
         ax.set_ylabel("calibrated probability")
         ax.legend(loc="upper left")
@@ -849,14 +862,13 @@ def plot_offset_audit(offset: Any, *, ax: Any = None) -> Any:
         The axes the audit chart was drawn on.
     """
     _require_mpl()
-    if not getattr(offset, "fitted_", False):
-        raise RuntimeError("LogitOffset is not fitted; call fit() first")
+    offset._check_fitted()
     t = np.linspace(*_DEFAULT_LOGIT_SPAN, 200)
     lp = logit1(offset.pre_mean_)
     lq = logit1(offset.post_mean_)
     with _plot_context():
         ax = _get_axes(ax, (6.5, 6))
-        ax.plot(t, t, ls="--", c=_GREY, lw=1, label="identity")
+        _identity(ax, t)
         ax.plot(t, t + offset.delta_, c=_BLUE, lw=1.6, label="offset map")
         if offset.target_mean is not None:
             ax.axhline(logit1(offset.target_mean), c=_GREY, lw=0.8, alpha=0.7)

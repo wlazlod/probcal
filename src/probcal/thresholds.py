@@ -11,13 +11,10 @@ it designs the bands from data.
 
 import numpy as np
 
-from ._validation import (
-    validate_binary_y,
-    validate_positive_int,
-    validate_weights,
-)
+from ._steps import bin_sums
+from ._validation import validate_choice, validate_positive_int, validate_ypw
 from .base import UnattainableTargetError, shrink_interval
-from .masterscale import Masterscale, _validate_probabilities
+from .masterscale import Masterscale
 
 
 def calibrated_interval_to_raw(
@@ -150,8 +147,7 @@ def _prebin(
     cuts = cuts[cuts < 1.0]
     idx = np.searchsorted(cuts, ps, side="right")
     k = len(cuts) + 1
-    W = np.bincount(idx, weights=ws, minlength=k).astype(np.float64)
-    E = np.bincount(idx, weights=ws * ys, minlength=k).astype(np.float64)
+    E, W = bin_sums(idx, ys, ws, k)
     return W, E, cuts
 
 
@@ -273,15 +269,10 @@ def build_masterscale(
         floor), or on an invalid ``objective``, ``target_shares``, ``names``,
         ``n_grades``, or ``prebins``.
     """
-    y_arr = validate_binary_y(y)
-    p_arr = _validate_probabilities(p, name="p")
-    if len(y_arr) != len(p_arr):
-        raise ValueError("y and p must have equal length")
-    w_arr = validate_weights(sample_weight, len(p_arr))
+    y_arr, p_arr, w_arr = validate_ypw(y, p, sample_weight, clip=False)
     n_grades = validate_positive_int(n_grades, "n_grades")
     prebins = validate_positive_int(prebins, "prebins")
-    if objective not in ("likelihood", "target_shares"):
-        raise ValueError(f'objective must be "likelihood" or "target_shares", got {objective!r}')
+    validate_choice("objective", objective, ("likelihood", "target_shares"))
     target: np.ndarray | None = None
     if objective == "target_shares":
         if target_shares is None:

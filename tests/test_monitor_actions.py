@@ -120,6 +120,12 @@ def test_moc_offset_from_counts_jeffreys_quantile_and_weight_scale() -> None:
         assert got.post_mean_ == pytest.approx(ref.post_mean_, rel=1e-10)
 
 
+def test_moc_offset_from_counts_accepts_zero_events() -> None:
+    # Regression: a zero-default portfolio (the low-default use case) was rejected.
+    off = moc_offset_from_counts(np.zeros(500), np.full(500, 0.01), level=0.9)
+    assert off.post_mean_ == pytest.approx(beta_ppf(0.9, 0.5, 500.5))
+
+
 def test_moc_offset_from_counts_weighted_uses_kish_counts() -> None:
     y = np.array([0.0, 0.0, 1.0, 0.0])
     p = np.array([0.05, 0.05, 0.05, 0.05])

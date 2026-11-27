@@ -10,7 +10,6 @@ import json
 import sys
 import warnings
 from collections.abc import Callable
-from datetime import UTC, datetime
 from typing import Any, Self
 
 import numpy as np
@@ -18,11 +17,11 @@ import numpy as np
 from ._math import expit
 from ._protocol import CalibratorProtocolMixin
 from ._registry import load, register
-from ._results import Interpretation
-from ._serialize import JsonIO, check_payload, data_fingerprint, encode_value, envelope
-from ._validation import stratified_folds, validate_binary_y, validate_cv, validate_weights
-from .base import BaseCalibrator, clone_unfitted
-from .chain import Chain, _concat_interpretations
+from ._results import Interpretation, merge_interpretations
+from ._serialize import JsonIO, check_payload, decode_value, encode_value, envelope, fit_meta
+from ._validation import cv_splits, validate_binary_y, validate_choice, validate_weights
+from .base import BaseCalibrator, _FittedState, clone_unfitted
+from .chain import Chain, _staged_method
 from .offset import LogitOffset
 
 
@@ -125,6 +124,24 @@ def _accepts_sample_weight(estimator: Any) -> bool:
     return False
 
 
+def _model_takes_weights(model: Any, weighted: bool, *, stacklevel: int) -> bool:
+    """Whether ``model``'s fits get the weights; warns when weights are given but not accepted.
+
+    ``stacklevel`` is the caller's own: the warning points where the caller's would.
+    """
+    if not weighted:
+        return False
+    if _accepts_sample_weight(model):
+        return True
+    warnings.warn(
+        f"{type(model).__name__}.fit does not accept sample_weight; the model is trained "
+        "unweighted (the calibrator still uses the weights)",
+        UserWarning,
+        stacklevel=stacklevel + 1,
+    )
+    return False
+
+
 def _clone(model: Any) -> Any:
     """sklearn.base.clone when sklearn is installed, deepcopy otherwise."""
     try:
@@ -136,7 +153,7 @@ def _clone(model: Any) -> Any:
 
 
 @register
-class CalibratedModel(CalibratorProtocolMixin, JsonIO):
+class CalibratedModel(CalibratorProtocolMixin, _FittedState, JsonIO):
     """Wrap any scoring model with a probcal calibrator (and optional offsets).
 
     Parameters
@@ -247,8 +264,7 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
         TypeError
             If ``flow="cv"`` and the model has no ``fit(X, y)`` method.
         """
-        if self.flow not in ("prefit", "cv"):
-            raise ValueError(f"flow must be 'prefit' or 'cv', got {self.flow!r}")
+        validate_choice("flow", self.flow, ("prefit", "cv"))
         y_arr = validate_binary_y(y)
         if _n_rows(X) != len(y_arr):
             raise ValueError(f"X has {_n_rows(X)} rows but y has {len(y_arr)}")
@@ -261,17 +277,13 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
             s = _model_scores(self.model_, X)
             self.calibrator_ = self._fresh_calibrator().fit(s, y_arr, sample_weight=w_arr)
         else:
-            cv = validate_cv(self.cv, y_arr, held_out_both_classes=self.ensemble)
-            s = self._fit_cv(X, y_arr, w_arr, cv, weighted=weighted)
+            splits = cv_splits(
+                self.cv, y_arr, self.random_state, held_out_both_classes=self.ensemble
+            )
+            s = self._fit_cv(X, y_arr, w_arr, splits, weighted=weighted)
         self._cal_scores = s
         self._cal_weights = w_arr if weighted else None
-        self.fit_meta_ = {
-            "n_obs": int(len(y_arr)),
-            "n_events": float(np.sum(w_arr * y_arr)),
-            "weight_sum": float(w_arr.sum()),
-            "fitted_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
-            "data_fingerprint": data_fingerprint(s, y_arr, w_arr),
-        }
+        self.fit_meta_ = fit_meta(s, w_arr, y_arr)
         self.fitted_ = True
         return self
 
@@ -279,20 +291,19 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
         return clone_unfitted(self.calibrator)  # type: ignore[return-value]
 
     def _fit_cv(
-        self, X: object, y: np.ndarray, w: np.ndarray, cv: int, *, weighted: bool
+        self,
+        X: object,
+        y: np.ndarray,
+        w: np.ndarray,
+        splits: list[tuple[np.ndarray, np.ndarray]],
+        *,
+        weighted: bool,
     ) -> np.ndarray:
         """Cross-fitted flow; returns the pooled out-of-fold scores."""
         if not hasattr(self.model, "fit"):
             raise TypeError("flow='cv' requires a model with fit(X, y)")
         # Whether the model fits take the weights is decided once, up front.
-        model_weighted = weighted and _accepts_sample_weight(self.model)
-        if weighted and not model_weighted:
-            warnings.warn(
-                f"{type(self.model).__name__}.fit does not accept sample_weight; the model is "
-                "trained unweighted (the calibrator still uses the weights)",
-                UserWarning,
-                stacklevel=3,
-            )
+        model_weighted = _model_takes_weights(self.model, weighted, stacklevel=3)
 
         def fit_clone(rows: np.ndarray | None) -> Any:
             model = _clone(self.model)
@@ -305,11 +316,9 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
                 model.fit(X_fit, y_fit)
             return model
 
-        folds = stratified_folds(y, cv, self.random_state)
         oof_scores = np.empty(len(y))
-        for k in range(cv):
-            fold_model = fit_clone(folds != k)
-            held = folds == k
+        for train, held in splits:
+            fold_model = fit_clone(train)
             s_held = _model_scores(fold_model, _take_rows(X, held))
             oof_scores[held] = s_held
             if self.ensemble:
@@ -325,14 +334,6 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
         return oof_scores
 
     # ------------------------------------------------------------------ prediction
-
-    def _check_fitted(self) -> None:
-        if not getattr(self, "fitted_", False):
-            raise RuntimeError("CalibratedModel is not fitted; call fit() first")
-
-    def __sklearn_is_fitted__(self) -> bool:
-        """Fitted state for sklearn >= 1.6 (model and calibrator both fitted)."""
-        return bool(getattr(self, "fitted_", False))
 
     def _pipeline(self, scores: "Callable[[Any], np.ndarray]") -> np.ndarray:
         """Calibrated, offset output; ``scores(model)`` gives each calibrator's input."""
@@ -490,7 +491,7 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
         """
         stages: list[BaseCalibrator | LogitOffset] = [*self._calibrators(), *self.offsets_]
         parts = [stage.interpret() for stage in stages]
-        return _concat_interpretations("CalibratedModel", parts, qualify=False)
+        return merge_interpretations(_staged_method("CalibratedModel", parts), parts)
 
     @property
     def chain_(self) -> Chain:
@@ -612,7 +613,7 @@ class CalibratedModel(CalibratorProtocolMixin, JsonIO):
         obj.ensemble_ = []
         obj.model_ = model
         obj._model_ref = dict(state["model_ref"])
-        obj.fit_meta_ = dict(d["fit_meta"])
+        obj.fit_meta_ = dict(decode_value(d["fit_meta"], arrays=False))  # type: ignore[call-overload]
         obj.fitted_ = True
         return obj
 

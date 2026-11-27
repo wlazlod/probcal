@@ -375,9 +375,9 @@ marker and a fixed default seed, per the package's reproducibility conventions.
 
 **Grouping (`by=`).** `evaluate(..., by=labels)` runs the exact same pooled call above on the
 full data plus one independent call per group, returning a `GroupedMetricReport`
-instead of a plain `MetricReport`. Groups are formed from the raw label values (so `1` and
-`"1"` are different groups) and displayed as `str(value)`, ordered by display name; two
-distinct values that print the same raise `ValueError`. Group `i` (in that order) uses
+instead of a plain `MetricReport`. Groups are formed by label key (`1` and `1.0` are one group
+`"1"`, the key grade and segment labels use too), ordered by key; a string label sharing its key
+with a non-string one (`"1"` next to `1`) raises `ValueError`. Group `i` (in that order) uses
 `random_state + 1000 * i` rather than reusing `random_state` for every group. The offset is fixed and label-independent, so
 reproducibility does not depend on how many groups exist or what they are named, and no two
 groups' bootstrap draws can coincide by construction. This is side-by-side reporting, not a
@@ -513,15 +513,12 @@ and is tested against it). Reported **point estimates** come off the unsorted pa
 bootstrap replicates' reordered sums move percentile CI bounds only in their last bits.
 
 The vectorized anchor fit differs from a scalar loop by ≤ 2.3×10⁻¹⁶ relative **on
-well-conditioned windows only**. If a window is rank-deficient (every non-zero tricube weight
-sitting on one distinct `p`, which needs the far half of the window to lie at exactly the
-bandwidth), the local-linear determinant is pure cancellation (~10⁻²³ rather than 0), and an
-ulp-level weight difference can put two evaluation orders on opposite sides of the
-`abs(det) < _FPMIN` guard, giving values that differ by O(1). On such a window the `swy / sw`
-branch (the weighted mean, what a rank-deficient local *linear* fit degenerates to) is the
-well-defined answer; the other branch divides by cancellation noise. Since anchors are data
-quantiles, this has not been observed to reach a reported value, and the corner is pinned by
-`tests/test_math.py`.
+well-conditioned windows**. A rank-deficient window (every non-zero tricube weight sitting on
+one distinct `p`, which needs the far half of the window to lie at exactly the bandwidth — it
+happens on tied scores) has a local-linear determinant that is pure cancellation (~10⁻²³
+rather than 0); such windows are detected exactly and take the `swy / sw` branch (the
+weighted mean, what a rank-deficient local *linear* fit degenerates to) instead of dividing by
+cancellation noise.
 
 Measured on the dev host at n=10⁴, one full-catalog replicate costs about 28 ms;
 `ece_sweep` with its early stop costs 1.8 ms per replicate (about 8.9 ms without it), and the binned ECE family costs 0.34 ms. `evaluate(n=10⁴, n_boot=1000)` takes about

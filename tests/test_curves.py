@@ -260,18 +260,20 @@ def test_reliability_loess_uses_weights() -> None:
     assert np.mean(up.event_rate) > np.mean(base.event_rate) + 0.02
 
 
-def test_weighted_local_linear_matches_loess_on_unit_weights() -> None:
+def test_weighted_loess_tie_invariant_and_continuous_in_weights() -> None:
+    # Regression: the weighted path used a separate engine without tie means,
+    # so a 1e-9 weight perturbation on tied scores moved the curve by ~0.76.
     from probcal._math import loess
-    from probcal.curves import _weighted_local_linear
 
-    rng = np.random.default_rng(6)
-    x = np.sort(rng.uniform(0, 1, 400))
-    yv = (rng.random(400) < x).astype(float)
-    grid = np.linspace(0.05, 0.95, 25)
+    rng = np.random.default_rng(1)
+    p = np.clip(np.round(rng.beta(0.6, 4, 400), 1), 0.001, 0.999)
+    y = (rng.random(400) < p).astype(float)
+    grid = np.linspace(0.05, 0.6, 30)
+    base = loess(p, y, frac=0.2, xeval=grid)
+    np.testing.assert_array_equal(loess(p, y, frac=0.2, xeval=grid, w=np.ones(400)), base)
+    near = reliability_loess(y, p, frac=0.2, sample_weight=1 + 1e-9 * rng.random(400))
     np.testing.assert_allclose(
-        _weighted_local_linear(x, yv, np.ones(400), grid, 0.5),
-        loess(x, yv, frac=0.5, xeval=grid),
-        atol=1e-10,
+        near.event_rate, reliability_loess(y, p, frac=0.2).event_rate, atol=1e-6
     )
 
 
